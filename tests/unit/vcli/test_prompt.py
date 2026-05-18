@@ -5,7 +5,7 @@
 
 Covers:
 - test_returns_list_of_dicts: build_system_prompt() returns list[dict] with "type" and "text" keys
-- test_includes_role_description: first block contains "Vector" and "robotics"
+- test_includes_role_description: first block carries the static ROLE_PROMPT
 - test_includes_tool_instructions: mentions tools and permissions
 - test_static_sections_have_cache_control: blocks with cache_control key exist
 - test_includes_hardware_state: when agent has arm, output includes arm info
@@ -21,9 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +159,13 @@ class TestReturnStructure:
 
 class TestContentPresence:
     def test_includes_role_description(self) -> None:
-        """First block contains 'Vector' and 'robotics' (role description)."""
+        """First block carries the static role description (ROLE_PROMPT)."""
         result = _build()
         first_text = result[0]["text"]
-        assert "Vector" in first_text
-        assert "robotics" in first_text.lower()
+        # Assert on stable role phrasing, not the brand token — the
+        # agent persona was intentionally renamed to "V" in a2ad980.
+        assert "AI core of a real robot" in first_text
+        assert "quadruped" in first_text.lower()
 
     def test_includes_tool_instructions(self) -> None:
         """Some block mentions 'tool' and 'permission'."""
@@ -337,8 +337,9 @@ class TestNoAgent:
         assert isinstance(result, list)
         assert len(result) >= 2
         combined = " ".join(b["text"] for b in result)
-        # Static sections still present
-        assert "Vector" in combined
+        # Static role section still present (brand token renamed to
+        # "V" in a2ad980 — assert on stable role phrasing instead).
+        assert "AI core of a real robot" in combined
 
     def test_no_agent_no_hardware_section(self) -> None:
         """agent=None -> 'Current Hardware' section does not appear."""

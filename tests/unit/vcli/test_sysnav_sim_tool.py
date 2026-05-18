@@ -214,10 +214,18 @@ def test_help_text_lists_required_topics() -> None:
     assert "/camera/image" in desc
 
 
-def test_tool_registered_in_init() -> None:
+def test_tool_paused_not_registered_in_init() -> None:
+    # SysNav sim integration PAUSED for the master merge — v2.4 T6
+    # (vnav_bridge wiring) + G5 (launch) were not delivered. The tool
+    # class is retained in-tree but intentionally NOT registered.
+    # Flip this back to `in names` when v2.4 resumes.
     tools = discover_all_tools()
     names = {getattr(t, "name") for t in tools}
-    assert "start_sysnav_sim" in names
+    assert "start_sysnav_sim" not in names
+    # Code retained, not deleted — class still importable.
+    from vector_os_nano.vcli.tools.sysnav_sim_tool import SysnavSimTool
+
+    assert SysnavSimTool.__name__ == "SysnavSimTool"
 
 
 def test_input_schema_documents_optional_gui_and_backend() -> None:
