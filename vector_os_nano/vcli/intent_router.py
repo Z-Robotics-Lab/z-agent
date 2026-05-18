@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
 """Intent-based tool routing for Vector CLI.
 
 Classifies user messages by keyword matching to select relevant tool
@@ -204,7 +207,14 @@ class IntentRouter:
         # System tool keywords → tool_use path, not VGG
         # These are CLI/infra commands, not robot actions.
         msg_lower = user_message.lower()
-        _SYSTEM_BYPASS = ("可视化", "foxglove", "visualization", "viz ")
+        _SYSTEM_BYPASS = (
+            "可视化", "foxglove", "visualization", "viz ",
+            # Simulation lifecycle — must route to start_simulation /
+            # stop_simulation tools, not to gripper_close_skill (which
+            # greedily matches "close" / "关闭").
+            "仿真", "sim ", " sim", "simulation",
+            "go2sim", "go2 sim", "armsim", "arm sim",
+        )
         if any(kw in msg_lower for kw in _SYSTEM_BYPASS):
             return False
 

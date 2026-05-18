@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
 """Go2 ROS2 Proxy — controls Go2 via ROS2 topics instead of direct MuJoCo.
 
 Used when the MuJoCo simulation is managed by an external process
@@ -77,6 +80,7 @@ class Go2ROS2Proxy:
         # Used by navigate_to() FAR probe phase to detect whether FAR has a
         # routing graph. Value 0.0 means no_path_received yet.
         self._last_path_time: float = 0.0
+        self._shared_runtime_used: bool = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -147,11 +151,19 @@ class Go2ROS2Proxy:
             except ImportError:
                 self._marker_pub = None
 
-            # Spin in a background daemon thread so the caller is not blocked.
-            self._spin_thread = threading.Thread(
-                target=lambda: rclpy.spin(self._node), daemon=True
-            )
-            self._spin_thread.start()
+            # Route to shared executor or legacy per-proxy spin.
+            import os as _os
+            if _os.environ.get("VECTOR_SHARED_EXECUTOR", "1") == "1":
+                from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+                get_ros2_runtime().add_node(self._node)
+                self._shared_runtime_used = True
+            else:
+                # Legacy per-proxy spin (rollback: VECTOR_SHARED_EXECUTOR=0)
+                self._spin_thread = threading.Thread(
+                    target=lambda: rclpy.spin(self._node), daemon=True
+                )
+                self._spin_thread.start()
+                self._shared_runtime_used = False
             self._connected = True
 
             # Wait up to 5 s for the first odometry message.
@@ -167,6 +179,13 @@ class Go2ROS2Proxy:
 
     def disconnect(self) -> None:
         """Destroy the rclpy node and mark proxy as disconnected."""
+        if self._shared_runtime_used and self._node is not None:
+            try:
+                from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+                get_ros2_runtime().remove_node(self._node)
+            except Exception:
+                pass  # best effort — don't block teardown
+        self._shared_runtime_used = False
         if self._node is not None:
             try:
                 self._node.destroy_node()
@@ -279,19 +298,31 @@ class Go2ROS2Proxy:
         return self.get_camera_frame(width, height), self.get_depth_frame(width, height)
 
     def get_camera_pose(self) -> tuple:
-        """Compute D435 camera world pose from robot odometry + mount config.
+        """Compute D435 camera world pose from robot odometry + MJCF mount config.
 
-        Returns (cam_xpos, cam_xmat) matching MuJoCoGo2.get_camera_pose().
-        Camera mounted at: 0.3m forward, 0.05m up, -5deg pitch on base_link.
+        Returns (cam_xpos, cam_xmat) matching MuJoCoGo2.get_camera_pose()
+        semantics (the live MuJoCo path reads data.cam_xmat directly).
+
+        Mount geometry sourced from MJCF go2_piper.xml::d435_camera body:
+            pos="0.25 0 0.1" quat="0.999054 0 0.0434863 0"
+        which is 0.25 m forward, 0.1 m up above base_link, pitched -5° down.
+
+        Frame convention (REP-103):
+            World X = forward, Y = left, Z = up.
+            For a robot heading 0 (facing +X), body-right is world -Y
+            so ``right = (sin(h), -cos(h), 0)``.
+        xmat columns are [camera_right, camera_up, -camera_forward].
+        ``up = cross(right, forward)`` keeps the basis right-handed and
+        gives world +Z for a level, +X-facing camera. v2.4 G3 fix.
         """
         import numpy as np
 
         pos = self._position
         heading = self._heading
 
-        # Mount offset in body frame
-        mount_fwd, mount_up = 0.3, 0.05
-        pitch = math.radians(-5.0)  # -5 deg downward tilt
+        # MJCF-grounded mount offsets
+        mount_fwd, mount_up = 0.25, 0.1
+        pitch = math.radians(-5.0)
 
         cos_h = math.cos(heading)
         sin_h = math.sin(heading)
@@ -304,12 +335,12 @@ class Go2ROS2Proxy:
         cam_z = pos[2] + mount_up
         cam_xpos = np.array([cam_x, cam_y, cam_z])
 
-        # Camera rotation: MuJoCo convention columns = [right, up, -forward]
-        # Body frame: forward=(cos_h, sin_h, 0), right=(-sin_h, cos_h, 0)
-        # With pitch: forward rotated by pitch around right axis
+        # Body frame: forward = (cos_h·cos_p, sin_h·cos_p, sin_p),
+        #             right   = (sin_h, -cos_h, 0)   ← REP-103 right
+        # up = cross(right, forward) → world +Z for a level, +X-facing camera.
         fwd = np.array([cos_h * cos_p, sin_h * cos_p, sin_p])
-        right = np.array([-sin_h, cos_h, 0.0])
-        up = np.cross(right, fwd)  # ensure orthogonal
+        right = np.array([sin_h, -cos_h, 0.0])
+        up = np.cross(right, fwd)
 
         # MuJoCo xmat: columns = [right, up, -forward]
         cam_xmat = np.column_stack([right, up, -fwd]).flatten()

@@ -1,269 +1,484 @@
-# SDD Plan — v2.0.1 V-Graph Cross-Room Edge Fix (Phase A)
+# v2.4 SysNav Simulation Integration — Technical Plan
 
-**Type**: Non-architectural (bug fix + revert + test cleanup)
-**Spec**: `.sdd/spec.md` — approved 2026-04-16
-**Base**: `feat/v2.0-vectorengine-unification` (uncommitted tree)
-**CEO gate**: Async review (no new interfaces, no new nodes)
-
----
-
-## 1. Design Summary
-
-No new components. This is a **targeted revert + config fix + test cleanup**.
-
-```
-┌────────────────────┐       ┌─────────────────────────┐
-│ go2_vnav_bridge    │──────▶│ /registered_scan        │
-│  (SIMPLIFIED)      │       │ (live lidar, sole pub)  │
-│  REMOVED:          │       └─────────────────────────┘
-│  - _terrain_map_pub│                  │
-│  - _terrain_map_   │                  ▼
-│    ext_pub         │       ┌──────────────────────┐  ┌──────────────────┐
-│  - _sync_terrain_  │       │ terrainAnalysis      │─▶│ /terrain_map     │ (single pub)
-│    to_far()        │       │ (ros2 run + --ros-   │  └──────────────────┘
-│  - _publish_       │       │  args,                │          │
-│    accumulated_    │       │  maxRelZ=1.5 …)      │          ▼
-│    terrain()       │       └──────────────────────┘  ┌──────────────────┐
-│  - terrain_map     │       ┌──────────────────────┐  │   FAR planner    │
-│    pub in replay   │       │ terrainAnalysisExt   │─▶│  (unchanged)     │
-│  KEPT:             │       │ (ros2 run + --ros-   │  │  builds V-Graph  │
-│  - TerrainAccumul. │       │  args)                │  │  from correct    │
-│  - save/load       │       └──────────────────────┘  │  obstacle cloud  │
-│  - _replay_terrain │                                 └──────────────────┘
-│    → only to       │
-│    /registered_scan│
-└────────────────────┘
-```
-
-Key invariants after fix:
-1. **Single publisher** per topic — bridge only publishes `/registered_scan`, not terrain_map/ext.
-2. **`terrainAnalysis` gets correct params** — driven by `--ros-args -p maxRelZ:=1.5 …`, same as `launch_explore.sh` already uses.
-3. **TerrainAccumulator kept** for persistence (save/load, startup replay to /registered_scan only). Accumulator itself is fine; only its misuse as a second `/terrain_map` publisher was wrong.
-
-## 2. Files Changed
-
-### A. Bridge (Python) — `scripts/go2_vnav_bridge.py`
-
-Cuts:
-- `self._terrain_map_pub = self.create_publisher(... "/terrain_map", ...)` (line 231-233)
-- `self._terrain_map_ext_pub = self.create_publisher(... "/terrain_map_ext", ...)` (line 234-236)
-- `self.create_timer(5.0, self._sync_terrain_to_far)` (line 287)
-- Method `_sync_terrain_to_far(self)` (lines 489-516)
-- Method `_publish_accumulated_terrain(self)` alias (lines 517-519)
-- Two lines in `_replay_terrain()`: `self._terrain_map_pub.publish(msg)` + `self._terrain_map_ext_pub.publish(msg)` (lines 479-480) — keep `self._pc_pub.publish(msg)`
-- The shutdown hook call `self._publish_accumulated_terrain()` (line 1470)
-
-Keeps:
-- `_pc_pub` publishing to `/registered_scan` (unchanged).
-- `TerrainAccumulator` class (unchanged).
-- `save_terrain()` / `load_terrain()` for persistence.
-- `_replay_terrain()` publishes to `/registered_scan` only (terrain replay on startup still works — TARE and terrain_analysis pick it up naturally).
-
-Estimated diff: −55 lines.
-
-### B. Launch scripts (shell)
-
-**`scripts/launch_nav_only.sh`** — replace lines 66-69:
-```bash
-# BEFORE
-ros2 run terrain_analysis terrainAnalysis &
-PIDS+=($!)
-ros2 run terrain_analysis_ext terrainAnalysisExt &
-PIDS+=($!)
-
-# AFTER (matches launch_explore.sh pattern verbatim)
-ros2 run terrain_analysis terrainAnalysis --ros-args \
-  -p clearDyObs:=true \
-  -p minDyObsDis:=0.14 \
-  -p minOutOfFovPointNum:=20 \
-  -p obstacleHeightThre:=0.15 \
-  -p maxRelZ:=1.5 \
-  -p limitGroundLift:=true \
-  -p maxGroundLift:=0.05 \
-  -p minDyObsVFOV:=-30.0 \
-  -p maxDyObsVFOV:=35.0 &
-PIDS+=($!)
-ros2 run terrain_analysis_ext terrainAnalysisExt --ros-args \
-  -p obstacleHeightThre:=0.15 \
-  -p maxRelZ:=1.5 &
-PIDS+=($!)
-```
-
-**`scripts/launch_nav_explore.sh`** — same fix at lines 58-61.
-**`scripts/test_integration.sh`** — same fix at lines 61-63.
-
-No changes to `launch_explore.sh`, `launch_vnav.sh` (already correct).
-
-### C. Tests (updates + new)
-
-Tests to DELETE (enforce reverted-out bug):
-- `tests/harness/test_level40_far_terrain_feed.py` (177 lines, entire file) — asserts `_publish_accumulated_terrain` + terrain_map publishing, both removed.
-
-Tests to UPDATE:
-- `tests/harness/test_level36_terrain_replay.py` — remove/invert `TestTerrainReplayPublisherDeclarations` class. Assertions flip: bridge must NOT have `_terrain_map_pub` / `_terrain_map_ext_pub`. Reduce to testing only `_pc_pub` on `/registered_scan`. Expected: drops from ~15 tests to ~6.
-
-Tests to ADD:
-- `tests/harness/test_level41_vgraph_bridge_cleanup.py` (new) — T1 regression guards:
-  ```python
-  def test_bridge_has_no_terrain_map_publisher(): ...
-  def test_bridge_has_no_sync_terrain_to_far(): ...
-  def test_bridge_has_no_publish_accumulated_terrain(): ...
-  def test_replay_terrain_publishes_only_registered_scan(): ...
-  ```
-- `tests/harness/test_level42_launch_terrain_params.py` (new) — T2:
-  ```python
-  @pytest.mark.parametrize("script", [
-      "launch_nav_only.sh",
-      "launch_nav_explore.sh",
-      "test_integration.sh",
-  ])
-  def test_script_passes_terrain_params(script): ...
-  ```
-- `tests/harness/test_level43_vgraph_integration.py` (new, opt-in) — T3:
-  ```python
-  @pytest.mark.ros2  # skipped unless ROS2 + nav_stack installed
-  @pytest.mark.slow  # ~60s
-  def test_vgraph_forms_cross_room_edge_through_living_hall_door(): ...
-  ```
-
-## 3. Data Flow After Fix
-
-```
-MuJoCo lidar
-  ↓ Go2VNavBridge._publish_pointcloud (20 Hz)
-  ↓
-/registered_scan  [intensity = z - ground_z, ceiling-filtered at 1.0m]
-  │
-  ├────▶ terrainAnalysis (maxRelZ=1.5)
-  │         ↓
-  │      /terrain_map [intensity = z - local_ground]
-  │         ↓
-  │      FAR (as /scan_cloud) → ScanCallBack
-  │
-  ├────▶ terrainAnalysisExt (maxRelZ=1.5)
-  │         ↓
-  │      /terrain_map_ext [intensity = z - local_ground]
-  │         ↓
-  │      FAR (as /terrain_cloud) → TerrainCallBack
-  │         ↓
-  │      CropBoxCloud 7.5m → ExtractFreeAndObsCloud (kFreeZ=0.15)
-  │         ↓
-  │      surround_obs_cloud_ → contour_detector → corners → V-Graph
-  │
-  └────▶ TARE (localFrontier, waypoint generation)
-  └────▶ FAR (as /terrain_local_cloud) → TerrainLocalCallBack
-```
-
-After fix: FAR's `surround_obs_cloud_` actually contains wall and doorframe points → `contour_detector` places corners at door edges → V-Graph gets nodes → edge voting can succeed.
-
-## 4. Wave Structure (Task Grouping)
-
-Work is parallelizable; grouping for Phase 3 (sdd-tasks) task decomposition:
-
-### Wave 1 — Parallel, independent file touches
-| # | Task | Agent | Files | ~LOC |
-|---|------|-------|-------|------|
-| W1-A | Bridge revert | Alpha | `scripts/go2_vnav_bridge.py` | −55 |
-| W1-B | Launch script fix ×3 | Beta | `scripts/launch_nav_only.sh`, `scripts/launch_nav_explore.sh`, `scripts/test_integration.sh` | +30 |
-| W1-C | Test cleanup | Gamma | Delete `test_level40_*.py`, update `test_level36_*.py` | −200 |
-
-### Wave 2 — Depends on Wave 1
-| # | Task | Agent | Files |
-|---|------|-------|-------|
-| W2-A | T1 regression tests | Alpha | `test_level41_vgraph_bridge_cleanup.py` |
-| W2-B | T2 launch script tests | Beta | `test_level42_launch_terrain_params.py` |
-| W2-C | T3 integration harness | Gamma | `test_level43_vgraph_integration.py` |
-
-### Wave 3 — Verification (sequential)
-| # | Task | Owner |
-|---|------|-------|
-| W3-1 | Full `pytest tests/` (exclude stale prompt tests) | Dispatcher |
-| W3-2 | Commit (a) bridge revert — atomic | Dispatcher |
-| W3-3 | Commit (b) launch script fix — atomic | Dispatcher |
-| W3-4 | **AC6 manual**: Yusen runs `vector-cli → "去卧室"`, observes FAR V-Graph route | CEO |
-
-If W3-4 passes: Phase A complete, Phase B not needed, ready for v2.0 merge.
-If W3-4 fails: escalate to Phase B (new SDD round for FAR internals).
-
-## 5. Test Strategy
-
-### Unit-style (static analysis, no ROS2)
-Pattern already established in `tests/harness/test_level30_*.py`, `test_level36_*.py`: read source text, assert presence/absence of symbols. Use `nav_debug_helpers.read_bridge_source()`.
-
-These tests are fast (<1s), runnable in any CI, reliable.
-
-### Integration (live ROS2)
-Pattern from existing `tests/e2e/test_explore_navigate_e2e.py`: subprocess-launch the nav stack, wait for readiness, drive via `/joy` or direct /speed, subscribe to output topics.
-
-T3 harness will:
-1. Launch `scripts/launch_nav_only.sh` in subprocess.
-2. Launch bridge in same process group.
-3. Wait for `/robot_vgraph` topic to exist (timeout 15s).
-4. Send /joy forward commands for 20s to drive Go2 through living_room→hallway door.
-5. Subscribe to `/robot_vgraph`, collect graph snapshots.
-6. Assert: ≥1 edge connects two nodes whose positions fall in different room bounding boxes (from `scene_room.xml` known layout).
-
-Marked `@pytest.mark.ros2 @pytest.mark.slow`, opt-in via `pytest -m ros2`.
-
-### Regression baseline
-`pytest tests/ --ignore=tests/unit/vcli/test_prompt.py -q` must show 0 failures after all waves.
-
-Expected delta vs current state:
-- −177 tests from deleted `test_level40_*.py`
-- −9 tests invalidated in `test_level36_*.py` (from `TestTerrainReplayPublisherDeclarations`)
-- +4 from new `test_level41_*.py`
-- +3 from new `test_level42_*.py` (3 parametrized)
-- +0 from new `test_level43_*.py` (skipped without ROS2)
-
-Net: ~3267 → ~3088 total, all passing.
-
-## 6. Risks & Mitigations
-
-| # | Risk | Likelihood | Impact | Mitigation |
-|---|------|------------|--------|------------|
-| 1 | Phase A insufficient → R3 (FAR internal) is the real cause | Med | High | Phase B contingency already scoped in spec §9. Off-ramp clear. |
-| 2 | Removing `_publish_accumulated_terrain` breaks a shutdown code path I missed | Low | Med | Grep pass before removal; shutdown hook `save_terrain()` is separate and stays intact. |
-| 3 | `TerrainAccumulator` still exists but nothing consumes `to_pointcloud()` — dead code? | Low | Low | `_replay_terrain()` still uses it (publishes replay to /registered_scan on startup). Not dead. |
-| 4 | Integration test T3 flakes on slow machines (subprocess ROS2 bringup) | Med | Low | Long timeouts (15s bringup, 20s drive); opt-in via `@pytest.mark.ros2`; no CI-blocking. |
-| 5 | Launch script edit breaks line-count-sensitive external users | Very low | Low | No one depends on shell script line numbers. |
-| 6 | Regression: terrainAnalysis with `maxRelZ=1.5` lets ceiling points pollute obs cloud | Low | Med | Bridge ceiling filter at 1.0m on `/registered_scan` upstream already caps input. |
-| 7 | `launch_nav_explore.sh` is only referenced in `explore.py:_launch_nav_explore()` — does it actually get called? | Med | Low | Check call site; if dead, just delete instead of fix. |
-
-## 7. Pre-execution Verification Checks
-
-Before starting Wave 1:
-```bash
-# Confirm the uncommitted changes match spec scope (shouldn't be surprises)
-git status
-git diff scripts/go2_vnav_bridge.py | head -30
-
-# Confirm launch_explore.sh is the right reference
-diff <(grep "ros2 run terrain_analysis" scripts/launch_explore.sh) \
-     <(grep "ros2 run terrain_analysis" scripts/launch_nav_only.sh)
-
-# Baseline test run (capture pre-fix state)
-pytest tests/harness/ -q --tb=no 2>&1 | tail -5
-```
-
-## 8. CEO-Visible Summary
-
-- **Architectural?** No. Non-architectural — revert of recent bridge experiment + config parameter sync + test cleanup.
-- **Nodes affected?** None added/removed. `terrainAnalysis` / `terrainAnalysisExt` get correct params (they were already in launch graph).
-- **Topics affected?** `/terrain_map` + `/terrain_map_ext` become single-publisher (from 2 → 1).
-- **Interfaces changed?** No.
-- **External dependencies?** None new.
-- **Estimated effort?** ~2 hours: 3 parallel Wave-1 tasks (~30min each), 3 parallel Wave-2 tasks (~30min each), + commit + AC6 manual test.
-
-## 9. Handoff to Phase 3 (sdd-tasks)
-
-Phase 3 will break the waves above into TDD-structured tasks with explicit Red/Green/Refactor cycles per task:
-
-- W1-A: [Red] write regression tests asserting publishers are absent → fail (they still exist) → [Green] delete publishers + methods → tests pass
-- W1-B: [Red] write parametrized script-content tests → fail → [Green] patch scripts → tests pass
-- W1-C: straight test deletions — no TDD cycle, just remove
-- W2-A/B: tests written in W1 are already these — merge into W1 tasks
-- W2-C: integration harness scaffold → [Manual] run live once → [Commit] mark passing
+**Status**: APPROVED async (CEO auto-approval)
+**Depends on**: spec.md (`.sdd/spec.md`)
+**Branch**: `feat/v2.0-vectorengine-unification`
 
 ---
 
-**Classification**: Non-architectural. CEO can review async; agent team proceeds.
+## 1. Architecture
+
+```
+                    Vector OS Nano main process (Apache 2.0)
+        ┌────────────────────────────────────────────────────┐
+        │  vector-cli sysnav-sim                              │
+        │   ├─ MuJoCo subprocess (existing go2_vnav_bridge)  │
+        │   │    └─ + 3 new sensor publishers               │
+        │   │                                                │
+        │   └─ LiveSysnavBridge (new, rclpy subscriber)      │
+        │        └─> world_model.add_object(ObjectState)     │
+        │             via existing object_node_to_state()    │
+        └────────────────────────────────────────────────────┘
+                              ▲
+              ROS2 topics      │ /object_nodes_list
+                              │
+                              │ /registered_scan, /camera/image,
+                              ▼ /camera/depth, /state_estimation
+        ┌────────────────────────────────────────────────────┐
+        │  SysNav Workspace (sibling, PolyForm-NC)           │
+        │   semantic_mapping_node + detection_node + vlm_*    │
+        └────────────────────────────────────────────────────┘
+```
+
+Isolation invariants preserved from v2.3:
+- Skills do **not** import sensors or rclpy.
+- `integrations/sysnav_bridge/` defers ROS2 imports to runtime so
+  unit tests run on a CPU-only Python interpreter.
+- `hardware/sim/sensors/` may import `mujoco` (we already do) but not
+  `rclpy` at module load — rclpy publishers are constructed lazily by
+  `go2_vnav_bridge.py` and passed in.
+
+## 2. Technical Decisions
+
+| # | Decision | Choice | Reason |
+|---|---|---|---|
+| D1 | Sim sensor location | `vector_os_nano/hardware/sim/sensors/` (new package) | Isolates publisher logic from `MuJoCoGo2` |
+| D2 | Lidar pattern | Uniform polar grid (h_resolution × v_layers) | Deterministic — tests can assert exact pixel-to-ray mapping |
+| D3 | Pano stitching | 6 cube faces × 90° render → equirectangular reproject | Robust geometry, Apache-friendly numpy + opencv math |
+| D4 | Stitch backend | OpenCV `cv2.remap` with precomputed LUT | Single LUT init, ~5 ms per frame on RTX 5080 |
+| D5 | Odometry source in sim | Read MuJoCo qpos directly → `/state_estimation`; **skip** `arise_slam_mid360` | Sim has ground truth; SLAM in sim is wasted compute |
+| D6 | rclpy in tests | Lazy import, mock-friendly factory | 0 ROS2 dep at test collection |
+| D7 | Bridge executor | Own `MultiThreadedExecutor` (matches v2.3 Go2 proxy refactor) | Aligns with `Ros2Runtime` pattern already in repo |
+| D8 | LiveSysnavBridge resilience | Soft-degrade: missing `tare_planner.msg`, `rclpy`, or topic → log WARNING + run as no-op | Already a v2.3 Q decision pattern |
+| D9 | Sysnav-sim entry point | New CLI tool `sysnav_sim_tool.py`, distinct from `sim_tool.py` | Keeps go2sim minimal; sysnav-sim adds bridge wiring |
+| D10 | Coordinate frames | All sim publishes in `map` frame; SysNav's frame conventions match | Avoid TF chaos; `frame_id="map"` everywhere |
+| D11 | Cleanup of v2.3 perception | Delete `vlm_qwen.py`, `go2_perception.py`, `go2_calibration.py` and their tests | Already landed pre-spec; no orphan paths |
+| D12 | xmat fix (G3) | Two-line patch in `go2_ros2_proxy.py` + update `test_go2_camera_pose.py` | Carries the v2.3.1 hot-fix forward |
+| D13 | GSO scene swap | **Out of scope** for v2.4 | Defer to v2.5; SysNav perception works on capsule cylinders too (lower fidelity but unblocks integration) |
+| D14 | Pano camera mount | Match SysNav `cloud_image_fusion` defaults: x=-0.12, y=-0.075, z=0.265, roll=-π/2, yaw=-π/2 | Avoids editing SysNav config; emit our launch with these as the canonical mount |
+| D15 | Lidar mount | Trunk-top (z = 0.10 m above body) | Matches typical Mid-360 mount on Go2 |
+
+## 3. Module Design
+
+### 3.1 `hardware/sim/sensors/__init__.py` (NEW)
+
+```python
+"""MuJoCo virtual ROS2 sensors.
+
+Module load is rclpy-free; publishers are wired by
+`go2_vnav_bridge.py` after rclpy is initialised.
+"""
+from .lidar360 import MuJoCoLivox360
+from .pano360 import MuJoCoPano360
+from .gt_odom import GroundTruthOdomPublisher
+
+__all__ = ["MuJoCoLivox360", "MuJoCoPano360", "GroundTruthOdomPublisher"]
+```
+
+### 3.2 `lidar360.py` — Virtual Mid-360 (~180 LoC)
+
+Algorithm:
+
+1. Precompute ray directions in body frame (`h_resolution × v_layers`,
+   default 360 × 16 = 5760 rays).
+2. Each `step()`:
+   - Read body world pose from `data.xpos[body_id]`,
+     `data.xquat[body_id]`.
+   - Rotate ray directions to world frame.
+   - Call `mujoco.mj_ray()` for each ray (vectorised loop).
+   - Build `(N, 4)` array of `(x, y, z, intensity=1.0)` for hits inside
+     `max_range`.
+3. `to_pointcloud2()`:
+   - Use the existing `ros2_bag_utils.create_point_cloud` helper
+     pattern (we'll port the relevant bits) — but simpler: hand-build
+     `PointCloud2` with fields `x y z intensity` (float32 each).
+
+Rate-limit:
+- Track last `step()` wall time; subsequent calls within `1/rate_hz`
+  return cached cloud.
+
+Tests use `mujoco.MjModel` constructed from a tiny inline MJCF:
+
+```xml
+<mujoco>
+  <worldbody>
+    <body name="trunk" pos="0 0 0.5"><freejoint/></body>
+    <geom name="wall" type="box" pos="3 0 0.5" size="0.1 5 5"/>
+  </worldbody>
+</mujoco>
+```
+
+### 3.3 `pano360.py` — 360-degree RGBD (~250 LoC)
+
+Algorithm:
+
+1. Build 6 MuJoCo cameras in MJCF runtime (via `mujoco.MjvCamera`):
+   front / back / left / right / up / down at `body_offset`.
+2. For each face: `mujoco.Renderer(...).render()` → RGB and depth
+   buffers at 480 × 480.
+3. Stitch into 1920 × 640 equirectangular via precomputed `cv2.remap`
+   LUT mapping each output (u, v) to a (face, fx, fy) sample.
+4. Crop top 30° / bottom 30° (per SysNav `cloud_image_fusion.py:68`
+   "cropped 30 degree (160 pixels) in top and 30 degree (160 pixels) in
+   bottom").
+
+Rate-limit identical to lidar.
+
+LUT precompute is one-time at __init__; runtime cost is dominated by
+the 6 GPU renders (~80 ms total on RTX 5080).
+
+Test inline MJCF places coloured boxes around the camera; assert the
+red box at θ=0° appears in the image columns matching θ=0°.
+
+### 3.4 `gt_odom.py` — Ground-truth odometry (~120 LoC)
+
+Algorithm:
+
+1. Read `data.xpos[body_id]` and `data.xquat[body_id]`.
+2. Differentiate position to estimate twist:
+
+   ```python
+   dt = now - self._last_t
+   linear = (xpos - self._last_xpos) / max(dt, 1e-3)
+   ```
+
+3. Build `nav_msgs/Odometry`. First call returns zero twist.
+
+Tests assert:
+- Position equals body pose.
+- Twist after teleporting body returns finite-diff velocity.
+- Quaternion normalised.
+- Frame fields correct.
+
+### 3.5 `integrations/sysnav_bridge/live_bridge.py` — Live ROS2 subscriber (~200 LoC)
+
+```python
+class LiveSysnavBridge:
+    def __init__(self, world_model, ...): ...
+
+    def start(self) -> bool:
+        try:
+            import rclpy
+            from rclpy.executors import MultiThreadedExecutor
+            from tare_planner.msg import ObjectNodeList
+        except ImportError as exc:
+            logger.warning("[sysnav_bridge] %s — degrading to no-op", exc)
+            self._active = False
+            return False
+
+        rclpy.init(args=[])
+        self._node = rclpy.create_node(self._name)
+        self._sub = self._node.create_subscription(
+            ObjectNodeList, self._topic, self._callback, 50,
+        )
+        self._executor = MultiThreadedExecutor()
+        self._executor.add_node(self._node)
+        self._spin_thread = threading.Thread(
+            target=self._executor.spin, daemon=True,
+        )
+        self._spin_thread.start()
+        self._active = True
+        return True
+
+    def _callback(self, msg):
+        for node in msg.nodes:
+            try:
+                state = object_node_to_state(node, prior=self._world_model.get_object(...))
+                self._world_model.add_object(state)
+            except Exception as exc:
+                logger.warning("[sysnav_bridge] skipping malformed node: %s", exc)
+```
+
+Disconnect detection:
+- Track `last_msg_t`. If `now - last_msg_t > on_disconnect_after_s`,
+  log WARNING once. Reset on next message.
+
+### 3.6 `vcli/tools/sysnav_sim_tool.py` — CLI entry (~150 LoC)
+
+Wraps `SimStartTool` (with_arm=True) and adds:
+
+1. Pre-flight: import `tare_planner.msg`; if missing, WARN and proceed
+   with `LiveSysnavBridge` disabled.
+2. Construct `LiveSysnavBridge` after MuJoCo subprocess is up.
+3. Wait up to 5 s for first `/object_nodes_list` message; log status.
+4. Register `stop_sysnav_sim` tool to clean up.
+
+### 3.7 `go2_vnav_bridge.py` patches (~100 LoC of new wiring)
+
+Where the bridge subprocess currently constructs the rclpy node, add:
+
+```python
+self._lidar = MuJoCoLivox360(model, data, ...)
+self._pano  = MuJoCoPano360(model, data, ...)
+self._odom  = GroundTruthOdomPublisher(model, data, ...)
+
+self._lidar_pub = node.create_publisher(PointCloud2, '/registered_scan', 10)
+self._image_pub = node.create_publisher(Image, '/camera/image', 5)
+self._depth_pub = node.create_publisher(Image, '/camera/depth', 5)
+self._odom_pub  = node.create_publisher(Odometry, '/state_estimation', 50)
+```
+
+Per `mj_step` callback:
+
+```python
+if self._lidar.due():  self._lidar_pub.publish(self._lidar.step_pc2(stamp))
+if self._pano.due():   img, depth = self._pano.step()
+                       self._image_pub.publish(self._cv_bridge.cv2_to_imgmsg(img, 'rgb8'))
+                       self._depth_pub.publish(self._cv_bridge.cv2_to_imgmsg(depth, '32FC1'))
+if self._odom.due():   self._odom_pub.publish(self._odom.step_msg(stamp))
+```
+
+`due()` is a simple rate-limit method on each sensor.
+
+### 3.8 `go2_ros2_proxy.py:338` — xmat fix (G3)
+
+```python
+# OLD (wrong — ROS-LEFT under REP-103):
+# right = np.array([-sin_h, cos_h, 0.0])
+# up = np.cross(fwd, right)
+
+# NEW (REP-103 compliant):
+right = np.array([sin_h, -cos_h, 0.0])
+up = np.cross(right, fwd)
+```
+
+Update `tests/integration/test_go2_camera_pose.py` expected values:
+at heading=0: `right = (0, -1, 0)`, `up = (0, 0, 1)`.
+
+## 4. Data Flow
+
+```
+MuJoCo step (~1000 Hz)
+   │
+   ├─ Lidar.step()       (10 Hz)  ──▶ /registered_scan PointCloud2
+   ├─ Pano.step()        (5 Hz)   ──▶ /camera/image    Image (rgb8)
+   │                                ──▶ /camera/depth    Image (32FC1)
+   └─ GTodom.step()      (50 Hz)  ──▶ /state_estimation Odometry
+
+(SysNav consumes; meanwhile inside Vector OS Nano main process:)
+
+LiveSysnavBridge subscriber (10 Hz typical from SysNav side)
+   │
+   └─▶ world_model.add_object(ObjectState)
+         │ via object_node_to_state() — already tested
+         ▼
+       Existing skills: DetectSkill / PickTopDownSkill / MobilePickSkill
+```
+
+## 5. Directory Structure
+
+```
+vector_os_nano/
+├── hardware/sim/
+│   ├── go2_vnav_bridge.py            (MODIFIED — sensor publishers)
+│   ├── go2_ros2_proxy.py              (MODIFIED — xmat G3)
+│   └── sensors/                       (NEW package)
+│       ├── __init__.py
+│       ├── lidar360.py
+│       ├── pano360.py
+│       └── gt_odom.py
+├── integrations/sysnav_bridge/
+│   ├── __init__.py                    (UPDATED — re-export LiveSysnavBridge)
+│   ├── topic_interfaces.py            (existing)
+│   └── live_bridge.py                 (NEW)
+└── vcli/tools/
+    ├── sim_tool.py                    (UPDATED — Qwen wire-up gone, see G8)
+    └── sysnav_sim_tool.py             (NEW)
+
+tests/
+├── unit/hardware/sim/sensors/         (NEW dir)
+│   ├── test_lidar360.py
+│   ├── test_pano360.py
+│   └── test_gt_odom.py
+├── unit/integrations/sysnav_bridge/   (NEW dir)
+│   └── test_live_bridge.py
+├── unit/vcli/test_sysnav_sim_tool.py
+└── integration/
+    ├── test_lidar360_against_world.py     (NEW)
+    ├── test_pano360_against_world.py      (NEW)
+    ├── test_gt_odom_against_walk.py        (NEW)
+    ├── test_sysnav_sim_smoke.py            (NEW)
+    ├── test_xmat_rep103_regression.py      (NEW)
+    └── test_sysnav_bridge_mapping.py       (existing — kept green)
+
+scripts/
+└── smoke_sysnav_sim.py                 (NEW)
+
+docs/
+├── sysnav_integration.md               (existing — bringup)
+└── sysnav_simulation.md                (NEW — sim-specific)
+```
+
+## 6. Key Implementation Details
+
+### 6.1 Lidar polar grid
+
+```python
+def _build_ray_dirs(h_resolution: int, v_layers: int) -> np.ndarray:
+    azimuths = np.linspace(-np.pi, np.pi, h_resolution, endpoint=False)
+    elevations = np.linspace(np.deg2rad(-7.0), np.deg2rad(52.0), v_layers)
+    az_grid, el_grid = np.meshgrid(azimuths, elevations)
+    cx = np.cos(el_grid) * np.cos(az_grid)
+    cy = np.cos(el_grid) * np.sin(az_grid)
+    cz = np.sin(el_grid)
+    return np.stack([cx, cy, cz], axis=-1).reshape(-1, 3)
+```
+
+Body→world rotation via quaternion. Total rays default = 5760.
+
+### 6.2 Pano cube-face → equirectangular LUT
+
+Precompute mapping from output `(u, v)` to a cube face and face-pixel
+coordinates:
+
+```python
+def _build_equirec_lut(out_w: int, out_h: int, face_size: int):
+    """For each output pixel, return (face_idx, fx, fy) sample point."""
+    # u, v in output → spherical angles
+    phi = (np.linspace(0, 1, out_w) - 0.5) * 2 * np.pi    # azimuth
+    theta = (0.5 - np.linspace(0, 1, out_h)) * np.pi        # elevation
+    # ...standard cube-map sampling math...
+    return face_idx_map, fx_map, fy_map
+```
+
+Apply via `cv2.remap` per face. Combine 6 face renders into one image.
+This is the SysNav-equivalent of what their Unity binary does
+internally.
+
+### 6.3 PointCloud2 hand-build
+
+```python
+def _build_pointcloud2(points: np.ndarray, stamp, frame_id) -> PointCloud2:
+    fields = [
+        PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+    ]
+    msg = PointCloud2()
+    msg.header.stamp = stamp
+    msg.header.frame_id = frame_id
+    msg.height = 1
+    msg.width = points.shape[0]
+    msg.fields = fields
+    msg.is_bigendian = False
+    msg.point_step = 16
+    msg.row_step = 16 * points.shape[0]
+    msg.is_dense = True
+    msg.data = points.astype(np.float32).tobytes()
+    return msg
+```
+
+### 6.4 LiveSysnavBridge prior-state lookup
+
+```python
+def _callback(self, msg):
+    for node in msg.nodes:
+        canonical_id = f"sysnav_{int(node.object_id[0])}" if node.object_id else "sysnav_unknown"
+        prior = self._world_model.get_object(canonical_id)
+        try:
+            state = object_node_to_state(node, prior=prior)
+            self._world_model.add_object(state)
+        except Exception as exc:
+            logger.warning("[sysnav_bridge] dropping malformed node: %s", exc)
+```
+
+## 7. Test Strategy
+
+### 7.1 Coverage philosophy
+
+This cycle adds infrastructure (sensor sims + ROS subscriber). Bugs
+here cascade into all downstream behaviour, so we over-invest in
+unit tests:
+
+- ≥ 50 unit tests across 5 new modules.
+- Each module tests at least: happy path, empty input, rate-limit,
+  resilience (missing dep / malformed input), one geometric invariant.
+- Mocks: small inline MJCF strings — no go2.xml dependency for unit
+  tests (avoids OOM cascade from `feedback_no_parallel_agents.md`).
+
+### 7.2 Mock infrastructure
+
+`tests/unit/hardware/sim/sensors/conftest.py`:
+
+```python
+@pytest.fixture
+def tiny_mujoco_model_data():
+    """Single-body MJCF for sensor tests — no Go2 robot, no perception
+    dependency cascade. Returns (model, data) ready for sensors."""
+    xml = ...
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    return model, data
+```
+
+### 7.3 ROS2 mocking
+
+`tests/unit/integrations/sysnav_bridge/conftest.py`:
+
+```python
+class _StubObjectNodeList:
+    def __init__(self, nodes):
+        self.nodes = nodes
+        self.header = _StubHeader()
+
+@pytest.fixture
+def patch_rclpy(monkeypatch):
+    """Stub out rclpy + tare_planner.msg so LiveSysnavBridge.start()
+    can be exercised in isolation."""
+    ...
+```
+
+### 7.4 Coverage gate
+
+```bash
+pytest \
+  tests/unit/hardware/sim/sensors \
+  tests/unit/integrations/sysnav_bridge \
+  tests/unit/vcli/test_sysnav_sim_tool.py \
+  --cov=vector_os_nano.hardware.sim.sensors \
+  --cov=vector_os_nano.integrations.sysnav_bridge \
+  --cov=vector_os_nano.vcli.tools.sysnav_sim_tool \
+  --cov-fail-under=90
+```
+
+## 8. Risks
+
+| # | Risk | Mitigation |
+|---|------|------------|
+| R1 | `mujoco.mj_ray` Python loop @ 5760 rays/frame too slow | Benchmark in T1 RED; if > 50 ms, vectorise via batched call (mujoco 3.6 supports `mj_multiRay`) |
+| R2 | 6 cube-face render saturates GPU when SAM2 also running | Drop pano rate to 3 Hz under load; runtime VRAM probe in pre-flight |
+| R3 | SysNav `cloud_image_fusion` rejects our pano due to mount mismatch | M1 emit YAML override; first launch logs SysNav's complained-about params |
+| R4 | rclpy version drift between Vector OS Nano venv and SysNav workspace | Docs spec `source /opt/ros/jazzy/setup.bash` in both terminals; pre-flight checks `/object_nodes_list` topic type |
+| R5 | LiveSysnavBridge spin-thread leaks on agent shutdown | Match `Ros2Runtime` graceful-stop pattern; `stop()` joins with 2 s timeout |
+| R6 | Pano LUT precompute hits memory if out resolution upsizes | Cap `out_w * out_h * 4 bytes < 50 MB` (default 1920×640×4 = 4.9 MB OK) |
+| R7 | Sensor publishers consume MuJoCo state from Python while physics thread mutates → segfault | Sensors run in same subprocess as physics step; gate via existing thread lock pattern from `MuJoCoGo2.set_velocity` |
+| R8 | Tests fail on dev box without `mujoco` available | We already require mujoco for existing tests; this risk is constant. Lidar/pano unit tests skip when import fails |
+
+## 9. Execution Plan (for task.md)
+
+| Wave | Task | Agent | Depends |
+|---|---|---|---|
+| **W0** | T0 env probe — mujoco + opencv versions, mj_ray smoke | dispatcher | — |
+| **W1** | T1 lidar360 + tests | Alpha | T0 |
+| **W1** | T2 gt_odom + tests | Beta | T0 |
+| **W1** | T3 G3 xmat fix + regression test | Gamma | — |
+| **W2** | T4 pano360 + tests | Alpha | T0, T1 (cube-face renderer pattern shared) |
+| **W2** | T5 LiveSysnavBridge + tests | Beta | T0 |
+| **W3** | T6 go2_vnav_bridge wiring + integration tests | Alpha | T1, T2, T4 |
+| **W3** | T7 sysnav_sim_tool CLI + tests | Beta | T5, T6 |
+| **W4** | T8 smoke_sysnav_sim.py + docs | Gamma | all |
+| **W5** | QA: code-reviewer + security-reviewer | parallel subagents | all |
+| **W6** | CEO live-REPL smoke | Yusen | all |
+
+Estimated wall-clock: **3–4 days** at serial subagent cadence.
+
+## 10. Carry-forward debt (not addressed in v2.4)
+
+- GSO realistic-mesh scene swap → v2.5
+- `_normalise_color_keyword` promote to public → v2.5
+- `_wait_stable` extract → v2.5
+- `arise_slam_mid360` for real-robot bringup → v2.5
+- Replace `vector_navigation_stack` with SysNav `tare_planner` → v3.0
+- Real Go2 + real Livox + real Ricoh integration → v3.0
+- 6-DoF FoundationPose grasp → v3.0

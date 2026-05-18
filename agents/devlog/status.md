@@ -1,121 +1,140 @@
 # Agent Status
 
-**Updated:** 2026-04-16
+**Updated:** 2026-05-18 (v2.4 SysNav — infra LANDED, bridge wiring + launch NOT delivered; master merge prep)
+**Branch:** `feat/v2.0-vectorengine-unification`
 
-## Current: v2.0.1 V-Graph Cross-Room Fix — COMPLETE
+## Current state
 
-Branch: `feat/v2.0-vectorengine-unification`
-Status: AC1-6 PASS. Ready to commit + push.
+**v2.4 SysNav Simulation Integration — PAUSED (infra + tests green, T6 + G5 NOT delivered)**
 
-### V-Graph Phase A (SDD, 2026-04-16 earlier)
-- Bridge cleanup: removed duplicate /terrain_map publishers (-55 lines)
-- Launch scripts: added maxRelZ=1.5 + Go2 terrain params to 3 scripts
-- Tests: +22 new (L41/L42/L43), -1 deleted (L40), 54 stale fails cleaned up
+5 core modules + 215 tests landed (lidar360, pano360, gt_odom, sysnav_bridge,
+sysnav_sim_tool, xmat G3 fix). Tasks T6 (vnav_bridge sensor wiring) + G5 (launch file)
+were NOT delivered — sensors exist but do not wire into scripts/go2_vnav_bridge.py
+or a working launch file. Pipeline does not run end-to-end. CEO decision: infra retained,
+integration deferred to v2.5. Local manipulation (Piper pick/place) decoupled/deferred
+(skills in-tree, not registered by default). Branch is 34 commits ahead of
+origin/master; integrate via PR (NOT fast-forward — see Master merge readiness).
 
-### V-Graph Phase B (FAR root cause, 2026-04-16 late)
-- Instrumented FAR TerrainCallBack + MapHandler with rate-limited printf
-- Localized drop: `neighbor_obs_indices_` pruned 2205→8 by `ObsNeighborCloudWithTerrain`
-- Root cause (cross-repo, vector_navigation_stack):
-  - `vehicle_height=1.0` in `far_planner/config/indoor.yaml` was wrong — FAR uses it as "base_link above floor", not "obstacle cutoff"
-  - For Go2 (base z≈0.28), gap to H_THRED=0.2 exceeded, TraversableAnalysis never inits
-  - Flat terrain kdtree cleared → only 8 cells near world origin pass filter
-  - Fix: `vehicle_height: 0.3`
-- Collateral fix: `contour_detector.h:SaveCurrentImg` SIGSEGV on `nh_->get_logger()` (nh_ never initialized upstream) → replaced with std::cout
+CEO directive 2026-04-25: auto-approve architectural decisions, start
+implementation, emphasize broad test coverage. v2.4-perception-overhaul
+(YOLOE + SAM3 + own pointcloud / sanity gates) is archived because
+SysNav already provides equivalent capabilities. SysNav (CMU sibling
+lab, PolyForm-NC) runs as a separate ROS2 workspace; we publish
+ground-truth `/registered_scan`, `/camera/image`, `/camera/depth`,
+`/state_estimation` from MuJoCo and consume `/object_nodes_list` via
+the existing `sysnav_bridge` adapter (Apache 2.0 boundary preserved).
 
-### V-Graph verify (AC6 passed)
-| Metric | Before | After |
-|---|---|---|
-| /FAR_obs_debug pts | 0 | 4800+ |
-| neighbor.size (GetSurroundObs) | 8 | 70-444 |
-| total_out (surround_obs) | 0 | 925-4869 |
-| global_vertex | 0 | 70-75 |
-| visibility_edge | 0 | 131 |
-| Cross-room edges | no | yes (e.g. kitchen↔living door through hallway) |
-| /tmp/far_contour_imgs non-zero | 0% | 84% |
+## Cleanup landed pre-spec (this session)
 
-### Cleanup done
-- Instrumentation removed from FAR C++, clean Release rebuild (0 VGRAPH-DBG strings)
-- is_save_img reverted to false (debug mode only)
-- DEBUG.md complete with full hypothesis-loop record
-- Learned pattern saved: `~/.claude/skills/learned/far-vgraph-pipeline.md`
+Deleted (~2570 LoC removed):
+- `vector_os_nano/perception/vlm_qwen.py`
+- `vector_os_nano/perception/go2_perception.py`
+- `vector_os_nano/perception/go2_calibration.py`
+- `tests/unit/perception/test_{vlm_qwen,go2_perception,go2_calibration}.py`
+- `tests/integration/test_sim_tool_perception_wire.py`
+- `scripts/verify_perception_pick.py`
+- `docs/v2.3_live_repl_checklist.md`
 
----
+Modified:
+- `vector_os_nano/vcli/tools/sim_tool.py` — Qwen wire-up block
+  replaced by a comment pointing at `sysnav_bridge`. `agent._perception`
+  / `agent._calibration` set to `None` until LiveSysnavBridge
+  populates `world_model` directly.
 
-## Prior: v2.0 VectorEngine Unification
+Verified post-cleanup:
+- 70/70 existing tests still green
+  (`test_pick_top_down.py` 33, `test_mobile_pick.py` 22, `test_sysnav_bridge_mapping.py` 15).
+- Targeted import smoke OK across perception/skills/integrations.
 
-Branch: `feat/v2.0-vectorengine-unification` (14 commits ahead of master)
+## v2.4 — landed cycle summary (PAUSED — infra only, T6 + G5 deferred)
 
-### Delivered (Wave 1-3)
+8 tasks planned; 6 delivered, 2 NOT delivered:
 
-- Unified architecture: CLI + MCP both use VectorEngine
-- Deleted 18,000 lines legacy code (robo/, cli/, web/, run.py, llm/, old Agent pipeline)
-- Global abort signal: stop <100ms, P0 bypass, full stack integration
-- Nav reliability: health monitor, single TARE, stall 30s timeout, door-chain timeout distribution
-- Feedback: nav progress 2s, explore progress 5s, camera timestamps
-- Engine: prompt caching, world context cache, nav.yaml params, log rotation, VGG init diagnostics
-- Session smart compression (summarize instead of truncate)
+| Wave | Task | Status | Tests | Notes |
+|------|------|--------|-------|-------|
+| W0 | env probe (mj_ray, cube-face benchmarks) | ✅ done | (probe only) | |
+| W1 | T1 lidar360 / T2 gt_odom / T3 G3 xmat fix | ✅ done | 56 | xmat REP-103 fix: right camera pose now correct |
+| W2 | T4 pano360 / T5 LiveSysnavBridge | ✅ done | 47 | bridge runs, subscribers ready |
+| W3 | T6 sensor integration / T7 SysnavSimTool | ⚠️ partial | 21 | T7 tool done; T6 wiring into vnav_bridge NOT done |
+| W4 | T8 smoke + docs | ⚠️ partial | (smoke) | smoke_sysnav_sim.py runs; sysnav_simulation.md exists; g5_launch does NOT exist |
+| — | **T6 NOT DELIVERED** | ❌ deferred | — | vnav_bridge.py never modified to wire lidar360/pano360/gt_odom |
+| — | **G5 NOT DELIVERED** | ❌ deferred | — | sysnav_sim.launch.py never created; no working launch file |
 
-### Test Status
+**Test result (2026-05-18, post-decoupling)**: green on the memory-safe
+subset run in chunks — `tests/skills` 90, sensors+sysnav_bridge unit +
+safe integration 125, `tests/unit/vcli` prompt/sysnav 35 (≈250 tests, 0
+failures). 3 tests fixed this session: 1 sysnav-pause contract + 2
+pre-existing stale prompt-brand assertions (red since a2ad980, 5 wks).
+NOTE: the full repo suite is NOT run as one process — `pytest tests/unit`
+whole-dir OOMs a 64 GB host (pre-existing repo characteristic; use CI
+shards / chunked runs). Coverage ≥ 90 % on each new module.
+Infrastructure is solid; pipeline is incomplete.
 
-3,250 tests collected, 0 collection errors.
+## Commit chain (v2.4 cycle, this branch)
 
-### Next
+```
+[smoke + docs]
+TBD       T8 smoke_sysnav_sim.py + docs/sysnav_simulation.md
+7e56458   T6+T7 sensor integration tests + SysnavSimTool CLI
+966ef44   T4+T5 MuJoCoPano360 + LiveSysnavBridge
+06cb3e9   T1+T2 MuJoCoLivox360 + GroundTruthOdomPublisher
+9317007   T3 G3 xmat REP-103 fix
+8071b3f   pivot + cleanup (-2570 LoC v2.3 Qwen perception)
+886ec4d   sysnav_bridge adapter (pre-cycle, foundation)
+2ae7c3f   relicense MIT → Apache 2.0
+```
 
-CEO testing in vector-cli. Then merge to master as v2.0.
+## Reference
 
----
+- Spec: `.sdd/spec.md` (v2.4 SysNav Sim)
+- Plan: `.sdd/plan.md`
+- Tasks: `.sdd/task.md`
+- Status: `.sdd/status.json` (phase=tasks, all approved)
+- Bringup integration (real-robot side): `docs/sysnav_integration.md`
+- Sim integration: `docs/sysnav_simulation.md` (T8 will write)
+- Adapter (already landed): `vector_os_nano/integrations/sysnav_bridge/`
+- SysNav repo (sibling lab): https://github.com/zwandering/SysNav
 
-## Beta — v2.0.1-vgraph-cross-room-fix Wave 2 T4
+## Archive index
 
-**Status**: DONE (2026-04-16)
+- `.sdd/archive-v2.4-perception-overhaul/` — YOLOE+SAM3 SDD (now redundant)
+- `.sdd/archive-v2.3/` — Qwen perception cycle (impl deleted this session)
+- `.sdd/archive-v2.2/` — loco manipulation infrastructure
+- `.sdd/archive-v2.1-pick/` — Piper top-down grasp
+- earlier archives unchanged.
 
-- Patched launch_nav_only.sh, launch_nav_explore.sh, test_integration.sh with Go2 terrain params
-- 15/15 tests GREEN (test_level42_launch_terrain_params.py)
-- All 3 scripts pass `bash -n` syntax check
+## Master merge readiness (2026-05-18)
 
----
+Branch is 34 commits ahead of origin/master, 0 real-code commits behind
+(post-`git fetch` 2026-05-18). NOT fast-forward-mergeable: master already
+absorbed the v2.0 line via PR #8 (2026-04-16) + PR #7 sim-to-real-nav, so
+master carries merge commits not in this linear branch. BUT
+`git log --no-merges HEAD..origin/master` is EMPTY — master has zero code
+this branch lacks; the divergence is pure merge topology, no real conflict.
+Integration path: open a PR (repo convention, PR #7/#8 precedent) — GitHub
+merge expected conflict-free. The 34 = 4 merge-prep commits + the v2.4 work
+landed after the 2026-04-16 PR#8 point. Green on the memory-safe subset
+(≈250 tests, chunked — see Test result above; full single-process OOMs,
+pre-existing). Diff is +730K lines, ~660K = Piper/Menagerie vendored mesh
+assets under vector_os_nano/hardware, pre-existing since v2.1 — flagged for
+CEO merge decision, not introduced by this cleanup.
 
-## Beta — SDD Cleanup: TARE config assertions + navigate_to→go_to_waypoint mocks
+Docs have been truth-corrected (2026-05-18):
+- status.md: v2.4 PAUSED narrative (infra + tests, T6 + G5 deferred)
+- progress.md: v2.4 entry corrected; v2.4 NOT "landed", is "paused"
+- docs/sysnav_simulation.md + docs/sysnav_integration.md: header block added (STATUS: PAUSED/DEFERRED)
+- docs/pick_top_down_spec.md + docs/pick_top_down_known_issues.md: header block added (STATUS: DEFERRED)
+- docs/v2.2_live_repl_checklist.md: DELETED (stale, obsolete)
 
-**Status**: DONE (2026-04-16)
+Living .md count: 21 (before cleanup), 20 (after v2.2 checklist deletion). All production + ADR + `.sdd/` docs verified.
 
-Fixed 8 failing tests across 5 files:
+## Next session starter
 
-- test_level18: floating-point inclusive bound (round(diff,10) <= 0.15)
-- test_level27: assertion 0.35→0.30 (Go2 cylinder tuning rationale added)
-- test_level23: kAutoStart assert True→False (YAML false by design)
-- test_level35: test_get_room_center_returns_none_insufficient_visits updated for _MIN_VISIT_COUNT=1
-- test_level35: test_dead_reckoning_uses_door_chain updated to assert go_to_waypoint
-- engine.py vgg_execute: added clear_abort() 1-liner (fixes stale abort in direct-call tests)
-- test_mujoco_vgg_e2e: 2 failures resolved by engine.py fix (no test edits needed)
-
----
-
-## Gamma — SDD Cleanup: L8/L4/L16 failure investigation
-
-**Status**: DONE (2026-04-16)
-
-- L8: FIXED — re-enabled `_build_object_markers` call in `build_scene_graph_markers` (scene_graph_viz.py:659). Was commented out with "object detection removed" comment. 38/38 PASS.
-- L16: confirmed pollution-only — 4/4 PASS in isolation. No action.
-- L4: REAL PRODUCTION BUG — NavigateSkill requires prior exploration; test uses fresh SpatialMemory with no rooms. Not fixable without re-seeding or redesigning test. Flagged for Lead review.
-
----
-
-## Alpha — SDD Cleanup: 10 stale source-inspection tests (54 fails)
-
-**Status**: DONE (2026-04-16)
-
-Fixed 54 failures across 10 test files on v2.0.1-vgraph-cross-room-fix.
-
-- test_level9_proxy_e2e: 20→0 fails. Added `_last_camera_ts = 0.0` to `_proxy_with_frame`. 4 real regressions skipped (LookSkill objects pipeline).
-- test_level31_wall_escape: 9→0 fails. Updated patterns for reactive direction-aware refactor (tgt_vx/tgt_vy vs escape_vy; cur_speed threshold; 700-char trigger window).
-- test_level53_ceiling_filter: 6→0 fails. Added `_get_ceiling_filter_height()` helper to accept `_nav()` call; fixed docstring vs code occurrence for `continue` check.
-- test_level25_nav_integration: 1→0 fails. Updated `_ARRIVAL_DIST` regex to accept `_nav("arrival_radius", 0.8)` pattern.
-- test_level26_vlm_reliability: 1→0 fails. Updated httpx.Client timeout to accept `self._timeout` (instance var) in addition to `_TIMEOUT_S`.
-- test_level28_nav_wall_clearance: 2→0 fails. Updated `_BODY_SIDE` check to accept inline `0.19`; lowered lateral repulsion threshold from 0.45 to 0.25.
-- test_level32_follower_precision: 2→0 fails. Widened MAX_SPEED to [0.5,0.8] and MAX_LAT to [0.10,0.40] range assertions.
-- test_level33_nav_pipeline: 1→0 fails. Extended Phase 2 search window from 1200 to 2000 chars.
-- test_level37_local_vlm: 1→0 fails. Changed local timeout threshold from >=60s to >=30s (intentional 45s value).
-- test_level2_scene_skills: 1→0 fails. Skipped with REAL REGRESSION note for Gamma.
-
-**Real regression flagged for Gamma**: LookSkill.execute() no longer returns `'objects'` in result_data and passes `[]` to SceneGraph. See `vector_os_nano/skills/go2/look.py` line ~107-119. Affects 5 tests (1 in L2, 4 in L9) — all skipped with TODO comments.
+```
+cd ~/Desktop/vector_os_nano
+git log --oneline feat/v2.0-vectorengine-unification -10   # recent commits
+cat progress.md                       # current status
+# chunked (whole tests/unit OOMs a 64 GB host — never run it as one process):
+.venv-nano/bin/python -m pytest tests/skills -q
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors tests/unit/integrations/sysnav_bridge tests/unit/vcli/test_sysnav_sim_tool.py tests/unit/vcli/test_prompt.py tests/integration/test_sysnav_bridge_mapping.py tests/integration/test_xmat_rep103_regression.py -q
+```

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
 """GoalDecomposer — LLM-backed natural language task decomposition.
 
 Converts a natural language task string into a structured GoalTree by:
@@ -18,7 +21,6 @@ import ast
 import json
 import logging
 import re
-from dataclasses import field
 from typing import Any
 
 from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
@@ -239,6 +241,7 @@ Response:
         """
         self._backend = backend
         self._template_library = template_library
+        self._skill_registry = skill_registry
         # Cached system prompt — built once per instance, reused across decompose() calls.
         self._cached_system_prompt: list[dict[str, Any]] | None = None
         # Build strategies from actual registered skills

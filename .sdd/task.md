@@ -1,438 +1,457 @@
-# SDD Tasks — v2.0.1 V-Graph Cross-Room Edge Fix
+# v2.4 SysNav Simulation Integration — Task Breakdown
 
-**Spec**: `.sdd/spec.md`
-**Plan**: `.sdd/plan.md`
-**Total tasks**: 9
-**Waves**: 3
+**Status**: APPROVED async (CEO auto-approval 2026-04-25)
+**Prereq**: spec.md + plan.md
+**Agents**: Alpha / Beta / Gamma serial-dispatch (post-OOM rule:
+forbid full pytest in subagents; narrow `pytest tests/unit/<file>.py`
+only; forbid imports of `pipeline`, `track_anything`, `mujoco`-with-
+go2-room.xml, `realsense`, `tracker`, `ultralytics`).
 
 ---
 
-## Dependency Graph
+## Execution summary
+
+| Metric | Value |
+|---|---|
+| Code tasks | 8 (T0–T8) |
+| Waves | 6 |
+| New files | 9 impl + 9 test files + 1 launch + 1 smoke + 1 doc |
+| Modified files | 4 |
+| Unit tests target | ≥ 50 new |
+| Integration tests target | ≥ 5 new |
+| Coverage floor | 90 % on new modules |
+| Estimated wall-clock | 3–4 days serial |
+
+Test-first culture is non-negotiable for this cycle. Each task lists
+RED test names that **must be authored and verified failing before**
+any implementation starts.
+
+---
+
+## Subagent prompt template
 
 ```
-                          ┌───────────┐
-                          │ T1 RED    │  ─┐
-                          │ bridge    │   │
-                          │ cleanup   │   │
-                          │ tests     │   │ Wave 1
-                          └─────┬─────┘   │ (3 parallel, independent test writes)
-                                │         │
-     ┌───────────┐              │         │
-     │ T3 RED    │             │         │
-     │ launch    │             │         │
-     │ param     │─────────────┼────── ──┤
-     │ tests     │              │
-     └─────┬─────┘              │
-           │        ┌───────────┐
-           │        │ T5        │
-           │        │ integration
-           │        │ harness    ─ ─ ─ ─ ┘
-           │        │ (scaffold,
-           │        │  opt-in)   │
-           │        └─── ── ─ ──┘
-           │              │
-  ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─ │─ ─ ─ ─ ─ ─ ─ ─ Wave 1 gate: T1+T3 RED confirmed
-           │              │
-           ▼              ▼
-  ┌────────────┐    ┌────────────┐
-  │ T2 GREEN   │    │ T4 GREEN   │
-  │ bridge     │    │ launch     │         Wave 2 (2 parallel)
-  │ revert +   │    │ scripts ×3 │
-  │ test clean │    │ patch      │
-  └─────┬──────┘    └─────┬──────┘
-        │                 │
-  ─ ─ ─ │─ ─ ─ ─ ─ ─ ─ ─  │─ ─ ─ ─ ─ ─ ─ ─ Wave 2 gate: T1+T3 tests GREEN
-        └────────┬────────┘
-                 ▼
-          ┌──────────────┐
-          │ T6 full      │
-          │ regression   │
-          │ pytest       │
-          └──────┬───────┘
-                 │
-                 ├──────────┬──────────┐   Wave 3 (sequential + parallel commits)
-                 ▼          ▼          │
-          ┌───────────┐ ┌───────────┐  │
-          │ T7 commit │ │ T8 commit │  │
-          │ (a)       │ │ (b)       │  │
-          │ bridge    │ │ launch    │  │
-          │ revert    │ │ fix       │  │
-          └─────┬─────┘ └─────┬─────┘  │
-                │             │        │
-                └──────┬──────┘        │
-                       ▼               │
-                ┌──────────────┐       │
-                │ T9 AC6 CEO   │ ◀─────┘
-                │ manual test  │
-                └──────────────┘
+[context]
+Task {ID} of v2.4 SysNav Simulation Integration.
+Spec: .sdd/spec.md §{relevant}
+Plan: .sdd/plan.md §{relevant}
+Depends on: {tasks landed at SHAs}
+
+[safety]
+- DO NOT run `pytest tests/` or `pytest tests/integration/`.
+- Run only the narrow file(s) listed under "Verify".
+- DO NOT import: pipeline, track_anything, realsense, tracker,
+  ultralytics. mujoco is allowed only via the inline tiny-MJCF
+  fixture in tests/unit/hardware/sim/sensors/conftest.py.
+- Stick to the files listed in "Files".
+- TDD strict: write RED tests first, confirm failure, then GREEN,
+  then REFACTOR. Do not skip RED.
+
+[deliverable]
+{files list}
+RED tests: {names}
+Verify: {commands}
+
+[completion]
+- All listed tests pass narrow-scope.
+- ruff check clean on modified files.
+- Coverage ≥ 90 % on the module via:
+    pytest <test_file> --cov=<module> --cov-report=term-missing
+- Commit `[alpha|beta|gamma] {type}(v2.4): <desc>`.
+- Report SHA + test pass count + coverage % to dispatcher.
 ```
 
 ---
 
-## Task List
+## Wave 0 — Environment Probe
 
-### Task 1: Bridge cleanup regression tests (RED)
-- **Status**: [ ] pending
-- **Agent**: alpha
-- **Depends**: none
-- **Package**: vector_os_nano (tests)
-- **Wave**: 1
-- **Input**:
-  - `scripts/go2_vnav_bridge.py` (to understand current structure)
-  - `tests/harness/nav_debug_helpers.py` (for `read_bridge_source()`)
-  - `tests/harness/test_level36_terrain_replay.py` (pattern reference)
-- **Output**: `tests/harness/test_level41_vgraph_bridge_cleanup.py` (new file)
-- **TDD Deliverables**:
-  - RED: Write 6 tests asserting the bridge has NO terrain_map publisher code:
-    1. `test_bridge_has_no_terrain_map_publisher_declaration` — `"_terrain_map_pub"` NOT in bridge __init__
-    2. `test_bridge_has_no_terrain_map_ext_publisher_declaration` — `"_terrain_map_ext_pub"` NOT in bridge __init__
-    3. `test_bridge_has_no_sync_terrain_to_far_method` — `"def _sync_terrain_to_far"` NOT in bridge source
-    4. `test_bridge_has_no_publish_accumulated_terrain_method` — `"def _publish_accumulated_terrain"` NOT in bridge
-    5. `test_replay_terrain_publishes_only_registered_scan` — `_replay_terrain` body references `_pc_pub` but NOT `_terrain_map_pub` / `_terrain_map_ext_pub`
-    6. `test_no_terrain_map_topic_in_publisher_declarations` — `"/terrain_map"` NOT in bridge __init__ (but may appear in comments/docstrings)
-  - These tests will FAIL (RED) because bridge still has those — confirms TDD gate.
-- **Acceptance Criteria**: File created, 6 tests present, all 6 FAIL on current bridge
-- **Verify**:
-  ```bash
-  pytest tests/harness/test_level41_vgraph_bridge_cleanup.py -v --tb=short
-  # Expected: 6 failed (RED confirmed)
-  ```
+### T0 — Probe MuJoCo + OpenCV versions; mj_ray smoke
 
-### Task 2: Bridge revert + test_level36 cleanup + test_level40 deletion (GREEN)
-- **Status**: [ ] pending
-- **Agent**: alpha
-- **Depends**: Task 1 (RED confirmed)
-- **Package**: vector_os_nano (scripts + tests)
-- **Wave**: 2
-- **Input**:
-  - `.sdd/plan.md` §2.A (bridge cut list)
-  - `.sdd/plan.md` §2.C (test file handling)
-  - `scripts/go2_vnav_bridge.py` current state
-  - `tests/harness/test_level36_terrain_replay.py` (to surgical-edit)
-  - `tests/harness/test_level40_far_terrain_feed.py` (to delete)
-- **Output**:
-  - `scripts/go2_vnav_bridge.py` — modified
-  - `tests/harness/test_level36_terrain_replay.py` — modified (remove WRONG-direction assertions)
-  - `tests/harness/test_level40_far_terrain_feed.py` — DELETED
-- **TDD Deliverables**:
-  - GREEN: Delete from `scripts/go2_vnav_bridge.py`:
-    - Publisher lines (~lines 231–236): `self._terrain_map_pub = ...` and `self._terrain_map_ext_pub = ...`
-    - Timer line (~line 287): `self.create_timer(5.0, self._sync_terrain_to_far)`
-    - Method `_sync_terrain_to_far()` (~lines 489–516, ~28 lines)
-    - Method `_publish_accumulated_terrain()` alias (~lines 517–519, 3 lines)
-    - In `_replay_terrain()`: lines 479–480 (`self._terrain_map_pub.publish(msg)` and `self._terrain_map_ext_pub.publish(msg)`) — keep `self._pc_pub.publish(msg)` at line 478
-    - Shutdown hook call at ~line 1470: `self._publish_accumulated_terrain()` — remove entire line
-  - Surgical update `tests/harness/test_level36_terrain_replay.py`:
-    - Remove entire `TestTerrainReplayPublisherDeclarations` class (tests 63–98ish)
-    - In any other class: flip assertions that check for `_terrain_map_pub` / `_terrain_map_ext_pub` presence to ABSENCE, OR just delete those test methods
-    - Keep tests asserting `_pc_pub` + `/registered_scan` invariants
-    - Keep tests for TerrainAccumulator roundtrip (those belong to L30 anyway)
-  - Delete `tests/harness/test_level40_far_terrain_feed.py` entirely.
-  - REFACTOR: Run `pytest tests/harness/test_level41_*.py test_level36_*.py test_level30_*.py -v` → expect all GREEN.
-- **Acceptance Criteria**:
-  - All 6 T1 tests pass
-  - `test_level36_terrain_replay.py` passes with reduced test count (~6 tests remain vs ~15 before)
-  - `test_level40_far_terrain_feed.py` does not exist
-  - `test_level30_terrain_persist.py` still passes (accumulator tests unaffected)
-- **Verify**:
-  ```bash
-  pytest tests/harness/test_level41_vgraph_bridge_cleanup.py -v
-  pytest tests/harness/test_level36_terrain_replay.py tests/harness/test_level30_terrain_persist.py -v
-  ls tests/harness/test_level40_far_terrain_feed.py 2>&1 | grep -q "No such" && echo "OK deleted"
-  ```
+**Agent**: Dispatcher (no subagent)
+**Output**: `agents/devlog/v24-sysnav-env-probe.md`
 
-### Task 3: Launch script parameter tests (RED)
-- **Status**: [ ] pending
-- **Agent**: beta
-- **Depends**: none
-- **Package**: vector_os_nano (tests)
-- **Wave**: 1
-- **Input**:
-  - `scripts/launch_nav_only.sh` (to see current broken state)
-  - `scripts/launch_explore.sh` (reference for correct pattern — lines 97–108)
-- **Output**: `tests/harness/test_level42_launch_terrain_params.py` (new file)
-- **TDD Deliverables**:
-  - RED: Write parametrized tests. Structure:
-    ```python
-    import re
-    import pytest
-    from pathlib import Path
+Steps:
+1. `python -c "import mujoco; print(mujoco.__version__)"` — record.
+2. `python -c "import cv2; print(cv2.__version__)"` — record.
+3. mj_ray smoke: 1024 rays against a single-body MJCF → wall time.
+   Target: ≤ 5 ms; if > 20 ms, R1 mitigation (`mj_multiRay`) is required.
+4. Cube-face render smoke: `mujoco.Renderer(model, 480, 480)` × 6 faces
+   → wall time. Target: ≤ 80 ms total on RTX 5080; document VRAM use.
+5. Confirm SysNav workspace presence at `~/Desktop/SysNav` and topic
+   types `tare_planner.msg.ObjectNodeList` build status.
 
-    _REPO = Path(__file__).resolve().parent.parent.parent
-    
-    _REQUIRED_PARAMS = {
-        "maxRelZ": 1.5,
-        "clearDyObs": "true",
-        "obstacleHeightThre": 0.15,
-        "maxGroundLift": 0.05,
-    }
-
-    @pytest.mark.parametrize("script", [
-        "launch_nav_only.sh",
-        "launch_nav_explore.sh",
-        "test_integration.sh",
-    ])
-    class TestTerrainAnalysisParams:
-        def test_script_passes_maxRelZ(self, script): ...
-        def test_script_passes_clearDyObs(self, script): ...
-        def test_script_passes_obstacleHeightThre(self, script): ...
-        def test_script_uses_ros_args(self, script): ...
-        def test_ext_also_has_params(self, script): ...  # terrainAnalysisExt line
-    ```
-  - These tests FAIL (RED) against the 3 broken scripts.
-- **Acceptance Criteria**: 15 parametrized tests (5 × 3 scripts), all FAIL
-- **Verify**:
-  ```bash
-  pytest tests/harness/test_level42_launch_terrain_params.py -v --tb=short
-  # Expected: 15 failed
-  ```
-
-### Task 4: Launch script patch ×3 (GREEN)
-- **Status**: [ ] pending
-- **Agent**: beta
-- **Depends**: Task 3 (RED confirmed)
-- **Package**: vector_os_nano (scripts)
-- **Wave**: 2
-- **Input**:
-  - `.sdd/plan.md` §2.B (exact replacement block)
-  - `scripts/launch_explore.sh` lines 97–108 (reference)
-- **Output**:
-  - `scripts/launch_nav_only.sh` — patched (lines ~66–69 replaced)
-  - `scripts/launch_nav_explore.sh` — patched (lines ~58–61 replaced)
-  - `scripts/test_integration.sh` — patched (lines ~61–63 replaced)
-- **TDD Deliverables**:
-  - GREEN: Patch all 3 scripts to match `launch_explore.sh` pattern. Use identical param values:
-    ```bash
-    ros2 run terrain_analysis terrainAnalysis --ros-args \
-      -p clearDyObs:=true \
-      -p minDyObsDis:=0.14 \
-      -p minOutOfFovPointNum:=20 \
-      -p obstacleHeightThre:=0.15 \
-      -p maxRelZ:=1.5 \
-      -p limitGroundLift:=true \
-      -p maxGroundLift:=0.05 \
-      -p minDyObsVFOV:=-30.0 \
-      -p maxDyObsVFOV:=35.0 &
-    PIDS+=($!)
-    ros2 run terrain_analysis_ext terrainAnalysisExt --ros-args \
-      -p obstacleHeightThre:=0.15 \
-      -p maxRelZ:=1.5 &
-    PIDS+=($!)
-    ```
-  - Preserve any surrounding comments / echo statements.
-  - REFACTOR: Run T3 tests, confirm GREEN.
-- **Acceptance Criteria**: All 15 T3 tests pass
-- **Verify**:
-  ```bash
-  pytest tests/harness/test_level42_launch_terrain_params.py -v
-  # Expected: 15 passed
-  bash -n scripts/launch_nav_only.sh && bash -n scripts/launch_nav_explore.sh && bash -n scripts/test_integration.sh
-  # Expected: all 3 shell-syntax OK
-  ```
-
-### Task 5: V-Graph integration harness (scaffold, opt-in)
-- **Status**: [ ] pending
-- **Agent**: gamma
-- **Depends**: none
-- **Package**: vector_os_nano (tests)
-- **Wave**: 1
-- **Input**:
-  - `tests/harness/test_vgraph_debug.py` (existing pattern for MuJoCo raycasting)
-  - `tests/e2e/test_explore_navigate_e2e.py` (existing pattern for subprocess-launching nav stack)
-  - `vector_os_nano/hardware/sim/scene_room.xml` (room bounding boxes for edge-spans-rooms assertion)
-  - `scripts/launch_nav_only.sh` (subprocess target)
-- **Output**: `tests/harness/test_level43_vgraph_integration.py` (new file)
-- **TDD Deliverables**:
-  - Scaffold a SINGLE test:
-    ```python
-    @pytest.mark.ros2
-    @pytest.mark.slow
-    def test_vgraph_forms_cross_room_edge_through_living_hall_door():
-        """AC4: after driving Go2 through living_hall door, /robot_vgraph has ≥1 cross-room edge."""
-        # 1. Launch scripts/launch_nav_only.sh as subprocess group
-        # 2. Launch go2_vnav_bridge as subprocess (spawn Go2 at living_room center)
-        # 3. Wait for /robot_vgraph publisher (timeout 15s)
-        # 4. Publish /joy commands to drive forward through door for 20s
-        # 5. Collect /robot_vgraph snapshots via subscriber
-        # 6. Parse graph: find edge whose endpoints fall in different known rooms
-        # 7. Assert ≥1 cross-room edge exists
-        # 8. Teardown: kill nav stack process group
-    ```
-  - Include room bounding boxes inline as constants (derived from `scene_room.xml`):
-    ```python
-    LIVING_ROOM_BBOX = (0, 6, 0, 5)    # x_min, x_max, y_min, y_max
-    HALLWAY_BBOX = (6, 14, 0, 10)
-    # ... (6 rooms)
-    ```
-  - Helper: `_points_in_different_rooms(p1, p2) -> bool`.
-  - Mark `@pytest.mark.ros2 @pytest.mark.slow` — skipped by default, run via `pytest -m ros2`.
-- **Acceptance Criteria**:
-  - File created
-  - `pytest tests/harness/test_level43_vgraph_integration.py --collect-only` shows 1 test
-  - `pytest tests/harness/test_level43_vgraph_integration.py -q` (default marks) reports 0 tests run (skipped)
-  - `pytest -m ros2 --collect-only tests/harness/test_level43_vgraph_integration.py` shows 1 test
-- **Verify**:
-  ```bash
-  pytest tests/harness/test_level43_vgraph_integration.py --collect-only 2>&1 | grep "1 test"
-  pytest tests/harness/test_level43_vgraph_integration.py -q 2>&1 | grep "deselected\|skipped"
-  ```
-- **Note**: Actual PASS verification is deferred to AC6 (manual CEO run). This task only scaffolds.
-
-### Task 6: Full regression suite
-- **Status**: [ ] pending
-- **Agent**: dispatcher (me)
-- **Depends**: Task 2, Task 4, Task 5
-- **Package**: vector_os_nano (all)
-- **Wave**: 3
-- **Input**: working tree with Wave 2 complete
-- **Output**: regression report
-- **Deliverables**:
-  - Run full suite excluding known-stale prompt tests
-  - Count pass/fail/skip
-  - If any failure: escalate to Architect (root cause, not patch-over)
-- **Acceptance Criteria**:
-  - 0 failures (apart from 2 stale `test_prompt.py` tests, which are excluded)
-  - Total tests ≈ 3088 (down from 3267 due to removed 180 + added 7)
-- **Verify**:
-  ```bash
-  pytest tests/ --ignore=tests/unit/vcli/test_prompt.py -q --tb=no 2>&1 | tail -5
-  # Expected: "XXXX passed" with 0 failed
-  ```
-
-### Task 7: Commit (a) — bridge revert
-- **Status**: [ ] pending
-- **Agent**: dispatcher (me)
-- **Depends**: Task 6 (green)
-- **Package**: vector_os_nano (git)
-- **Wave**: 3
-- **Input**: working tree with Task 2 changes
-- **Output**: git commit
-- **Deliverables**:
-  - Stage ONLY bridge-related files:
-    - `scripts/go2_vnav_bridge.py`
-    - `tests/harness/test_level36_terrain_replay.py`
-    - `tests/harness/test_level40_far_terrain_feed.py` (deletion)
-    - `tests/harness/test_level41_vgraph_bridge_cleanup.py`
-  - Commit message:
-    ```
-    revert: remove bridge duplicate publishers on /terrain_map and /terrain_map_ext
-
-    The bridge was also publishing to /terrain_map and /terrain_map_ext in
-    addition to terrainAnalysis/terrainAnalysisExt, causing duplicate-
-    publisher data pollution for FAR. Its intensity semantics differed
-    (absolute z vs height-above-ground), and FAR crops global terrain to
-    7.5m anyway.
-
-    - Remove _sync_terrain_to_far() periodic timer
-    - Remove _publish_accumulated_terrain() alias
-    - Remove _terrain_map_pub and _terrain_map_ext_pub publishers
-    - _replay_terrain() now publishes only /registered_scan
-    - Delete test_level40_far_terrain_feed.py (enforced removed invariant)
-    - Trim test_level36_terrain_replay.py to keep only /registered_scan
-    - Add test_level41_vgraph_bridge_cleanup.py as regression guard
-
-    Net: -260 lines.
-    ```
-- **Acceptance Criteria**: Commit created, `git log -1 --stat` shows expected files
-- **Verify**:
-  ```bash
-  git log -1 --stat | head -15
-  ```
-
-### Task 8: Commit (b) — launch script fix
-- **Status**: [ ] pending
-- **Agent**: dispatcher (me)
-- **Depends**: Task 6 (green)
-- **Package**: vector_os_nano (git)
-- **Wave**: 3 (can run parallel with T7 — different files)
-- **Input**: working tree with Task 4 changes
-- **Output**: git commit
-- **Deliverables**:
-  - Stage ONLY launch/test files:
-    - `scripts/launch_nav_only.sh`
-    - `scripts/launch_nav_explore.sh`
-    - `scripts/test_integration.sh`
-    - `tests/harness/test_level42_launch_terrain_params.py`
-    - `tests/harness/test_level43_vgraph_integration.py`
-  - Commit message:
-    ```
-    fix: pass Go2 terrain_analysis params in launch_nav_* scripts
-
-    launch_nav_only.sh and launch_nav_explore.sh used `ros2 run
-    terrain_analysis terrainAnalysis` without parameters, inheriting
-    the C++ default maxRelZ=0.2. For Go2 (vehicleZ~0.27m), this
-    rejects any lidar point above z=0.47 at close range — wall and
-    doorframe points get dropped, so contour_detector never sees
-    door edges and FAR never builds V-Graph corners at doorways.
-
-    Aligned with the same pattern launch_explore.sh and launch_vnav.sh
-    already use: --ros-args -p maxRelZ:=1.5 plus other Go2-tuned flags.
-
-    - Patch launch_nav_only.sh, launch_nav_explore.sh, test_integration.sh
-    - Add test_level42 param regression guard
-    - Scaffold test_level43 V-Graph integration harness (opt-in)
-    ```
-- **Acceptance Criteria**: Commit created, `git log -1 --stat` shows expected files
-- **Verify**:
-  ```bash
-  git log -1 --stat | head -15
-  ```
-
-### Task 9: AC6 — CEO manual verification
-- **Status**: [ ] pending
-- **Agent**: CEO (Yusen)
-- **Depends**: Task 7, Task 8
-- **Package**: vector_os_nano
-- **Wave**: 3
-- **Input**: running laptop with clean working tree post-commits
-- **Output**: CEO verdict (PASS / FAIL)
-- **Deliverables**:
-  1. Dispatcher hands control to Yusen with clear instructions:
-     ```
-     git status         # clean
-     vector-cli          # launch REPL
-     # In REPL: "启动仿真"    # spawns MuJoCo + nav stack via launch_nav_only.sh
-     # In REPL: "去卧室"     # test cross-room nav
-     # Open RViz (separate terminal): rviz2 -d config/vnav.rviz
-     # Watch /robot_vgraph marker array — should show nodes + edges
-     ```
-  2. CEO observes:
-     - V-Graph nodes appear at wall corners and doorways
-     - At least one edge crosses through a doorway (connects rooms)
-     - Go2 navigates via FAR route (not door-chain fallback)
-  3. CEO reports PASS or FAIL to dispatcher
-- **Acceptance Criteria (spec AC6)**:
-  - Yusen visually confirms V-Graph edge forms
-  - Go2 reaches target room
-- **Verify**: CEO verbal/text confirmation
-- **If FAIL**: Dispatcher opens Phase B SDD round. Commits T7+T8 remain (they're good hygiene regardless); Phase B investigates `IsInDirectConstraint` / vote accumulation via FAR debug logs.
+**Gate**: probe report posted; no abort unless mj_ray > 50 ms (then
+escalate).
 
 ---
 
-## Execution Waves
+## Wave 1 — Foundational sensors (3 parallel tasks, **SERIAL** dispatch)
 
-| Wave | Tasks | Agents | Gate |
-|------|-------|--------|------|
-| 1 | T1, T3, T5 | Alpha, Beta, Gamma | T1 + T3 tests are RED on current tree; T5 test skeleton compiles |
-| 2 | T2, T4 | Alpha, Beta (Gamma idle) | T1 + T3 tests flip to GREEN |
-| 3 | T6 → T7 + T8 (parallel) → T9 | Dispatcher + CEO | Full suite green, 2 commits created, CEO manual PASS |
+### T1 — `MuJoCoLivox360` virtual lidar
 
-**Wave 1 parallelism**: T1/T3/T5 touch completely disjoint files. Safe to run 3 agents concurrently.
+**Agent**: Alpha
+**Wave**: 1
+**Depends**: T0
+**Package**: `vector_os_nano/hardware/sim/sensors/`
 
-**Wave 2 parallelism**: T2 touches bridge + tests; T4 touches launch scripts. Disjoint. 2 agents.
+**Files**:
+- NEW `vector_os_nano/hardware/sim/sensors/__init__.py`
+- NEW `vector_os_nano/hardware/sim/sensors/lidar360.py` (~180 LoC)
+- NEW `tests/unit/hardware/sim/sensors/__init__.py`
+- NEW `tests/unit/hardware/sim/sensors/conftest.py` (tiny MJCF fixture)
+- NEW `tests/unit/hardware/sim/sensors/test_lidar360.py`
 
-**Wave 3**: T6 must complete before commits; T7/T8 touch disjoint file sets and can commit in parallel; T9 is manual and sequential after commits.
+**RED tests (write FIRST, confirm failure)**:
+
+1. `test_ray_dirs_polar_grid_shape` — h=360, v=16 → (5760, 3) unit vectors.
+2. `test_ray_dirs_azimuth_endpoints_excluded` — last azimuth ≠ first.
+3. `test_ray_dirs_elevation_range_within_minus7_to_52_deg` — Mid-360 spec.
+4. `test_step_returns_empty_when_no_geom` — empty MJCF → 0 hits.
+5. `test_step_against_known_wall_returns_correct_xyz` — wall at x=3, ray azimuth=0 → hit `(3.0, 0.0, body_z)` ± 5 cm.
+6. `test_step_clamps_at_max_range` — max_range=2.0, wall at x=3 → no hit recorded.
+7. `test_intensity_field_defaults_to_one_point_zero` — every hit `intensity == 1.0`.
+8. `test_rate_limit_returns_cached_when_called_too_fast` — two `step()` calls within 1/rate_hz return same array.
+9. `test_to_pointcloud2_field_layout_x_y_z_intensity_float32` — offsets 0,4,8,12; point_step 16; row_step matches.
+10. `test_to_pointcloud2_dense_and_little_endian` — `is_dense == True`, `is_bigendian == False`.
+11. `test_to_pointcloud2_frame_id_is_map` — header.frame_id="map".
+12. `test_step_in_world_frame_after_body_translated` — translate body to (5,0,0); same ray to wall at (3,0,0) does NOT hit (target now behind).
+
+**GREEN**: implement per plan §3.2 / §6.1 / §6.3.
+
+**Verify**:
+```
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors/test_lidar360.py -v
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors/test_lidar360.py \
+  --cov=vector_os_nano.hardware.sim.sensors.lidar360 --cov-fail-under=90
+```
+
+### T2 — `GroundTruthOdomPublisher`
+
+**Agent**: Beta
+**Wave**: 1
+**Depends**: T0
+**Package**: `vector_os_nano/hardware/sim/sensors/`
+
+**Files**:
+- NEW `vector_os_nano/hardware/sim/sensors/gt_odom.py` (~120 LoC)
+- NEW `tests/unit/hardware/sim/sensors/test_gt_odom.py`
+
+**RED tests**:
+
+1. `test_position_matches_body_xpos` — body at (1, 2, 0.5) → odom.pose.position == (1, 2, 0.5).
+2. `test_orientation_quaternion_normalised` — set xquat to non-unit; output magnitude 1.
+3. `test_first_call_twist_is_zero` — no prior state → linear/angular all zero.
+4. `test_twist_is_finite_difference_after_translation` — body at (0,0,0) then (0.1, 0, 0) after dt=0.1 → vx ≈ 1.0 ± 0.05.
+5. `test_frame_id_default_map` and `test_child_frame_id_default_sensor`.
+6. `test_rate_limit_step_returns_cached_msg` — two `step()` within 1/rate_hz identical.
+7. `test_dt_clamp_against_zero_division` — back-to-back calls at same monotonic time → no ZeroDivisionError, twist zero.
+8. `test_orientation_unchanged_returns_zero_angular_twist` — body translates without rotation → angular = (0,0,0).
+
+**GREEN**: implement per plan §3.4.
+
+**Verify**:
+```
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors/test_gt_odom.py -v --cov=vector_os_nano.hardware.sim.sensors.gt_odom --cov-fail-under=90
+```
+
+### T3 — G3 xmat REP-103 fix + regression test
+
+**Agent**: Gamma
+**Wave**: 1
+**Depends**: — (parallel-safe with T1/T2 since file is independent)
+
+**Files**:
+- MOD `vector_os_nano/hardware/sim/go2_ros2_proxy.py` (lines 337–339)
+- MOD `tests/integration/test_go2_camera_pose.py` (update expectations)
+- NEW `tests/integration/test_xmat_rep103_regression.py` (additional)
+
+**RED tests** (in regression file):
+
+1. `test_right_at_heading_zero_is_minus_y` — `right == (0, -1, 0)`.
+2. `test_up_at_heading_zero_is_plus_z` — `up == (0, 0, 1)`.
+3. `test_right_at_heading_pi_over_2_is_plus_x` — heading=π/2 → `right == (1, 0, 0)` ± 1e-9.
+4. `test_xmat_columns_orthonormal` — det ≈ 1, every column unit-length.
+5. `test_existing_camera_pose_test_still_passes_with_new_values` — re-run the v2.3 expected fixture with G3-corrected expectations.
+
+**GREEN**: change two lines in `go2_ros2_proxy.py:337-339`:
+```python
+right = np.array([sin_h, -cos_h, 0.0])
+up = np.cross(right, fwd)
+```
+
+Update the existing `test_go2_camera_pose.py` expected values to
+match REP-103.
+
+**Verify**:
+```
+.venv-nano/bin/python -m pytest tests/integration/test_go2_camera_pose.py tests/integration/test_xmat_rep103_regression.py -v
+```
+
+Wave 1 gate runs all three:
+```
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors/ tests/integration/test_go2_camera_pose.py tests/integration/test_xmat_rep103_regression.py
+```
 
 ---
 
-## QA Gate Policy
+## Wave 2 — Pano camera + ROS subscriber
 
-Per plan classification (non-architectural), no CEO approval gate on task.md itself. QA review:
-- ✅ Tasks atomic (each has one deliverable)
-- ✅ TDD deliverables explicit (RED tests in T1/T3 before GREEN in T2/T4)
-- ✅ Dependencies correct (Task 2 depends on Task 1; Task 4 on Task 3; etc.)
-- ✅ Wave grouping optimal (max parallelism respected)
-- ✅ Atomic commits planned (2 logical commits matching CEO D4)
-- ✅ CEO only needed at AC6 (final manual test)
+### T4 — `MuJoCoPano360` virtual 360-degree RGBD
 
-Ready to execute.
+**Agent**: Alpha
+**Wave**: 2
+**Depends**: T0, T1 (renderer pattern reused)
+**Package**: `vector_os_nano/hardware/sim/sensors/`
+
+**Files**:
+- NEW `vector_os_nano/hardware/sim/sensors/pano360.py` (~250 LoC)
+- NEW `tests/unit/hardware/sim/sensors/test_pano360.py`
+
+**RED tests**:
+
+1. `test_lut_shape_matches_output_resolution` — out_w=1920, out_h=640 → LUT (640, 1920) for face_idx, fx, fy.
+2. `test_lut_face_indices_in_range_zero_to_five` — every entry ∈ [0, 5].
+3. `test_lut_central_pixel_maps_to_front_face_centre` — (out_w/2, out_h/2) → face=front, fx≈face_size/2, fy≈face_size/2.
+4. `test_lut_left_quarter_maps_to_left_face` — column 0 → face=left.
+5. `test_step_returns_rgb_uint8_with_correct_shape` — output (out_h, out_w, 3) uint8.
+6. `test_step_returns_depth_float32_with_correct_shape` — output (out_h, out_w) float32.
+7. `test_step_uniform_red_world_returns_red_pano` — synthetic uniform red sphere → output >95 % red.
+8. `test_depth_clipped_at_max_range` — far wall, max_range=5 → depth values capped at 5.
+9. `test_rate_limit_returns_cached_when_called_too_fast` — two step calls within 1/rate_hz identical.
+10. `test_image_pano_aspect_ratio_3_to_1` — width / height == 3.0 ± 0.01.
+
+**GREEN**: implement per plan §3.3 / §6.2.
+
+**Verify**:
+```
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors/test_pano360.py -v --cov=vector_os_nano.hardware.sim.sensors.pano360 --cov-fail-under=90
+```
+
+### T5 — `LiveSysnavBridge` rclpy subscriber
+
+**Agent**: Beta
+**Wave**: 2
+**Depends**: T0
+**Package**: `vector_os_nano/integrations/sysnav_bridge/`
+
+**Files**:
+- NEW `vector_os_nano/integrations/sysnav_bridge/live_bridge.py` (~200 LoC)
+- MOD `vector_os_nano/integrations/sysnav_bridge/__init__.py` (re-export)
+- NEW `tests/unit/integrations/sysnav_bridge/__init__.py`
+- NEW `tests/unit/integrations/sysnav_bridge/conftest.py`
+- NEW `tests/unit/integrations/sysnav_bridge/test_live_bridge.py`
+
+**RED tests**:
+
+1. `test_start_returns_false_when_rclpy_missing` — patch import → False, no exception.
+2. `test_start_returns_false_when_tare_planner_msg_missing` — same pattern → False.
+3. `test_start_returns_true_with_stubs` — both stubs available → True; `_active` flag set.
+4. `test_start_creates_subscription_with_correct_topic_and_type` — assert subscription args.
+5. `test_callback_dispatches_one_add_object_per_node` — 3 nodes → 3 `add_object` calls.
+6. `test_callback_uses_existing_object_node_to_state` — passes `prior` from `world_model.get_object`.
+7. `test_callback_logs_warning_on_malformed_node_no_crash` — node missing position → WARN log, processing continues for next.
+8. `test_status_false_node_maps_to_unknown_state` — uses object_node_to_state already.
+9. `test_stop_is_idempotent` — `stop(); stop()` → no errors, single shutdown.
+10. `test_disconnect_warning_fires_after_threshold` — no callback for `on_disconnect_after_s` → WARN logged once.
+11. `test_disconnect_warning_resets_after_message` — message arrives → next disconnect rearms.
+12. `test_world_model_observed_through_repeated_callbacks` — same sysnav_id called twice with different positions → `add_object` upserts.
+
+**GREEN**: implement per plan §3.5.
+
+**Verify**:
+```
+.venv-nano/bin/python -m pytest tests/unit/integrations/sysnav_bridge/test_live_bridge.py -v --cov=vector_os_nano.integrations.sysnav_bridge.live_bridge --cov-fail-under=90
+```
+
+Wave 2 gate:
+```
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors/ tests/unit/integrations/sysnav_bridge/
+```
+
+---
+
+## Wave 3 — Bridge wiring + CLI tool
+
+### T6 — `go2_vnav_bridge.py` wiring + integration tests
+
+**Agent**: Alpha
+**Wave**: 3
+**Depends**: T1, T2, T4
+
+**Files**:
+- MOD `scripts/go2_vnav_bridge.py` (~100 LoC of new wiring)
+- NEW `tests/integration/test_lidar360_against_world.py`
+- NEW `tests/integration/test_pano360_against_world.py`
+- NEW `tests/integration/test_gt_odom_against_walk.py`
+
+**RED tests**:
+
+1. `test_lidar_publishes_at_least_one_point_against_room` — load `go2_room.xml` (this integration may import mujoco directly; not subagent-only), tick lidar → PointCloud2 has ≥ 1000 points within trunk radius.
+2. `test_lidar_hits_known_wall_position_within_tolerance` — known wall at world (10, 0, 1) → at least 1 lidar return within 5 cm.
+3. `test_pano_image_shape_after_render` — full pipeline tick → image (640, 1920, 3) uint8.
+4. `test_pano_depth_correlates_with_distance_to_wall` — wall at known distance → depth pixel ≈ that distance.
+5. `test_gt_odom_after_simulated_walk` — drive Go2 forward via `set_velocity` for 1 s → odom.pose.position.x ≈ 0.5 m.
+
+**GREEN**: implement publisher wiring per plan §3.7.
+
+**Verify**:
+```
+.venv-nano/bin/python -m pytest tests/integration/test_lidar360_against_world.py tests/integration/test_pano360_against_world.py tests/integration/test_gt_odom_against_walk.py -v
+```
+
+### T7 — `sysnav_sim_tool` CLI + tests
+
+**Agent**: Beta
+**Wave**: 3
+**Depends**: T5, T6
+
+**Files**:
+- NEW `vector_os_nano/vcli/tools/sysnav_sim_tool.py` (~150 LoC)
+- MOD `vector_os_nano/vcli/tools/__init__.py` (register tool)
+- NEW `tests/unit/vcli/test_sysnav_sim_tool.py`
+- NEW `tests/integration/test_sysnav_sim_smoke.py`
+
+**RED tests** (unit):
+
+1. `test_preflight_when_tare_planner_msg_present` — stub import → returns True.
+2. `test_preflight_when_tare_planner_msg_absent` — stub ImportError → returns False, WARN logged.
+3. `test_run_starts_sim_then_bridge` — mocks `SimStartTool` and `LiveSysnavBridge`; assert order.
+4. `test_run_continues_when_bridge_start_fails` — bridge.start() returns False → tool still completes, agent.perception stays None.
+5. `test_stop_cleans_bridge_then_sim` — assert teardown order reverse of run.
+6. `test_double_run_idempotent` — calling run twice does not double-construct.
+7. `test_help_text_lists_required_topics` — tool.description mentions /object_nodes_list and /target_object_instruction.
+8. `test_tool_registered_in_init` — importing `vector_os_nano.vcli.tools` exposes `SysnavSimTool`.
+
+**Integration test** (`test_sysnav_sim_smoke.py`):
+
+1. `test_mock_object_nodes_list_publisher_to_world_model` — boots a tiny rclpy node that publishes 3 stub `ObjectNodeList` messages → after 2 s, `world_model.get_objects()` has ≥ 3 sysnav_-prefixed entries with correct labels.
+
+**GREEN**: implement per plan §3.6.
+
+**Verify**:
+```
+.venv-nano/bin/python -m pytest tests/unit/vcli/test_sysnav_sim_tool.py tests/integration/test_sysnav_sim_smoke.py -v
+```
+
+Wave 3 gate:
+```
+.venv-nano/bin/python -m pytest tests/unit tests/integration -k "sysnav or lidar360 or pano360 or gt_odom or xmat or pick_top_down or mobile_pick"
+```
+
+(Filter avoids accidentally pulling in unrelated heavy MuJoCo paths.)
+
+---
+
+## Wave 4 — Smoke + docs
+
+### T8 — `smoke_sysnav_sim.py` + `docs/sysnav_simulation.md`
+
+**Agent**: Gamma
+**Wave**: 4
+**Depends**: all prior
+
+**Files**:
+- NEW `scripts/smoke_sysnav_sim.py`
+- NEW `docs/sysnav_simulation.md`
+- MOD `progress.md` (v2.4 final section)
+- MOD `agents/devlog/status.md` (v2.4 final state)
+
+`smoke_sysnav_sim.py` contract:
+
+- `--check-deps` mode: imports rclpy + tare_planner.msg, exits 0/1.
+- `--no-sysnav` mode: starts sim only, asserts 4 topics publishing
+  within 5 s.
+- Default mode: starts sim, asserts SysNav workspace running, asserts
+  `/object_nodes_list` carries ≥ 1 node within 30 s, asserts
+  `world_model` populated.
+
+`docs/sysnav_simulation.md` covers:
+
+- Bringup order (3 terminals).
+- Topic matrix (input/output).
+- Performance targets (mj_ray latency, pano FPS).
+- Troubleshooting (no /object_nodes_list, GPU OOM, frame mismatch).
+- Cross-reference to `docs/sysnav_integration.md` (real-robot + license
+  boundary).
+
+**Verify**:
+```
+.venv-nano/bin/python scripts/smoke_sysnav_sim.py --check-deps
+```
+
+---
+
+## Wave 5 — QA (parallel subagents)
+
+### code-reviewer
+
+Focus:
+- Lidar pose math (body→world quaternion correctness).
+- Pano LUT precompute (off-by-one / boundary cases).
+- LiveSysnavBridge resource cleanup (`stop()` must join thread, kill
+  rclpy node).
+- Rate-limit thread-safety.
+- New CLI tool concurrency (no race vs. SimStartTool).
+
+### security-reviewer
+
+Focus:
+- New rclpy subscriber: malformed PointCloud2/Image payloads must
+  not crash the process.
+- LiveSysnavBridge logging — ensure nothing logs PII / secret env vars.
+- `sysnav_sim_tool` does not allow argument injection through user
+  input (CLI args validation).
+- Topic queue depths: avoid unbounded buffering of large PointCloud2.
+
+Gate: 0 CRITICAL / 0 unaddressed HIGH. MAJOR/LOW deferred with explicit
+note in `qa_status` history.
+
+---
+
+## Wave 6 — CEO smoke
+
+Yusen runs (with SysNav workspace started in another terminal):
+
+```
+vector-cli sysnav-sim
+> 抓起蓝色瓶子
+```
+
+Pass: bottle picked, no phantom navigation, world_model entries match
+ground truth within 0.1 m.
+
+On pass: tag `v2.4.0-rc1`, push to remote.
+
+---
+
+## Dispatch order (dispatcher script)
+
+```
+W0  T0   dispatcher
+W1  T1   Alpha   →   T2  Beta   →   T3  Gamma
+W1  gate: pytest tests/unit/hardware/sim/sensors tests/integration/test_go2_camera_pose.py tests/integration/test_xmat_rep103_regression.py
+W2  T4   Alpha   →   T5  Beta
+W2  gate: pytest tests/unit/hardware/sim/sensors tests/unit/integrations/sysnav_bridge
+W3  T6   Alpha   →   T7  Beta
+W3  gate: pytest -k "sysnav or lidar360 or pano360 or gt_odom or xmat or pick_top_down or mobile_pick"
+W4  T8   Gamma
+W5  QA   code-reviewer + security-reviewer (parallel subagents)
+W6  CEO  live-REPL smoke + tag
+```
+
+Coverage gate after each wave: `--cov-fail-under=90` on the new
+modules touched in that wave.
+
+---
+
+## Test-first discipline reminders
+
+1. RED before GREEN. Each task lists exact RED test names.
+2. Coverage ≥ 90 % per module — measured per wave gate.
+3. Dispatcher runs the wave gate, NOT the subagent (avoid full pytest
+   in subagent prompts per `feedback_no_parallel_agents.md`).
+4. New integration tests use `go2_room.xml` only when the test name
+   ends with `_against_world` or `_against_walk` — keep unit tests on
+   inline tiny MJCFs.
+5. `LiveSysnavBridge` and `SysnavSimTool` tests do NOT spawn real
+   rclpy nodes; they patch import sites.
