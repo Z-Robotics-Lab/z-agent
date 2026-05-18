@@ -98,6 +98,12 @@
       "action": "tasks_draft",
       "agent": "dispatcher",
       "details": "Task breakdown: T0 env probe, T1 lidar360, T2 gt_odom, T3 xmat fix, T4 pano360, T5 LiveSysnavBridge, T6 vnav_bridge wiring, T7 sysnav_sim_tool, T8 smoke+docs. Each task lists explicit RED test names; coverage gate 90%. Serial subagent dispatch per wave (per feedback_no_parallel_agents.md)."
+    },
+    {
+      "timestamp": "2026-05-18T00:00:00Z",
+      "action": "v24_paused_for_master_merge",
+      "agent": "scribe",
+      "details": "v2.4 status truth-corrected (2026-05-18 master merge prep). Infra delivered: 5 modules + 215 tests green (70 baseline + 145 new). NOT delivered: T6 (vnav_bridge.py sensor wiring) and G5 (sysnav_sim.launch.py). CEO decision: retain infra in-tree, defer pipeline completion to v2.5. Local manipulation (Piper pick/place) similarly decoupled/deferred (in-tree, not registered by default). Branch fast-forward-mergeable to master. Living docs truth-corrected with STATUS headers; v2.2 checklist deleted (stale)."
     }
   ]
 }

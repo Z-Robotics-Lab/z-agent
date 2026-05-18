@@ -1,18 +1,22 @@
 # Vector OS Nano SDK — Progress
 
-**Last updated:** 2026-04-25 (v2.4 SysNav sim integration landed)
+**Last updated:** 2026-05-18 (master merge prep — v2.4 truth-corrected)
 **Version:** v2.4-dev (branch: feat/v2.0-vectorengine-unification)
 **Base:** v1.8.0
 
-## v2.4 SysNav Simulation Integration — landed (2026-04-25)
+**2026-05-18 Master Merge Prep**
+Branch 162 commits ahead, fast-forward-mergeable. All 215 tests green.
+v2.4 status corrected: SysNav infrastructure + tests delivered; pipeline integration (T6 + G5) + local manipulation deferred to v2.5.
+Living docs truth-corrected with STATUS headers. Stale v2.2 checklist deleted.
+
+## v2.4 SysNav Simulation Integration — PAUSED / DEFERRED (2026-04-25 — 2026-05-18)
 
 ### Status
-Pivot from the abandoned v2.4 perception overhaul (YOLOE+SAM3, see
-`.sdd/archive-v2.4-perception-overhaul/`) to a thin bringup of the
-**SysNav** sibling project (CMU Robotics Institute, PolyForm-NC) as
-the standard scene-graph backend. License boundary preserved: SysNav
-runs in a separate ROS2 workspace, never copied or redistributed in
-this Apache-2.0 repo.
+Infrastructure delivered (5 modules + 215 tests green); integration tasks T6 (vnav_bridge wiring)
+and G5 (sysnav_sim.launch.py) NOT delivered. CEO decision (2026-05-18): retain infra in-tree,
+defer pipeline completion to v2.5. Sensors exist but do not wire into the navigation bridge or
+a working launch file, so the pipeline does not run end-to-end yet. Manipulation skills
+(Piper pick/place) similarly decoupled/deferred (in-tree but not registered by default).
 
 ### Delivered
 
@@ -32,9 +36,20 @@ this Apache-2.0 repo.
   `go2_perception.py`, `go2_calibration.py`) + tests (~2570 LoC removed).
   `sim_tool.py` Qwen wire-up replaced by sysnav_bridge comment.
 
-Test totals: **194 green** (70 baseline + 124 new this cycle); 90 %
+Test totals: **215 green** (70 baseline + 145 new this cycle); 90 %
 coverage gate met on every new module (modulo numpy 2.4 / coverage
 C-tracer flake noted in `feedback_no_parallel_agents.md`).
+
+### What was NOT delivered
+- **T6 Bridge Wiring**: `scripts/go2_vnav_bridge.py` was never modified to wire the 3 sensors into
+  the ROS2 topic publishers. Sensors exist and are testable in isolation but are not connected
+  to the end-to-end pipeline.
+- **G5 Launch File**: `sysnav_sim.launch.py` was never created. There is no working launch file
+  to start the full sensor + navigation stack. CEO decision to defer to v2.5.
+
+### Deferred items
+- **Local manipulation**: Piper pick/place skills retained in-tree but DECOUPLED — not registered
+  by default (gated behind `VECTOR_ENABLE_MANIPULATION=1` env flag, off by default). Deferred to v2.5.
 
 ### Architecture
 

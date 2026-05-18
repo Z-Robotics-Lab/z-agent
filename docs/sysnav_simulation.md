@@ -1,5 +1,7 @@
 # SysNav Simulation Bringup
 
+> **STATUS: PAUSED/DEFERRED (2026-05-18).** v2.4 SysNav infra modules + tests are in-tree and green (215 tests pass), but T6 bridge wiring and G5 launch file are NOT delivered. This pipeline does not run end-to-end yet. Deferred to v2.5. See [progress.md](../progress.md).
+
 How to run [SysNav](https://github.com/zwandering/SysNav) on top of the
 Vector OS Nano MuJoCo simulation. SysNav is the same CMU Robotics
 Institute lab's project; we consume its scene-graph topics through the

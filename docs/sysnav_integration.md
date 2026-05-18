@@ -1,5 +1,7 @@
 # SysNav Integration — Bringup Mode
 
+> **STATUS: PAUSED/DEFERRED (2026-05-18).** v2.4 SysNav infra modules + tests are in-tree and green (215 tests pass), but T6 bridge wiring and G5 launch file are NOT delivered. This pipeline does not run end-to-end yet. Deferred to v2.5. See [progress.md](../progress.md).
+
 Vector OS Nano consumes the **SysNav** project as its standard semantic
 scene-graph backend. SysNav runs as a sibling ROS2 workspace; we
 subscribe to its topic outputs through a thin Apache-2.0 adapter inside

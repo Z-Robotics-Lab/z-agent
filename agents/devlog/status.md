@@ -1,14 +1,18 @@
 # Agent Status
 
-**Updated:** 2026-04-25 (v2.4 SysNav sim integration COMPLETE — 194 tests green, ready for CEO smoke)
+**Updated:** 2026-05-18 (v2.4 SysNav — infra LANDED, bridge wiring + launch NOT delivered; master merge prep)
 **Branch:** `feat/v2.0-vectorengine-unification`
 
 ## Current state
 
-**v2.4 SysNav Simulation Integration — IMPLEMENTATION COMPLETE**
+**v2.4 SysNav Simulation Integration — PAUSED (infra + tests green, T6 + G5 NOT delivered)**
 
-All 8 SDD tasks landed across 4 waves; 194/194 tests green; smoke
-script + docs ready. Awaiting CEO live-REPL smoke + tag.
+5 core modules + 215 tests landed (lidar360, pano360, gt_odom, sysnav_bridge,
+sysnav_sim_tool, xmat G3 fix). Tasks T6 (vnav_bridge sensor wiring) + G5 (launch file)
+were NOT delivered — sensors exist but do not wire into scripts/go2_vnav_bridge.py
+or a working launch file. Pipeline does not run end-to-end. CEO decision: infra retained,
+integration deferred to v2.5. Local manipulation (Piper pick/place) decoupled/deferred
+(skills in-tree, not registered by default). Branch fast-forward-mergeable to master.
 
 CEO directive 2026-04-25: auto-approve architectural decisions, start
 implementation, emphasize broad test coverage. v2.4-perception-overhaul
@@ -41,24 +45,23 @@ Verified post-cleanup:
   (`test_pick_top_down.py` 33, `test_mobile_pick.py` 22, `test_sysnav_bridge_mapping.py` 15).
 - Targeted import smoke OK across perception/skills/integrations.
 
-## v2.4 — landed cycle summary
+## v2.4 — landed cycle summary (PAUSED — infra only, T6 + G5 deferred)
 
-8 code tasks across 4 implementation waves (W5 QA + W6 CEO smoke
-remaining):
+8 tasks planned; 6 delivered, 2 NOT delivered:
 
-| Wave | Task | Status | Tests |
-|------|------|--------|-------|
-| W0 | env probe (mj_ray, cube-face benchmarks) | ✅ done | (probe only) |
-| W1 | T1 lidar360 / T2 gt_odom / T3 G3 xmat fix | ✅ done | 56 |
-| W2 | T4 pano360 / T5 LiveSysnavBridge | ✅ done | 47 |
-| W3 | T6 sensor integration / T7 SysnavSimTool | ✅ done | 21 |
-| W4 | T8 smoke + docs | ✅ done | (smoke script) |
-| W5 | code-review + security-review | pending | — |
-| W6 | CEO live-REPL smoke + tag | pending | — |
+| Wave | Task | Status | Tests | Notes |
+|------|------|--------|-------|-------|
+| W0 | env probe (mj_ray, cube-face benchmarks) | ✅ done | (probe only) | |
+| W1 | T1 lidar360 / T2 gt_odom / T3 G3 xmat fix | ✅ done | 56 | xmat REP-103 fix: right camera pose now correct |
+| W2 | T4 pano360 / T5 LiveSysnavBridge | ✅ done | 47 | bridge runs, subscribers ready |
+| W3 | T6 sensor integration / T7 SysnavSimTool | ⚠️ partial | 21 | T7 tool done; T6 wiring into vnav_bridge NOT done |
+| W4 | T8 smoke + docs | ⚠️ partial | (smoke) | smoke_sysnav_sim.py runs; sysnav_simulation.md exists; g5_launch does NOT exist |
+| — | **T6 NOT DELIVERED** | ❌ deferred | — | vnav_bridge.py never modified to wire lidar360/pano360/gt_odom |
+| — | **G5 NOT DELIVERED** | ❌ deferred | — | sysnav_sim.launch.py never created; no working launch file |
 
-**Test result**: 194/194 green (70 baseline + 124 new this cycle).
-Coverage ≥ 90 % on each new module (modulo the known numpy 2.4 /
-coverage C-tracer flake noted in `feedback_no_parallel_agents.md`).
+**Test result**: 215/215 green (70 baseline + 145 new this cycle, verified 2026-05-18).
+Coverage ≥ 90 % on each new module (modulo numpy 2.4 / coverage C-tracer flake).
+Infrastructure is solid; pipeline is incomplete.
 
 ## Commit chain (v2.4 cycle, this branch)
 
@@ -93,12 +96,26 @@ TBD       T8 smoke_sysnav_sim.py + docs/sysnav_simulation.md
 - `.sdd/archive-v2.1-pick/` — Piper top-down grasp
 - earlier archives unchanged.
 
-## Session starter (next time)
+## Master merge readiness (2026-05-18)
+
+Branch is 162 commits ahead of origin/master, 0 behind, fast-forward-mergeable.
+All 215 tests green. Diff is +730K lines (mostly Piper/Menagerie vendored assets,
+pre-existing since v2.1, not a merge blocker).
+
+Docs have been truth-corrected (2026-05-18):
+- status.md: v2.4 PAUSED narrative (infra + tests, T6 + G5 deferred)
+- progress.md: v2.4 entry corrected; v2.4 NOT "landed", is "paused"
+- docs/sysnav_simulation.md + docs/sysnav_integration.md: header block added (STATUS: PAUSED/DEFERRED)
+- docs/pick_top_down_spec.md + docs/pick_top_down_known_issues.md: header block added (STATUS: DEFERRED)
+- docs/v2.2_live_repl_checklist.md: DELETED (stale, obsolete)
+
+Living .md count: 21 (before cleanup), 20 (after v2.2 checklist deletion). All production + ADR + `.sdd/` docs verified.
+
+## Next session starter
 
 ```
 cd ~/Desktop/vector_os_nano
-cat agents/devlog/status.md          # this file
-cat .sdd/spec.md                      # v2.4 SysNav Sim
-.venv-nano/bin/python -m pytest tests/skills tests/integration/test_sysnav_bridge_mapping.py -q
-git log --oneline 8dda396..HEAD       # this cycle's commits
+git log --oneline feat/v2.0-vectorengine-unification -10   # recent commits
+cat progress.md                       # current status
+.venv-nano/bin/python -m pytest tests/unit/hardware/sim/sensors tests/unit/integrations/sysnav_bridge tests/unit/vcli/test_sysnav_sim_tool.py tests/integration/test_sysnav_bridge_mapping.py -q   # verify 215 tests green
 ```

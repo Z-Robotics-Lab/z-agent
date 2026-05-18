@@ -1,5 +1,7 @@
 # pick_top_down — Known Issues (2026-04-19 live REPL)
 
+> **STATUS: DEFERRED (2026-05-18).** Local manipulation (Piper pick/place) decoupled; skills retained in-tree but not registered by default (gated behind `VECTOR_ENABLE_MANIPULATION=1` env flag, off). Deferred to v2.5. See [progress.md](../progress.md).
+
 Tracks concrete bugs observed in Yusen's `vector-cli go2sim with_arm=1`
 REPL session on 2026-04-19 (after commits up through `e0a7e33`).
 Next session should start here.

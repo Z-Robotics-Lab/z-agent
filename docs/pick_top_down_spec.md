@@ -1,5 +1,7 @@
 # Top-Down Grasp Pipeline (Piper on Go2) — Spec & Assumptions
 
+> **STATUS: DEFERRED (2026-05-18).** Local manipulation (Piper pick/place) decoupled; skills retained in-tree but not registered by default (gated behind `VECTOR_ENABLE_MANIPULATION=1` env flag, off). Deferred to v2.5. See [progress.md](../progress.md).
+
 Phase C of the v2.1 manipulation stack. Given an object whose world pose is
 known a priori, the Piper arm performs a fixed top-down grasp. Demo-quality
 only — see the Assumptions section before using this for anything real.
