@@ -404,8 +404,8 @@ class SimStartTool:
         from vector_os_nano.skills.go2 import get_go2_skills  # type: ignore[import]
         for skill in get_go2_skills():
             agent._skill_registry.register(skill)
-        # Piper manipulation skills — only useful when arm proxy connected
-        if piper_arm is not None:
+        # Local manipulation (Piper pick/place) PAUSED/deferred — set VECTOR_ENABLE_MANIPULATION=1 to re-enable. Skills + tests retained in-tree.
+        if piper_arm is not None and os.environ.get("VECTOR_ENABLE_MANIPULATION") == "1":
             from vector_os_nano.skills.pick_top_down import PickTopDownSkill
             from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
             from vector_os_nano.skills.mobile_pick import MobilePickSkill
