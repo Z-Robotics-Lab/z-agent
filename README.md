@@ -168,6 +168,8 @@ navigation:
 
 ## SO-101 Arm
 
+> **Status:** Manipulation is experimental and gated behind `VECTOR_ENABLE_MANIPULATION=1`. The grasp pipeline (scan → detect → top-down pick) is validated in MuJoCo (headless); the real-hardware arm path is a work in progress. Navigation (Go2) is the more mature stack.
+
 ```python
 from vector_os_nano import Agent, SO101
 from vector_os_nano.core.skill import SkillContext
@@ -313,6 +315,8 @@ Without the nav stack, basic Go2 skills (walk, turn, stand, dead-reckoning navig
 Vector OS Nano's open-vocabulary scene graph (objects + rooms + spatial relations) consumes the output of [**SysNav**](https://github.com/zwandering/SysNav) — a sibling project from the same CMU Robotics Institute lab that publishes the field's standard `ObjectNode` / `RoomNode` topic contract.
 
 **SysNav is run as a separate ROS2 workspace and *not redistributed* in this repo.** Vector OS Nano's [`vector_os_nano/integrations/sysnav_bridge/`](vector_os_nano/integrations/sysnav_bridge/) subscribes to its published topics, converts each `tare_planner/ObjectNode` into a `vector_os_nano.core.world_model.ObjectState`, and seeds the in-process `WorldModel` for skill resolution.
+
+> **Status:** This integration is in progress. The `ObjectNode` adapter and simulated sensors are implemented and unit-tested, but the live bridge is not yet wired into the default CLI/MCP startup, and `RoomNode` ingestion is not implemented. Treat the bringup below as the target contract, not a turnkey pipeline.
 
 ```bash
 # 1) SysNav (sibling workspace, follow its README to install)

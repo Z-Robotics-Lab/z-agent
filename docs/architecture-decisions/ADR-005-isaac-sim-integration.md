@@ -1,7 +1,7 @@
 # ADR-005: Isaac Sim 集成 — Docker 化高保真仿真后端
 
 **Date:** 2026-04-10
-**Status:** Accepted
+**Status:** Superseded / Paused — Isaac integration was archived during the v2.4 perception pivot. MuJoCo remains the primary sim backend for development and CI; the Isaac proxy in-tree is an interface/topic contract only (no working Isaac SDK code). See the v2.x history.
 **Author:** Yusen (CEO) + Architect
 
 ## 背景

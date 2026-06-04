@@ -1,6 +1,6 @@
 # ADR-003: Hardware Abstraction Layer Redesign
 
-- Status: proposed
+- Status: Accepted (implemented from v2.0; BaseProtocol, PerceptionProtocol, and the dict-based SkillContext are live across the codebase)
 - Date: 2026-03-25
 - Context: CEO directives require hardware-agnostic framework. SO-101 and Go2 must be "adapter A" and "adapter B" plugging into the same Agent/Skill/LLM pipeline. Current system has ArmProtocol and GripperProtocol but no BaseProtocol, and SkillContext is accumulating ad-hoc fields.
 - Decision: See below.
