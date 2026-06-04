@@ -194,9 +194,14 @@ is opt-in (`init_vgg(persist_dir=...)`) under `~/.vector/`. Outcome: an agent th
 gates its own completion on evidence, and learns from its own runs without fine-tuning — the
 differentiation story made real.
 
-**Phase C — Robot worlds + the heterogeneous model zoo (the actual product). [PROPOSED —
-design in [agent-kernel-phase-c-plan.md](agent-kernel-phase-c-plan.md); awaiting keystone
-sign-off].**
+**Phase C — Robot worlds + the heterogeneous model zoo (the actual product). [C.1 + C.2
+SHIPPED; C.3 + C.4 await owner sign-off — see
+[agent-kernel-phase-c-plan.md](agent-kernel-phase-c-plan.md)].**
+C.1 shipped the capability seam (`cognitive/capabilities/`: `Capability` protocol +
+`CapabilityRegistry` + one `"capability"` executor branch; the chat LLM wrapped as a
+capability) and C.2 the cross-capability routing (keyword rules route to a registered
+capability; the `StrategyStats` bandit promotes the measured-better one). C.3 (a real
+specialized model in the robot world) needs embodiment/model decisions.
 Fold the robot stack into `robot` world plugin(s) per embodiment; make the kernel
 orchestrate a *fleet of brains* — route a sub-goal to a specialized model (detector,
 planner, VLA policy), a classical skill, or an atomic action, by measured fit; deliver

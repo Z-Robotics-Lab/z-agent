@@ -1,6 +1,9 @@
 # Verified Agent Kernel — Phase C Plan (Heterogeneous Model-Zoo Routing)
 
-- Status: **Proposed — design for owner review; NOT started.** Awaiting keystone sign-off.
+- Status: **C.1 + C.2 SHIPPED** on `feat/verified-agent-kernel` (keystone (a) taken).
+  **C.3 + C.4 await owner sign-off** — C.3 is the actual product (a real specialized model
+  in the robot world) and needs embodiment/model/skill-migration decisions (see "Shipped"
+  note + open questions 4 & the C.3 keystone).
 - Date: 2026-06-04
 - Branch: `feat/verified-agent-kernel` (Phase A + Phase B shipped on this branch)
 - Related: [agent-kernel.md](agent-kernel.md) ("Forward direction: from one LLM to a model
@@ -32,7 +35,31 @@ macOS / Python 3.12 / uv / ruff / pytest. LLM and any model-zoo backend mocked i
 default tests; new persistence under `~/.vector/`. Robot + MCP + dev stay green at every
 stage.
 
-## KEYSTONE DECISION (resolve before coding C.1)
+## Shipped (C.1 + C.2)
+
+Keystone **(a)** taken. The capability seam is real and the cross-capability bandit routes:
+
+- **C.1** `feat(kernel): capability seam …` — `cognitive/capabilities/` (`Capability` protocol,
+  `CapabilityResult`, `CapabilityRegistry`, `LLMChatCapability` over `create_backend`); one
+  `"capability"` executor branch (`goal_executor._execute_capability`); `StrategySelector`
+  resolves registered capability names; `World.register_capabilities`; dev registers `chat`
+  (+ `"chat"` in `DEV_VOCAB.strategies`/`KNOWN_STRATEGIES`); robot no-op. The invariant is
+  tested: invoke-success-but-verify-false ⇒ `StepRecord.success=False`. Side-effecting
+  capabilities fail closed (gate deferred to C.3).
+- **C.2** `feat(kernel): cross-capability routing …` — `StrategySelector._route` makes the
+  navigate/observe/detect keyword rules capability-aware (capability if registered, else the
+  classical skill — inert today); the existing `StrategyStats` bandit promotes the
+  measured-better capability for a sub-goal pattern with **no schema change**.
+- Tests: `tests/vcli/test_level69_capability_seam.py`, `test_level70_capability_routing.py`.
+  Robot + dev byte-identical (every injection defaults `None`/empty/no-op).
+
+**C.3 / C.4 NOT started — they need owner decisions** (this is the actual product): which
+embodiment + which specialized model(s) to wire (detector/planner/VLA), and whether to
+re-express existing skills as capabilities or keep the legacy branch (recommend: keep
+legacy, register only net-new model-zoo capabilities). See the C.3 keystone + open
+questions 4–5, 7 below.
+
+## KEYSTONE DECISION (resolved for C.1/C.2; C.3 keystone still open)
 
 **Where does the capability `(input -> output)` contract live, and who owns dispatch?**
 
