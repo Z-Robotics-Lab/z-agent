@@ -1011,10 +1011,12 @@ def main(argv: list[str] | None = None) -> None:
 
     no_key = not api_key
     if no_key:
-        console.print(f"[yellow]No API key configured.[/]")
-        console.print(f"[dim]  /login claude     auto-detect Claude Code subscription")
-        console.print(f"  /login anthropic  enter Anthropic API key")
-        console.print(f"  /login openrouter enter OpenRouter key[/dim]\n")
+        # Each console.print is parsed independently — markup tags must balance
+        # within a single call (rich does not span tags across print calls).
+        console.print("[yellow]No API key configured.[/]")
+        console.print("[dim]  /login claude     auto-detect Claude Code subscription[/dim]")
+        console.print("[dim]  /login anthropic  enter Anthropic API key[/dim]")
+        console.print("[dim]  /login openrouter enter OpenRouter key[/dim]\n")
 
     # Agent (optional hardware) + active world (robot if an agent is connected,
     # else the default cross-platform "dev" world).
