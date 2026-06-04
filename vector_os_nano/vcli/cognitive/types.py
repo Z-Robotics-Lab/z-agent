@@ -45,6 +45,10 @@ class StepRecord:
     duration_sec: float
     error: str = ""
     fallback_used: bool = False
+    # True when verify_result was set by a VLM visual-verification override
+    # rather than the deterministic predicate — NOT deterministic evidence
+    # (see trace_store.evidence_passed).
+    visual_override: bool = False
 
 
 @dataclass(frozen=True)

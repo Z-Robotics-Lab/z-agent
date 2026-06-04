@@ -109,13 +109,16 @@ class ToolDispatcher:
             return False, f"permission denied: {perm.reason or tool_name}"
         if perm.behavior == "ask":
             response = self._ask(tool_name, args) if self._ask else "n"
-            if response == "n":
-                return False, f"permission denied by resolver for {tool_name}"
+            # Deny-by-default: only an explicit "y"/"a" allows. None, "", or any
+            # unexpected resolver output fails closed (the gate must never allow
+            # on an undecided/buggy resolver).
             if response == "a":
                 try:
                     self._permissions.add_always_allow(tool_name)
                 except Exception:  # noqa: BLE001
                     pass
+            elif response != "y":
+                return False, f"permission denied for {tool_name} (resolver -> {response!r})"
 
         try:
             result = tool.execute(args, ctx)

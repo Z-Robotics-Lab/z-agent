@@ -35,8 +35,10 @@ _TOOL_PARAMS = {"tool": "file_write", "args": {"file_path": "config.txt", "conte
 
 
 def _tool_trace(goal: str = "create config.txt with ready") -> ExecutionTrace:
+    # Sub-goal name words ("create", "config") both appear in the reuse task, so
+    # the (strict, full-subset) concrete matcher fires — a realistic LLM naming.
     sg = SubGoal(
-        name="write_config",
+        name="create_config",
         description="write config.txt",
         verify="path_contains('config.txt', 'ready')",
         strategy="tool_call",
@@ -44,7 +46,7 @@ def _tool_trace(goal: str = "create config.txt with ready") -> ExecutionTrace:
     )
     return ExecutionTrace(
         goal_tree=GoalTree(goal=goal, sub_goals=(sg,)),
-        steps=(StepRecord("write_config", "tool_call", True, True, 0.1),),
+        steps=(StepRecord("create_config", "tool_call", True, True, 0.1),),
         success=True,
         total_duration_sec=0.1,
     )
@@ -140,6 +142,20 @@ def test_decomposer_template_hit_skips_backend(tmp_path: Path) -> None:
     assert backend.call.call_count == 0  # no LLM call on a template hit
     assert tree.sub_goals[0].strategy == "tool_call"
     assert tree.sub_goals[0].strategy_params == _TOOL_PARAMS
+
+
+def test_concrete_template_does_not_hijack_unrelated_task(tmp_path: Path) -> None:
+    """A single shared token must NOT trigger reuse (stale tool_call hijack)."""
+    lib = TemplateLibrary(persist_path=str(tmp_path / "tpl.json"))
+    lib.add(ExperienceCompiler().compile([_tool_trace()])[0])  # name words {create, config}
+
+    backend = MagicMock()
+    backend.call.return_value = MagicMock(text='{"goal": "x", "sub_goals": []}')
+    gd = GoalDecomposer(backend, template_library=lib, **DEV_VOCAB.as_kwargs())
+
+    # Shares only "create" with the template's sub-goal name -> no full-subset match.
+    gd.decompose("create a summary report", "")
+    assert backend.call.call_count == 1  # fell through to the LLM, no stale reuse
 
 
 def test_decomposer_no_template_falls_through_to_backend(tmp_path: Path) -> None:

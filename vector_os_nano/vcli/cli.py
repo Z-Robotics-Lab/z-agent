@@ -1165,7 +1165,11 @@ def main(argv: list[str] | None = None) -> None:
             on_vgg_step=_vgg_step_display,
             world=world,
             tool_permission_resolver=lambda n, p: ask_permission(n, p),
-            persist_dir=Path.home() / ".vector",
+            # Learning tier (stats + templates) is dev-world only: keep the robot
+            # decompose/execute path byte-identical and avoid cross-world stats
+            # contamination (a dev 'tool_call' record must not promote onto a
+            # robot sub-goal that has no ToolDispatcher).
+            persist_dir=(Path.home() / ".vector") if not world.is_robot() else None,
         )
         if engine._vgg_enabled:
             console.print(f"[dim]  VGG cognitive layer: enabled[/dim]")

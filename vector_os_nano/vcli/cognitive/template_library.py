@@ -209,7 +209,10 @@ class TemplateLibrary:
     """Store, retrieve, and persist GoalTemplates."""
 
     def __init__(self, persist_path: str | None = None) -> None:
-        self._path = persist_path or _DEFAULT_PATH
+        # None => in-memory only (no home-dir reads/writes), matching
+        # StrategyStats. _DEFAULT_PATH is a documented constant, not an
+        # automatic fallback.
+        self._path: str | None = persist_path
         self._templates: list[GoalTemplate] = []
         self.load()
 
@@ -253,12 +256,26 @@ class TemplateLibrary:
         return best
 
     def _matches_concrete(self, template: GoalTemplate, task: str) -> bool:
-        """Check if a task string is plausibly matched by a concrete template."""
+        """Check if a task string is matched by a concrete template.
+
+        Side-effecting sub-goals (``tool_call`` / ``code_as_policy``) require the
+        task to contain ALL words of the sub-goal name (full subset): a wrong
+        autonomous dispatch is far costlier than a missed cache hit, and a single
+        shared token (e.g. "write") must not hijack an unrelated task into a stale
+        tool_call. Non-side-effecting sub-goals (skills/primitives) keep the
+        lenient single-token match so synonym reuse still works ("go to kitchen"
+        -> a ``reach_kitchen`` template). A miss here just falls back to LLM
+        decomposition, which is the safe default.
+        """
         tokens = _tokenize(task)
-        # Use sub-goal name patterns (concrete, no placeholders) as signal
         for sgt in template.sub_goal_templates:
             name_words = set(sgt.name_pattern.lower().replace("_", " ").split())
-            if name_words & tokens:
+            if not name_words:
+                continue
+            if sgt.strategy in ("tool_call", "code_as_policy"):
+                if name_words.issubset(tokens):
+                    return True
+            elif name_words & tokens:
                 return True
         return False
 
@@ -281,7 +298,9 @@ class TemplateLibrary:
     # ------------------------------------------------------------------
 
     def save(self) -> None:
-        """Persist templates to JSON file."""
+        """Persist templates to JSON file (no-op in in-memory mode)."""
+        if self._path is None:
+            return
         path = Path(self._path)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -292,7 +311,9 @@ class TemplateLibrary:
             logger.warning("TemplateLibrary: save failed: %s", exc)
 
     def load(self) -> None:
-        """Load templates from JSON file (no-op if file absent or invalid)."""
+        """Load templates from JSON file (no-op in in-memory mode / if absent)."""
+        if self._path is None:
+            return
         path = Path(self._path)
         if not path.exists():
             return

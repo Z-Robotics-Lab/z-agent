@@ -12,12 +12,17 @@ Compilation pipeline:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal
 
 logger = logging.getLogger(__name__)
+
+# Suffixes shorter than this are too generic to safely parameterize (e.g. a
+# 2-char token would blindly rewrite unrelated substrings).
+_MIN_PARAM_VALUE_LEN = 3
 
 
 @dataclass(frozen=True)
@@ -103,10 +108,15 @@ def _param_name_for_prefix(prefix: str, used_names: set[str]) -> str:
 
 
 def _replace_value(text: str, value: str, param: str) -> str:
-    """Replace all occurrences of `value` in `text` with `${param}`."""
-    if not value:
+    """Replace whole-word occurrences of `value` in `text` with `${param}`.
+
+    Uses a word boundary (not a blind substring replace) and skips very short
+    values, so a value like "room" does not corrupt "bedroom" and "pen" does not
+    corrupt "pencil".
+    """
+    if not value or len(value) < _MIN_PARAM_VALUE_LEN:
         return text
-    return text.replace(value, f"${{{param}}}")
+    return re.sub(rf"\b{re.escape(value)}\b", f"${{{param}}}", text)
 
 
 def _parameterize_payload(value: Any, value_to_param: dict[str, str]) -> Any:
@@ -268,9 +278,11 @@ class ExperienceCompiler:
         used_params: set[str] = set()
 
         for i, (prefix, suffixes) in enumerate(zip(sig, position_suffixes)):
-            unique_suffixes = set(s for s in suffixes if s)
+            unique_suffixes = set(
+                s for s in suffixes if s and len(s) >= _MIN_PARAM_VALUE_LEN
+            )
             if len(unique_suffixes) <= 1:
-                continue  # this position is constant — skip
+                continue  # this position is constant (or too-short) — skip
 
             # All different values at this position → a parameter
             param = _param_name_for_prefix(prefix, used_params)

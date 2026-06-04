@@ -366,7 +366,13 @@ class VectorEngine:
         tool_dispatcher: Any = None
         try:
             from vector_os_nano.vcli.cognitive.code_executor import CodeExecutor
-            code_executor = CodeExecutor(ns)
+            # The code-as-policy sandbox must NOT receive side-effecting verifier
+            # predicates (e.g. tests_pass spawns subprocesses, bypassing the
+            # permission gate). The GoalVerifier keeps the full namespace; the
+            # executor gets a filtered copy.
+            _SANDBOX_DENY = {"tests_pass"}
+            code_ns = {k: v for k, v in ns.items() if k not in _SANDBOX_DENY}
+            code_executor = CodeExecutor(code_ns)
         except Exception as exc:  # noqa: BLE001
             logger.debug("VGG: CodeExecutor unavailable: %s", exc)
         # Tool-backed execution is dev-world only; the robot world keeps its
@@ -1048,7 +1054,11 @@ class VectorEngine:
 
         if perm.behavior == "ask":
             response = ask_permission(tool_name, params) if ask_permission else "n"
-            if response == "n":
+            # Deny-by-default: only an explicit "y"/"a" allows; anything else
+            # (None, "", unexpected output) fails closed.
+            if response == "a":
+                self._permissions.add_always_allow(tool_name)
+            elif response != "y":
                 denial = f"Permission denied by user for {tool_name}"
                 result = ToolResult(content=denial, is_error=True)
                 logger.info("User denied permission for tool %r", tool_name)
@@ -1056,8 +1066,6 @@ class VectorEngine:
                     {"tool_use_id": tc.id, "content": result.content, "is_error": True},
                     ToolCall(tool_name=tool_name, params=params, result=result, duration_sec=0.0, permission_action="asked_denied"),
                 )
-            if response == "a":
-                self._permissions.add_always_allow(tool_name)
             perm_action = "asked_allowed"
         else:
             perm_action = "allowed"

@@ -56,7 +56,10 @@ class EvalReport:
 
     @property
     def all_passed(self) -> bool:
-        return bool(self.results) and all(r.passed for r in self.results)
+        # Vacuously true for an empty suite; main() surfaces "no cases"
+        # separately with a distinct exit code so an empty file is not a
+        # silent generic failure.
+        return all(r.passed for r in self.results)
 
 
 class EvalRunner:
@@ -209,6 +212,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cases = _load_cases(args.eval_file)
+    if not cases:
+        print("vector-eval: no cases in eval file")
+        return 2  # distinct from "a case failed" (1)
 
     engine = build_dev_engine(allow_ask=args.allow)
     from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier

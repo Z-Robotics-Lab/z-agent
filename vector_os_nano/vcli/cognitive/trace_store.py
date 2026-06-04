@@ -37,7 +37,8 @@ _NO_EVIDENCE: frozenset[str] = frozenset({"", "True"})
 _DEFAULT_TRACES_DIR = Path.home() / ".vector" / "traces"
 
 # Bump when the on-disk shape changes; load_trace tolerates older/unknown keys.
-_SCHEMA_VERSION = 1
+# v2 adds StepRecord.visual_override.
+_SCHEMA_VERSION = 2
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +75,7 @@ def _trace_to_dict(trace: ExecutionTrace) -> dict[str, Any]:
                 "duration_sec": s.duration_sec,
                 "error": s.error,
                 "fallback_used": s.fallback_used,
+                "visual_override": getattr(s, "visual_override", False),
             }
             for s in trace.steps
         ],
@@ -111,6 +113,7 @@ def _dict_to_trace(data: dict[str, Any]) -> ExecutionTrace:
             duration_sec=float(s.get("duration_sec", 0.0)),
             error=str(s.get("error", "")),
             fallback_used=bool(s.get("fallback_used", False)),
+            visual_override=bool(s.get("visual_override", False)),
         )
         for s in data.get("steps", []) or []
     )
@@ -179,9 +182,12 @@ def evidence_passed(trace: ExecutionTrace, is_robot: bool = False) -> bool:
     """True when the trace's success is backed by deterministic evidence.
 
     Dev world (strict): every executed step must map to a sub-goal whose verify
-    is a real predicate (not ``""`` / ``"True"``) and whose ``verify_result`` is
-    True. Robot world: always True — do not regress async motor skills that use
-    ``verify="True"`` because no symbolic post-condition exists.
+    is a real predicate (not ``""`` / ``"True"``), whose ``verify_result`` is
+    True, and whose pass was NOT a VLM visual override (a visual override is not
+    deterministic evidence and cannot be replayed — this keeps ``evidence_passed``
+    and ``replay`` in agreement). Robot world: always True — do not regress async
+    motor skills that use ``verify="True"`` because no symbolic post-condition
+    exists.
     """
     if is_robot:
         return True
@@ -192,5 +198,6 @@ def evidence_passed(trace: ExecutionTrace, is_robot: bool = False) -> bool:
     return all(
         (sg_by_name[s.sub_goal_name].verify or "").strip() not in _NO_EVIDENCE
         and s.verify_result
+        and not getattr(s, "visual_override", False)
         for s in checked
     )

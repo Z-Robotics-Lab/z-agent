@@ -324,6 +324,7 @@ class GoalExecutor:
                             duration_sec=time.monotonic() - step_start,
                             error="",
                             fallback_used=False,
+                            visual_override=True,  # not deterministic evidence
                         )
             except Exception as exc:  # noqa: BLE001
                 logger.debug("GoalExecutor: visual verification failed: %s", exc)

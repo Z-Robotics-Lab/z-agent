@@ -59,8 +59,10 @@ class StrategyStats:
     are automatically bucketed by prefix pattern via ``extract_pattern()``.
 
     Args:
-        persist_path: Path to JSON persistence file.  Defaults to
-            ``~/.vector_os_nano/strategy_stats.json``.
+        persist_path: Path to the JSON persistence file. When ``None`` (the
+            default), the instance is in-memory only and performs no file I/O.
+            The module-level default location is ``~/.vector/strategy_stats.json``
+            (see ``_DEFAULT_PATH``).
     """
 
     def __init__(self, persist_path: str | None = None) -> None:

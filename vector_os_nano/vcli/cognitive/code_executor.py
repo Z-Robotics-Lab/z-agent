@@ -251,6 +251,18 @@ class CodeExecutor:
         # Split into body + last expression (for return value capture)
         body_code, expr_code = _split_last_expr(code)
 
+        # Non-empty source that parses to no executable statements (e.g.
+        # comment-only) must not be reported as a successful execution — a
+        # no-op code sub-goal should fail, not trivially "pass".
+        if body_code is None and expr_code is None:
+            return CodeResult(
+                success=False,
+                stdout="",
+                return_value=None,
+                error="code produced no executable statements (comment-only or empty body)",
+                duration_sec=time.monotonic() - start,
+            )
+
         # Thread-based execution with timeout
         result_holder: dict[str, Any] = {
             "success": False,
@@ -273,9 +285,7 @@ class CodeExecutor:
             except Exception as exc:  # noqa: BLE001
                 result_holder["error"] = str(exc)
 
-        # Redirect stdout for the exec body as well
-        old_stdout_ref = buf  # already our buffer
-
+        # Redirect stdout for the exec body as well (buf is already our buffer).
         def _run_with_redirect() -> None:
             with contextlib.redirect_stdout(buf):
                 _run()
