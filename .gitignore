@@ -13,6 +13,7 @@ build/
 .venv-nano/
 .sdd*/
 agents/devlog/
+progress.md
 vector_os_nano/hardware/sim/mjcf/go2/scene_flat.xml
 vector_os_nano/hardware/sim/mjcf/go2/scene_room.xml
 venv/
@@ -44,3 +45,12 @@ CLAUDE.md
 lib/
 MUJOCO_LOG.TXT
 .coverage
+
+# stale generated MuJoCo scenes (machine-specific abs paths; runtime gen lives in mjcf/go2/)
+vector_os_nano/hardware/sim/scene_room.xml
+vector_os_nano/hardware/sim/scene_room_piper.xml
+vector_os_nano/hardware/sim/scene_flat.xml
+
+# internal/deferred design notes (kept on disk, not shipped)
+docs/pick_top_down_known_issues.md
+docs/pick_top_down_spec.md
