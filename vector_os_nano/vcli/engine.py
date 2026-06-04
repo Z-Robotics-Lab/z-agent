@@ -185,6 +185,7 @@ class VectorEngine:
         skill_registry: Any = None,
         on_vgg_step: "Callable[[StepRecord], None] | None" = None,
         world: Any = None,
+        tool_permission_resolver: "Callable[[str, dict[str, Any]], str] | None" = None,
     ) -> None:
         """Initialise the VGG cognitive pipeline components.
 
@@ -195,6 +196,11 @@ class VectorEngine:
         ``world`` selects the decompose vocabulary: a world returning a
         DecomposeVocab injects it into the GoalDecomposer; a robot world (or
         None) keeps the decomposer's robot defaults.
+
+        ``tool_permission_resolver`` resolves ``ask``-level tool permissions for
+        dev-world ``tool_call`` sub-goals (called with ``(tool_name, params) ->
+        "y"|"a"|"n"``). None auto-denies — the safe headless default; the CLI
+        passes its interactive prompt.
         """
         if not _VGG_AVAILABLE:
             logger.warning("VGG components not available — VGG disabled")
@@ -312,6 +318,32 @@ class VectorEngine:
                 config=_config,
             )
 
+        # Phase B execution wiring. Both default None so the robot path is
+        # behaviourally identical when no code/tool sub-goal is produced;
+        # construction failures here never disable VGG (decompose + verify still
+        # work) — they just leave the corresponding branch unavailable.
+        code_executor: Any = None
+        tool_dispatcher: Any = None
+        try:
+            from vector_os_nano.vcli.cognitive.code_executor import CodeExecutor
+            code_executor = CodeExecutor(ns)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("VGG: CodeExecutor unavailable: %s", exc)
+        # Tool-backed execution is dev-world only; the robot world keeps its
+        # skill/primitive path (Phase C migrates robot tools behind this seam).
+        if world is not None and not world.is_robot():
+            try:
+                from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
+                from vector_os_nano.vcli.worlds.dev import DEV_TOOL_ALLOWLIST
+                tool_dispatcher = ToolDispatcher(
+                    self._registry,
+                    self._permissions,
+                    allowlist=DEV_TOOL_ALLOWLIST,
+                    ask_permission=tool_permission_resolver,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("VGG: ToolDispatcher unavailable: %s", exc)
+
         try:
             executor = GoalExecutor(
                 strategy_selector=selector,
@@ -320,6 +352,8 @@ class VectorEngine:
                 build_context=_build_context,
                 stats=stats,
                 visual_verifier_agent=agent,
+                code_executor=code_executor,
+                tool_dispatcher=tool_dispatcher,
             )
         except ImportError as exc:
             logger.warning("VGG: GoalExecutor not available: %s", exc)

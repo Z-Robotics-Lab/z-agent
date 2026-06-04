@@ -59,7 +59,7 @@ _STATS_MIN_SUCCESS_RATE: float = 0.5
 class StrategyResult:
     """Result of strategy selection."""
 
-    executor_type: str   # "skill" | "primitive" | "fallback" | "code"
+    executor_type: str   # "skill" | "primitive" | "fallback" | "code" | "tool"
     name: str            # skill name or primitive function name
     params: dict         # parameters to pass
 
@@ -198,12 +198,17 @@ class StrategySelector:
 
         Mapping rules:
         - "code_as_policy" → executor_type="code", name="code_as_policy".
+        - "tool_call" → executor_type="tool", name="tool_call" (params carry
+          {"tool": <name>, "args": {...}}; dispatched through ToolDispatcher).
         - Ends with "_skill" → executor_type="skill", name=strategy minus suffix.
         - In _PRIMITIVE_NAMES → executor_type="primitive".
         - Otherwise → executor_type="skill" (assume skill by name convention).
         """
         if strategy == "code_as_policy":
             return StrategyResult("code", "code_as_policy", params)
+
+        if strategy == "tool_call":
+            return StrategyResult("tool", "tool_call", params)
 
         if strategy.endswith(_SKILL_SUFFIX):
             skill_name = strategy[: -len(_SKILL_SUFFIX)]

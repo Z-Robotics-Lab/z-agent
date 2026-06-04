@@ -41,6 +41,8 @@ class GoalExecutor:
         build_context: Callable | None = None,
         stats: Any = None,
         visual_verifier_agent: Any = None,
+        code_executor: Any = None,
+        tool_dispatcher: Any = None,
     ) -> None:
         """Initialise the executor.
 
@@ -55,6 +57,12 @@ class GoalExecutor:
                    strategy selection.  Auto-saved after each full execution.
             visual_verifier_agent: Optional agent ref for VLM-based visual verification
                                    fallback when primary verify fails on perception steps.
+            code_executor: Optional CodeExecutor — runs ``code`` (code-as-policy)
+                           sub-goals in an AST sandbox. None disables the ``code`` branch.
+            tool_dispatcher: Optional ToolDispatcher — runs ``tool`` sub-goals through
+                             the permission gate + per-world allowlist. None disables
+                             the ``tool`` branch. Both default None so the robot path is
+                             byte-identical when no code/tool sub-goal is produced.
         """
         self._selector = strategy_selector
         self._verifier = verifier
@@ -63,6 +71,8 @@ class GoalExecutor:
         self._build_context = build_context
         self._stats = stats
         self._visual_verifier_agent = visual_verifier_agent
+        self._code_executor = code_executor
+        self._tool_dispatcher = tool_dispatcher
 
     # ------------------------------------------------------------------
     # Public API
@@ -387,10 +397,54 @@ class GoalExecutor:
             return self._execute_skill(name, params)
         if executor_type == "primitive":
             return self._execute_primitive(name, params)
+        if executor_type == "code":
+            return self._execute_code(params)
+        if executor_type == "tool":
+            return self._execute_tool(params)
         # Unknown executor type
         error = f"No strategy for: {name} (executor_type={executor_type!r})"
         logger.warning("GoalExecutor: %s", error)
         return False, error
+
+    def _execute_code(self, params: dict) -> tuple[bool, str]:
+        """Execute an AST-sandboxed code-as-policy snippet.
+
+        Requires ``params['code']``. The CodeExecutor's AST validator rejects
+        imports (except ``math``) and dunder access; any name not in its
+        restricted builtins (e.g. ``open``) fails at runtime. Either way a
+        violation yields ``success=False``.
+
+        Returns:
+            (success: bool, error_message: str)
+        """
+        if self._code_executor is None:
+            return False, "code branch requires a CodeExecutor (none configured)"
+        code = params.get("code")
+        if not isinstance(code, str) or not code.strip():
+            return False, 'code branch requires a non-empty params["code"]'
+        result = self._code_executor.execute(code)
+        return bool(getattr(result, "success", False)), getattr(result, "error", "") or ""
+
+    def _execute_tool(self, params: dict) -> tuple[bool, str]:
+        """Dispatch a kernel tool through the permission-gated ToolDispatcher.
+
+        Requires ``params['tool']`` (the tool name) and optional ``params['args']``
+        (a dict of tool arguments). The dispatcher enforces a per-world allowlist
+        plus the shared PermissionContext (bash deny-list, file_write overwrite
+        guard, deny/always-allow rules).
+
+        Returns:
+            (success: bool, error_message: str)
+        """
+        if self._tool_dispatcher is None:
+            return False, "tool branch requires a ToolDispatcher (none configured)"
+        tool_name = params.get("tool")
+        if not isinstance(tool_name, str) or not tool_name:
+            return False, 'tool branch requires params["tool"]'
+        args = params.get("args", {})
+        if not isinstance(args, dict):
+            args = {}
+        return self._tool_dispatcher.dispatch(tool_name, args)
 
     def _execute_skill(self, name: str, params: dict) -> tuple[bool, str]:
         """Locate and execute a skill from the registry.

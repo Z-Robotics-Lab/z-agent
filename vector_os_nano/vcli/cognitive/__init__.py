@@ -41,6 +41,13 @@ from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
 from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult, StrategySelector
 from vector_os_nano.vcli.cognitive.strategy_stats import StrategyRecord, StrategyStats
 from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
+from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
+from vector_os_nano.vcli.cognitive.trace_store import (
+    evidence_passed,
+    load_trace,
+    replay,
+    save_trace,
+)
 from vector_os_nano.vcli.cognitive.vgg_harness import VGGHarness, HarnessConfig, FailureRecord
 from vector_os_nano.vcli.cognitive.object_memory import ObjectMemory, TrackedObject
 from vector_os_nano.vcli.cognitive.types import (
@@ -69,8 +76,13 @@ __all__ = [
     "SubGoal",
     "SubGoalTemplate",
     "TemplateLibrary",
+    "ToolDispatcher",
     "TrackedObject",
     "VGGHarness",
     "HarnessConfig",
     "FailureRecord",
+    "save_trace",
+    "load_trace",
+    "replay",
+    "evidence_passed",
 ]

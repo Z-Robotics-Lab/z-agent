@@ -1164,6 +1164,7 @@ def main(argv: list[str] | None = None) -> None:
             skill_registry=_skill_registry,
             on_vgg_step=_vgg_step_display,
             world=world,
+            tool_permission_resolver=lambda n, p: ask_permission(n, p),
         )
         if engine._vgg_enabled:
             console.print(f"[dim]  VGG cognitive layer: enabled[/dim]")
@@ -1434,8 +1435,18 @@ def main(argv: list[str] | None = None) -> None:
                         n_steps = len(trace.steps)
                         n_ok = sum(1 for s in trace.steps if s.success)
                         dur = trace.total_duration_sec
-                        if trace.success:
+                        # Evidence gate: a successful run only counts as *verified*
+                        # when its steps are backed by deterministic predicates
+                        # (dev world). Robot worlds bypass the gate.
+                        try:
+                            from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+                            _evidence = evidence_passed(trace, is_robot=bool(world.is_robot()))
+                        except Exception:  # noqa: BLE001
+                            _evidence = True
+                        if trace.success and _evidence:
                             console.print(f"  [{TEAL}]>[/] [green]all {n_steps} steps done[/] [dim]{dur:.1f}s[/]")
+                        elif trace.success:
+                            console.print(f"  [{TEAL}]>[/] [yellow]completed without verifiable evidence[/] — {n_steps} steps ran [dim]{dur:.1f}s[/]")
                         elif n_ok > 0:
                             console.print(f"  [{TEAL}]>[/] [yellow]{n_ok}/{n_steps} steps done[/], rest failed [dim]{dur:.1f}s[/]")
                         else:

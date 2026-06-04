@@ -202,17 +202,65 @@ Response:
   "context_snapshot": ""
 }"""
 
+# Phase B: the dev world can now *act* via a single tool-backed strategy. A
+# "tool_call" sub-goal dispatches one kernel tool (file_write/file_edit/bash/...)
+# through the permission gate + the dev allowlist below. Leave strategy empty for
+# steps that only need verification; use tool_call when a step must change the tree.
+_DEV_TOOL_EXAMPLE = """\
+Task: "create config.txt containing the word ready"
+Response:
+{
+  "goal": "create config.txt containing the word ready",
+  "sub_goals": [
+    {
+      "name": "write_config",
+      "description": "write config.txt with the content 'ready'",
+      "verify": "path_contains('config.txt', 'ready')",
+      "strategy": "tool_call",
+      "timeout_sec": 30,
+      "depends_on": [],
+      "strategy_params": {"tool": "file_write", "args": {"file_path": "config.txt", "content": "ready\\n"}},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""
+
+# Tools a dev sub-goal may invoke autonomously (the kernel's domain-general
+# "code" toolset). Anything off this list is denied by ToolDispatcher before any
+# permission check — robot/diag/system tools are never reachable from the dev world.
+DEV_TOOL_ALLOWLIST: frozenset[str] = frozenset({
+    "file_read",
+    "file_write",
+    "file_edit",
+    "bash",
+    "glob",
+    "grep",
+})
+
+_DEV_STRATEGY_PARAMS_HELP = """\
+  - tool_call: {"tool": "<tool_name>", "args": {<tool-specific arguments>}}
+      Dispatches one kernel tool through the permission gate. Allowed tools:
+        file_write  args: {"file_path": str, "content": str}
+        file_edit   args: {"file_path": str, "old_string": str, "new_string": str}
+        bash        args: {"command": str}
+      Use tool_call ONLY for steps that must change the project; otherwise leave
+      strategy empty and rely on the verify predicate alone."""
+
 DEV_VOCAB = DecomposeVocab(
     planner_intro=(
         "You are a software task planner. Decompose the user's task into verifiable "
-        "sub-goals, each with a deterministic verify predicate over the project."
+        "sub-goals, each with a deterministic verify predicate over the project. "
+        "For steps that must modify the project, set strategy to \"tool_call\"."
     ),
     verify_functions=frozenset(_DEV_VERIFY_SIGNATURES.keys()),
     verify_fn_signatures=_DEV_VERIFY_SIGNATURES,
-    strategy_descriptions={},  # Phase A dev world: decompose + verify only, no strategies
-    strategies=frozenset(),
-    strategy_params_help="  (no strategies in this world yet — leave strategy empty)",
-    examples=_DEV_EXAMPLE,
+    strategy_descriptions={
+        "tool_call": "Invoke one kernel tool (file_write/file_edit/bash/...) to act on the project",
+    },
+    strategies=frozenset({"tool_call"}),
+    strategy_params_help=_DEV_STRATEGY_PARAMS_HELP,
+    examples=_DEV_EXAMPLE + "\n\n" + _DEV_TOOL_EXAMPLE,
     fallback_verify="True",
 )
 
