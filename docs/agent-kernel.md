@@ -139,20 +139,23 @@ greenfield.
 
 ## Roadmap
 
-**Phase A — Kernel/world decoupling + macOS general-agent CLI.**
-Fix the packaging gap so the CLI installs and starts on a clean Mac; make the persona
-world-selectable (general default with no robot); formalize the `World` seam and ship a
-default dev/code world; un-gate VGG from a connected robot and make the decomposer
-vocabulary injectable. Outcome: `vector-cli` runs on macOS as a general verified agent
-over file/bash/web tools, zero robot dependencies. This is the cross-platform win and the
-demo vehicle.
+**Phase A — Kernel/world decoupling + macOS general-agent CLI. [DONE — shipped on
+`feat/verified-agent-kernel`].**
+Fixed the packaging gap so the CLI installs and starts on a clean Mac; made the persona
+world-selectable (general default with no robot); formalized the `World` seam
+(`vcli/worlds/`) and shipped a default dev/code world; un-gated VGG from a connected robot
+and made the decomposer vocabulary injectable. Outcome: `vector-cli` runs on macOS as a
+general verified agent over file/bash/web tools, zero robot dependencies. The dev world
+does decompose + verify (execution is Phase B).
 
-**Phase B — Wire the differentiation tier.**
-Add the `code-as-policy` execution branch (forced through the AST validator);
-verify-as-eval (predicates as a self-grading, replayable eval signal; evidence-gated
-"done"); experience compilation -> template reuse; persistent strategy stats. Outcome: an
-agent that self-verifies, gates its own completion on evidence, and learns from its own
-runs without fine-tuning — the differentiation story made real.
+**Phase B — Wire the differentiation tier. [PLANNED — see
+[agent-kernel-phase-b-plan.md](agent-kernel-phase-b-plan.md); awaiting the keystone
+execution-model decision].**
+Add code-as-policy / tool-backed execution (so the dev world *acts*, through the
+permission system); verify-as-eval (predicates as a self-grading, replayable eval signal;
+evidence-gated "done"); experience compilation -> template reuse; persistent strategy
+stats. Outcome: an agent that self-verifies, gates its own completion on evidence, and
+learns from its own runs without fine-tuning — the differentiation story made real.
 
 **Phase C — Worlds ecosystem + robot as flagship.**
 Fold the robot stack into a `robot` world plugin; ship the `dev` world by default;
