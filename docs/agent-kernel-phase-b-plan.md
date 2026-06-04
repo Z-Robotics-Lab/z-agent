@@ -1,9 +1,55 @@
 # Verified Agent Kernel — Phase B Plan (Differentiation Tier)
 
-- Status: Planned — NOT started (no code written). Awaiting one keystone decision.
+- Status: **Shipped — B.1 + B.2 implemented on `feat/verified-agent-kernel`.** Keystone
+  resolved as (a) tool-backed via `PermissionContext`. See "Shipped" note below.
 - Date: 2026-06-04
 - Branch: `feat/verified-agent-kernel` (Phase A merged on this branch + pushed)
 - Related: [agent-kernel.md](agent-kernel.md), [ADR-006](architecture-decisions/ADR-006-agent-kernel-world-plugin.md)
+
+## Shipped (what actually landed)
+
+B.1 (`feat(kernel): wire dev-world execution + verify-as-eval`) and B.2
+(`feat(kernel): persistent stats + experience compilation`) are implemented and tested.
+Deviations from this plan, for the record:
+
+- **Keystone (a) tool-backed** as recommended: new `cognitive/tool_dispatcher.py` runs
+  every dev side effect through `PermissionContext.check` + a per-world allowlist
+  (`worlds/dev.py:DEV_TOOL_ALLOWLIST`). Bash deny-list + file_write overwrite guard reused.
+- **Plan omission caught:** `tool_call` also had to be added to the decomposer's
+  `KNOWN_STRATEGIES` gate (via `DEV_VOCAB.strategies`), or LLM-authored `strategy="tool_call"`
+  is silently cleared before reaching the selector.
+- **Persistence is opt-in** via `engine.init_vgg(persist_dir=...)` (None = in-memory) so
+  tests/evals never write to `~/.vector`. The CLI passes `~/.vector`. Both `_DEFAULT_PATH`s
+  moved to `~/.vector/`.
+- **strategy_params carried through templates** (step-17 surprise handled): parameterized
+  to `${param}` for multi-trace templates, verbatim for concrete; v1 files load tolerantly.
+- **Tests live in `tests/vcli/`** (`test_level63..66`), not `tests/harness/` — the harness
+  `conftest.py` does `pytest.importorskip("mujoco")`, and these are robot-free kernel tests
+  that must run on macOS with zero robot deps.
+- `cognitive/trace_store.py` carries `replay` + `evidence_passed` (the evidence gate helper
+  is shared by `cli._on_vgg_complete` and `eval_runner`).
+
+**Post-ship hardening (adversarial review).** A multi-agent adversarial review of B.1+B.2
+confirmed 17 findings (5 dismissed as already gated by the permission prompt); all are
+fixed (commit `fix(kernel): harden Phase B execution path`). Highlights:
+- Intrinsic tool `deny` (bash deny-list, dangerous-path) is now an unconditional hard stop
+  evaluated *before* `no_permission` — `--no-permission` can no longer disable a safety rail.
+- `file_write` / `file_edit` hard-deny protected paths (parity with the read path).
+- The code-as-policy sandbox no longer receives `tests_pass` (a subprocess runner).
+- Evidence gate: a VLM visual-override pass is no longer counted as deterministic evidence
+  (`StepRecord.visual_override`; trace schema v2), so `evidence_passed` and `replay` agree.
+- Template fast-path: concrete `tool_call`/`code` templates require a *full* sub-goal-name
+  match (no single-token hijack); skills keep lenient synonym matching.
+- The learning tier (stats + templates) is wired for the **dev world only** — the robot
+  decompose/execute path stays byte-identical and is not contaminated by dev `tool_call`
+  stats. Persistence (`init_vgg(persist_dir=...)`) is opt-in everywhere.
+- Tests: `tests/vcli/test_level67_dev_e2e.py` (full loop) and `test_level68_review_fixes.py`
+  (one per fix).
+
+Deferred follow-ups: incremental experience compilation (currently a bounded O(n) recompile
+per success) and full cwd-containment for the autonomous write path (the dangerous-path
+deny-list covers the sensitive targets; global containment would break the interactive
+agent's legitimate absolute-path writes).
 
 ## Goal
 

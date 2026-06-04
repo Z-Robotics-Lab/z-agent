@@ -154,16 +154,19 @@ Grounded in a read of `vcli/cognitive/` and `engine.py`:
   restricted builtins, 5s timeout) -> execute (topo-sort, timeout, fallback, abort) ->
   3-layer retry/re-plan harness. Cleanly decoupled from robotics behind a single binding
   method (`_build_verifier_namespace`).
-- **Built but not wired (latent headline features):**
-  - `code_executor.py` — complete AST-sandboxed Python executor; missing only a
-    `code` branch in the executor dispatch and a `code_as_policy` entry in the decomposer
-    menu.
-  - `experience_compiler.py` + `template_library.py` — compile successful traces into
-    reusable templates; no runtime feeds traces in.
-  - `strategy_stats.py` — cross-session persistence implemented but disabled (engine
-    constructs `StrategyStats()` with no path -> in-memory only).
-- **Robot-gated:** `vgg_decompose` returns `None` when no robot base is connected; the
-  decomposer vocabulary is robot-specific.
+- **Wired in Phase B (were latent):**
+  - `code_executor.py` — now reachable via the `code` branch in
+    `GoalExecutor._execute_strategy`; instantiated in `engine.init_vgg`.
+  - `tool_dispatcher.py` (new) — the `tool` branch: a verified sub-goal dispatches one
+    kernel tool through `PermissionContext` + a per-world allowlist.
+  - `experience_compiler.py` + `template_library.py` — `engine._maybe_compile_experience`
+    feeds successful traces in; the compiled `TemplateLibrary` drives the no-LLM
+    decompose fast path. `strategy_params` now survives compile -> reuse.
+  - `strategy_stats.py` — persisted under `~/.vector/` when `init_vgg(persist_dir=...)` is
+    set (the CLI passes it); atomic save.
+  - `trace_store.py` (new) — save/load/replay + the evidence gate.
+- **Robot-gated (unchanged):** `vgg_decompose` returns `None` when no robot base is
+  connected; the decomposer vocabulary is robot-specific. The dev world is not robot-gated.
 
 Implication: a large fraction of the differentiation is wiring and de-coupling, not
 greenfield.
@@ -179,14 +182,17 @@ and made the decomposer vocabulary injectable. Outcome: `vector-cli` runs on mac
 general verified agent over file/bash/web tools, zero robot dependencies. The dev world
 does decompose + verify (execution is Phase B).
 
-**Phase B — Wire the differentiation tier. [PLANNED — see
-[agent-kernel-phase-b-plan.md](agent-kernel-phase-b-plan.md); awaiting the keystone
-execution-model decision].**
-Add code-as-policy / tool-backed execution (so the dev world *acts*, through the
-permission system); verify-as-eval (predicates as a self-grading, replayable eval signal;
-evidence-gated "done"); experience compilation -> template reuse; persistent strategy
-stats. Outcome: an agent that self-verifies, gates its own completion on evidence, and
-learns from its own runs without fine-tuning — the differentiation story made real.
+**Phase B — Wire the differentiation tier. [DONE — shipped on
+`feat/verified-agent-kernel`; see [agent-kernel-phase-b-plan.md](agent-kernel-phase-b-plan.md)].**
+Keystone resolved as tool-backed via `PermissionContext`. B.1 added tool-backed execution
+(the dev world *acts* through the permission system + a per-world allowlist) and code-as-policy
+(AST sandbox), plus verify-as-eval (predicates as a self-grading, replayable eval signal via
+`cognitive/trace_store.py`; evidence-gated "done"; a `vector-eval` headless harness). B.2 added
+persistent strategy stats and experience compilation -> template reuse (no-LLM decompose
+fast path), with `strategy_params` carried through compile/serialize/instantiate. Persistence
+is opt-in (`init_vgg(persist_dir=...)`) under `~/.vector/`. Outcome: an agent that self-verifies,
+gates its own completion on evidence, and learns from its own runs without fine-tuning — the
+differentiation story made real.
 
 **Phase C — Robot worlds + the heterogeneous model zoo (the actual product).**
 Fold the robot stack into `robot` world plugin(s) per embodiment; make the kernel
