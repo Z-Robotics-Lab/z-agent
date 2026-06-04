@@ -26,19 +26,43 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=1.24",
-    "pyserial>=3.5",
+    # --- Agent kernel (cross-platform, macOS-friendly; no robot/ROS2 deps) ---
+    "rich>=13.0",            # CLI rendering (hard-imported by vcli/cli.py)
+    "prompt_toolkit>=3.0",   # CLI REPL (hard-imported by vcli/cli.py)
     "httpx>=0.25",
     "pyyaml>=6.0",
     "anthropic>=0.40",
     "openai>=1.0",
+    # numpy/pyserial are robot/perception-leaning but kept in core for now:
+    # the kernel import path is numpy-free, but several lazily-loaded tools and
+    # the vector-os-mcp entry point assume they are present. Slated to move to
+    # the sim/real tiers in a guarded follow-up.
+    "numpy>=1.24",
+    "pyserial>=3.5",
 ]
 
 [project.optional-dependencies]
-# Perception: Camera + VLM support
+# Tiers: base install = agent kernel only. Robot/sim/perception/hardware are opt-in.
+#   [sim]        -> MuJoCo simulation (macOS-friendly)
+#   [perception] -> VLM + tracker + pointcloud (torch stack; MPS on macOS)
+#   [real]       -> physical-camera / hardware-only native deps (Linux/USB-leaning)
+#   [ik] [go2]   -> kinematics / MPC
+#   [ros2]       -> apt-installed, not pip
+#   [mcp]        -> MCP server
+
+# Simulation: MuJoCo (the primary, cross-platform sim backend)
+sim = [
+    "mujoco>=3.0",
+]
+
+# Perception: VLM detection + EdgeTAM tracker + pointcloud (no robot/USB deps).
+# These were previously undeclared despite being imported by perception/.
 perception = [
-    "pyrealsense2>=2.50",
-    "open3d>=0.17",
+    "torch>=2.2",
+    "transformers>=4.40",
+    "pillow>=10",
+    "huggingface_hub>=0.23",
+    "scipy>=1.11",
     "opencv-python>=4.8",
 ]
 
@@ -46,17 +70,18 @@ gpu = [
     "vector-os-nano[perception]",
 ]
 
+# Real hardware / physical cameras: native deps that are Linux/USB-leaning and
+# painful or unavailable on macOS arm64. Kept out of [all].
+real = [
+    "pyrealsense2>=2.50",
+    "open3d>=0.17",
+    "pybullet>=3.2",
+]
+
 # IK: Inverse kinematics solver
 # pin (Pinocchio) >=3.9.0 for SO-101 URDF compatibility
 ik = [
     "pin>=3.9.0",
-]
-
-
-# Simulation: MuJoCo (recommended) + PyBullet (legacy)
-sim = [
-    "mujoco>=3.0",
-    "pybullet>=3.2",
 ]
 
 # ROS2 integration (packages installed via apt, not pip)
@@ -73,8 +98,9 @@ mcp = [
 # Go2 quadruped locomotion: Pinocchio kinematics + CasADi for MPC
 go2 = ["casadi>=3.6", "pin>=3.0"]
 
+# Mac-installable union (excludes [real] hardware-only native deps)
 all = [
-    "vector-os-nano[perception,ik,sim,mcp]",
+    "vector-os-nano[sim,perception,ik,mcp]",
 ]
 
 # Development tools

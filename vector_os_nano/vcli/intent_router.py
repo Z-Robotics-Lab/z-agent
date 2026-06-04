@@ -14,12 +14,14 @@ from __future__ import annotations
 
 # (keywords, categories) — checked in order, all matches accumulated
 _RULES: list[tuple[frozenset[str], tuple[str, ...]]] = [
-    # Code editing
+    # Code editing — "general" carries web_fetch; "system" (robot infra, e.g.
+    # skill_reload) is included for the robot world and gated off in the dev
+    # world via disable_category("system").
     (frozenset({
         "改", "修改", "编辑", "代码", "文件", "函数", "变量", "类",
         "edit", "fix", "code", "file", "function", "class", "import",
         "read", "write", "bug", "refactor", "重构", "写",
-    }), ("code", "system")),
+    }), ("code", "general", "system")),
 
     # Robot control
     (frozenset({

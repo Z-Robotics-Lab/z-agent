@@ -273,10 +273,18 @@ class CategorizedToolRegistry(ToolRegistry):
                         (default behavior — backward compatible).
         """
         if categories is not None:
-            # Explicit category filter (from intent router)
+            # Explicit category filter (from intent router). Disabled categories
+            # are still excluded so disable_category() is authoritative on both
+            # the routed and the default paths (e.g. robot tools off in dev world).
             allowed: set[str] = set()
             for cat in categories:
+                if cat in self._disabled:
+                    continue
                 allowed.update(self._categories.get(cat, []))
+            disabled_tools: set[str] = set()
+            for cat in self._disabled:
+                disabled_tools.update(self._categories.get(cat, []))
+            allowed -= disabled_tools
             return [s for s in super().to_anthropic_schemas() if s["name"] in allowed]
 
         # Default: exclude disabled categories

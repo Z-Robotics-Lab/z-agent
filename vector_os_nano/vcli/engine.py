@@ -184,12 +184,17 @@ class VectorEngine:
         agent: Any = None,
         skill_registry: Any = None,
         on_vgg_step: "Callable[[StepRecord], None] | None" = None,
+        world: Any = None,
     ) -> None:
         """Initialise the VGG cognitive pipeline components.
 
         Safe to call at any time. If initialisation fails for any reason
         (missing dependencies, bad backend), _vgg_enabled stays False and
         the engine continues to work through the normal tool_use path.
+
+        ``world`` selects the decompose vocabulary: a world returning a
+        DecomposeVocab injects it into the GoalDecomposer; a robot world (or
+        None) keeps the decomposer's robot defaults.
         """
         if not _VGG_AVAILABLE:
             logger.warning("VGG components not available — VGG disabled")
@@ -198,6 +203,7 @@ class VectorEngine:
         _backend = backend or self._backend
         self._vgg_agent = agent
         self._vgg_step_callback = on_vgg_step
+        self._world = world
 
         # ObjectMemory — sync from SceneGraph if available.
         # Isolated try/except: failure here must not block the rest of VGG init.
@@ -231,8 +237,20 @@ class VectorEngine:
             self._vgg_enabled = False
             return
 
+        # Per-world decompose vocabulary (dev world injects; robot world keeps defaults).
+        _vocab_kwargs: dict = {}
+        if world is not None:
+            try:
+                _vocab = world.decompose_vocab()
+                if _vocab is not None:
+                    _vocab_kwargs = _vocab.as_kwargs()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("world decompose_vocab unavailable: %s", exc)
+
         try:
-            decomposer = GoalDecomposer(_backend, skill_registry=skill_registry)
+            decomposer = GoalDecomposer(
+                _backend, skill_registry=skill_registry, **_vocab_kwargs
+            )
         except ImportError as exc:
             logger.warning("VGG: GoalDecomposer not available: %s", exc)
             self._vgg_enabled = False
@@ -336,8 +354,19 @@ class VectorEngine:
             self._vgg_enabled = False
 
     def _build_verifier_namespace(self, agent: Any) -> dict[str, Any]:
-        """Build function namespace for GoalVerifier from agent state."""
+        """Build function namespace for GoalVerifier from agent state.
+
+        Dev-world predicates (file_exists/grep_count/path_contains, and opt-in
+        tests_pass) are always included so the verifier works without a robot;
+        robot bindings are added on top when an agent is connected.
+        """
         ns: dict[str, Any] = {}
+        # Domain-general dev predicates — always available (no robot required).
+        try:
+            from vector_os_nano.vcli.worlds.dev import dev_verify_namespace
+            ns.update(dev_verify_namespace())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("dev verify namespace unavailable: %s", exc)
         if agent is None:
             return ns
         base = getattr(agent, "_base", None)
@@ -439,11 +468,18 @@ class VectorEngine:
             return None
         if self._intent_router is None:
             return None
-        # VGG needs a functioning robot — don't decompose before sim starts
         _agent = getattr(self, "_vgg_agent", None)
-        if _agent is None or getattr(_agent, "_base", None) is None:
+        _world = getattr(self, "_world", None)
+        # Robot world needs a functioning robot — don't decompose before sim
+        # starts. Dev world has no robot and operates over the dev verify
+        # namespace, so it is not gated on a connected base.
+        if _world is not None:
+            _is_robot = bool(_world.is_robot())
+        else:
+            _is_robot = _agent is not None  # back-compat: agent present => robot
+        if _is_robot and (_agent is None or getattr(_agent, "_base", None) is None):
             return None
-        _sr = getattr(_agent, "_skill_registry", None)
+        _sr = getattr(_agent, "_skill_registry", None) if _agent is not None else None
         if not self._intent_router.should_use_vgg(user_message, skill_registry=_sr):
             return None
 

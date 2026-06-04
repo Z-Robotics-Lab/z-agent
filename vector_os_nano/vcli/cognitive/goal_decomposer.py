@@ -230,22 +230,82 @@ Response:
   "context_snapshot": ""
 }"""
 
-    def __init__(self, backend: Any, template_library: Any = None, skill_registry: Any = None) -> None:
+    # Default planner intro + strategy-params help (robot world). These are
+    # injectable so a non-robot "world" can supply its own decompose vocabulary.
+    _PLANNER_INTRO: str = (
+        "You are a robot task planner. Decompose the user's task into verifiable sub-goals."
+    )
+    _STRATEGY_PARAMS_HELP: str = """\
+  - navigate_skill: {"room": "<room_name>"}
+  - walk_forward: {"distance": <meters float>, "speed": <m/s float>}
+  - turn: {"angle": <degrees int, positive=left, negative=right>}
+  - detect_skill: {"query": "<object_name>"}
+  - stand_skill: {}
+  - sit_skill: {}
+  - stop_skill: {}
+  - explore_skill: {}
+  - look_skill: {}
+  - scan_360: {}"""
+
+    # Default fallback verify (robot world). Dev world overrides to "True".
+    _FALLBACK_VERIFY: str = "world_stats() is not None"
+
+    def __init__(
+        self,
+        backend: Any,
+        template_library: Any = None,
+        skill_registry: Any = None,
+        *,
+        verify_functions: "frozenset[str] | set[str] | None" = None,
+        verify_fn_signatures: "dict[str, str] | None" = None,
+        strategy_descriptions: "dict[str, str] | None" = None,
+        strategies: "frozenset[str] | set[str] | None" = None,
+        strategy_params_help: "str | None" = None,
+        examples: "str | None" = None,
+        fallback_verify: "str | None" = None,
+        planner_intro: "str | None" = None,
+    ) -> None:
         """Initialise with an LLMBackend (must implement .call()).
 
         Args:
             backend: Any object implementing the LLMBackend Protocol.
             template_library: Optional TemplateLibrary for template matching.
-            skill_registry: Optional SkillRegistry — when provided, KNOWN_STRATEGIES
-                           is built dynamically from registered skill names.
+            skill_registry: Optional SkillRegistry — when provided (and ``strategies``
+                           is not given), KNOWN_STRATEGIES is built from skill names.
+            verify_functions / verify_fn_signatures / strategy_descriptions /
+            strategies / strategy_params_help / examples / fallback_verify /
+            planner_intro: optional per-world decompose vocabulary overrides. When
+                           omitted, the robot defaults (class attributes) are used,
+                           preserving existing behaviour exactly.
         """
         self._backend = backend
         self._template_library = template_library
         self._skill_registry = skill_registry
         # Cached system prompt — built once per instance, reused across decompose() calls.
         self._cached_system_prompt: list[dict[str, Any]] | None = None
-        # Build strategies from actual registered skills
-        if skill_registry is not None:
+
+        # --- Per-world vocabulary injection (override instance attrs; class
+        #     attributes remain the robot defaults when nothing is injected) ---
+        if verify_functions is not None:
+            self.VERIFY_FUNCTIONS = frozenset(verify_functions)
+        if verify_fn_signatures is not None:
+            self._VERIFY_FN_SIGNATURES = dict(verify_fn_signatures)
+        if strategy_descriptions is not None:
+            self._STRATEGY_DESCRIPTIONS = dict(strategy_descriptions)
+        if strategy_params_help is not None:
+            self._STRATEGY_PARAMS_HELP = strategy_params_help
+        if examples is not None:
+            self._EXAMPLE = examples
+        if fallback_verify is not None:
+            self._FALLBACK_VERIFY = fallback_verify
+        if planner_intro is not None:
+            self._PLANNER_INTRO = planner_intro
+
+        # Strategies: explicit injection wins; else derive from skill registry;
+        # else keep the robot defaults.
+        if strategies is not None:
+            self.KNOWN_STRATEGIES = frozenset(strategies)
+        elif skill_registry is not None:
             try:
                 skill_names = set(skill_registry.list_skills())
                 real_strategies = {f"{n}_skill" for n in skill_names} | {
@@ -318,7 +378,7 @@ Response:
         )
 
         text = f"""\
-You are a robot task planner. Decompose the user's task into verifiable sub-goals.
+{self._PLANNER_INTRO}
 
 ## Output Format
 Respond with ONLY valid JSON matching this schema — no prose, no markdown fences:
@@ -327,7 +387,7 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
 ## Rules
 1. Each sub_goal MUST have a verify expression using ONLY the verify functions listed below.
 2. Maximum {self.MAX_SUB_GOALS} sub_goals — prefer fewer.
-3. Simple tasks (stand, sit, go to X) should have 1-2 sub_goals.
+3. Simple tasks should have 1-2 sub_goals.
 4. depends_on must reference sub_goal names defined earlier in the same list.
 5. strategy must be one of the KNOWN_STRATEGIES below, or an empty string "".
 6. Do NOT call any function not in the verify list. Do NOT use import, exec, or eval.
@@ -335,16 +395,7 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
 8. strategy_params MUST contain the required parameters for the chosen strategy (see STRATEGY_PARAMS below).
 
 ## STRATEGY_PARAMS (required keys per strategy)
-  - navigate_skill: {{"room": "<room_name>"}}
-  - walk_forward: {{"distance": <meters float>, "speed": <m/s float>}}
-  - turn: {{"angle": <degrees int, positive=left, negative=right>}}
-  - detect_skill: {{"query": "<object_name>"}}
-  - stand_skill: {{}}
-  - sit_skill: {{}}
-  - stop_skill: {{}}
-  - explore_skill: {{}}
-  - look_skill: {{}}
-  - scan_360: {{}}
+{self._STRATEGY_PARAMS_HELP}
 
 ## KNOWN_STRATEGIES
 {strategies_block}
@@ -567,7 +618,7 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
         fallback_sg = SubGoal(
             name="execute_task",
             description=task,
-            verify="world_stats() is not None",
+            verify=self._FALLBACK_VERIFY,
             timeout_sec=60.0,
         )
         return GoalTree(

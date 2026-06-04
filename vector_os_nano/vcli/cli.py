@@ -1016,8 +1016,11 @@ def main(argv: list[str] | None = None) -> None:
         console.print(f"  /login anthropic  enter Anthropic API key")
         console.print(f"  /login openrouter enter OpenRouter key[/dim]\n")
 
-    # Agent (optional hardware)
+    # Agent (optional hardware) + active world (robot if an agent is connected,
+    # else the default cross-platform "dev" world).
     agent = _init_agent(args)
+    from vector_os_nano.vcli.worlds import resolve_world
+    world = resolve_world(agent)
 
     # Tools (categorized registry for scalable tool management)
     registry: CategorizedToolRegistry = CategorizedToolRegistry()
@@ -1033,6 +1036,10 @@ def main(argv: list[str] | None = None) -> None:
         from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
         for skill_tool in wrap_skills(agent):
             registry.register(skill_tool, category="robot")
+    else:
+        # Dev world: don't advertise robot/diag/sim tools to the model.
+        for _c in ("robot", "diag", "system"):
+            registry.disable_category(_c)
 
     # Permissions
     permissions = PermissionContext(no_permission=args.no_permission)
@@ -1063,7 +1070,9 @@ def main(argv: list[str] | None = None) -> None:
         robot_ctx_provider = RobotContextProvider(base=base, scene_graph=sg)
     except ImportError:
         pass
-    system_prompt = build_system_prompt(agent=agent, cwd=Path.cwd(), robot_context=robot_ctx_provider)
+    system_prompt = build_system_prompt(
+        agent=agent, cwd=Path.cwd(), robot_context=robot_ctx_provider, world=world
+    )
 
     # Wrap in DynamicSystemPrompt so robot state refreshes each turn
     try:
@@ -1152,6 +1161,7 @@ def main(argv: list[str] | None = None) -> None:
             agent=agent,
             skill_registry=_skill_registry,
             on_vgg_step=_vgg_step_display,
+            world=world,
         )
         if engine._vgg_enabled:
             console.print(f"[dim]  VGG cognitive layer: enabled[/dim]")
