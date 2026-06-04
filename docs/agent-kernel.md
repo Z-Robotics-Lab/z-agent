@@ -195,6 +195,25 @@ planner, VLA policy), a classical skill, or an atomic action, by measured fit; d
 the "any model / any skill / any robot, plug and play" platform for building physical AI.
 The dev world stays as the build/test means.
 
+## Forward direction: from one LLM to a model zoo
+
+The orchestration vision needs the kernel to route to *capabilities*, not just one LLM.
+Today `vcli/backends/` is a single chat-LLM backend and `StrategySelector` routes a
+sub-goal only to a skill/primitive. The evolution:
+
+1. Generalize `backends/` into a **routable-capability registry**: a capability is
+   anything with a typed `(input -> output)` contract and measured stats — a chat LLM, a
+   specialized detector/segmenter, a planner, a VLA policy, a classical skill, an atomic
+   action. Each world registers its capabilities (see the world-plugin seam above).
+2. Extend `StrategySelector` to choose *across capability kinds* by measured fit (the
+   bandit/stats machinery already exists), not just among skills — so "detect the red
+   cup" routes to a small detector, "plan a grasp" to a planner, "walk" to a skill.
+3. Keep verification unchanged: every routed step still carries a deterministic `verify`
+   predicate, so a heterogeneous fleet of brains stays trustworthy.
+
+This is net-new architecture (beyond Phase A/B) and is the bridge from "verified agent
+kernel" to "Vector OS orchestrating any model/skill/robot." Sequence it after Phase B.
+
 ## Risks and mitigations
 
 - *Verification bias at predicate-authoring time* — predicate libraries, human review,
