@@ -43,6 +43,7 @@ class GoalExecutor:
         visual_verifier_agent: Any = None,
         code_executor: Any = None,
         tool_dispatcher: Any = None,
+        capability_registry: Any = None,
     ) -> None:
         """Initialise the executor.
 
@@ -63,6 +64,9 @@ class GoalExecutor:
                              the permission gate + per-world allowlist. None disables
                              the ``tool`` branch. Both default None so the robot path is
                              byte-identical when no code/tool sub-goal is produced.
+            capability_registry: Optional CapabilityRegistry — routes ``capability``
+                             sub-goals to a named routable capability (Phase C). None
+                             disables the ``capability`` branch.
         """
         self._selector = strategy_selector
         self._verifier = verifier
@@ -73,6 +77,7 @@ class GoalExecutor:
         self._visual_verifier_agent = visual_verifier_agent
         self._code_executor = code_executor
         self._tool_dispatcher = tool_dispatcher
+        self._capability_registry = capability_registry
 
     # ------------------------------------------------------------------
     # Public API
@@ -402,6 +407,8 @@ class GoalExecutor:
             return self._execute_code(params)
         if executor_type == "tool":
             return self._execute_tool(params)
+        if executor_type == "capability":
+            return self._execute_capability(name, params)
         # Unknown executor type
         error = f"No strategy for: {name} (executor_type={executor_type!r})"
         logger.warning("GoalExecutor: %s", error)
@@ -446,6 +453,49 @@ class GoalExecutor:
         if not isinstance(args, dict):
             args = {}
         return self._tool_dispatcher.dispatch(tool_name, args)
+
+    def _execute_capability(self, name: str, params: dict) -> tuple[bool, str]:
+        """Route a sub-goal to a named routable capability (Phase C).
+
+        ``params`` is the capability input payload. A read-only capability is
+        invoked directly; a side-effecting one fails closed until C.3 wires the
+        permission gate. The capability never decides success — the sub-goal's
+        ``verify`` predicate (checked separately by the caller) does.
+
+        Returns:
+            (success: bool, error_message: str)
+        """
+        if self._capability_registry is None:
+            return False, "capability branch requires a CapabilityRegistry (none configured)"
+        cap = self._capability_registry.get(name)
+        if cap is None:
+            return False, f"unknown capability: {name}"
+        if getattr(cap, "side_effecting", False):
+            # Side-effecting capabilities (e.g. a VLA policy) must route through a
+            # permission gate — wired in Phase C.3. Fail closed until then.
+            return False, (
+                f"side-effecting capability '{name}' requires a permission gate "
+                "(deferred to Phase C.3)"
+            )
+        payload = params if isinstance(params, dict) else {}
+        try:
+            from vector_os_nano.vcli.cognitive.capabilities import validate_input
+            err = validate_input(getattr(cap, "input_schema", {}) or {}, payload)
+            if err is not None:
+                return False, f"capability '{name}' input invalid: {err}"
+        except Exception:  # noqa: BLE001
+            pass
+        context = None
+        if self._build_context is not None:
+            try:
+                context = self._build_context()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("GoalExecutor: build_context for capability raised: %s", exc)
+        try:
+            result = cap.invoke(payload, context)
+        except Exception as exc:  # noqa: BLE001
+            return False, f"capability error: {exc}"
+        return bool(getattr(result, "success", False)), getattr(result, "error", "") or ""
 
     def _execute_skill(self, name: str, params: dict) -> tuple[bool, str]:
         """Locate and execute a skill from the registry.

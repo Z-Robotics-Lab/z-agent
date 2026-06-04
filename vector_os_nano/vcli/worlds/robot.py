@@ -38,6 +38,11 @@ class RobotWorld:
         # (engine._build_verifier_namespace). Nothing extra to add here.
         return {}
 
+    def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
+        # No-op in C.1 — the robot path keeps its skill/primitive routing,
+        # byte-identical. C.3 registers detectors / planners / VLA policies here.
+        return None
+
     def decompose_vocab(self) -> None:
         # None => GoalDecomposer keeps its robot defaults (derived from skills).
         return None

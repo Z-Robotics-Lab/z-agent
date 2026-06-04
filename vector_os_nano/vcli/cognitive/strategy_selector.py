@@ -59,7 +59,7 @@ _STATS_MIN_SUCCESS_RATE: float = 0.5
 class StrategyResult:
     """Result of strategy selection."""
 
-    executor_type: str   # "skill" | "primitive" | "fallback" | "code" | "tool"
+    executor_type: str   # "skill" | "primitive" | "fallback" | "code" | "tool" | "capability"
     name: str            # skill name or primitive function name
     params: dict         # parameters to pass
 
@@ -72,9 +72,18 @@ class StrategySelector:
     a success rate > 50%, it overrides the rule-based choice.
     """
 
-    def __init__(self, skill_registry: Any = None, stats: Any = None) -> None:
+    def __init__(
+        self,
+        skill_registry: Any = None,
+        stats: Any = None,
+        capability_names: "frozenset[str] | set[str] | None" = None,
+    ) -> None:
         self._skill_registry = skill_registry
         self._stats = stats
+        # Registered routable-capability names (Phase C). An explicit strategy
+        # matching one of these resolves to capability dispatch. Empty => no
+        # capability routing (the path stays byte-identical).
+        self._capability_names = frozenset(capability_names) if capability_names else frozenset()
 
     # ------------------------------------------------------------------
     # Public API
@@ -209,6 +218,11 @@ class StrategySelector:
 
         if strategy == "tool_call":
             return StrategyResult("tool", "tool_call", params)
+
+        # A strategy naming a registered routable capability (Phase C) — the
+        # capability name IS the strategy; params is its input payload.
+        if strategy in self._capability_names:
+            return StrategyResult("capability", strategy, params)
 
         if strategy.endswith(_SKILL_SUFFIX):
             skill_name = strategy[: -len(_SKILL_SUFFIX)]

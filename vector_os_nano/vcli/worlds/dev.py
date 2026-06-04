@@ -257,8 +257,9 @@ DEV_VOCAB = DecomposeVocab(
     verify_fn_signatures=_DEV_VERIFY_SIGNATURES,
     strategy_descriptions={
         "tool_call": "Invoke one kernel tool (file_write/file_edit/bash/...) to act on the project",
+        "chat": "Ask the chat LLM for free-form text (no project side effect; verify must still hold)",
     },
-    strategies=frozenset({"tool_call"}),
+    strategies=frozenset({"tool_call", "chat"}),
     strategy_params_help=_DEV_STRATEGY_PARAMS_HELP,
     examples=_DEV_EXAMPLE + "\n\n" + _DEV_TOOL_EXAMPLE,
     fallback_verify="True",
@@ -282,6 +283,14 @@ class DevWorld:
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
         return dev_verify_namespace()
+
+    def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
+        # The chat LLM as one routable capability (Phase C seam). No-op without a
+        # backend (e.g. before /login), keeping the dev path inert until then.
+        if backend is None:
+            return
+        from vector_os_nano.vcli.cognitive.capabilities import LLMChatCapability
+        registry.register(LLMChatCapability(backend))
 
     def decompose_vocab(self) -> DecomposeVocab:
         return DEV_VOCAB

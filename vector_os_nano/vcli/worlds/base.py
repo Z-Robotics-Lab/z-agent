@@ -86,6 +86,19 @@ class World(Protocol):
         """
         ...
 
+    def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
+        """Register this world's routable capabilities (Phase C).
+
+        A *capability* is anything a sub-goal can be routed to with a typed
+        ``(input -> output)`` contract: a chat LLM, a detector, a planner, a VLA
+        policy, a skill, an atomic action. The dev world registers the chat
+        capability (over *backend*); the robot world registers specialized models
+        (C.3). Default: no-op — the kernel keeps its built-in
+        skill/primitive/code/tool branches, so a world that registers nothing
+        routes exactly as before. Must not import heavy deps at module load.
+        """
+        ...
+
     def decompose_vocab(self) -> "DecomposeVocab | None":
         """Return the GoalDecomposer vocabulary, or None to use kernel defaults.
 

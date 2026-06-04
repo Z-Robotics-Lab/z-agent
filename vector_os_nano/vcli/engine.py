@@ -280,6 +280,23 @@ class VectorEngine:
                 template_library = None
                 experience_compiler = None
 
+        # Routable-capability registry (Phase C). The world registers its
+        # capabilities (dev: the chat LLM; robot: detectors/planners in C.3).
+        # Empty for a world that registers none, so capability routing is inert
+        # and the path stays byte-identical.
+        capability_registry: Any = None
+        try:
+            from vector_os_nano.vcli.cognitive.capabilities import CapabilityRegistry
+            capability_registry = CapabilityRegistry()
+            if world is not None and hasattr(world, "register_capabilities"):
+                world.register_capabilities(capability_registry, agent, _backend)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("VGG: capability registry unavailable: %s", exc)
+            capability_registry = None
+        _capability_names = (
+            capability_registry.names() if capability_registry is not None else frozenset()
+        )
+
         # Per-world decompose vocabulary (dev world injects; robot world keeps defaults).
         _vocab_kwargs: dict = {}
         if world is not None:
@@ -308,7 +325,11 @@ class VectorEngine:
 
         try:
             verifier = GoalVerifier(ns)
-            selector = StrategySelector(skill_registry=skill_registry, stats=stats)
+            selector = StrategySelector(
+                skill_registry=skill_registry,
+                stats=stats,
+                capability_names=_capability_names,
+            )
         except ImportError as exc:
             logger.warning("VGG: cognitive layer not available: %s", exc)
             self._vgg_enabled = False
@@ -400,6 +421,7 @@ class VectorEngine:
                 visual_verifier_agent=agent,
                 code_executor=code_executor,
                 tool_dispatcher=tool_dispatcher,
+                capability_registry=capability_registry,
             )
         except ImportError as exc:
             logger.warning("VGG: GoalExecutor not available: %s", exc)
