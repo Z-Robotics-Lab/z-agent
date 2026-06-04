@@ -114,18 +114,18 @@ class StrategySelector:
         # Navigation
         if any(kw in combined for kw in ("reach", "navigate", "go_to", "到", "去")):
             room = sub_goal.strategy_params.get("room", sub_goal.description)
-            result = StrategyResult("skill", "navigate", {"room": room})
+            result = self._route("navigate", {"room": room})
 
         # Observation
         elif any(kw in combined for kw in ("observe", "look", "scan", "看", "观察")):
-            result = StrategyResult("skill", "look", {})
+            result = self._route("look", {})
 
         # Detection
         elif _word_match(("detect", "find", "check"), combined) or any(
             kw in combined for kw in ("检测", "找", "检查")
         ):
             query = sub_goal.strategy_params.get("query", sub_goal.description)
-            result = StrategyResult("skill", "detect", {"query": query})
+            result = self._route("detect", {"query": query})
 
         # Stance — stand / sit
         elif _word_match(("stand",), combined):
@@ -201,6 +201,19 @@ class StrategySelector:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _route(self, name: str, params: dict) -> StrategyResult:
+        """Route a keyword-matched perception/planning step (Phase C.2).
+
+        If a routable capability named *name* is registered, dispatch to it (and
+        let measured stats later promote a better-performing alternative for the
+        same sub-goal pattern); otherwise fall back to the classical skill of the
+        same name. Inert until a world registers such a capability, so dev/robot
+        routing is unchanged today.
+        """
+        if name in self._capability_names:
+            return StrategyResult("capability", name, params)
+        return StrategyResult("skill", name, params)
 
     def _resolve_explicit(self, strategy: str, params: dict) -> StrategyResult:
         """Resolve an explicit strategy name to a StrategyResult.
