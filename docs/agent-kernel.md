@@ -2,29 +2,55 @@
 
 - Status: Proposed
 - Date: 2026-06-04
-- Scope: the agentic system (VectorEngine + VGG + CLI), not the robot stack
+- Scope: the Vector OS orchestration layer (VectorEngine + VGG + CLI) — the OS *around*
+  the models, in service of robots.
 
-## Thesis
+## Vision
 
-VGG (Verified Goal Graph) is not a robot feature. It is a **domain-general,
-verified-agent kernel**: a runtime that decomposes a task into an inspectable goal
-graph, attaches a machine-checkable success predicate to every sub-goal, executes via
-ranked strategies, and re-plans on verified failure — with no fine-tuning. The robot is
-one **world** the kernel can drive, alongside future worlds (code/dev, browser, ops).
+Vector OS is not another model — it is an agent-orchestration system built *around*
+models, in service of robots. It plans tasks, routes each instruction to the right model
+and skill, verifies every step of execution, and recovers automatically on failure — the
+things models do unreliably on their own are exactly Vector OS's job. Unified large
+models, specialized small models, classical skills, and atomic actions are orchestrated
+into one deployable whole that is cross-hardware, cross-model, and cross-system.
 
-This single reframe addresses both current goals at once:
+Further, Vector OS is a *programmable platform*: developers build physical AI the way they
+write code ("code physical AI"). Any model, any skill, any robot — plug and play.
 
-1. **Cross-platform (macOS first).** The kernel — engine, VGG sandbox, general tools
-   (file/bash/grep/web), backends, session, permissions — is already pure Python with no
-   robot or ROS2 dependency. Once the robot coupling is pushed behind a world plugin, the
-   CLI runs on macOS as a general verified agent with zero robot dependencies.
-2. **Architectural differentiation.** The capabilities the kernel embodies —
-   deterministic per-step verification, an inspectable self-revising plan graph,
-   measured-strategy selection, and experience compilation without fine-tuning — are
-   precisely the white space the mainstream agent CLIs leave open.
+Models are raw capability. We are not trying to build the smartest brain right now; we
+make *every* brain run trustworthily on the industrial floor, callable and buildable by
+anyone. **Vector OS is the operating system for the robot world.**
 
-The robot does not get demoted; it becomes the flagship world ("the same kernel that
-verifies your code also drives a real quadruped").
+## Thesis (how the architecture serves the vision)
+
+The VGG (Verified Goal Graph) kernel is the engine of that OS. It decomposes a task into
+an inspectable goal graph, **routes each sub-goal to the right capability** (a skill, an
+atomic action, or a model — large or specialized), attaches a machine-checkable success
+predicate to every step, executes via ranked strategies, and re-plans on verified failure
+— with no fine-tuning. The kernel is deliberately model-, skill-, and hardware-agnostic
+*so that* it can orchestrate a heterogeneous fleet of brains and bodies in the field.
+
+A **world** is a deployment target the kernel drives: a robot embodiment (Go2, SO-101 /
+Piper, …) and — on a developer's laptop — a robot-free **dev** world used to build and
+harden the kernel itself. The dev / macOS path is a *means*, not the product: it gives
+cross-system deployability, a fast hardware-free dev loop, and a way to exercise the
+orchestration logic. **Robots remain the end.**
+
+This serves two near-term goals at once:
+
+1. **Cross-platform / cross-system.** The kernel — engine, VGG sandbox, routing, tools,
+   backends, session, permissions — is pure Python with no robot/ROS2 dependency, so it
+   runs anywhere (macOS first) and the *same* orchestration deploys onto real hardware by
+   swapping the world.
+2. **A trustworthy orchestration layer the field needs.** Deterministic per-step
+   verification, an inspectable self-revising plan graph, measured-strategy selection,
+   and experience compilation — what makes unreliable models dependable in production.
+
+Note: today the kernel routes sub-goals to skills/primitives behind a single LLM backend
+(`vcli/backends/`). The full vision — routing to a *heterogeneous model zoo* (specialized
+detectors/planners, VLA policies, small task models) as first-class routable capabilities
+alongside skills — is a forward direction the architecture is built toward, not yet
+implemented.
 
 ## Differentiation (honest)
 
@@ -80,11 +106,11 @@ the robot vocabulary behind it.
                              | registers
         +--------------------+---------------------+
         |                    |                     |
-   robot world          dev/code world        browser world (future)
-   tools + verify       tools + verify         ...
-   namespace +          namespace +
-   decompose vocab      decompose vocab
-   + persona            + persona
+   robot embodiments     dev world            (more embodiments /
+   (Go2, SO-101/Piper)   (laptop, robot-free   deployment targets)
+   tools + verify ns +   build/test means)     ...
+   model+skill routing   tools + verify ns +
+   + persona             routing + persona
 ```
 
 A **world plugin** registers exactly four things, all consumed through interfaces the
@@ -100,6 +126,11 @@ kernel already has:
    `GoalDecomposer` prompt teaches (today robot-hardcoded).
 4. **A persona / prompt block** — replacing the hardcoded robot `ROLE_PROMPT` /
    `TOOL_INSTRUCTIONS`.
+
+A world thus contributes the **routable capabilities** for its domain — today skills +
+atomic actions; as the heterogeneous model zoo lands, specialized models (detectors,
+planners, VLA policies) register here too and the StrategySelector routes a sub-goal to
+the right one. This is the "any model, any skill, any robot — plug and play" seam.
 
 What stays in the kernel vs moves to the robot world:
 
@@ -157,10 +188,12 @@ evidence-gated "done"); experience compilation -> template reuse; persistent str
 stats. Outcome: an agent that self-verifies, gates its own completion on evidence, and
 learns from its own runs without fine-tuning — the differentiation story made real.
 
-**Phase C — Worlds ecosystem + robot as flagship.**
-Fold the robot stack into a `robot` world plugin; ship the `dev` world by default;
-explore compositional worlds (one verified plan that both edits code and drives the
-robot).
+**Phase C — Robot worlds + the heterogeneous model zoo (the actual product).**
+Fold the robot stack into `robot` world plugin(s) per embodiment; make the kernel
+orchestrate a *fleet of brains* — route a sub-goal to a specialized model (detector,
+planner, VLA policy), a classical skill, or an atomic action, by measured fit; deliver
+the "any model / any skill / any robot, plug and play" platform for building physical AI.
+The dev world stays as the build/test means.
 
 ## Risks and mitigations
 
@@ -175,10 +208,15 @@ robot).
 
 ## Non-goals (this direction)
 
+- **Building a foundation model or competing on raw model intelligence.** Vector OS
+  orchestrates whatever brains exist (large, small, specialized) and makes them
+  trustworthy in the field; the smartest-brain race is not ours to run right now.
+- **Positioning the dev/macOS path as the product.** It is a means — cross-system
+  deployability and a hardware-free dev loop. The end is robots.
 - Re-implementing industrial navigation (FAR/TARE) on macOS. The robot world keeps ROS2
   as an opt-in high-fidelity backend on Linux.
 - Driving real robot hardware from macOS. Real hardware stays on Linux.
-- Fine-tuning any model. The kernel is provider-agnostic and frozen-model by design.
+- Fine-tuning any model. The kernel is orchestration-first and frozen-model by design.
 
 ## References (prior art, for honest positioning)
 

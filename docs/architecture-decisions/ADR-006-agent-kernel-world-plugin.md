@@ -26,8 +26,11 @@ and the CLI startup/prompt.
 ## Decision
 
 Treat VGG + the engine + general tools + backends + session + permissions as a
-**domain-general agent kernel**, and model each domain (robot, code/dev, browser, ...) as
-a **world plugin** that registers four things into the kernel:
+**model-, skill-, and hardware-agnostic orchestration kernel — the engine of Vector OS, in
+service of robots** — and model each deployment target as a **world plugin**: robot
+embodiments (Go2, SO-101/Piper, …) as the primary worlds, plus a robot-free `dev` world
+that ships in the kernel as a build/test means (not the product). Each world registers
+four things into the kernel:
 
 1. tools (into the existing `CategorizedToolRegistry`, under its own category),
 2. a verify/primitive namespace (consumed by `GoalVerifier`),
