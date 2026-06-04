@@ -31,6 +31,11 @@ class SubGoalTemplate:
     timeout_sec: float = 30.0
     depends_on: tuple[str, ...] = ()
     fail_action: str = ""
+    # Strategy payload carried verbatim (concrete templates) or with values
+    # parameterized to ${param} (parameterized templates). Required so tool_call
+    # / code-as-policy sub-goals survive compile -> reuse — without it the
+    # {"tool": ..., "args": ...} payload is lost and reuse fails.
+    strategy_params: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,25 @@ def _replace_value(text: str, value: str, param: str) -> str:
     return text.replace(value, f"${{{param}}}")
 
 
+def _parameterize_payload(value: Any, value_to_param: dict[str, str]) -> Any:
+    """Recursively replace known values with ${param} inside a strategy payload.
+
+    Walks dicts/lists/strings so a tool_call payload like
+    {"args": {"room": "kitchen"}} becomes {"args": {"room": "${room}"}}.
+    Non-string leaves are returned unchanged.
+    """
+    if isinstance(value, str):
+        out = value
+        for val, param in value_to_param.items():
+            out = _replace_value(out, val, param)
+        return out
+    if isinstance(value, dict):
+        return {k: _parameterize_payload(v, value_to_param) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_parameterize_payload(v, value_to_param) for v in value]
+    return value
+
+
 def _build_sub_goal_template(
     sub_goal: SubGoal,
     value_to_param: dict[str, str],
@@ -134,6 +158,7 @@ def _build_sub_goal_template(
         timeout_sec=sub_goal.timeout_sec,
         depends_on=tuple(dep_pats),
         fail_action=sub_goal.fail_action,
+        strategy_params=_parameterize_payload(sub_goal.strategy_params, value_to_param),
     )
 
 
@@ -212,6 +237,7 @@ class ExperienceCompiler:
                 timeout_sec=sg.timeout_sec,
                 depends_on=sg.depends_on,
                 fail_action=sg.fail_action,
+                strategy_params=dict(sg.strategy_params),
             )
             for sg in tree.sub_goals
         )

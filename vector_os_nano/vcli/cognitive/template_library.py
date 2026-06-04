@@ -18,7 +18,12 @@ from vector_os_nano.vcli.cognitive.experience_compiler import GoalTemplate, SubG
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PATH = os.path.expanduser("~/.vector_os_nano/goal_templates.json")
+_DEFAULT_PATH = os.path.expanduser("~/.vector/goal_templates.json")
+
+# On-disk shape v2 carries SubGoalTemplate.strategy_params so tool_call /
+# code-as-policy payloads survive compile -> reuse. The loader is tolerant:
+# v1 files (no strategy_params key) load with an empty payload, and unknown
+# keys are ignored — no migration needed.
 
 # ---------------------------------------------------------------------------
 # Known keyword sets for simple parameter extraction
@@ -49,10 +54,12 @@ def _sub_goal_template_to_dict(sgt: SubGoalTemplate) -> dict:
         "timeout_sec": sgt.timeout_sec,
         "depends_on": list(sgt.depends_on),
         "fail_action": sgt.fail_action,
+        "strategy_params": dict(getattr(sgt, "strategy_params", {}) or {}),
     }
 
 
 def _sub_goal_template_from_dict(d: dict) -> SubGoalTemplate:
+    sp = d.get("strategy_params", {})
     return SubGoalTemplate(
         name_pattern=d["name_pattern"],
         description_pattern=d["description_pattern"],
@@ -61,6 +68,7 @@ def _sub_goal_template_from_dict(d: dict) -> SubGoalTemplate:
         timeout_sec=float(d.get("timeout_sec", 30.0)),
         depends_on=tuple(d.get("depends_on", [])),
         fail_action=d.get("fail_action", ""),
+        strategy_params=dict(sp) if isinstance(sp, dict) else {},
     )
 
 
@@ -151,9 +159,36 @@ def _substitute(pattern: str, params: dict[str, str]) -> str:
     return result
 
 
+def _substitute_payload(value, params: dict[str, str]):
+    """Recursively substitute ${param} placeholders inside a strategy payload."""
+    if isinstance(value, str):
+        return _substitute(value, params)
+    if isinstance(value, dict):
+        return {k: _substitute_payload(v, params) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_substitute_payload(v, params) for v in value]
+    return value
+
+
 def _instantiate_sub_goal(sgt: SubGoalTemplate, params: dict[str, str]) -> SubGoal:
-    """Create a concrete SubGoal from a SubGoalTemplate and parameter values."""
+    """Create a concrete SubGoal from a SubGoalTemplate and parameter values.
+
+    Strategy payload resolution (in priority order):
+    1. A stored ``strategy_params`` on the template -> substitute ${param} in its
+       string leaves (carries tool_call/code payloads through reuse, verbatim for
+       concrete templates).
+    2. Back-compat: a strategy with no stored payload -> the extracted params
+       (the historical robot behaviour for templates compiled before v2).
+    3. No strategy -> empty payload.
+    """
     depends_on = tuple(_substitute(dep, params) for dep in sgt.depends_on)
+    stored = dict(getattr(sgt, "strategy_params", {}) or {})
+    if stored:
+        strategy_params = _substitute_payload(stored, params)
+    elif sgt.strategy:
+        strategy_params = dict(params)
+    else:
+        strategy_params = {}
     return SubGoal(
         name=_substitute(sgt.name_pattern, params),
         description=_substitute(sgt.description_pattern, params),
@@ -162,7 +197,7 @@ def _instantiate_sub_goal(sgt: SubGoalTemplate, params: dict[str, str]) -> SubGo
         timeout_sec=sgt.timeout_sec,
         depends_on=depends_on,
         fail_action=sgt.fail_action,
-        strategy_params=dict(params) if sgt.strategy else {},
+        strategy_params=strategy_params,
     )
 
 

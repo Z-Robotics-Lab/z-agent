@@ -168,6 +168,13 @@ class VectorEngine:
         self._goal_decomposer: Any = None
         self._goal_executor: Any = None
 
+        # Experience-compilation tier (wired only when init_vgg is given a
+        # persist_dir; in-memory / off otherwise so tests don't touch ~/.vector).
+        self._template_library: Any = None
+        self._experience_compiler: Any = None
+        self._successful_traces: list[Any] = []
+        self._max_successful_traces: int = 50
+
         # World context cache — avoids repeated sensor/graph queries when robot is static
         _WORLD_CONTEXT_TTL: float = 5.0  # seconds
         self._world_context_ttl: float = _WORLD_CONTEXT_TTL
@@ -186,6 +193,7 @@ class VectorEngine:
         on_vgg_step: "Callable[[StepRecord], None] | None" = None,
         world: Any = None,
         tool_permission_resolver: "Callable[[str, dict[str, Any]], str] | None" = None,
+        persist_dir: "str | Path | None" = None,
     ) -> None:
         """Initialise the VGG cognitive pipeline components.
 
@@ -201,6 +209,11 @@ class VectorEngine:
         dev-world ``tool_call`` sub-goals (called with ``(tool_name, params) ->
         "y"|"a"|"n"``). None auto-denies — the safe headless default; the CLI
         passes its interactive prompt.
+
+        ``persist_dir`` enables the learning tier: when set, StrategyStats and the
+        TemplateLibrary persist under it (e.g. ``~/.vector``) and successful runs
+        are compiled into reusable templates. None keeps everything in memory
+        (the default, so tests never touch the home dir).
         """
         if not _VGG_AVAILABLE:
             logger.warning("VGG components not available — VGG disabled")
@@ -234,14 +247,38 @@ class VectorEngine:
 
         # Cognitive layer (GoalDecomposer, GoalVerifier, GoalExecutor, VGGHarness).
         # Any failure here disables VGG — the engine falls back to tool_use path.
+        # Persistence is opt-in: a persist_dir wires StrategyStats + TemplateLibrary
+        # to disk for cross-session learning; None keeps them in memory so tests
+        # (and headless evals) never write to the home dir.
+        _persist = Path(persist_dir) if persist_dir is not None else None
+        _stats_path = str(_persist / "strategy_stats.json") if _persist else None
+
         try:
             # Build primitives namespace for GoalVerifier
             ns = self._build_verifier_namespace(agent)
-            stats = StrategyStats()
+            stats = StrategyStats(persist_path=_stats_path)
         except Exception as exc:
             logger.warning("VGG: verifier namespace build failed: %s", exc)
             self._vgg_enabled = False
             return
+
+        # Experience-compilation tier (only when persisting). A persistent
+        # TemplateLibrary activates the decomposer's no-LLM fast path; an
+        # ExperienceCompiler turns successful runs into reusable templates.
+        template_library = None
+        experience_compiler = None
+        if _persist is not None:
+            try:
+                from vector_os_nano.vcli.cognitive.experience_compiler import ExperienceCompiler
+                from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
+                template_library = TemplateLibrary(
+                    persist_path=str(_persist / "goal_templates.json")
+                )
+                experience_compiler = ExperienceCompiler()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("VGG: experience tier unavailable: %s", exc)
+                template_library = None
+                experience_compiler = None
 
         # Per-world decompose vocabulary (dev world injects; robot world keeps defaults).
         _vocab_kwargs: dict = {}
@@ -255,7 +292,10 @@ class VectorEngine:
 
         try:
             decomposer = GoalDecomposer(
-                _backend, skill_registry=skill_registry, **_vocab_kwargs
+                _backend,
+                template_library=template_library,
+                skill_registry=skill_registry,
+                **_vocab_kwargs,
             )
         except ImportError as exc:
             logger.warning("VGG: GoalDecomposer not available: %s", exc)
@@ -367,6 +407,9 @@ class VectorEngine:
         try:
             self._goal_decomposer = decomposer
             self._goal_executor = executor
+            self._template_library = template_library
+            self._experience_compiler = experience_compiler
+            self._successful_traces = []
             self._vgg_harness = VGGHarness(
                 decomposer=decomposer,
                 executor=executor,
@@ -643,13 +686,37 @@ class VectorEngine:
             pass
         if hasattr(self, "_vgg_harness") and self._vgg_harness is not None:
             world_context = self._build_world_context()
-            return self._vgg_harness.run(
+            trace = self._vgg_harness.run(
                 task=goal_tree.goal,
                 world_context=world_context,
                 goal_tree=goal_tree,
             )
-        # Fallback: raw executor (no harness)
-        return self._goal_executor.execute(goal_tree, on_step=self._on_vgg_step)
+        else:
+            # Fallback: raw executor (no harness)
+            trace = self._goal_executor.execute(goal_tree, on_step=self._on_vgg_step)
+        self._maybe_compile_experience(trace)
+        return trace
+
+    def _maybe_compile_experience(self, trace: Any) -> None:
+        """Compile a successful trace into reusable templates (best-effort).
+
+        No-op unless the experience tier was wired (init_vgg given a persist_dir).
+        Bounded, never raises, and never blocks the caller — a failure here must
+        not affect the execution result.
+        """
+        lib = getattr(self, "_template_library", None)
+        comp = getattr(self, "_experience_compiler", None)
+        if lib is None or comp is None or not getattr(trace, "success", False):
+            return
+        try:
+            self._successful_traces.append(trace)
+            if len(self._successful_traces) > self._max_successful_traces:
+                self._successful_traces = self._successful_traces[-self._max_successful_traces:]
+            for template in comp.compile(self._successful_traces):
+                lib.add(template)
+            lib.save()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("VGG: experience compilation skipped: %s", exc)
 
     def vgg_execute_async(
         self,

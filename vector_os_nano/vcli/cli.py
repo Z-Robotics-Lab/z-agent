@@ -1165,6 +1165,7 @@ def main(argv: list[str] | None = None) -> None:
             on_vgg_step=_vgg_step_display,
             world=world,
             tool_permission_resolver=lambda n, p: ask_permission(n, p),
+            persist_dir=Path.home() / ".vector",
         )
         if engine._vgg_enabled:
             console.print(f"[dim]  VGG cognitive layer: enabled[/dim]")
