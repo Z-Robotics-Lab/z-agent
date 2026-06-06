@@ -36,6 +36,7 @@ The repo has a BOUNDED, fixed set of authoritative docs. A new session reads onl
 1. Update `docs/agent-kernel-STATUS.md` to reflect the new state and next step. ALWAYS.
 2. If the change touched structure / contracts / data-flow / invariants: update `docs/ARCHITECTURE.md` in the SAME commit (it may never lag the code). Update the rules in `CLAUDE.md` if an invariant changed.
 3. Delete every temporary/scratch/analysis/plan doc you created during the work that is NOT one of the allowed docs above. The repo's doc set must equal {canonical + reference + ADRs + active/pending phase plans}. Nothing else gets committed; no working-tree `archive/`.
+4. Scan the whole `docs/` set for STALE docs — any doc whose content is superseded, outdated, or no longer matches the code (not just ones you created this session). Delete each stale doc (git history keeps it). Finding nothing stale is the normal, expected outcome — but the scan is mandatory every time.
 
 ### Read order for a new session
 `docs/agent-kernel-STATUS.md` -> `docs/ARCHITECTURE.md` -> the relevant Tier-2 reference -> the current phase plan.
