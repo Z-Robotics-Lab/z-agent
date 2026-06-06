@@ -94,7 +94,9 @@ When 主人 says "启动仿真" or "start sim" or wants to explore/navigate but 
 2. Wait ~20 seconds for all nodes to start (bash("sleep 20"))
 3. Then robot skills (explore, navigate, walk, etc.) will work via ROS2 topics.
 Do NOT use start_simulation for Go2 -- use bash + launch_explore.sh instead.
-For SO-101 arm sim, use start_simulation(sim_type="arm").
+For SO-101 arm sim, use start_simulation(sim_type="arm"). This opens a viewer window by
+default. If 主人 says "headless" / "无窗口" / "no window" / "不要窗口", pass gui=false to
+start_simulation to suppress the window.
 
 Key files in this project:
 - scripts/go2_vnav_bridge.py: path follower, obstacle avoidance, terrain persistence

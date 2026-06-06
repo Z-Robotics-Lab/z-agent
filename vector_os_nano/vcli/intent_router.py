@@ -38,10 +38,15 @@ _RULES: list[tuple[frozenset[str], tuple[str, ...]]] = [
         "hz", "频率", "进程", "bridge",
     }), ("diag", "system")),
 
-    # Simulation
+    # Simulation — 'sim' (start/stop_simulation) stays enabled even in the dev
+    # world, so it must lead here or "start arm sim" routes only to disabled
+    # categories and the LLM gets zero tools.
+    # Headless phrases are included so they still resolve to the sim tool and the
+    # LLM can pass gui=false.
     (frozenset({
         "仿真", "sim", "simulation", "reset", "重置", "启动", "模拟",
-    }), ("system", "robot")),
+        "headless", "无窗口", "不要窗口", "no window",
+    }), ("sim", "system", "robot")),
 ]
 
 
@@ -216,6 +221,8 @@ class IntentRouter:
             # greedily matches "close" / "关闭").
             "仿真", "sim ", " sim", "simulation",
             "go2sim", "go2 sim", "armsim", "arm sim",
+            # Headless modifier — pass gui=false to start_simulation; not a VGG task.
+            "headless", "无窗口", "不要窗口", "no window",
         )
         if any(kw in msg_lower for kw in _SYSTEM_BYPASS):
             return False

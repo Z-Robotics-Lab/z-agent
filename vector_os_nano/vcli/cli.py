@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -271,7 +272,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--sim", action="store_true", help="Start with MuJoCo arm simulation")
     parser.add_argument("--sim-go2", action="store_true", help="Start with Go2 quadruped simulation")
-    parser.add_argument("--model", default="claude-sonnet-4-6", help="Model to use (default: claude-sonnet-4-6)")
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Suppress the MuJoCo viewer window (default: window opens when --sim is active)",
+    )
+    parser.add_argument("--model", default=None, help="Model to use (overrides config; default reads ~/.vector/config.yaml)")
     parser.add_argument("--resume", nargs="?", const="latest", default=None, help="Resume session")
     parser.add_argument("--api-key", default=None, help="API key (or set ANTHROPIC_API_KEY / OPENROUTER_API_KEY)")
     parser.add_argument("--base-url", default=None, help="API base URL")
@@ -387,9 +393,20 @@ def _init_agent(args: argparse.Namespace) -> Any:
         from vector_os_nano.core.agent import Agent  # type: ignore[import]
         if args.sim:
             from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
-            arm = MuJoCoArm()
+            from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
+            from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
+            arm = MuJoCoArm(gui=not getattr(args, "headless", False))
             arm.connect()
-            return Agent(arm=arm)
+            gripper = MuJoCoGripper(arm)
+            perception = MuJoCoPerception(arm)
+            # hardware_offsets compensate for real-rig URDF/gripper error; in sim the
+            # MuJoCo positions are exact, so disable them to keep grasps centered.
+            return Agent(
+                arm=arm,
+                gripper=gripper,
+                perception=perception,
+                config={"skills": {"pick": {"hardware_offsets": False}}},
+            )
 
         # --- Go2 full stack: MuJoCo + ROS2 bridge + nav stack + VLM + Rerun ---
         from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # type: ignore[import]
@@ -993,8 +1010,74 @@ def _setup_explore_events(console: Any) -> None:
     set_event_callback(_on_explore_event)
 
 
+def _wants_window(args: argparse.Namespace) -> bool:
+    """Return True when the user wants a visible MuJoCo viewer window.
+
+    A window is wanted when --sim or --sim-go2 is active (NL-triggered sims are
+    handled separately in sim_tool.py) and --headless is NOT set.
+    """
+    return (args.sim or args.sim_go2) and not getattr(args, "headless", False)
+
+
+def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
+    """On macOS, re-exec the whole CLI under mjpython if a window is wanted.
+
+    Gates (ALL must be true for re-exec to fire):
+    1. sys.platform == 'darwin'                 — macOS only
+    2. _wants_window(args)                      — --sim/--sim-go2 without --headless
+    3. VECTOR_REEXEC != '1'                     — not already re-exec'd (loop guard)
+    4. not running under pytest                 — never re-exec during tests
+    5. mujoco.viewer._MJPYTHON is falsy         — not already under mjpython
+
+    Falls back to a one-line warning (headless) when mjpython is missing.
+    Does NOT call os.execv when any gate fails — safe for headless / CI / pytest.
+    """
+    if sys.platform != "darwin":
+        return
+    if not _wants_window(args):
+        return
+    if os.environ.get("VECTOR_REEXEC") == "1":
+        return
+    # Never re-exec under pytest (pytest sets this env or injects its own sys.argv)
+    if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+
+    # Check if already under mjpython
+    try:
+        import mujoco.viewer as _mj_viewer  # type: ignore[import]
+        if getattr(_mj_viewer, "_MJPYTHON", None):
+            return  # already under mjpython — nothing to do
+    except Exception:
+        pass  # mujoco not importable yet; proceed to re-exec attempt
+
+    # Locate mjpython
+    mjpython: str | None = None
+    venv_mjpy = Path(__file__).resolve().parents[3] / ".venv-nano" / "bin" / "mjpython"
+    if venv_mjpy.is_file() and os.access(str(venv_mjpy), os.X_OK):
+        mjpython = str(venv_mjpy)
+    else:
+        mjpython = shutil.which("mjpython")
+
+    if not mjpython:
+        print(
+            "Warning: mjpython not found — running headless "
+            "(install mujoco into .venv-nano to get a viewer window).",
+            file=sys.stderr,
+        )
+        return
+
+    # Re-exec the entire process under mjpython with the same argv.
+    # VECTOR_REEXEC=1 prevents infinite loops.
+    new_env = os.environ.copy()
+    new_env["VECTOR_REEXEC"] = "1"
+    os.execve(mjpython, [mjpython, "-m", "vector_os_nano.vcli.cli"] + sys.argv[1:], new_env)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+
+    # --- macOS mjpython re-exec guard (must be before any credential/agent init) ---
+    _maybe_reexec_under_mjpython(args)
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
@@ -1006,7 +1089,7 @@ def main(argv: list[str] | None = None) -> None:
     api_key, provider, model, base_url = resolve_credentials(
         cli_api_key=args.api_key,
         cli_base_url=args.base_url,
-        cli_model=args.model if args.model != "claude-sonnet-4-6" else None,
+        cli_model=args.model,
     )
 
     no_key = not api_key
@@ -1039,7 +1122,9 @@ def main(argv: list[str] | None = None) -> None:
         for skill_tool in wrap_skills(agent):
             registry.register(skill_tool, category="robot")
     else:
-        # Dev world: don't advertise robot/diag/sim tools to the model.
+        # Dev world: hide robot/diag/system tools. The 'sim' category (start/stop
+        # _simulation) stays enabled so the user can spin up a sim conversationally
+        # ("start the arm sim").
         for _c in ("robot", "diag", "system"):
             registry.disable_category(_c)
 
@@ -1069,7 +1154,8 @@ def main(argv: list[str] | None = None) -> None:
         from vector_os_nano.vcli.robot_context import RobotContextProvider
         base = getattr(agent, "_base", None) if agent else None
         sg = getattr(agent, "_spatial_memory", None) if agent else None
-        robot_ctx_provider = RobotContextProvider(base=base, scene_graph=sg)
+        arm = getattr(agent, "_arm", None) if agent else None
+        robot_ctx_provider = RobotContextProvider(base=base, scene_graph=sg, arm=arm)
     except ImportError:
         pass
     system_prompt = build_system_prompt(
@@ -1122,6 +1208,7 @@ def main(argv: list[str] | None = None) -> None:
         "base_url": base_url,
         "scene_graph": _spatial_memory,
         "skill_registry": _skill_registry,
+        "robot_ctx_provider": robot_ctx_provider,
     }
 
     # VGG cognitive layer (optional)
@@ -1157,6 +1244,9 @@ def main(argv: list[str] | None = None) -> None:
                 friendly = f"skill not available: {strategy}"
             fb_tag = " [dim](tried fallback)[/]" if fallback else ""
             console.print(f"  [{TEAL}]>[/] {prefix} {name} [red]failed[/] — {friendly}{fb_tag} [dim]{dur:.1f}s[/]")
+
+    # Stored so SimStartTool can reuse the real step display after a mid-session start.
+    app_state["vgg_step_callback"] = _vgg_step_display
 
     try:
         engine.init_vgg(

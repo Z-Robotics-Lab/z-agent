@@ -44,6 +44,9 @@ class SkillWrapperTool:
     class, so it works with any object that satisfies the Skill protocol.
     """
 
+    # Marker so the registry/SimStopTool can identify (and unregister) skill tools.
+    _is_skill_wrapper: bool = True
+
     def __init__(self, skill: Any, agent: Any) -> None:
         self.name: str = skill.name
         self.description: str = getattr(skill, "description", skill.name)
@@ -66,7 +69,8 @@ class SkillWrapperTool:
         """
         preconditions_text = " ".join(str(p) for p in getattr(skill, "preconditions", []))
         effects_text = str(getattr(skill, "effects", {}))
-        combined = (preconditions_text + " " + effects_text).lower()
+        description_text = str(getattr(skill, "description", ""))
+        combined = (preconditions_text + " " + effects_text + " " + description_text).lower()
         return any(kw in combined for kw in MOTOR_KEYWORDS)
 
     @staticmethod
@@ -105,13 +109,25 @@ class SkillWrapperTool:
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         """Execute the wrapped skill and translate SkillResult -> ToolResult."""
         agent = context.agent if context.agent is not None else self._agent
-        skill_ctx = agent._build_context()
-        result = self._skill.execute(params, skill_ctx)
+        auto_steps = getattr(self._skill, "__skill_auto_steps__", None)
+        if auto_steps:
+            # Multi-step skill (e.g. pick = scan->detect->pick): run through the
+            # agent so the auto_steps prerequisites execute. Returns ExecutionResult.
+            result = agent.execute_skill(self.name, params)
+        else:
+            skill_ctx = agent._build_context()
+            result = self._skill.execute(params, skill_ctx)
         agent._sync_robot_state()
 
         if result.success:
             content = f"Skill '{self.name}' succeeded."
-            result_data: dict[str, Any] = result.result_data or {}
+            result_data: dict[str, Any] = getattr(result, "result_data", None) or {}
+            if not result_data:
+                # auto_steps skills return an ExecutionResult; the skill's own
+                # output lives in the last trace step, not on the top-level result.
+                _trace = getattr(result, "trace", None)
+                if _trace:
+                    result_data = getattr(_trace[-1], "result_data", None) or {}
             if result_data:
                 content += f"\nData: {result_data}"
             # Append robot state after motor skills for verification
@@ -128,7 +144,11 @@ class SkillWrapperTool:
             return ToolResult(content=content, metadata=result_data)
 
         # Failure with diagnosis + recovery hint
-        error_msg = result.error_message or f"Skill '{self.name}' failed."
+        error_msg = (
+            getattr(result, "error_message", None)
+            or getattr(result, "failure_reason", None)
+            or f"Skill '{self.name}' failed."
+        )
         diag = getattr(result, "diagnosis_code", None)
         if diag:
             error_msg += f" ({diag})"

@@ -250,7 +250,16 @@ class CategorizedToolRegistry(ToolRegistry):
 
     def register(self, tool_instance: Any, category: str = "default") -> None:  # type: ignore[override]
         super().register(tool_instance)
-        self._categories.setdefault(category, []).append(tool_instance.name)
+        names = self._categories.setdefault(category, [])
+        if tool_instance.name not in names:
+            names.append(tool_instance.name)
+
+    def unregister(self, name: str) -> None:
+        """Remove a tool by name from the registry and every category list."""
+        self._tools.pop(name, None)
+        for names in self._categories.values():
+            if name in names:
+                names.remove(name)
 
     def enable_category(self, category: str) -> None:
         """Re-enable a previously disabled category."""

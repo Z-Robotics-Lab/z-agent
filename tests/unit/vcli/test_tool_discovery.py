@@ -88,15 +88,19 @@ class TestDiscoverCategorizedTools:
         assert missing == set(), f"'diag' category missing: {missing}"
 
     def test_categories_system(self) -> None:
-        """'system' category contains robot infra (robot_status, start_simulation, skill_reload)."""
+        """'system' holds robot infra; sim lifecycle lives in its own 'sim' category."""
         from vector_os_nano.vcli.tools import discover_categorized_tools
 
         _, categories = discover_categorized_tools()
         assert "system" in categories
         system_tools = set(categories["system"])
-        expected = {"robot_status", "start_simulation", "skill_reload"}
+        expected = {"robot_status", "skill_reload", "open_foxglove"}
         missing = expected - system_tools
         assert missing == set(), f"'system' category missing: {missing}"
+        # start/stop_simulation moved to the always-enabled 'sim' category so the
+        # user can spin up a sim from the bare dev world.
+        assert {"start_simulation", "stop_simulation"} <= set(categories.get("sim", []))
+        assert "start_simulation" not in system_tools
 
     def test_categories_general(self) -> None:
         """'general' is the domain-general bucket and holds web_fetch (moved out of 'system')."""
