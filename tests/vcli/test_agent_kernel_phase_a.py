@@ -274,6 +274,75 @@ class TestRobotRegression:
 
 
 # ---------------------------------------------------------------------------
+# Shared prelude (1): a world OWNS its verify namespace (INC2)
+# ---------------------------------------------------------------------------
+
+
+class _FakeVerifyWorld:
+    """Minimal world that contributes a verify predicate (and a stub override)."""
+
+    name = "fake"
+
+    def is_robot(self) -> bool:
+        return False
+
+    def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
+        return {
+            "near_object": lambda name: name == "mug",
+            # Override the engine's empty perception stub with a real predicate.
+            "detect_objects": lambda query="": ["mug", "banana"],
+        }
+
+
+class TestWorldOwnsVerifyNamespace:
+    def test_engine_merges_world_predicate(self) -> None:
+        """A world wired into the engine contributes predicates into the ns."""
+        eng = _make_engine("{}")
+        eng._world = _FakeVerifyWorld()
+        ns = eng._build_verifier_namespace(None)
+        # World-provided predicate is present and callable.
+        assert "near_object" in ns
+        assert ns["near_object"]("mug") is True
+        assert ns["near_object"]("bottle") is False
+        # Existing dev predicates still coexist (additive).
+        assert "file_exists" in ns and "grep_count" in ns
+
+    def test_world_predicate_overrides_perception_stub(self) -> None:
+        """A world predicate takes precedence over the engine's empty stub."""
+        eng = _make_engine("{}")
+        eng._world = _FakeVerifyWorld()
+        agent = SimpleNamespace(_base=None, _spatial_memory=None, _object_memory=None)
+        ns = eng._build_verifier_namespace(agent)
+        # Stub default is []; the world overrides it.
+        assert ns["detect_objects"]() == ["mug", "banana"]
+
+    def test_world_predicate_evaluates_via_goal_verifier(self) -> None:
+        """The merged world predicate is usable from a real GoalVerifier."""
+        from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+
+        eng = _make_engine("{}")
+        eng._world = _FakeVerifyWorld()
+        gv = GoalVerifier(eng._build_verifier_namespace(None))
+        assert gv.verify("near_object('mug')") is True
+        assert gv.verify("near_object('lego')") is False
+
+    def test_empty_world_contribution_is_byte_identical(self) -> None:
+        """RobotWorld/DevWorld contribute {} -> the stub default is preserved."""
+        agent = SimpleNamespace(_base=None, _spatial_memory=None, _object_memory=None)
+        eng = _make_engine("{}")
+        eng._world = RobotWorld()  # build_verify_namespace -> {}
+        ns_world = eng._build_verifier_namespace(agent)
+        eng_no_world = _make_engine("{}")
+        eng_no_world._world = None  # falls back to registry -> robot world ({} too)
+        ns_none = eng_no_world._build_verifier_namespace(agent)
+        # Both leave the perception stubs at their engine defaults.
+        assert ns_world["detect_objects"]() == []
+        assert ns_none["detect_objects"]() == []
+        # Same key set as before the world hook existed.
+        assert set(ns_world) == set(ns_none)
+
+
+# ---------------------------------------------------------------------------
 # Tool category gating in the dev world (T-TOOLS)
 # ---------------------------------------------------------------------------
 

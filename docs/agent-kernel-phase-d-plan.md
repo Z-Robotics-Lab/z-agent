@@ -1,6 +1,6 @@
 # Verified Agent Kernel — Phase D Plan (closed-loop controller: grounding, control-flow, unification)
 
-- Status: **Stage 3 (grounding) — next.** Stages 0-2 shipped to working tree (uncommitted; 628 tests green).
+- Status: **Stage 4 (control-flow IR) — in progress (long-line workflow).** Playground v1 + the seam-contract prelude shipped (registry, world-owned verify-ns merge, observation surface, tabletop NL-verified loop); arm grounding (Stage 3) done via the deterministic sim oracle. 719 tests green. See ADR-008.
 - Date: 2026-06-05; updated 2026-06-06
 - Branch: `feat/verified-agent-kernel`
 - Related: [ARCHITECTURE.md](ARCHITECTURE.md), [agent-kernel-STATUS.md](agent-kernel-STATUS.md),
@@ -23,8 +23,8 @@ Two concrete failures exposed the gap and drive this phase:
 2. **Headless was the default; it shouldn't be.** "Start the arm sim" in plain `vector-cli`
    silently ran windowless. NL-first means a window by default; headless only on request.
 
-This phase is now structured as **Stages 0–5**. Stages 0–2 are shipped to the working tree
-(uncommitted). Stage 3 is next. The original D.1 / D.2 analysis is preserved below as the
+This phase is now structured as **Stages 0–5**. Stages 0–2 are committed and pushed. Stage 3 is
+next. The original D.1 / D.2 analysis is preserved below as the
 root-cause record; see each stage's section for current status.
 
 ---

@@ -95,6 +95,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("clear", "Reset conversation", False),
     ("clear_memory", "Clear scene graph (forget all explored rooms/objects)", False),
     ("reset", "Reset robot pose (stand up after tip-over, sim only)", False),
+    ("scenario", "Show or enter a playground scenario  (/scenario <id>)", True),
     ("sessions", "List saved sessions", False),
     ("quit", "Exit", False),
 ]
@@ -273,6 +274,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--sim", action="store_true", help="Start with MuJoCo arm simulation")
     parser.add_argument("--sim-go2", action="store_true", help="Start with Go2 quadruped simulation")
     parser.add_argument(
+        "--scenario",
+        default=None,
+        metavar="ID",
+        help=(
+            "Start in a named playground scenario (e.g. 'tabletop'). When set it "
+            "selects the playground world (and its verify predicates) instead of "
+            "the agent-driven default. Unknown ids fail loud with the valid set."
+        ),
+    )
+    parser.add_argument(
         "--headless",
         action="store_true",
         help="Suppress the MuJoCo viewer window (default: window opens when --sim is active)",
@@ -318,12 +329,18 @@ def _load_logo_lines() -> list[str]:
         return []
 
 
-def format_banner(model: str, agent: Any = None) -> str:
-    """Return banner info text (testable, no side effects)."""
+def format_banner(model: str, agent: Any = None, scenario: str | None = None) -> str:
+    """Return banner info text (testable, no side effects).
+
+    When a playground ``scenario`` is active, its name is surfaced on its own
+    line so a user can see at a glance which preset scene the session is in.
+    """
     lines = [
         f"Vector CLI v{VERSION}",
         f"Model: {model}",
     ]
+    if scenario:
+        lines.append(f"Scenario: {scenario}")
     if agent is not None:
         arm = getattr(agent, "_arm", None)
         base = getattr(agent, "_base", None)
@@ -335,8 +352,13 @@ def format_banner(model: str, agent: Any = None) -> str:
     return "\n".join(lines)
 
 
-def print_banner(model: str, provider: str, agent: Any = None) -> None:
-    """Print startup banner with braille logo (auto-scales to terminal width)."""
+def print_banner(
+    model: str, provider: str, agent: Any = None, scenario: str | None = None
+) -> None:
+    """Print startup banner with braille logo (auto-scales to terminal width).
+
+    When a playground ``scenario`` is active its name is shown in the info line.
+    """
     import shutil
     term_w = shutil.get_terminal_size().columns
     logo_lines = _load_logo_lines()
@@ -359,6 +381,8 @@ def print_banner(model: str, provider: str, agent: Any = None) -> None:
     time.sleep(0.15)
 
     info_parts = [f"Model: {model}", f"Provider: {provider}"]
+    if scenario:
+        info_parts.append(f"Scenario: {scenario}")
     if agent is not None:
         arm = getattr(agent, "_arm", None)
         base = getattr(agent, "_base", None)
@@ -384,6 +408,87 @@ def ask_permission(tool_name: str, params: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Hardware init
 # ---------------------------------------------------------------------------
+
+
+def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
+    """Select the active world, honouring an explicit playground ``--scenario``.
+
+    Precedence:
+      1. ``--scenario <id>`` selected -> the playground world for that scenario
+         WINS. Loading the playground package (an explicit, user-requested track)
+         registers its scenarios into the world registry via the lazy hook; we
+         then resolve the named world. The kernel still never hard-imports the
+         playground — this import only happens because the user asked for it.
+      2. Otherwise -> ``resolve_world(agent)`` (exactly today's behaviour:
+         a connected agent selects the robot world, else the default dev world).
+
+    Fails loud on an unknown scenario id with the valid set — never a silent
+    fallback to another world.
+    """
+    from vector_os_nano.vcli.worlds import resolve_world, resolve_world_named
+
+    scenario = getattr(args, "scenario", None)
+    if not scenario:
+        return resolve_world(agent)
+
+    # Explicit playground track: importing the package runs register_scenarios(),
+    # wiring the scenario factories into the process-wide world registry.
+    import vector_os_nano.playground  # noqa: F401  (side-effect: register scenarios)
+
+    try:
+        return resolve_world_named(scenario)
+    except KeyError as exc:
+        # Surface the fail-loud message (valid set included) to the user, then
+        # re-raise so an unknown scenario id never silently degrades to a default.
+        console.print(f"[red]Unknown scenario:[/red] {exc}")
+        raise
+
+
+def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
+    """Switch the LIVE session into the playground ``scenario_id`` (mid-session).
+
+    This is the conversational / ``/scenario`` counterpart to the ``--scenario``
+    launch flag: it makes the playground reachable WITHOUT relaunching. Loading
+    the playground package (an explicit, user-requested track) registers its
+    scenarios into the world registry via the lazy hook; we then resolve the
+    named world, swap it into ``app_state`` and re-init the engine's VGG layer so
+    the playground verify predicates take effect on the next decompose.
+
+    The kernel still never hard-imports the playground — this import only happens
+    because the user asked for it (one-way dependency intact).
+
+    Returns the resolved world. Fails loud (``KeyError`` with the valid set) on an
+    unknown scenario id — never a silent fallback to another world.
+    """
+    from vector_os_nano.vcli.worlds import resolve_world_named
+
+    # Explicit playground track: importing the package runs register_scenarios().
+    import vector_os_nano.playground  # noqa: F401  (side-effect: register scenarios)
+
+    world = resolve_world_named(scenario_id)  # KeyError -> fail loud, caller reports
+
+    app_state["world"] = world
+    app_state["scenario"] = getattr(world, "name", scenario_id)
+
+    # Re-init VGG so the verifier namespace picks up the playground predicates.
+    # Best-effort: a missing engine (no API key yet) or init failure must not
+    # crash the REPL — the world swap still stands for the next engine init.
+    engine = app_state.get("engine")
+    if engine is not None:
+        try:
+            engine.init_vgg(
+                agent=app_state.get("agent"),
+                skill_registry=app_state.get("skill_registry"),
+                on_vgg_step=app_state.get("vgg_step_callback"),
+                on_vgg_step_view=app_state.get("vgg_step_view_callback"),
+                world=world,
+                tool_permission_resolver=app_state.get("tool_permission_resolver"),
+                # Mirror the launch path: learning tier (persist_dir) is dev-world only.
+                persist_dir=(Path.home() / ".vector") if not world.is_robot() else None,
+            )
+        except Exception as exc:  # noqa: BLE001 — display path, never crash REPL
+            logger.warning("init_vgg after scenario switch failed: %s", exc)
+    return world
 
 
 def _init_agent(args: argparse.Namespace) -> Any:
@@ -936,6 +1041,28 @@ def _handle_slash_command(
         console.print(tbl)
         console.print()
 
+    elif cmd == "scenario":
+        app = app_state or {}
+        if not args_rest:
+            # No id -> show the active scenario (or that none is active).
+            active = app.get("scenario")
+            if active:
+                console.print(f"[{TEAL}]  Active scenario:[/] {active}")
+            else:
+                console.print("[dim]  No playground scenario active.[/]")
+            console.print("[dim]  Switch with: /scenario <id>[/]")
+        else:
+            scenario_id = args_rest[0]
+            try:
+                world = enter_scenario(scenario_id, app)
+            except KeyError as exc:
+                # Fail loud with the valid set — never a silent fallback.
+                console.print(f"[red]  Unknown scenario:[/red] {exc}")
+            else:
+                console.print(
+                    f"[green]  Entered scenario:[/] {getattr(world, 'name', scenario_id)}"
+                )
+
     else:
         console.print(f"[yellow]  Unknown: /{cmd}[/]  (type / + Tab)")
 
@@ -1101,11 +1228,13 @@ def main(argv: list[str] | None = None) -> None:
         console.print("[dim]  /login anthropic  enter Anthropic API key[/dim]")
         console.print("[dim]  /login openrouter enter OpenRouter key[/dim]\n")
 
-    # Agent (optional hardware) + active world (robot if an agent is connected,
-    # else the default cross-platform "dev" world).
+    # Agent (optional hardware) + active world. An explicit --scenario selects a
+    # playground world (its verify predicates win); otherwise a connected agent
+    # selects the robot world, else the default cross-platform "dev" world. The
+    # resolved world flows into init_vgg(world=...) below, which sets engine._world
+    # BEFORE the verifier namespace is built, so the merge picks up its predicates.
     agent = _init_agent(args)
-    from vector_os_nano.vcli.worlds import resolve_world
-    world = resolve_world(agent)
+    world = _resolve_active_world(args, agent)
 
     # Tools (categorized registry for scalable tool management)
     registry: CategorizedToolRegistry = CategorizedToolRegistry()
@@ -1198,6 +1327,9 @@ def main(argv: list[str] | None = None) -> None:
     # Mutable app state
     _spatial_memory = getattr(agent, "_spatial_memory", None) if agent else None
     _skill_registry = getattr(agent, "_skill_registry", None) if agent else None
+    # An explicit --scenario selected a playground world; its name doubles as the
+    # active scenario id (banner + mid-session /scenario read/write this).
+    _active_scenario = getattr(args, "scenario", None) or None
     app_state: dict[str, Any] = {
         "agent": agent,
         "registry": registry,
@@ -1209,6 +1341,8 @@ def main(argv: list[str] | None = None) -> None:
         "scene_graph": _spatial_memory,
         "skill_registry": _skill_registry,
         "robot_ctx_provider": robot_ctx_provider,
+        "world": world,
+        "scenario": _active_scenario,
     }
 
     # VGG cognitive layer (optional)
@@ -1245,14 +1379,43 @@ def main(argv: list[str] | None = None) -> None:
             fb_tag = " [dim](tried fallback)[/]" if fallback else ""
             console.print(f"  [{TEAL}]>[/] {prefix} {name} [red]failed[/] — {friendly}{fb_tag} [dim]{dur:.1f}s[/]")
 
-    # Stored so SimStartTool can reuse the real step display after a mid-session start.
+    # Observation surface (INC8): make the verified loop VISIBLE. The per-step
+    # EXPORT VIEW (JSON-safe dict) is rendered to a readable line carrying the
+    # sub-goal, strategy, verify predicate and a stable PASS/FAIL marker. Runs
+    # alongside _vgg_step_display (best-effort) — never affects execution. The
+    # verify predicate lives on the active goal tree's sub_goals; the REPL loop
+    # refreshes this map when it decomposes each task.
+    _vgg_verify_by_name: dict[str, str] = {}
+
+    def _vgg_step_view_display(view: dict[str, Any]) -> None:
+        """Render one per-step EXPORT VIEW (sub-goal/strategy/verify/PASS-FAIL)."""
+        try:
+            from vector_os_nano.vcli.cognitive.observation import render_step_view
+            verify = _vgg_verify_by_name.get(view.get("sub_goal_name"))
+            line = render_step_view(view, verify)
+            ok = bool(view.get("success")) and bool(view.get("verify_result"))
+            colour = "green" if ok else "red"
+            # markup=False: the rendered line carries literal [PASS]/[FAIL]
+            # markers that must NOT be parsed as rich style tags.
+            console.print(f"    VGG {line}", style=colour, markup=False)
+        except Exception:  # noqa: BLE001 — display must never break the loop
+            pass
+
+    # Stored so SimStartTool / a mid-session /scenario switch can reuse the real
+    # step + view displays when they re-init VGG.
     app_state["vgg_step_callback"] = _vgg_step_display
+    app_state["vgg_step_view_callback"] = _vgg_step_view_display
+    # Stored so a mid-session /scenario switch (enter_scenario) re-inits VGG with the
+    # SAME interactive permission prompt the launch path uses — otherwise switching
+    # from a dev world would silently lose the prompt.
+    app_state["tool_permission_resolver"] = lambda n, p: ask_permission(n, p)
 
     try:
         engine.init_vgg(
             agent=agent,
             skill_registry=_skill_registry,
             on_vgg_step=_vgg_step_display,
+            on_vgg_step_view=_vgg_step_view_display,
             world=world,
             tool_permission_resolver=lambda n, p: ask_permission(n, p),
             # Learning tier (stats + templates) is dev-world only: keep the robot
@@ -1277,7 +1440,7 @@ def main(argv: list[str] | None = None) -> None:
         provider_display = f"Local ({base_url})"
     else:
         provider_display = "Anthropic"
-    print_banner(model, provider_display, agent)
+    print_banner(model, provider_display, agent, scenario=_active_scenario)
     console.print(f"[dim]Session: {session.session_id}[/dim]\n")
 
     # REPL setup
@@ -1524,6 +1687,12 @@ def main(argv: list[str] | None = None) -> None:
                     # Reset step counter for callback
                     _vgg_step_idx[0] = 0
                     _vgg_total[0] = len(goal_tree.sub_goals)
+                    # Refresh the verify-predicate map the per-step view renderer
+                    # reads (INC8) — keyed by sub_goal name for this plan.
+                    _vgg_verify_by_name.clear()
+                    _vgg_verify_by_name.update(
+                        {sg.name: sg.verify for sg in goal_tree.sub_goals}
+                    )
 
                     # Execute async — CLI remains responsive
                     def _on_vgg_complete(trace: Any) -> None:
@@ -1546,6 +1715,21 @@ def main(argv: list[str] | None = None) -> None:
                             console.print(f"  [{TEAL}]>[/] [yellow]{n_ok}/{n_steps} steps done[/], rest failed [dim]{dur:.1f}s[/]")
                         else:
                             console.print(f"  [{TEAL}]>[/] [red]task failed[/] — 0/{n_steps} steps succeeded [dim]{dur:.1f}s[/]")
+
+                        # Observation surface (INC8): show the full verified loop
+                        # — goal tree + per-step PASS/FAIL + any replan notes +
+                        # outcome — from the run snapshot (pure EXPORT VIEW; never
+                        # re-derived from frozen types). Best-effort display.
+                        try:
+                            from vector_os_nano.vcli.cognitive.observation import (
+                                render_run_snapshot,
+                            )
+                            snapshot = engine.vgg_run_snapshot(trace)
+                            for snap_line in render_run_snapshot(snapshot).splitlines():
+                                # markup=False: literal [PASS]/[FAIL] markers.
+                                console.print(f"  {snap_line}", style="dim", markup=False)
+                        except Exception:  # noqa: BLE001 — display only
+                            pass
 
                         # Record in session
                         step_summary = "\n".join(

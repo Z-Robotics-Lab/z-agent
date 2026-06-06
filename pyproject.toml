@@ -131,4 +131,6 @@ markers = [
     "level3: Level 3 — Velocity tracking via set_velocity()",
     "level4: Level 4 — Navigation to waypoint (P-controller placeholder)",
     "ros2: requires rclpy installed and a live DDS context",
+    "integration: hits a real backend (e.g. headless MuJoCo); deselect with -m 'not integration'",
+    "live_llm: hits a real LLM backend; skipped unless VECTOR_LIVE_LLM=1; deselect with -m 'not live_llm'",
 ]

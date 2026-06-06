@@ -38,6 +38,13 @@ from vector_os_nano.vcli.cognitive.experience_compiler import (
 from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
 from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
 from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+from vector_os_nano.vcli.cognitive.observation import (
+    goal_tree_view,
+    render_run_snapshot,
+    render_step_view,
+    run_snapshot,
+    step_view,
+)
 from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult, StrategySelector
 from vector_os_nano.vcli.cognitive.strategy_stats import StrategyRecord, StrategyStats
 from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
@@ -85,4 +92,9 @@ __all__ = [
     "load_trace",
     "replay",
     "evidence_passed",
+    "step_view",
+    "run_snapshot",
+    "goal_tree_view",
+    "render_step_view",
+    "render_run_snapshot",
 ]

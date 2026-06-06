@@ -77,6 +77,15 @@ the right one by measured fit. This is the "any model, any skill, any robot" sea
 and `robot` embodiments — Go2 (has a mobile base) and SO-101 / Piper arm (no base). The
 kernel is identical across all of them; only the four registered things change.
 
+**The seam is the integration contract — and it is what makes parallel development
+possible.** Because a world touches the kernel through exactly these four registrations
+(plus the verified-loop observation surface in Section 5), the kernel and a world can be
+built as **separate, parallel tracks** that meet only at the contract. This is how the
+**playground** is developed: its own track (eventually its own repo) registering preset
+scenes, embodiments, and tasks as worlds, while the agentic kernel evolves behind the same
+versioned contract — neither track reaching across except through the four registrations
+and the observation surface. (Decision: ADR-008.)
+
 ---
 
 ## 3. Block diagram
@@ -115,7 +124,10 @@ kernel is identical across all of them; only the four registered things change.
 ```
 
 Two entry points — the `vector-cli` REPL and the `vector-os-mcp` server — share this one
-engine. Robots are the end; the dev path is the hardware-free means.
+engine. Robots are the end; the dev path is the hardware-free means. The seam is also the
+**track boundary**: the agentic kernel (this whole block) and the **playground** (a separate,
+parallel-developed world track) are built independently and integrate only across it
+(Section 5; ADR-008).
 
 ---
 
@@ -207,6 +219,19 @@ These are the contracts the kernel guarantees. Anything that violates them is a 
   Hallucinated or dropped strategies are fed back into the re-plan context as validation
   notes so the next planning pass stops repeating the mistake.
 
+- **The seam is a versioned public contract (the parallel-track boundary).** The kernel and
+  a world (e.g. the playground) integrate ONLY through the four registrations (tools, verify
+  namespace, decompose vocab, persona) plus the **verified-loop observation surface** — the
+  kernel exposing each run's `GoalTree`, per-step `StepRecord` (`success` / `verify_result` /
+  `result_data`), and replan `validation_notes` as structured, inspectable data a front-end
+  can render. Neither track reaches across the seam by any other path. This contract is what
+  lets the agentic kernel and the playground be built as separate, parallel tracks (ADR-008).
+  Status: world selection now goes through `WorldRegistry` (`resolve_world` / `resolve_world_named`)
+  and the engine MERGES the active world's `build_verify_namespace` additively — so a world (e.g.
+  the playground) OWNS its predicates. Remaining debt: the legacy robot bindings still live in
+  `engine._build_verifier_namespace` (a full migration into `RobotWorld` is deferred); the merge is
+  additive, so behaviour is byte-identical for the robot/dev worlds today.
+
 ---
 
 ## 6. Conceptual module map
@@ -239,11 +264,21 @@ relative to `vector_os_nano/`.
 - `experience_compiler.py` — turns successful verified traces into templates (no
   fine-tuning).
 - `types.py` — frozen plan structures (`GoalTree`, `SubGoal`, `StepRecord`).
+- `observation.py` — the verified-loop observation surface: a pure JSON-safe export view over the
+  frozen types (`step_view` / `run_snapshot`) + plain-text renderers; what a front-end renders.
 
 **Worlds** (`vcli/worlds/`)
 - `base.py` — the `World` protocol (the four-thing contract).
 - `dev.py` — the robot-free dev/code world (default; build/test means).
 - `robot.py` — robot embodiments (Go2 with a base; SO-101 / Piper arm without one).
+- `registry.py` — `WorldRegistry`: world/scenario resolution (agent-driven `resolve_world` +
+  named `resolve_world_named`); worlds self-register via lazy factories (the seam-as-contract entry).
+
+**Playground track** (`playground/` — a separate, parallel-developed world track; ADR-008)
+- `world.py` / `scenario.py` / `catalog.py` — `PlaygroundWorld` + frozen `Scenario` + the preset
+  catalog (`tabletop`, `tabletop_tray`); registers into the kernel `WorldRegistry` via a lazy hook.
+- `verify/` — the deterministic sim-oracle verify predicates (`holding_object` / `arm_at_home` /
+  `placed_count` / `detect_objects` / `describe_scene`) the world OWNS and contributes across the seam.
 
 **Tools, routing, prompt, session, permissions**
 - `vcli/tools/` — general tools (file/bash/glob/grep/web) + world-contributed tool wrappers.
@@ -260,6 +295,18 @@ relative to `vector_os_nano/`.
 The work is staged from open-loop to closed-loop. **Live status (which stage, what is
 committed) lives in [agent-kernel-STATUS.md](agent-kernel-STATUS.md)** — this section gives
 the durable shape only.
+
+**Two parallel tracks (ADR-008).** Work proceeds on two tracks that meet only at the seam
+contract (Section 5): the **kernel track** (the closed-loop stages below — grounding,
+control-flow IR, unify paths — the agentic moat, behind the contract) and the **playground
+track** (a separate, parallel-developed catalog of preset scenes, embodiments, and tasks
+registered as worlds, NL entry into a scene, and the view that renders the verified loop, in
+front of the contract). A small **shared prelude is not parallelizable** and comes first:
+define and harden the seam contract (verify namespace owned by the world; `resolve_world` -> a
+world/scenario registry; the verified-loop observation surface). The flagship demo — a
+*visible, self-correcting long chain* — is a cross-track rendezvous, needing the kernel
+track's grounding + control-flow AND the playground track's view, so the tracks run in
+parallel but meet at milestones.
 
 **Shipped:**
 

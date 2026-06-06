@@ -191,6 +191,7 @@ class VectorEngine:
         agent: Any = None,
         skill_registry: Any = None,
         on_vgg_step: "Callable[[StepRecord], None] | None" = None,
+        on_vgg_step_view: "Callable[[dict[str, Any]], None] | None" = None,
         world: Any = None,
         tool_permission_resolver: "Callable[[str, dict[str, Any]], str] | None" = None,
         persist_dir: "str | Path | None" = None,
@@ -204,6 +205,12 @@ class VectorEngine:
         ``world`` selects the decompose vocabulary: a world returning a
         DecomposeVocab injects it into the GoalDecomposer; a robot world (or
         None) keeps the decomposer's robot defaults.
+
+        ``on_vgg_step_view`` is the observation surface (INC5): an optional sink
+        for the JSON-serializable per-step EXPORT VIEW (a front-end renders it).
+        It runs alongside ``on_vgg_step`` (the raw StepRecord) and is best-effort
+        — a failure there never affects execution. The run-complete snapshot is
+        available via ``vgg_run_snapshot(trace)``.
 
         ``tool_permission_resolver`` resolves ``ask``-level tool permissions for
         dev-world ``tool_call`` sub-goals (called with ``(tool_name, params) ->
@@ -222,6 +229,10 @@ class VectorEngine:
         _backend = backend or self._backend
         self._vgg_agent = agent
         self._vgg_step_callback = on_vgg_step
+        # Observation surface (INC5): an optional sink for the per-step EXPORT
+        # VIEW (JSON-safe dict the front-end renders). Independent of the raw
+        # StepRecord callback above; either, both, or neither may be set.
+        self._vgg_step_view_callback = on_vgg_step_view
         self._world = world
 
         # ObjectMemory — sync from SceneGraph if available.
@@ -594,7 +605,7 @@ class VectorEngine:
         except Exception as exc:  # noqa: BLE001
             logger.debug("dev verify namespace unavailable: %s", exc)
         if agent is None:
-            return ns
+            return self._merge_world_verify_namespace(ns, agent)
         base = getattr(agent, "_base", None)
         sg = getattr(agent, "_spatial_memory", None)
         if base:
@@ -652,6 +663,48 @@ class VectorEngine:
                 "confidence": 0.0,
             },
         )
+        return self._merge_world_verify_namespace(ns, agent)
+
+    def _merge_world_verify_namespace(
+        self, ns: dict[str, Any], agent: Any
+    ) -> dict[str, Any]:
+        """Merge the active world's verify-namespace contribution into *ns*.
+
+        Shared-prelude (1): a world may OWN verify predicates. The engine builds
+        its existing dev/robot bindings and stubs first, then merges in
+        ``world.build_verify_namespace(agent)`` on top — additively. World-
+        provided predicates take precedence over the engine's empty perception
+        stubs (``describe_scene`` -> "", ``detect_objects`` -> []); a world that
+        contributes ``{}`` (RobotWorld/DevWorld today) leaves *ns* byte-identical.
+
+        The active world is the one wired into this engine (``self._world``); when
+        none is wired (older/headless call paths) it is resolved from the agent via
+        the world registry, so the behaviour is identical to the kernel's default
+        world selection. Resolution and the world hook are isolated so a failing or
+        absent world never breaks namespace construction.
+        """
+        world = getattr(self, "_world", None)
+        if world is None:
+            try:
+                from vector_os_nano.vcli.worlds.registry import resolve_world
+                world = resolve_world(agent)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("world resolution for verify namespace failed: %s", exc)
+                return ns
+        builder = getattr(world, "build_verify_namespace", None)
+        if builder is None:
+            return ns
+        try:
+            world_ns = builder(agent)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "world %r build_verify_namespace failed: %s",
+                getattr(world, "name", world),
+                exc,
+            )
+            return ns
+        if world_ns:
+            ns.update(world_ns)
         return ns
 
     def try_vgg(self, user_message: str) -> "ExecutionTrace | None":
@@ -1003,10 +1056,33 @@ class VectorEngine:
         return TurnResult(text="Stopped.", tool_calls=[], stop_reason="end_turn", usage=TokenUsage())
 
     def _on_vgg_step(self, step: Any) -> None:
-        """Callback invoked by GoalExecutor after each sub-goal completes."""
+        """Callback invoked by GoalExecutor after each sub-goal completes.
+
+        Fans out to (a) the raw ``StepRecord`` callback and (b) the observation
+        surface's per-step EXPORT VIEW callback (INC5), if wired. The view sink
+        is best-effort and isolated: a failure building/emitting it must never
+        abort execution or affect the raw callback.
+        """
         cb = getattr(self, "_vgg_step_callback", None)
         if cb:
             cb(step)
+        view_cb = getattr(self, "_vgg_step_view_callback", None)
+        if view_cb:
+            try:
+                from vector_os_nano.vcli.cognitive.observation import step_view
+                view_cb(step_view(step))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("VGG: step_view emit skipped: %s", exc)
+
+    def vgg_run_snapshot(self, trace: "ExecutionTrace") -> dict[str, Any]:
+        """Return the run-complete observation snapshot for *trace* (INC5).
+
+        A pure, JSON-serializable EXPORT VIEW (goal tree + per-step views +
+        replan ``validation_notes`` + outcome) for the front-end to render. Does
+        not mutate the trace and adds no fields to the frozen VGG types.
+        """
+        from vector_os_nano.vcli.cognitive.observation import run_snapshot
+        return run_snapshot(trace)
 
     # ------------------------------------------------------------------
     # Public API

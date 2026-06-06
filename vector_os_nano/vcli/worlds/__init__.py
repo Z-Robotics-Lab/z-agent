@@ -10,10 +10,14 @@ a robot agent is connected.
 
 from __future__ import annotations
 
-from typing import Any
-
 from vector_os_nano.vcli.worlds.base import DecomposeVocab, World
 from vector_os_nano.vcli.worlds.dev import DevWorld, dev_verify_namespace
+from vector_os_nano.vcli.worlds.registry import (
+    WorldRegistry,
+    get_world_registry,
+    resolve_world,
+    resolve_world_named,
+)
 from vector_os_nano.vcli.worlds.robot import RobotWorld
 
 __all__ = [
@@ -23,15 +27,7 @@ __all__ = [
     "RobotWorld",
     "dev_verify_namespace",
     "resolve_world",
+    "resolve_world_named",
+    "WorldRegistry",
+    "get_world_registry",
 ]
-
-
-def resolve_world(agent: Any = None) -> World:
-    """Select the active world.
-
-    A connected robot agent selects the robot world; otherwise the default dev
-    world (the cross-platform, robot-free general agent).
-    """
-    if agent is not None:
-        return RobotWorld()
-    return DevWorld()

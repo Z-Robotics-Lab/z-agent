@@ -30,7 +30,7 @@ Committed:
   `LLMChatCapability`; invoke-succeeds-but-verify-false => success=False) and cross-capability
   routing (measured-better promotion, no schema change).
 
-Working tree (NOT yet committed); 628 tests green:
+Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tests green (`tests/vcli tests/unit/vcli`):
 - **Robot-arm control** — SO-101 MuJoCo arm controllable from `vector-cli` by single NL
   commands (wave/home/scan/detect/describe/pick/place). Arm-aware `RobotContextProvider`;
   `start_simulation` in always-enabled `sim` tool category + `sim` IntentRouter rule; VGG
@@ -53,20 +53,32 @@ Working tree (NOT yet committed); 628 tests green:
   (walk_forward/turn/scan_360) gated on `has_base`; `StrategySelector` is world-scoped;
   `GoalTree.validation_notes` fed back into replan context ("skill X does not exist; use
   one of {…}") so hallucinated skills stop repeating.
+- **Playground v1 (this commit)** — the playground track (ADR-008) + the shared seam-contract
+  prelude. Prelude: `vcli/worlds/registry.py` (`resolve_world`->registry + named lookup); the engine
+  MERGES `world.build_verify_namespace` additively (a world OWNS its predicates); `vcli/cognitive/
+  observation.py` (JSON-safe verified-loop observation surface + CLI renderers). Track:
+  `vector_os_nano/playground/` package — `PlaygroundWorld` + frozen `Scenario` + catalog (`tabletop`,
+  `tabletop_tray` over `so101_mujoco.xml`) + 5 deterministic sim-oracle predicates
+  (`holding_object`/`arm_at_home`/`placed_count`/`detect_objects`/`describe_scene`); `--scenario`
+  flag + `/scenario` mid-session switch + banner; NL decompose proven arm-only (mock backend;
+  go2/hallucinated strategies rejected via `validation_notes`); the verified loop (goal tree +
+  per-step PASS/FAIL + replan) rendered in the live CLI. Sim-oracle is the deterministic verify
+  source (ADR-008 C1); VLM `detect`/`describe` stays the agent's perception skill. 719 tests green
+  + 1 marked live-LLM smoke; real headless `MuJoCoArm` oracle test passes in isolation.
 
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —
 `git checkout` it before committing.
 
-## Next — Stage 3 (grounding)
+## Next — Stage 4 (control-flow IR) then 2nd embodiment (in progress; ADR-008 two tracks)
 
 Full plan: **[agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md)**. Remaining stages:
 
-- **Stage 3 (grounding)** — wire structured perception into `world_context` (detect_objects /
-  describe_scene from real `MuJoCoPerception`/`DetectSkill` rather than stubs); referring-
-  expression resolution (pick "the red cup" -> object_id); arm predicates `holding_object()`,
-  `arm_at_home()`, `placed_count()`; re-sync `ObjectMemory` from perception output.
+- **Stage 3 (grounding)** — PARTIAL: arm predicates `holding_object()`/`arm_at_home()`/`placed_count()`
+  and `detect_objects`/`describe_scene` are real via the **deterministic sim oracle** (shipped in
+  Playground v1). Still open: the VLM `MuJoCoPerception`/`DetectSkill` perception path, referring-
+  expression resolution ("the red cup" -> object_id), and `ObjectMemory` re-sync.
 - **Stage 4 (control-flow IR + observation-driven replan)** — `foreach`/`until`/`if` constructs
   in the goal model so "把所有东西抓一遍" is expressible; executor expands `foreach` at runtime
   from a producing step's output; mid-tree replan triggered by live observations, not only
@@ -78,8 +90,16 @@ Full plan: **[agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md)**. Rem
 grounded arm decomposer is the prerequisite. C.3/C.4 decisions remain open
 ([agent-kernel-phase-c-plan.md](agent-kernel-phase-c-plan.md)).
 
-**Owner action:** review working-tree diff and commit Stages 0-2 (revert go2 XML first); then
-begin Stage 3 grounding.
+**Direction (2026-06-06, ADR-008).** The shared seam-contract prelude AND playground v1 are shipped
+(see "Playground v1" above; 719 green). Stage 3 grounding is satisfied for the arm via the
+**deterministic sim oracle**; the VLM perception path + referring-expression + `ObjectMemory` re-sync
+remain open. Work proceeds on two parallel tracks across the seam contract — see
+[ARCHITECTURE.md](ARCHITECTURE.md) §5/§7 and
+[ADR-008](architecture-decisions/ADR-008-playground-parallel-track.md).
+
+**In progress (long-line workflow):** **Stage 4 — control-flow IR** (`foreach` over detected objects
+so "把所有东西抓一遍" is expressible + observation-driven mid-tree replan), then a **second embodiment**
+in the playground (e.g. Go2). Kernel track then continues toward **Stage 5** (unify the planning paths).
 
 ## Pointers
 
@@ -88,7 +108,8 @@ begin Stage 3 grounding.
 - Next-session plan: [agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md)
 - Phase C plan (C.1/C.2 shipped, C.3/C.4 open): [agent-kernel-phase-c-plan.md](agent-kernel-phase-c-plan.md)
 - ADRs: [architecture-decisions/ADR-006-agent-kernel-world-plugin.md](architecture-decisions/ADR-006-agent-kernel-world-plugin.md),
-  [architecture-decisions/ADR-007-closed-loop-controller.md](architecture-decisions/ADR-007-closed-loop-controller.md)
+  [architecture-decisions/ADR-007-closed-loop-controller.md](architecture-decisions/ADR-007-closed-loop-controller.md),
+  [architecture-decisions/ADR-008-playground-parallel-track.md](architecture-decisions/ADR-008-playground-parallel-track.md)
 - Superseded/historical docs (phase-b plan, vgg-design-spec, pick_top_down, sysnav, agent-kernel.md) live in git history — `git log --all -- <path>`. No working-tree archive.
 
 ## Next-session kickoff prompt (paste this to start)
