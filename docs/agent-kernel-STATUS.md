@@ -89,7 +89,7 @@ begin Stage 3 grounding.
 - Phase C plan (C.1/C.2 shipped, C.3/C.4 open): [agent-kernel-phase-c-plan.md](agent-kernel-phase-c-plan.md)
 - ADRs: [architecture-decisions/ADR-006-agent-kernel-world-plugin.md](architecture-decisions/ADR-006-agent-kernel-world-plugin.md),
   [architecture-decisions/ADR-007-closed-loop-controller.md](architecture-decisions/ADR-007-closed-loop-controller.md)
-- Archived (shipped/superseded/deferred): `docs/archive/` (phase-b plan, vgg-design-spec, pick_top_down, sysnav).
+- Superseded/historical docs (phase-b plan, vgg-design-spec, pick_top_down, sysnav, agent-kernel.md) live in git history — `git log --all -- <path>`. No working-tree archive.
 
 ## Next-session kickoff prompt (paste this to start)
 

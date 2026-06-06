@@ -10,8 +10,8 @@
   robot world) requires a robot world whose VGG decomposer reliably produces correct arm-only
   long chains — see [agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md).
 - Related: [ARCHITECTURE.md](ARCHITECTURE.md) ("Forward direction: from one LLM to a model
-  zoo"), [agent-kernel-phase-b-plan.md](archive/agent-kernel-phase-b-plan.md),
-  [ADR-006](architecture-decisions/ADR-006-agent-kernel-world-plugin.md)
+  zoo"), [ADR-006](architecture-decisions/ADR-006-agent-kernel-world-plugin.md).
+  Phase B plan is in git history (`git log --all -- docs/agent-kernel-phase-b-plan.md`).
 - Note: file:line references are against the current branch (post Phase B); treat as
   approximate anchors, not exact addresses.
 

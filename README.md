@@ -343,7 +343,7 @@ source ~/Desktop/SysNav/install/setup.bash
 cd ~/Desktop/vector_os_nano && vector-cli go2sim       # our shell
 ```
 
-See [`docs/archive/sysnav_integration.md`](docs/archive/sysnav_integration.md) for the full topic mapping, hardware requirements (Livox Mid-360 + 360-degree camera), and adapter contract. SysNav is licensed under PolyForm-Noncommercial-1.0.0; do not vendor its sources into this Apache 2.0 repository.
+The SysNav integration design (topic mapping, hardware requirements — Livox Mid-360 + 360-degree camera — and adapter contract) lives in git history: `git log --all -- docs/sysnav_integration.md`. SysNav is licensed under PolyForm-Noncommercial-1.0.0; do not vendor its sources into this Apache 2.0 repository.
 
 ---
 

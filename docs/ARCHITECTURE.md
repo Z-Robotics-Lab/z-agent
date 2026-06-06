@@ -1,6 +1,6 @@
 # Vector OS Nano — Architecture
 
-- Status: Canonical durable design doc. Supersedes `agent-kernel.md` (archived).
+- Status: Canonical durable design doc. Supersedes `agent-kernel.md` (removed; in git history).
 - Scope: the orchestration layer — VectorEngine + the VGG cognitive layer + the CLI/MCP
   entry points. The OS *around* the models, in service of robots.
 - For live "where are we / what's next", see [agent-kernel-STATUS.md](agent-kernel-STATUS.md).
