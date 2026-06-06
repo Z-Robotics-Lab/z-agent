@@ -297,21 +297,51 @@ class VectorEngine:
             capability_registry.names() if capability_registry is not None else frozenset()
         )
 
-        # Per-world decompose vocabulary (dev world injects; robot world keeps defaults).
+        # Per-world decompose vocabulary. A world either injects an explicit
+        # DecomposeVocab (dev), or opts into engine-side derivation from the live
+        # skill registry (robot/arm) so the prompt, the validator allowlist, and
+        # the params-help are single-sourced and can never drift. Otherwise the
+        # decomposer keeps its class defaults.
         _vocab_kwargs: dict = {}
+        _has_base = getattr(agent, "_base", None) is not None
+        try:
+            _requires_registry_vocab = bool(
+                world is not None
+                and getattr(world, "derive_vocab_from_registry", None) is not None
+                and world.derive_vocab_from_registry()
+            )
+        except Exception:  # noqa: BLE001
+            _requires_registry_vocab = False
         if world is not None:
             try:
                 _vocab = world.decompose_vocab()
                 if _vocab is not None:
                     _vocab_kwargs = _vocab.as_kwargs()
+                elif _requires_registry_vocab and skill_registry is not None:
+                    _vocab_kwargs = self._build_registry_vocab_kwargs(
+                        skill_registry, agent, _has_base
+                    )
             except Exception as exc:  # noqa: BLE001
-                logger.debug("world decompose_vocab unavailable: %s", exc)
+                logger.warning("VGG: registry vocab derivation failed: %s", exc)
+
+        # Invariant (single-source vocab): a world that REQUIRES registry-derived
+        # vocab must never silently fall back to the hardcoded class defaults — that
+        # re-opens the split-brain (e.g. teaching go2 navigate / "去厨房" to an arm
+        # while the validator allowlist is arm-only). If derivation produced nothing
+        # (registry missing, or it raised), use an explicit neutral vocab instead.
+        if _requires_registry_vocab and not _vocab_kwargs:
+            logger.warning(
+                "VGG: registry vocab unavailable for a derivation-required world; "
+                "using a neutral vocab (NOT class defaults)"
+            )
+            _vocab_kwargs = self._neutral_vocab_kwargs(agent, _has_base)
 
         try:
             decomposer = GoalDecomposer(
                 _backend,
                 template_library=template_library,
                 skill_registry=skill_registry,
+                has_base=_has_base,
                 **_vocab_kwargs,
             )
         except ImportError as exc:
@@ -329,6 +359,7 @@ class VectorEngine:
                 skill_registry=skill_registry,
                 stats=stats,
                 capability_names=_capability_names,
+                has_base=_has_base,
             )
         except ImportError as exc:
             logger.warning("VGG: cognitive layer not available: %s", exc)
@@ -458,6 +489,96 @@ class VectorEngine:
             logger.warning("VGG: harness init failed: %s", exc)
             self._vgg_enabled = False
 
+    _NEUTRAL_PLANNER_INTRO: str = (
+        "You are a robot task planner. Decompose the user's task into verifiable "
+        "sub-goals, each with a deterministic verify predicate over the robot's "
+        "world state. Choose a strategy for steps that must act; leave strategy "
+        "empty for pure checks."
+    )
+
+    def _build_registry_vocab_kwargs(
+        self, skill_registry: Any, agent: Any, has_base: bool
+    ) -> dict[str, Any]:
+        """Build GoalDecomposer vocab kwargs from the live skill registry.
+
+        Single-sources the decompose vocabulary: schemas come from
+        ``skill_registry.to_schemas()`` and the verify-function allowlist +
+        signatures are derived from the engine's verify namespace (so the prompt
+        and the validator can never drift). Falls back to the GoalDecomposer
+        class-default verify signatures if the namespace can't be built here, so
+        the decomposer is never left without a verify allowlist.
+        """
+        from vector_os_nano.vcli.cognitive.vocab_from_registry import (
+            build_decompose_vocab,
+        )
+
+        schemas = skill_registry.to_schemas()
+        verify_signatures = self._verify_signatures_from_namespace(agent)
+        vocab = build_decompose_vocab(
+            schemas,
+            verify_signatures,
+            has_base=has_base,
+            planner_intro=self._NEUTRAL_PLANNER_INTRO,
+        )
+        return vocab.as_kwargs()
+
+    def _verify_signatures_from_namespace(self, agent: Any) -> dict[str, str]:
+        """Derive name -> readable signature for the verify namespace callables.
+
+        Reads the same namespace GoalVerifier uses (``_build_verifier_namespace``)
+        and renders each callable's signature via ``inspect.signature`` (e.g.
+        ``"detect_objects(query='')"``). Falls back to the GoalDecomposer
+        class-default signatures if the namespace can't be built or yields
+        nothing, so the validator always has an allowlist.
+        """
+        import inspect
+
+        try:
+            ns = self._build_verifier_namespace(agent)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("verify namespace for vocab unavailable: %s", exc)
+            ns = {}
+
+        signatures: dict[str, str] = {}
+        for name, fn in ns.items():
+            if not callable(fn):
+                continue
+            try:
+                sig = str(inspect.signature(fn))
+            except (TypeError, ValueError):
+                sig = "(...)"
+            signatures[name] = f"{name}{sig}"
+
+        if not signatures:
+            # Class-default robot verify signatures — never leave the validator
+            # without an allowlist.
+            from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
+
+            return dict(GoalDecomposer._VERIFY_FN_SIGNATURES)
+        return signatures
+
+    def _neutral_vocab_kwargs(self, agent: Any, has_base: bool) -> dict[str, Any]:
+        """Neutral fallback vocab for a derivation-required world with no registry.
+
+        Used only when registry derivation could not run. Produces an empty
+        strategy set (so the decomposer teaches/validates NO domain strategies,
+        rather than the wrong domain's class defaults) while still exposing the
+        real verify-function allowlist, so the single-source invariant holds even
+        on the failure path.
+        """
+        from vector_os_nano.vcli.cognitive.vocab_from_registry import (
+            build_decompose_vocab,
+        )
+
+        verify_signatures = self._verify_signatures_from_namespace(agent)
+        vocab = build_decompose_vocab(
+            [],
+            verify_signatures,
+            has_base=has_base,
+            planner_intro=self._NEUTRAL_PLANNER_INTRO,
+        )
+        return vocab.as_kwargs()
+
     def _build_verifier_namespace(self, agent: Any) -> dict[str, Any]:
         """Build function namespace for GoalVerifier from agent state.
 
@@ -582,7 +703,13 @@ class VectorEngine:
             _is_robot = bool(_world.is_robot())
         else:
             _is_robot = _agent is not None  # back-compat: agent present => robot
-        if _is_robot and (_agent is None or getattr(_agent, "_base", None) is None):
+        if _is_robot and (
+            _agent is None
+            or (
+                getattr(_agent, "_base", None) is None
+                and getattr(_agent, "_arm", None) is None
+            )
+        ):
             return None
         _sr = getattr(_agent, "_skill_registry", None) if _agent is not None else None
         if not self._intent_router.should_use_vgg(user_message, skill_registry=_sr):
@@ -618,6 +745,13 @@ class VectorEngine:
 
         skill_name = match.skill_name
         extracted = match.extracted_arg or ""
+
+        # Skills with auto_steps (e.g. pick = scan->detect->pick) must run through
+        # the agent's multi-step expansion, not a bare 1-step GoalTree. Let them fall
+        # through to the tool_use path (SkillWrapperTool -> agent.execute_skill).
+        _skill_for_steps = skill_registry.get(skill_name) if skill_registry else None
+        if getattr(_skill_for_steps, "__skill_auto_steps__", None):
+            return None
 
         # Resolve room alias to canonical ID (e.g. "客房" → "guest_bedroom")
         # so verify expressions and params use the same IDs as SceneGraph.
@@ -718,6 +852,9 @@ class VectorEngine:
                 task=goal_tree.goal,
                 world_context=world_context,
                 goal_tree=goal_tree,
+                # Stage 1b: rebuild world context fresh on every re-decompose so
+                # replans see current robot/world state (bypass the TTL cache).
+                context_provider=lambda: self._build_world_context(force=True),
             )
         else:
             # Fallback: raw executor (no harness)
@@ -776,15 +913,21 @@ class VectorEngine:
         t.start()
         self._vgg_thread = t
 
-    def _build_world_context(self) -> str:
+    def _build_world_context(self, force: bool = False) -> str:
         """Build a brief world context string for the GoalDecomposer.
 
         Results are cached for _world_context_ttl seconds to avoid repeated
         sensor/graph queries when the robot has not moved.
+
+        Args:
+            force: When True, bypass the TTL cache and rebuild from current
+                state (Stage 1b — used so re-decompose sees fresh world state).
+                The freshly built result still refreshes the cache.
         """
         now = time.monotonic()
         if (
-            self._world_context_cache is not None
+            not force
+            and self._world_context_cache is not None
             and now - self._world_context_ts < self._world_context_ttl
         ):
             return self._world_context_cache

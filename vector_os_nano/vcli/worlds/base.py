@@ -106,3 +106,15 @@ class World(Protocol):
         robot defaults (derived from the skill registry).
         """
         ...
+
+    def derive_vocab_from_registry(self) -> bool:
+        """Opt into engine-side decompose-vocab derivation from the skill registry.
+
+        When True (and ``decompose_vocab()`` returns None), the engine builds the
+        decomposer vocabulary from ``skill_registry.to_schemas()`` plus the verify
+        namespace, so the prompt, the validator allowlist, and the params-help are
+        single-sourced and can never drift. Default False: the world either
+        injects an explicit ``decompose_vocab()`` or keeps the decomposer's class
+        defaults.
+        """
+        ...

@@ -197,7 +197,7 @@ def test_executor_routes_tool_branch(tmp_path: Path) -> None:
     disp = _dispatcher(ask=_ALLOW, cwd=tmp_path)
     ex = GoalExecutor(strategy_selector=None, verifier=None, tool_dispatcher=disp)
 
-    ok, err = ex._execute_strategy(
+    ok, err, _ = ex._execute_strategy(
         _Result("tool", "tool_call", {"tool": "file_write",
                                       "args": {"file_path": str(target), "content": "ok\n"}})
     )
@@ -209,7 +209,7 @@ def test_executor_routes_tool_branch(tmp_path: Path) -> None:
 def test_executor_tool_branch_requires_tool_key() -> None:
     disp = _dispatcher(ask=_ALLOW)
     ex = GoalExecutor(strategy_selector=None, verifier=None, tool_dispatcher=disp)
-    ok, err = ex._execute_strategy(_Result("tool", "tool_call", {"args": {}}))
+    ok, err, _ = ex._execute_strategy(_Result("tool", "tool_call", {"args": {}}))
     assert ok is False
     assert 'params["tool"]' in err
 
@@ -217,16 +217,16 @@ def test_executor_tool_branch_requires_tool_key() -> None:
 def test_executor_code_branch_runs_and_rejects_sandbox_escape() -> None:
     ex = GoalExecutor(strategy_selector=None, verifier=None, code_executor=CodeExecutor({}))
 
-    ok, _ = ex._execute_strategy(_Result("code", "code_as_policy", {"code": "x = 21 * 2\nx"}))
+    ok, _, _ = ex._execute_strategy(_Result("code", "code_as_policy", {"code": "x = 21 * 2\nx"}))
     assert ok is True
 
-    ok_imp, err_imp = ex._execute_strategy(
+    ok_imp, err_imp, _ = ex._execute_strategy(
         _Result("code", "code_as_policy", {"code": "import os"})
     )
     assert ok_imp is False
     assert "not allowed" in err_imp
 
-    ok_open, _ = ex._execute_strategy(
+    ok_open, _, _ = ex._execute_strategy(
         _Result("code", "code_as_policy", {"code": "open('/etc/passwd')"})
     )
     assert ok_open is False
@@ -240,17 +240,19 @@ def test_executor_code_branch_runs_and_rejects_sandbox_escape() -> None:
 def test_unwired_branches_report_none_configured() -> None:
     ex = GoalExecutor(strategy_selector=None, verifier=None)  # no code/tool deps
 
-    ok_t, err_t = ex._execute_strategy(_Result("tool", "tool_call", {"tool": "file_write"}))
+    ok_t, err_t, _ = ex._execute_strategy(_Result("tool", "tool_call", {"tool": "file_write"}))
     assert ok_t is False
     assert "none configured" in err_t
 
-    ok_c, err_c = ex._execute_strategy(_Result("code", "code_as_policy", {"code": "1"}))
+    ok_c, err_c, _ = ex._execute_strategy(_Result("code", "code_as_policy", {"code": "1"}))
     assert ok_c is False
     assert "none configured" in err_c
 
 
-def test_unknown_executor_type_unchanged() -> None:
+def test_unknown_executor_type_reports_no_match() -> None:
     ex = GoalExecutor(strategy_selector=None, verifier=None)
-    ok, err = ex._execute_strategy(_Result("bogus", "x", {}))
+    ok, err, _ = ex._execute_strategy(_Result("bogus", "x", {}))
     assert ok is False
-    assert "No strategy for" in err
+    # Stage 2b improved the opaque fallback to a clear, named error.
+    assert "no strategy matched for" in err
+    assert "x" in err and "bogus" in err

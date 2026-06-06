@@ -250,6 +250,28 @@ class TestRobotRegression:
         eng.init_vgg(agent=agent_no_base, skill_registry=None, world=RobotWorld())
         assert eng.vgg_decompose("walk forward") is None
 
+    def test_registry_required_world_no_registry_uses_neutral_not_class_defaults(
+        self,
+    ) -> None:
+        """Single-source invariant on the FAILURE path: a world that requires
+        registry-derived vocab but has no registry must use a neutral vocab, NOT
+        the hardcoded GO2 class defaults (which would re-open the split-brain —
+        teaching go2 navigate / '去厨房' / base primitives to a baseless agent)."""
+        eng = _make_engine(_DEV_TREE)
+        agent_no_base = SimpleNamespace(_base=None, _skill_registry=None)
+        eng.init_vgg(agent=agent_no_base, skill_registry=None, world=RobotWorld())
+        decomposer = eng._goal_decomposer
+        assert decomposer is not None
+        text = decomposer._build_system_prompt()[0]["text"]
+        # No GO2 class-default vocabulary may leak into a baseless robot world.
+        assert "去厨房" not in text
+        assert "scan_360" not in text
+        assert "navigate" not in text.lower()
+        assert "walk_forward" not in text
+        # The validator allowlist must agree (single source): no base primitives.
+        assert "walk_forward" not in decomposer.KNOWN_STRATEGIES
+        assert "scan_360" not in decomposer.KNOWN_STRATEGIES
+
 
 # ---------------------------------------------------------------------------
 # Tool category gating in the dev world (T-TOOLS)

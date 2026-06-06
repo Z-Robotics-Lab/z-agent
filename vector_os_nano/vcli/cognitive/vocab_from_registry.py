@@ -1,0 +1,212 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
+"""Build a DecomposeVocab from the live skill registry.
+
+Single-sources the GoalDecomposer's decompose vocabulary from one place: the
+skill registry schemas plus the engine's verify namespace. The prompt the LLM
+reads, the validator's strategy allowlist, and the params-help block are all
+derived here, so they can never drift apart (the split-brain Stage 2 fixes:
+the prompt teaching one set of strategies while the allowlist is built from
+another).
+
+This mechanism is world-agnostic. The arm is the touchstone — an arm with no
+mobile base must NOT be taught the base primitives (walk_forward/turn/scan_360),
+while a Go2 (which has a base) must. Callers pass ``has_base`` to gate that.
+
+Nothing here is robot-specific: there is no hardcoded GO2 strategy list, no
+"去厨房" example, no navigate/look/explore prompt text. Every strategy and
+every example is generated from real registry skills and real verify
+signatures.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from vector_os_nano.vcli.worlds.base import DecomposeVocab
+
+# Base locomotion primitives a mobile robot exposes in addition to its skills.
+# Included in the vocabulary only when the connected agent has a mobile base
+# (``has_base=True``); an arm-only agent never sees them.
+_BASE_PRIMITIVE_DESCRIPTIONS: dict[str, str] = {
+    "walk_forward": "Walk straight forward a set distance",
+    "turn": "Rotate in place by given angle",
+    "scan_360": "Rotate 360 degrees while recording observations",
+}
+
+_DEFAULT_PLANNER_INTRO: str = (
+    "You are a robot task planner. Decompose the user's task into verifiable "
+    "sub-goals, each with a deterministic verify predicate. Choose a strategy "
+    "for every step that must act; leave strategy empty for pure checks."
+)
+
+_SKILL_SUFFIX = "_skill"
+
+
+def _strategy_name(skill_name: str) -> str:
+    """Return the decompose strategy name for a skill (``<name>_skill``)."""
+    return f"{skill_name}{_SKILL_SUFFIX}"
+
+
+def _format_params_block(schema: dict[str, Any]) -> str:
+    """Render one skill's parameters as a readable strategy-params help line.
+
+    Mirrors the spirit of dev.py's ``_DEV_STRATEGY_PARAMS_HELP``: skill name
+    then each param's name/type and whether it is required. Skills with no
+    parameters render an explicit ``{}`` so the LLM knows none are needed.
+    """
+    name = str(schema.get("name", ""))
+    strat = _strategy_name(name)
+    params = schema.get("parameters") or {}
+    if not isinstance(params, dict) or not params:
+        return f"  - {strat}: {{}}"
+
+    lines = [f"  - {strat}:"]
+    for pname, spec in params.items():
+        if isinstance(spec, dict):
+            ptype = str(spec.get("type", "any"))
+            required = bool(spec.get("required", False))
+        else:
+            ptype = "any"
+            required = False
+        flag = "required" if required else "optional"
+        lines.append(f'      "{pname}": <{ptype}, {flag}>')
+    return "\n".join(lines)
+
+
+def _build_examples(
+    schemas: list[dict[str, Any]],
+    verify_signatures: dict[str, str],
+) -> str:
+    """Build a generic few-shot example from REAL registry skills.
+
+    Picks the first one or two skills and shows a minimal valid JSON GoalTree
+    using their ``<name>_skill`` strategies. The verify expression uses an
+    actual verify-function name from ``verify_signatures`` when one exists,
+    otherwise the always-safe ``True`` literal. No GO2 hardcoding.
+    """
+    if not schemas:
+        return ""
+
+    verify_fn = _pick_verify_fn(verify_signatures)
+    chosen = schemas[:2]
+    sub_goals: list[str] = []
+    prev_name: str | None = None
+    for idx, schema in enumerate(chosen):
+        skill_name = str(schema.get("name", f"skill_{idx}"))
+        strat = _strategy_name(skill_name)
+        step_name = f"step_{idx + 1}_{skill_name}"
+        verify_expr = f"{verify_fn}()" if verify_fn else "True"
+        depends = f'["{prev_name}"]' if prev_name else "[]"
+        params = _example_params(schema)
+        sub_goals.append(
+            "    {\n"
+            f'      "name": "{step_name}",\n'
+            f'      "description": "{_first_sentence(schema.get("description", skill_name))}",\n'
+            f'      "verify": "{verify_expr}",\n'
+            f'      "strategy": "{strat}",\n'
+            '      "timeout_sec": 30,\n'
+            f'      "depends_on": {depends},\n'
+            f'      "strategy_params": {params},\n'
+            '      "fail_action": ""\n'
+            "    }"
+        )
+        prev_name = step_name
+
+    goal = "run " + " then ".join(str(s.get("name", "")) for s in chosen)
+    body = ",\n".join(sub_goals)
+    return (
+        f'Task: "{goal}"\n'
+        "Response:\n"
+        "{\n"
+        f'  "goal": "{goal}",\n'
+        '  "sub_goals": [\n'
+        f"{body}\n"
+        "  ],\n"
+        '  "context_snapshot": ""\n'
+        "}"
+    )
+
+
+def _example_params(schema: dict[str, Any]) -> str:
+    """Return a minimal JSON object literal for a skill's required params."""
+    params = schema.get("parameters") or {}
+    if not isinstance(params, dict):
+        return "{}"
+    required = [
+        pname
+        for pname, spec in params.items()
+        if isinstance(spec, dict) and spec.get("required")
+    ]
+    if not required:
+        return "{}"
+    pairs = ", ".join(f'"{p}": ""' for p in required)
+    return "{" + pairs + "}"
+
+
+def _pick_verify_fn(verify_signatures: dict[str, str]) -> str | None:
+    """Pick one verify-function name to demonstrate in the example, or None."""
+    if not verify_signatures:
+        return None
+    return sorted(verify_signatures.keys())[0]
+
+
+def _first_sentence(text: Any) -> str:
+    """Return a short, JSON-safe first clause of *text* for the example."""
+    s = str(text).strip().replace('"', "'").replace("\n", " ")
+    for sep in (". ", "; "):
+        if sep in s:
+            s = s.split(sep, 1)[0]
+            break
+    return s[:80]
+
+
+def build_decompose_vocab(
+    schemas: list[dict],
+    verify_signatures: dict[str, str],
+    has_base: bool,
+    planner_intro: str | None = None,
+) -> DecomposeVocab:
+    """Build a DecomposeVocab from skill schemas and verify signatures.
+
+    Args:
+        schemas: ``skill_registry.to_schemas()`` output — a list of dicts each
+            with at least ``name``, ``description`` and ``parameters``.
+        verify_signatures: name -> human-readable signature string for the
+            callables available in verify expressions (e.g.
+            ``{"detect_objects": "detect_objects(query='')"}``). The keys become
+            the validator's verify-function allowlist.
+        has_base: True if the connected agent has a mobile base. When True, the
+            base primitives (walk_forward/turn/scan_360) are added to the
+            strategies and their descriptions; when False they are omitted
+            entirely (the arm must never be taught base primitives).
+        planner_intro: Optional planner-intro override; a neutral robot-task
+            default is used when None.
+
+    Returns:
+        A DecomposeVocab whose strategies, descriptions, params-help, examples
+        and verify allowlist are all derived from the single source above.
+    """
+    strategy_names = {_strategy_name(str(s.get("name", ""))) for s in schemas}
+    strategy_descriptions = {
+        _strategy_name(str(s.get("name", ""))): str(s.get("description", ""))
+        for s in schemas
+    }
+    if has_base:
+        strategy_names |= set(_BASE_PRIMITIVE_DESCRIPTIONS.keys())
+        strategy_descriptions.update(_BASE_PRIMITIVE_DESCRIPTIONS)
+
+    params_help_blocks = [_format_params_block(s) for s in schemas]
+    strategy_params_help = "\n".join(params_help_blocks)
+
+    return DecomposeVocab(
+        planner_intro=planner_intro or _DEFAULT_PLANNER_INTRO,
+        verify_functions=frozenset(verify_signatures.keys()),
+        verify_fn_signatures=dict(verify_signatures),
+        strategy_descriptions=strategy_descriptions,
+        strategies=frozenset(strategy_names),
+        strategy_params_help=strategy_params_help,
+        examples=_build_examples(schemas, verify_signatures),
+        fallback_verify="True",
+    )

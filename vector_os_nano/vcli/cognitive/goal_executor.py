@@ -44,6 +44,7 @@ class GoalExecutor:
         code_executor: Any = None,
         tool_dispatcher: Any = None,
         capability_registry: Any = None,
+        blackboard: Any = None,
     ) -> None:
         """Initialise the executor.
 
@@ -67,6 +68,10 @@ class GoalExecutor:
             capability_registry: Optional CapabilityRegistry — routes ``capability``
                              sub-goals to a named routable capability (Phase C). None
                              disables the ``capability`` branch.
+            blackboard: Optional Blackboard (Stage 1a) — run-scoped store that
+                             captures each successful step's structured output under
+                             the sub-goal name. None disables capture; the executor's
+                             behavior is otherwise byte-identical.
         """
         self._selector = strategy_selector
         self._verifier = verifier
@@ -78,6 +83,25 @@ class GoalExecutor:
         self._code_executor = code_executor
         self._tool_dispatcher = tool_dispatcher
         self._capability_registry = capability_registry
+        self._blackboard = blackboard
+
+    # ------------------------------------------------------------------
+    # Blackboard accessor (Stage 1b)
+    # ------------------------------------------------------------------
+
+    @property
+    def blackboard(self) -> Any:
+        """The run-scoped Blackboard, or ``None`` when capture is disabled."""
+        return self._blackboard
+
+    @blackboard.setter
+    def blackboard(self, value: Any) -> None:
+        """Attach a fresh Blackboard for the current run (Stage 1b).
+
+        The VGGHarness sets this at the start of each ``run()`` so capture and
+        data-binding are scoped to a single execution. ``None`` disables both.
+        """
+        self._blackboard = value
 
     # ------------------------------------------------------------------
     # Public API
@@ -249,8 +273,15 @@ class GoalExecutor:
 
         strategy_name = self._extract_name(result)
 
-        # Execute strategy
-        exec_success, exec_error = self._execute_strategy(result)
+        # Data binding (Stage 1b): resolve ``${step.key}`` references in the
+        # selected strategy's params against the run blackboard BEFORE executing,
+        # so a later step can consume an earlier step's captured output. Pure
+        # dict/list traversal — never eval (see Blackboard.resolve). StrategyResult
+        # is frozen, so build a resolved copy rather than mutating in place.
+        result = self._resolve_params(result)
+
+        # Execute strategy — captures the step's structured output (Stage 1a).
+        exec_success, exec_error, exec_output = self._execute_strategy(result)
         elapsed = time.monotonic() - step_start
 
         # Check timeout (takes priority over execution result)
@@ -267,6 +298,7 @@ class GoalExecutor:
                 duration_sec=elapsed,
                 error=error_msg,
                 fallback_used=False,
+                result_data={"output": exec_output, "verify_value": None},
             )
 
         # If execution itself failed (skill not found, unknown type, etc.),
@@ -283,13 +315,16 @@ class GoalExecutor:
                 duration_sec=time.monotonic() - step_start,
                 error=exec_error,
                 fallback_used=False,
+                result_data={"output": exec_output, "verify_value": None},
             )
 
-        # Verify
-        verify_result = self._verifier.verify(sub_goal.verify)
+        # Verify — yields (bool, raw value) from the same sandbox.
+        verify_result, verify_value = self._verify_and_value(sub_goal.verify)
 
         if verify_result:
             # Success path
+            result_data = {"output": exec_output, "verify_value": verify_value}
+            self._capture(sub_goal.name, result_data)
             return StepRecord(
                 sub_goal_name=sub_goal.name,
                 strategy=strategy_name,
@@ -298,6 +333,7 @@ class GoalExecutor:
                 duration_sec=time.monotonic() - step_start,
                 error="",
                 fallback_used=False,
+                result_data=result_data,
             )
 
         # --- Phase 3: Visual verification fallback ---
@@ -321,6 +357,8 @@ class GoalExecutor:
                             "GoalExecutor: visual verification overrode failed verify for %s",
                             sub_goal.name,
                         )
+                        vo_result_data = {"output": exec_output, "verify_value": verify_value}
+                        self._capture(sub_goal.name, vo_result_data)
                         return StepRecord(
                             sub_goal_name=sub_goal.name,
                             strategy=strategy_name,
@@ -330,6 +368,7 @@ class GoalExecutor:
                             error="",
                             fallback_used=False,
                             visual_override=True,  # not deterministic evidence
+                            result_data=vo_result_data,
                         )
             except Exception as exc:  # noqa: BLE001
                 logger.debug("GoalExecutor: visual verification failed: %s", exc)
@@ -342,14 +381,22 @@ class GoalExecutor:
                 verify=sub_goal.verify,
                 timeout_sec=sub_goal.timeout_sec,
             )
+            fallback_output: dict = {}
             try:
                 fallback_result = self._selector.select(fallback_sg)
-                self._execute_strategy(fallback_result)
+                _, _, fallback_output = self._execute_strategy(fallback_result)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("GoalExecutor: fallback strategy raised: %s", exc)
 
             # Re-verify after fallback
-            verify_result_after = self._verifier.verify(sub_goal.verify)
+            verify_result_after, verify_value_after = self._verify_and_value(sub_goal.verify)
+            # Prefer the fallback's output; fall back to the primary attempt's.
+            fb_result_data = {
+                "output": fallback_output or exec_output,
+                "verify_value": verify_value_after,
+            }
+            if verify_result_after:
+                self._capture(sub_goal.name, fb_result_data)
             return StepRecord(
                 sub_goal_name=sub_goal.name,
                 strategy=strategy_name,
@@ -358,6 +405,7 @@ class GoalExecutor:
                 duration_sec=time.monotonic() - step_start,
                 error="" if verify_result_after else "failed after fallback",
                 fallback_used=True,
+                result_data=fb_result_data,
             )
 
         # No fallback, verification failed
@@ -369,7 +417,75 @@ class GoalExecutor:
             duration_sec=time.monotonic() - step_start,
             error="verification failed",
             fallback_used=False,
+            result_data={"output": exec_output, "verify_value": verify_value},
         )
+
+    # ------------------------------------------------------------------
+    # Observation capture (Stage 1a)
+    # ------------------------------------------------------------------
+
+    def _verify_and_value(self, expression: str) -> tuple[bool, Any]:
+        """Return ``(verify_bool, verify_value)`` for *expression*.
+
+        Prefers the verifier's :meth:`evaluate` (which surfaces the raw value);
+        falls back to :meth:`verify` (value = None) for any verifier — including
+        test mocks — that only exposes ``verify``. The boolean result is always
+        identical to what ``verify`` alone would have returned.
+        """
+        evaluate = getattr(self._verifier, "evaluate", None)
+        if callable(evaluate):
+            try:
+                outcome = evaluate(expression)
+                if isinstance(outcome, tuple) and len(outcome) == 2:
+                    return bool(outcome[0]), outcome[1]
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("GoalExecutor: verifier.evaluate raised: %s", exc)
+        return bool(self._verifier.verify(expression)), None
+
+    def _resolve_params(self, result: Any) -> Any:
+        """Return *result* with its ``params`` resolved against the blackboard.
+
+        Data binding (Stage 1b). No-op when no blackboard is attached, when the
+        result carries no dict ``params``, or when resolution raises — the path
+        stays byte-identical so non-binding runs are unaffected. Resolution is
+        pure dict/list/str traversal (Blackboard.resolve), never ``eval``.
+
+        StrategyResult is a frozen dataclass; a resolved copy is built via
+        :func:`dataclasses.replace` so the original is never mutated. A non-frozen
+        result (e.g. a test MagicMock) is returned unchanged.
+        """
+        if self._blackboard is None:
+            return result
+        raw_params = getattr(result, "params", None)
+        if not isinstance(raw_params, dict) or not raw_params:
+            return result
+        try:
+            resolved = self._blackboard.resolve(dict(raw_params))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("GoalExecutor: blackboard.resolve raised: %s", exc)
+            return result
+        if resolved == raw_params:
+            return result  # nothing referenced — avoid an unnecessary copy
+        try:
+            import dataclasses
+            if dataclasses.is_dataclass(result) and not isinstance(result, type):
+                return dataclasses.replace(result, params=resolved)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("GoalExecutor: could not rebuild result with resolved params: %s", exc)
+        return result
+
+    def _capture(self, step_name: str, result_data: dict) -> None:
+        """Store a successful step's result_data on the run blackboard, if any.
+
+        Fail-soft: a missing blackboard or a misbehaving ``put`` never aborts
+        execution (capture is a side channel, not a control-flow dependency).
+        """
+        if self._blackboard is None:
+            return
+        try:
+            self._blackboard.put(step_name, result_data)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("GoalExecutor: blackboard.put raised: %s", exc)
 
     # ------------------------------------------------------------------
     # Strategy execution dispatchers
@@ -388,11 +504,16 @@ class GoalExecutor:
         # or return empty string as a safe fallback
         return ""
 
-    def _execute_strategy(self, result: Any) -> tuple[bool, str]:
+    def _execute_strategy(self, result: Any) -> tuple[bool, str, dict]:
         """Dispatch to skill or primitive execution.
 
         Returns:
-            (success: bool, error_message: str)
+            (success: bool, error_message: str, output: dict)
+
+        ``output`` is the step's captured structured output (Stage 1a). Each
+        branch surfaces its native structured payload (skill_result.result_data,
+        CapabilityResult.output, etc.); non-dict payloads are wrapped under a
+        ``"value"`` key so the contract is always a dict.
         """
         executor_type = getattr(result, "executor_type", "")
         name = self._extract_name(result)
@@ -409,12 +530,57 @@ class GoalExecutor:
             return self._execute_tool(params)
         if executor_type == "capability":
             return self._execute_capability(name, params)
+        if executor_type == "invalid":
+            # Fail-loud (Stage 2b): the selector resolved an explicit strategy
+            # that is NOT a skill in this world. Surface a clear, named error
+            # including the valid set rather than the opaque 'unmatched' fallback.
+            error = self._invalid_strategy_error(name, params)
+            logger.warning("GoalExecutor: %s", error)
+            return False, error, {}
         # Unknown executor type
-        error = f"No strategy for: {name} (executor_type={executor_type!r})"
+        error = self._unmatched_strategy_error(name, executor_type)
         logger.warning("GoalExecutor: %s", error)
-        return False, error
+        return False, error, {}
 
-    def _execute_code(self, params: dict) -> tuple[bool, str]:
+    def _valid_strategy_set(self) -> list[str] | None:
+        """Return the sorted registered skill names, or None if undeterminable."""
+        registry = self._skill_registry
+        if registry is None:
+            return None
+        lister = getattr(registry, "list_skills", None)
+        if not callable(lister):
+            return None
+        try:
+            return sorted(str(n) for n in lister())
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _invalid_strategy_error(self, name: str, params: dict) -> str:
+        """Build a clear error for an explicit strategy that is not a skill."""
+        strategy = str(params.get("strategy", name)) if isinstance(params, dict) else name
+        valid = None
+        if isinstance(params, dict):
+            valid = params.get("valid_strategies")
+        if not valid:
+            valid = self._valid_strategy_set()
+        if valid:
+            return (
+                f"strategy {strategy!r} is not a skill in this world "
+                f"(valid: {sorted(valid)})"
+            )
+        return f"strategy {strategy!r} is not a skill in this world"
+
+    def _unmatched_strategy_error(self, name: str, executor_type: str) -> str:
+        """Build a clear error for an unroutable/unmatched strategy result."""
+        valid = self._valid_strategy_set()
+        if valid:
+            return (
+                f"no strategy matched for {name!r} "
+                f"(executor_type={executor_type!r}; valid: {valid})"
+            )
+        return f"no strategy matched for {name!r} (executor_type={executor_type!r})"
+
+    def _execute_code(self, params: dict) -> tuple[bool, str, dict]:
         """Execute an AST-sandboxed code-as-policy snippet.
 
         Requires ``params['code']``. The CodeExecutor's AST validator rejects
@@ -423,17 +589,18 @@ class GoalExecutor:
         violation yields ``success=False``.
 
         Returns:
-            (success: bool, error_message: str)
+            (success: bool, error_message: str, output: dict)
         """
         if self._code_executor is None:
-            return False, "code branch requires a CodeExecutor (none configured)"
+            return False, "code branch requires a CodeExecutor (none configured)", {}
         code = params.get("code")
         if not isinstance(code, str) or not code.strip():
-            return False, 'code branch requires a non-empty params["code"]'
+            return False, 'code branch requires a non-empty params["code"]', {}
         result = self._code_executor.execute(code)
-        return bool(getattr(result, "success", False)), getattr(result, "error", "") or ""
+        output = self._coerce_output(getattr(result, "return_value", None))
+        return bool(getattr(result, "success", False)), getattr(result, "error", "") or "", output
 
-    def _execute_tool(self, params: dict) -> tuple[bool, str]:
+    def _execute_tool(self, params: dict) -> tuple[bool, str, dict]:
         """Dispatch a kernel tool through the permission-gated ToolDispatcher.
 
         Requires ``params['tool']`` (the tool name) and optional ``params['args']``
@@ -442,19 +609,22 @@ class GoalExecutor:
         guard, deny/always-allow rules).
 
         Returns:
-            (success: bool, error_message: str)
+            (success: bool, error_message: str, output: dict)
         """
         if self._tool_dispatcher is None:
-            return False, "tool branch requires a ToolDispatcher (none configured)"
+            return False, "tool branch requires a ToolDispatcher (none configured)", {}
         tool_name = params.get("tool")
         if not isinstance(tool_name, str) or not tool_name:
-            return False, 'tool branch requires params["tool"]'
+            return False, 'tool branch requires params["tool"]', {}
         args = params.get("args", {})
         if not isinstance(args, dict):
             args = {}
-        return self._tool_dispatcher.dispatch(tool_name, args)
+        success, error = self._tool_dispatcher.dispatch(tool_name, args)
+        # The dispatcher returns (success, error) only; expose the tool name as a
+        # minimal structured output so downstream steps can reference the step ran.
+        return success, error, {"tool": tool_name}
 
-    def _execute_capability(self, name: str, params: dict) -> tuple[bool, str]:
+    def _execute_capability(self, name: str, params: dict) -> tuple[bool, str, dict]:
         """Route a sub-goal to a named routable capability (Phase C).
 
         ``params`` is the capability input payload. A read-only capability is
@@ -463,26 +633,26 @@ class GoalExecutor:
         ``verify`` predicate (checked separately by the caller) does.
 
         Returns:
-            (success: bool, error_message: str)
+            (success: bool, error_message: str, output: dict)
         """
         if self._capability_registry is None:
-            return False, "capability branch requires a CapabilityRegistry (none configured)"
+            return False, "capability branch requires a CapabilityRegistry (none configured)", {}
         cap = self._capability_registry.get(name)
         if cap is None:
-            return False, f"unknown capability: {name}"
+            return False, f"unknown capability: {name}", {}
         if getattr(cap, "side_effecting", False):
             # Side-effecting capabilities (e.g. a VLA policy) must route through a
             # permission gate — wired in Phase C.3. Fail closed until then.
             return False, (
                 f"side-effecting capability '{name}' requires a permission gate "
                 "(deferred to Phase C.3)"
-            )
+            ), {}
         payload = params if isinstance(params, dict) else {}
         try:
             from vector_os_nano.vcli.cognitive.capabilities import validate_input
             err = validate_input(getattr(cap, "input_schema", {}) or {}, payload)
             if err is not None:
-                return False, f"capability '{name}' input invalid: {err}"
+                return False, f"capability '{name}' input invalid: {err}", {}
         except Exception:  # noqa: BLE001
             pass
         context = None
@@ -494,26 +664,27 @@ class GoalExecutor:
         try:
             result = cap.invoke(payload, context)
         except Exception as exc:  # noqa: BLE001
-            return False, f"capability error: {exc}"
-        return bool(getattr(result, "success", False)), getattr(result, "error", "") or ""
+            return False, f"capability error: {exc}", {}
+        output = self._coerce_output(getattr(result, "output", {}))
+        return bool(getattr(result, "success", False)), getattr(result, "error", "") or "", output
 
-    def _execute_skill(self, name: str, params: dict) -> tuple[bool, str]:
+    def _execute_skill(self, name: str, params: dict) -> tuple[bool, str, dict]:
         """Locate and execute a skill from the registry.
 
         Returns:
-            (success: bool, error_message: str)
+            (success: bool, error_message: str, output: dict)
         """
         if self._skill_registry is None:
-            return False, f"Skill not found: {name} (no registry)"
+            return False, f"Skill not found: {name} (no registry)", {}
 
         skill = None
         try:
             skill = self._skill_registry.get(name)
         except Exception as exc:  # noqa: BLE001
-            return False, f"Registry error for {name}: {exc}"
+            return False, f"Registry error for {name}: {exc}", {}
 
         if skill is None:
-            return False, f"Skill not found: {name}"
+            return False, f"Skill not found: {name}", {}
 
         context = None
         if self._build_context is not None:
@@ -532,9 +703,9 @@ class GoalExecutor:
             if result_data.get("status") == "exploration_started":
                 success, error = self._wait_for_async_skill(name)
 
-            return success, error
+            return success, error, self._coerce_output(result_data)
         except Exception as exc:  # noqa: BLE001
-            return False, str(exc)
+            return False, str(exc), {}
 
     def _wait_for_async_skill(self, name: str) -> tuple[bool, str]:
         """Block until an async skill (e.g. explore) completes or abort fires."""
@@ -559,7 +730,7 @@ class GoalExecutor:
                 return False, "aborted"
         return False, f"async skill {name} timed out (10 min)"
 
-    def _execute_primitive(self, name: str, params: dict) -> tuple[bool, str]:
+    def _execute_primitive(self, name: str, params: dict) -> tuple[bool, str, dict]:
         """Locate and call a primitive function.
 
         Primitive sources (checked in order):
@@ -567,16 +738,16 @@ class GoalExecutor:
         2. vcli.primitives sub-modules (locomotion, navigation, perception, world)
 
         Return value semantics:
-        - bool → (value, "")
-        - other non-None → (True, "")
-        - Exception → (False, str(exc))
+        - bool → (value, "", {})
+        - other non-None → (True, "", coerced output dict)
+        - Exception → (False, str(exc), {})
 
         Returns:
-            (success: bool, error_message: str)
+            (success: bool, error_message: str, output: dict)
         """
         fn = self._resolve_primitive(name)
         if fn is None:
-            return False, f"Primitive not found: {name}"
+            return False, f"Primitive not found: {name}", {}
 
         try:
             sig = inspect.signature(fn)
@@ -584,10 +755,10 @@ class GoalExecutor:
             filtered = {k: v for k, v in params.items() if k in accepted}
             retval = fn(**filtered)
             if isinstance(retval, bool):
-                return retval, ""
-            return True, ""
+                return retval, "", {}
+            return True, "", self._coerce_output(retval)
         except Exception as exc:  # noqa: BLE001
-            return False, str(exc)
+            return False, str(exc), {}
 
     def _resolve_primitive(self, name: str) -> Callable | None:
         """Find a primitive function by name.
@@ -640,6 +811,7 @@ class GoalExecutor:
         error: str,
         start: float,
         fallback_used: bool,
+        result_data: dict | None = None,
     ) -> StepRecord:
         """Convenience factory for StepRecord."""
         strategy_name = self._extract_name(result) if result is not None else ""
@@ -651,4 +823,19 @@ class GoalExecutor:
             duration_sec=time.monotonic() - start,
             error=error,
             fallback_used=fallback_used,
+            result_data=result_data or {},
         )
+
+    @staticmethod
+    def _coerce_output(value: Any) -> dict:
+        """Coerce a strategy return value into a structured-output dict.
+
+        A dict passes through unchanged; any other non-None value is wrapped under
+        a ``"value"`` key so the captured output contract is always a dict. None /
+        empty yields an empty dict.
+        """
+        if isinstance(value, dict):
+            return value
+        if value is None:
+            return {}
+        return {"value": value}

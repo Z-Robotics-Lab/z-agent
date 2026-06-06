@@ -12,7 +12,7 @@ Verify predicates are intentionally observational. The read-only predicates
 (``file_exists``, ``grep_count``, ``path_contains``) are always available;
 ``tests_pass`` executes a command and is therefore opt-in (env
 ``VECTOR_DEV_ALLOW_TESTS=1``) and bounded. Command-executing predicates beyond
-``tests_pass`` are deferred (see docs/agent-kernel.md, Phase B).
+``tests_pass`` are deferred (see docs/ARCHITECTURE.md, Phase B).
 """
 
 from __future__ import annotations
@@ -294,3 +294,7 @@ class DevWorld:
 
     def decompose_vocab(self) -> DecomposeVocab:
         return DEV_VOCAB
+
+    def derive_vocab_from_registry(self) -> bool:
+        # Dev world ships an explicit DEV_VOCAB; no registry derivation.
+        return False

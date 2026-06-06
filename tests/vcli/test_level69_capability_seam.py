@@ -109,7 +109,7 @@ def test_executor_invokes_readonly_capability() -> None:
     cap = _Cap("echo")
     reg.register(cap)
     ex = GoalExecutor(strategy_selector=None, verifier=None, capability_registry=reg)
-    ok, err = ex._execute_strategy(_result("capability", "echo", {"x": 1}))
+    ok, err, _ = ex._execute_strategy(_result("capability", "echo", {"x": 1}))
     assert ok is True and err == ""
     assert cap.invoked is True
 
@@ -118,7 +118,7 @@ def test_executor_side_effecting_fails_closed() -> None:
     reg = CapabilityRegistry()
     reg.register(_Cap("vla", side=True))
     ex = GoalExecutor(strategy_selector=None, verifier=None, capability_registry=reg)
-    ok, err = ex._execute_strategy(_result("capability", "vla", {}))
+    ok, err, _ = ex._execute_strategy(_result("capability", "vla", {}))
     assert ok is False
     assert "permission gate" in err
 
@@ -126,13 +126,13 @@ def test_executor_side_effecting_fails_closed() -> None:
 def test_executor_unknown_capability_fails_closed() -> None:
     ex = GoalExecutor(strategy_selector=None, verifier=None,
                       capability_registry=CapabilityRegistry())
-    ok, err = ex._execute_strategy(_result("capability", "ghost", {}))
+    ok, err, _ = ex._execute_strategy(_result("capability", "ghost", {}))
     assert ok is False and "unknown capability" in err
 
 
 def test_executor_no_registry_fails_closed() -> None:
     ex = GoalExecutor(strategy_selector=None, verifier=None)  # default None
-    ok, err = ex._execute_strategy(_result("capability", "echo", {}))
+    ok, err, _ = ex._execute_strategy(_result("capability", "echo", {}))
     assert ok is False and "none configured" in err
 
 
@@ -140,7 +140,7 @@ def test_executor_invalid_input_fails() -> None:
     reg = CapabilityRegistry()
     reg.register(_Cap("detect", required=["image"]))
     ex = GoalExecutor(strategy_selector=None, verifier=None, capability_registry=reg)
-    ok, err = ex._execute_strategy(_result("capability", "detect", {}))  # no image
+    ok, err, _ = ex._execute_strategy(_result("capability", "detect", {}))  # no image
     assert ok is False and "invalid" in err
 
 

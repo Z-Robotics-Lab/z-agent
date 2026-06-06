@@ -44,5 +44,14 @@ class RobotWorld:
         return None
 
     def decompose_vocab(self) -> None:
-        # None => GoalDecomposer keeps its robot defaults (derived from skills).
+        # None => the engine derives the vocab from the live skill registry
+        # (see derive_vocab_from_registry); falls back to GoalDecomposer class
+        # defaults if no registry/namespace is available.
         return None
+
+    def derive_vocab_from_registry(self) -> bool:
+        # Single-source the decompose vocabulary from the skill registry so the
+        # prompt, the validator allowlist, and the params-help can never drift.
+        # Serves both go2 (has_base=True) and the arm (has_base=False); the
+        # engine inspects the agent to decide has_base.
+        return True

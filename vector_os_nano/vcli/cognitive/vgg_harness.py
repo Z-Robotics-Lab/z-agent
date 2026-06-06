@@ -74,13 +74,19 @@ class VGGHarness:
         task: str,
         world_context: str,
         goal_tree: GoalTree | None = None,
+        context_provider: Callable[[], str] | None = None,
     ) -> ExecutionTrace:
         """Run task with full feedback loop.
 
         Args:
             task: Natural language task description.
-            world_context: Current world model summary.
+            world_context: Current world model summary (static fallback).
             goal_tree: Pre-decomposed GoalTree (skip decomposition if provided).
+            context_provider: Optional callable that (re)builds the world context
+                on demand (Stage 1b). When given, it is called to produce a FRESH
+                world context for the initial decompose and before every
+                re-decompose, so replans see current state. When ``None`` the
+                static *world_context* arg is used (current behavior).
 
         Returns:
             Best ExecutionTrace achieved across all retry attempts.
@@ -89,6 +95,12 @@ class VGGHarness:
         failures: list[FailureRecord] = []
         best_trace: ExecutionTrace | None = None
         tree: GoalTree | None = None
+
+        # Data binding (Stage 1b): one fresh Blackboard scoped to this run. The
+        # executor captures each successful step's output here and resolves later
+        # steps' ``${step.key}`` params against it. Fail-soft: if the executor
+        # has no blackboard attribute (e.g. a bare mock) capture is simply off.
+        self._attach_blackboard()
 
         for pipeline_attempt in range(cfg.max_pipeline_retries + 1):
             # --- Abort check ---
@@ -103,7 +115,15 @@ class VGGHarness:
             if goal_tree is not None and pipeline_attempt == 0:
                 tree = goal_tree
             else:
-                tree = self._decompose_with_context(task, world_context, failures)
+                fresh_context = self._current_context(world_context, context_provider)
+                # Validator feedback (Stage 2b): carry the PRIOR attempt's dropped/
+                # invalid-strategy notes into this decompose so the next plan stops
+                # repeating the hallucination. ``tree`` still holds the previous
+                # attempt's GoalTree here (None on the very first attempt).
+                prior_notes = tuple(getattr(tree, "validation_notes", ()) or ())
+                tree = self._decompose_with_context(
+                    task, fresh_context, failures, prior_notes
+                )
                 if tree is None:
                     logger.warning("VGGHarness: decomposition failed on attempt %d", pipeline_attempt)
                     break
@@ -138,13 +158,53 @@ class VGGHarness:
             total_duration_sec=0.0,
         )
 
+    def _attach_blackboard(self) -> None:
+        """Attach a fresh run-scoped Blackboard to the executor (Stage 1b).
+
+        Fail-soft: a missing import or an executor that does not accept a
+        ``blackboard`` (e.g. a bare test double) leaves capture disabled and
+        never aborts the run.
+        """
+        try:
+            from vector_os_nano.vcli.cognitive.blackboard import Blackboard
+            self._executor.blackboard = Blackboard()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("VGGHarness: could not attach blackboard: %s", exc)
+
+    @staticmethod
+    def _current_context(
+        world_context: str,
+        context_provider: Callable[[], str] | None,
+    ) -> str:
+        """Return a fresh world context (Stage 1b).
+
+        Calls *context_provider* when supplied so each (re)decompose sees current
+        state; on any failure or when no provider is given, falls back to the
+        static *world_context* (current behavior).
+        """
+        if context_provider is None:
+            return world_context
+        try:
+            fresh = context_provider()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("VGGHarness: context_provider raised: %s", exc)
+            return world_context
+        return fresh if isinstance(fresh, str) else world_context
+
     def _decompose_with_context(
         self,
         task: str,
         world_context: str,
         failures: list[FailureRecord],
+        prior_validation_notes: tuple[str, ...] = (),
     ) -> GoalTree | None:
-        """Decompose with failure history injected into context."""
+        """Decompose with failure history + prior validator feedback in context.
+
+        *prior_validation_notes* are the previous attempt's
+        ``GoalTree.validation_notes`` (Stage 2b) — dropped/invalid-strategy
+        messages. Injecting them tells the next decompose which strategies were
+        invalid so it stops hallucinating them.
+        """
         enriched_context = world_context
         if failures:
             failure_summary = "\n".join(
@@ -155,11 +215,44 @@ class VGGHarness:
                 f"\n\nPrevious failures (avoid these strategies):\n{failure_summary}"
             )
 
+        if prior_validation_notes:
+            invalid = self._invalid_strategies_from_notes(prior_validation_notes)
+            notes_block = "\n".join(f"  - {n}" for n in prior_validation_notes)
+            enriched_context += (
+                "\n\nValidator rejected part of the previous plan:\n"
+                f"{notes_block}"
+            )
+            if invalid:
+                enriched_context += (
+                    "\nDo NOT use these invalid strategies again: "
+                    f"{', '.join(invalid)}; valid strategies are listed in "
+                    "KNOWN_STRATEGIES above."
+                )
+
         try:
             return self._decomposer.decompose(task, enriched_context)
         except Exception as exc:
             logger.warning("VGGHarness: decompose raised: %s", exc)
             return None
+
+    @staticmethod
+    def _invalid_strategies_from_notes(notes: tuple[str, ...]) -> list[str]:
+        """Extract the invalid strategy names quoted in validator notes.
+
+        Notes have the shape ``strategy 'look_skill' is not valid; ...``. The
+        first single-quoted token of such a note is the offending strategy.
+        Best-effort and side-effect-free; returns a de-duplicated, ordered list.
+        """
+        import re
+
+        found: list[str] = []
+        for note in notes:
+            if "is not valid" not in note:
+                continue
+            m = re.search(r"'([^']+)'", note)
+            if m and m.group(1) not in found:
+                found.append(m.group(1))
+        return found
 
     def _execute_with_retry(
         self,

@@ -67,6 +67,11 @@ _BLOCKED_NODE_TYPES = (
 
 _TIMEOUT_SECONDS = 5
 
+# Sentinel returned by the eval helpers when evaluation failed (security
+# violation, timeout, or runtime error). Distinct from any legitimate Python
+# value an expression could produce.
+_EVAL_FAILED = object()
+
 
 class _TimeoutError(Exception):
     """Raised when a verify expression exceeds the time limit."""
@@ -96,15 +101,29 @@ class GoalVerifier:
 
         Returns ``True`` if the expression evaluates to a truthy value.
         Returns ``False`` on any error (security violation, timeout, exception).
+
+        Thin wrapper over :meth:`evaluate` — returns only the bool so every
+        existing caller and the evidence gate behave byte-identically.
+        """
+        return self.evaluate(expression)[0]
+
+    def evaluate(self, expression: str) -> tuple[bool, Any]:
+        """Evaluate *expression* in the same restricted sandbox as :meth:`verify`.
+
+        Returns ``(bool(result), result)`` — the truthiness AND the raw value the
+        expression produced. On any failure (empty/dunder/blocked-AST/syntax/
+        compile/timeout/runtime error) returns ``(False, None)``. The raw-value
+        path uses the IDENTICAL sandbox, AST checks, safe builtins, and timeout as
+        the boolean path — nothing is loosened.
         """
         if not expression or not expression.strip():
             _LOG.warning("GoalVerifier: empty expression")
-            return False
+            return False, None
 
         # Dunder check on raw source text
         if "__" in expression:
             _LOG.warning("GoalVerifier: dunder name rejected in expression: %r", expression)
-            return False
+            return False, None
 
         # AST safety check
         try:
@@ -120,11 +139,11 @@ class GoalVerifier:
                             type(node).__name__,
                             expression,
                         )
-                        return False
+                        return False, None
             except SyntaxError:
                 pass
             _LOG.warning("GoalVerifier: SyntaxError in expression: %r", expression)
-            return False
+            return False, None
 
         # Walk the eval-mode AST and reject blocked node types
         for node in ast.walk(tree):
@@ -134,14 +153,14 @@ class GoalVerifier:
                     type(node).__name__,
                     expression,
                 )
-                return False
+                return False, None
 
         # Compile for eval
         try:
             code = compile(tree, "<verify>", "eval")
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("GoalVerifier: compile error for %r: %s", expression, exc)
-            return False
+            return False, None
 
         # Build execution globals
         exec_globals: dict[str, Any] = {
@@ -149,8 +168,11 @@ class GoalVerifier:
         }
         exec_globals.update(self._namespace)
 
-        # Evaluate with timeout
-        return self._eval_with_timeout(code, exec_globals)
+        # Evaluate with timeout — returns the raw value or _EVAL_FAILED.
+        raw = self._eval_with_timeout(code, exec_globals)
+        if raw is _EVAL_FAILED:
+            return False, None
+        return bool(raw), raw
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -160,8 +182,12 @@ class GoalVerifier:
         self,
         code: Any,
         exec_globals: dict[str, Any],
-    ) -> bool:
-        """Evaluate compiled *code* with a timeout. Returns False on failure."""
+    ) -> Any:
+        """Evaluate compiled *code* with a timeout.
+
+        Returns the raw expression value, or the ``_EVAL_FAILED`` sentinel on
+        timeout / runtime error.
+        """
         use_signal = hasattr(signal, "SIGALRM") and threading.current_thread() is threading.main_thread()
 
         if use_signal:
@@ -172,18 +198,17 @@ class GoalVerifier:
         self,
         code: Any,
         exec_globals: dict[str, Any],
-    ) -> bool:
+    ) -> Any:
         old_handler = signal.signal(signal.SIGALRM, _signal_handler)
         signal.alarm(_TIMEOUT_SECONDS)
         try:
-            result = eval(code, exec_globals)  # noqa: S307
-            return bool(result)
+            return eval(code, exec_globals)  # noqa: S307
         except _TimeoutError:
             _LOG.warning("GoalVerifier: expression timed out")
-            return False
+            return _EVAL_FAILED
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("GoalVerifier: runtime error: %s", exc)
-            return False
+            return _EVAL_FAILED
         finally:
             signal.alarm(0)
             signal.signal(signal.SIGALRM, old_handler)
@@ -192,9 +217,9 @@ class GoalVerifier:
         self,
         code: Any,
         exec_globals: dict[str, Any],
-    ) -> bool:
+    ) -> Any:
         """Fallback timeout using a threading.Timer (for Windows / non-main threads)."""
-        result_box: list[Any] = [None]
+        result_box: list[Any] = [_EVAL_FAILED]
         error_box: list[Exception | None] = [None]
 
         def _target() -> None:
@@ -209,10 +234,10 @@ class GoalVerifier:
 
         if thread.is_alive():
             _LOG.warning("GoalVerifier: expression timed out (thread fallback)")
-            return False
+            return _EVAL_FAILED
 
         if error_box[0] is not None:
             _LOG.warning("GoalVerifier: runtime error: %s", error_box[0])
-            return False
+            return _EVAL_FAILED
 
-        return bool(result_box[0])
+        return result_box[0]

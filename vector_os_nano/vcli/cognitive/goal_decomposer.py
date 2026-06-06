@@ -264,6 +264,7 @@ Response:
         examples: "str | None" = None,
         fallback_verify: "str | None" = None,
         planner_intro: "str | None" = None,
+        has_base: bool = True,
     ) -> None:
         """Initialise with an LLMBackend (must implement .call()).
 
@@ -277,6 +278,12 @@ Response:
             planner_intro: optional per-world decompose vocabulary overrides. When
                            omitted, the robot defaults (class attributes) are used,
                            preserving existing behaviour exactly.
+            has_base: whether the connected agent has a mobile base. Gates the
+                     registry-derived fallback's base-primitive union
+                     (walk_forward/turn/scan_360); an arm-only agent (False) is
+                     never taught the base primitives. Ignored when an explicit
+                     ``strategies`` set is injected. Defaults True (robot/go2),
+                     preserving existing behaviour.
         """
         self._backend = backend
         self._template_library = template_library
@@ -308,9 +315,11 @@ Response:
         elif skill_registry is not None:
             try:
                 skill_names = set(skill_registry.list_skills())
-                real_strategies = {f"{n}_skill" for n in skill_names} | {
-                    "walk_forward", "turn", "scan_360",
-                }
+                real_strategies = {f"{n}_skill" for n in skill_names}
+                # Base locomotion primitives only when the agent has a base; an
+                # arm-only agent must never be taught walk_forward/turn/scan_360.
+                if has_base:
+                    real_strategies |= {"walk_forward", "turn", "scan_360"}
                 self.KNOWN_STRATEGIES = frozenset(real_strategies)
             except Exception:
                 pass  # keep defaults
@@ -474,9 +483,14 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             if isinstance(sg, dict) and sg.get("name")
         }
 
+        # Collect validator feedback (Stage 2b): notes about dropped/unknown
+        # strategies and dropped sub_goals, surfaced on GoalTree.validation_notes
+        # so the harness can warn the next replan off the same hallucination.
+        notes: list[str] = []
+
         validated: list[SubGoal] = []
         for raw in raw_sub_goals:
-            sg = self._validate_sub_goal(raw, valid_names)
+            sg = self._validate_sub_goal(raw, valid_names, notes)
             if sg is not None:
                 validated.append(sg)
 
@@ -487,16 +501,20 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             goal=goal,
             sub_goals=tuple(validated),
             context_snapshot=context_snapshot,
+            validation_notes=tuple(notes),
         )
 
     def _validate_sub_goal(
         self,
         raw: Any,
         valid_names: set[str],
+        notes: "list[str] | None" = None,
     ) -> SubGoal | None:
         """Validate and normalise a raw sub_goal dict.
 
-        Returns a SubGoal on success, or None to discard.
+        Returns a SubGoal on success, or None to discard. When *notes* is given,
+        appends human-readable validator feedback for any dropped sub_goal or
+        cleared (unknown) strategy (Stage 2b).
         """
         if not isinstance(raw, dict):
             return None
@@ -519,6 +537,10 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
         if verify is None:
             # Discard sub_goal whose verify is non-parseable / malicious
             _LOG.warning("GoalDecomposer: dropping sub_goal %r — invalid verify", name)
+            if notes is not None:
+                notes.append(
+                    f"dropped sub_goal {name!r}: its verify expression was invalid"
+                )
             return None
 
         # Validate strategy
@@ -528,6 +550,11 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
                 strategy,
                 name,
             )
+            if notes is not None:
+                valid = ", ".join(sorted(self.KNOWN_STRATEGIES)) or "(none)"
+                notes.append(
+                    f"strategy {strategy!r} is not valid; valid strategies: {valid}"
+                )
             strategy = ""
 
         # Validate depends_on

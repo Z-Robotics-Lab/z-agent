@@ -32,6 +32,12 @@ class GoalTree:
     goal: str
     sub_goals: tuple[SubGoal, ...]
     context_snapshot: str = ""
+    # Validator feedback (Stage 2b): human-readable notes about strategies or
+    # sub_goals the decomposer DROPPED during validation (e.g. an unknown
+    # strategy cleared to ""). The harness threads these into the next replan's
+    # decompose context so the LLM stops repeating the hallucination. Additive +
+    # keyword-default so existing positional constructors are unaffected.
+    validation_notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,10 @@ class StepRecord:
     # rather than the deterministic predicate — NOT deterministic evidence
     # (see trace_store.evidence_passed).
     visual_override: bool = False
+    # Captured structured output of the step (Stage 1a). Typically
+    # {"output": <strategy output dict>, "verify_value": <raw verify value>}.
+    # Additive + keyword-default so existing positional constructors are unaffected.
+    result_data: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
