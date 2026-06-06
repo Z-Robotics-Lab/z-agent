@@ -145,6 +145,88 @@ engine.init_vgg(agent=agent, skill_registry=registry)
 For simple commands (`站起来`, `stop`, `walk`), `try_vgg` takes the fast path
 and never calls the LLM backend.
 
+## ARM Sim World (SO-101 / `vector-cli --sim`)
+
+### Overview
+
+The SO-101 arm runs in a separate sim world from the Go2. When an arm agent is
+connected, its 10 skills are automatically wrapped as tools in the `robot` category
+and become available to the agent loop.
+
+### Arm Skill Registry
+
+The 10 built-in arm skills (registered at startup by `cli._init_agent` when `--sim`
+is passed):
+
+| Skill | Category | Notes |
+|-------|----------|-------|
+| `home` | motor | move arm to home pose |
+| `wave` | motor | wave gesture |
+| `scan` | motor | sweep arm through scan arc |
+| `detect` | perception | detect objects in scene |
+| `describe` | perception | caption / visual query of current view |
+| `pick` | motor | scan → detect → grasp (auto-steps via `__skill_auto_steps__`) |
+| `place` | motor | place held object |
+| `handover` | motor | hand object to user |
+| `gripper_open` | motor | open gripper |
+| `gripper_close` | motor | close gripper |
+
+The `pick` skill declares `__skill_auto_steps__`, so `SkillWrapperTool` executes
+a scan → detect → pick chain automatically rather than a bare grasp.
+
+### Headless vs Window on macOS
+
+MuJoCo's passive viewer requires the Cocoa main thread, which only `mjpython`
+provides. Two operating modes:
+
+| Mode | Command | Viewer | Use-case |
+|------|---------|--------|----------|
+| Headless | `vector-cli` + say "start the arm sim" | none | tests, remote, CI |
+| Window | `scripts/vector-sim` | MuJoCo viewer window | interactive dev |
+
+`scripts/vector-sim` is a thin bash wrapper that re-execs under `.venv-nano/bin/mjpython`:
+
+```bash
+exec "$mjpy" -m vector_os_nano.vcli.cli --sim --gui "$@"
+```
+
+You can also invoke it directly:
+
+```bash
+mjpython -m vector_os_nano.vcli.cli --sim --gui
+```
+
+**Phase D** will fold the `--gui` path into `vector-cli --sim` by detecting macOS
+and re-execing under mjpython automatically, so the two modes collapse to a single
+entry point.
+
+### Test Suite
+
+All arm sim tests live in `tests/vcli/test_level71_robot_control.py` (15 tests, 656
+green across the full suite). Tests split into two groups:
+
+**Pure-logic (no mujoco dep):** `test_robot_context_arm_only_reports_connected`,
+`test_start_simulation_in_sim_category`, `test_start_simulation_visible_in_dev_world`,
+`test_sim_start_reachable_via_router_in_dev_world`, `test_model_flag_no_sentinel`,
+`test_wave_scan_classified_motor` — run without any hardware.
+
+**Sim-backed (skip if mujoco absent):** use the `arm` fixture (`MuJoCoArm(gui=False)`)
+and cover gripper/perception wiring, VGG gate, perception word-boundary,
+`SkillWrapperTool` auto-steps, `SimStartTool`/`SimStopTool` lifecycle, and
+`DynamicSystemPrompt` refresh correctness.
+
+```bash
+# Run only the arm control tests
+pytest tests/vcli/test_level71_robot_control.py -v
+
+# Skip sim-backed tests when mujoco is absent
+pytest tests/vcli/test_level71_robot_control.py -v -k "not (arm or sim)"
+```
+
+The `arm` fixture uses `scope` per-function (each test gets a fresh `MuJoCoArm`)
+because arm state resets are cheap compared to Go2 physics. All tests run headless
+(`gui=False`); no viewer is spawned in CI.
+
 ## Physics Assertions
 
 Use conservative bounds that hold for both backends:

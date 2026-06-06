@@ -4,10 +4,13 @@
   **C.3 + C.4 await owner sign-off** — C.3 is the actual product (a real specialized model
   in the robot world) and needs embodiment/model/skill-migration decisions (see "Shipped"
   note + open questions 4 & the C.3 keystone).
-- Date: 2026-06-04
+- Date: 2026-06-04 (updated 2026-06-05)
 - Branch: `feat/verified-agent-kernel` (Phase A + Phase B shipped on this branch)
-- Related: [agent-kernel.md](agent-kernel.md) ("Forward direction: from one LLM to a model
-  zoo"), [agent-kernel-phase-b-plan.md](agent-kernel-phase-b-plan.md),
+- **Blocked-by (2026-06-05): Phase D precedes C.3.** C.3 (a real specialized model in the
+  robot world) requires a robot world whose VGG decomposer reliably produces correct arm-only
+  long chains — see [agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md).
+- Related: [ARCHITECTURE.md](ARCHITECTURE.md) ("Forward direction: from one LLM to a model
+  zoo"), [agent-kernel-phase-b-plan.md](archive/agent-kernel-phase-b-plan.md),
   [ADR-006](architecture-decisions/ADR-006-agent-kernel-world-plugin.md)
 - Note: file:line references are against the current branch (post Phase B); treat as
   approximate anchors, not exact addresses.
@@ -22,7 +25,7 @@ and measured stats, chosen by the `StrategySelector` by measured fit. **Verifica
 byte-identical**: every routed step still carries a deterministic `verify` predicate
 evaluated in the `GoalVerifier` sandbox, with the existing escalation ladder unchanged.
 
-This is the bridge described in `docs/agent-kernel.md` ("Forward direction: from one LLM to
+This is the bridge described in `docs/ARCHITECTURE.md` ("Forward direction: from one LLM to
 a model zoo"). Like Phase B, the strategy is **the smallest set of new seams that reuses the
 Phase A/B machinery** — we are wiring and generalizing existing dispatch, not greenfield.
 Concretely: today `_resolve_explicit` (`strategy_selector.py:196-227`) maps a strategy

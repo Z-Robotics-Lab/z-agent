@@ -1,7 +1,7 @@
 # Verified Agent Kernel — Architecture Direction
 
-- Status: Proposed
-- Date: 2026-06-04
+- Status: Active — Phase A–C.2 shipped; Phase D (NL long-chain planning) next.
+- Date: 2026-06-04 (updated 2026-06-05)
 - Scope: the Vector OS orchestration layer (VectorEngine + VGG + CLI) — the OS *around*
   the models, in service of robots.
 
@@ -20,6 +20,15 @@ write code ("code physical AI"). Any model, any skill, any robot — plug and pl
 Models are raw capability. We are not trying to build the smartest brain right now; we
 make *every* brain run trustworthily on the industrial floor, callable and buildable by
 anyone. **Vector OS is the operating system for the robot world.**
+
+> **North star + current gap (2026-06-05).** The user-facing promise is **natural language
+> controls everything** — the built-in agent must *decompose NL → plan → execute long-chain
+> tasks*, not keyword-match. Single-skill NL control of the SO-101 arm ships today
+> (wave/home/scan/detect/pick/place). **Long-chain arm planning does not yet work:** the robot
+> world ships no decompose vocabulary, so the planner reaches for GO2 skills and hallucinates
+> (e.g. `把所有东西抓一遍` → `scan_360`/`look`), and the goal model has no iteration construct
+> ("for each detected object" is inexpressible). Closing this is the next phase —
+> see [agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md).
 
 ## Thesis (how the architecture serves the vision)
 
@@ -183,7 +192,7 @@ general verified agent over file/bash/web tools, zero robot dependencies. The de
 does decompose + verify (execution is Phase B).
 
 **Phase B — Wire the differentiation tier. [DONE — shipped on
-`feat/verified-agent-kernel`; see [agent-kernel-phase-b-plan.md](agent-kernel-phase-b-plan.md)].**
+`feat/verified-agent-kernel`; see [agent-kernel-phase-b-plan.md](archive/agent-kernel-phase-b-plan.md)].**
 Keystone resolved as tool-backed via `PermissionContext`. B.1 added tool-backed execution
 (the dev world *acts* through the permission system + a per-world allowlist) and code-as-policy
 (AST sandbox), plus verify-as-eval (predicates as a self-grading, replayable eval signal via

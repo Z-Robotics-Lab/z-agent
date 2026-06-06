@@ -1,8 +1,8 @@
 # ADR-006: Agent Kernel / World-Plugin Architecture
 
-- Status: Proposed
-- Date: 2026-06-04
-- Related: [docs/agent-kernel.md](../agent-kernel.md), ADR-003 (Hardware Abstraction Layer)
+- Status: Accepted — implemented on `feat/verified-agent-kernel` (Phase A/B/C.1/C.2 + arm-control shipped)
+- Date: 2026-06-04 (accepted 2026-06-05)
+- Related: [docs/ARCHITECTURE.md](../ARCHITECTURE.md), ADR-003 (Hardware Abstraction Layer)
 
 ## Context
 
