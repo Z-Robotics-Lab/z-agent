@@ -34,6 +34,15 @@ class HarnessConfig:
     max_step_retries: int = 2       # per-step strategy retries (Layer 1)
     max_redecompose: int = 1        # re-decompose attempts on step failure (Layer 2)
     max_pipeline_retries: int = 1   # full re-plan attempts (Layer 3)
+    # Stage 4 (S4-4) — observation-driven mid-tree replan. The maximum number of
+    # times the harness may re-decompose a SUCCEEDING run because a step's
+    # result_data showed a live observation that diverged from the plan's
+    # assumptions (e.g. detect found a different object set). Bounded so a
+    # detector that always reports divergence cannot loop forever. Only consulted
+    # when an ``observation_divergence`` detector is wired into the harness; with
+    # no detector the run path is byte-identical. Additive + LAST + defaulted so
+    # existing HarnessConfig(...) constructions are unaffected.
+    max_obs_replan: int = 1
 
 
 @dataclass(frozen=True)
@@ -61,13 +70,29 @@ class VGGHarness:
         config: HarnessConfig | None = None,
         on_step: Callable[[StepRecord], None] | None = None,
         on_replan: Callable[[str], None] | None = None,
+        observation_divergence: Callable[[ExecutionTrace], str | None] | None = None,
     ) -> None:
+        """Construct the harness.
+
+        Args:
+            observation_divergence: Optional detector for observation-driven
+                mid-tree replan (Stage 4, S4-4). Given the just-completed
+                ExecutionTrace, it returns a non-empty reason string when a step's
+                live observation (its ``result_data``) diverged from what the plan
+                assumed — e.g. a detect step found a different object set, or a
+                post-pick re-detect changed the remaining set. Returning ``None`` /
+                "" means no divergence. When this is ``None`` (the default) the
+                observation-replan loop is entirely skipped and ``run()`` is
+                byte-identical to before. The detector is a PURE read over the
+                trace/result_data — it never executes model output.
+        """
         self._decomposer = decomposer
         self._executor = executor
         self._selector = selector
         self._config = config or HarnessConfig()
         self._on_step = on_step
         self._on_replan = on_replan
+        self._obs_divergence = observation_divergence
 
     def run(
         self,
@@ -95,6 +120,7 @@ class VGGHarness:
         failures: list[FailureRecord] = []
         best_trace: ExecutionTrace | None = None
         tree: GoalTree | None = None
+        obs_replans_used = 0  # S4-4: bounded observation-driven re-decomposes
 
         # Data binding (Stage 1b): one fresh Blackboard scoped to this run. The
         # executor captures each successful step's output here and resolves later
@@ -136,7 +162,35 @@ class VGGHarness:
                 best_trace = trace
 
             if trace.success:
-                return trace
+                # --- S4-4: observation-driven mid-tree replan ---
+                # Even a fully-verified run may have observed live state that the
+                # plan did not assume (e.g. detect found a different object set, or
+                # a post-pick re-detect changed the remaining set). When a divergence
+                # detector is wired AND replan budget remains, re-decompose against
+                # the CURRENT world_context/Blackboard (not the stale T=0 context)
+                # and re-execute. This is its OWN bounded loop, independent of the
+                # pipeline-retry counter (max_obs_replan), so a detector that always
+                # reports divergence cannot loop forever.
+                while True:
+                    reason = self._obs_divergence_reason(trace, obs_replans_used, cfg)
+                    if not reason:
+                        break
+                    obs_replans_used += 1
+                    new_tree = self._obs_replan_decompose(
+                        task, world_context, context_provider, failures, tree, reason
+                    )
+                    if new_tree is None:
+                        return trace  # re-decompose failed — keep the verified run
+                    tree = new_tree
+                    trace = self._execute_with_retry(tree, failures)
+                    if trace.success:
+                        best_trace = trace
+                    else:
+                        # The post-divergence plan did not verify; fall back to
+                        # Layer 3 pipeline retry with the accumulated failures.
+                        break
+                if trace.success:
+                    return trace
 
             # --- Layer 3: Pipeline retry — full re-plan with failure history ---
             if pipeline_attempt < cfg.max_pipeline_retries:
@@ -190,6 +244,74 @@ class VGGHarness:
             logger.warning("VGGHarness: context_provider raised: %s", exc)
             return world_context
         return fresh if isinstance(fresh, str) else world_context
+
+    def _obs_divergence_reason(
+        self,
+        trace: ExecutionTrace,
+        obs_replans_used: int,
+        cfg: HarnessConfig,
+    ) -> str | None:
+        """Return the divergence reason for a verified run, or ``None`` (S4-4).
+
+        Consulted ONCE per replan decision (the reason is then threaded into the
+        re-decompose so the detector is never invoked twice for one decision).
+        Returns a non-empty reason only when a divergence detector is wired, the
+        per-run observation-replan budget (``cfg.max_obs_replan``) is not yet
+        spent, and the detector reports a non-empty reason for *trace*. With no
+        detector this is always ``None``, so the run path is unchanged. The
+        detector is consulted defensively — any exception is treated as
+        "no divergence" so a misbehaving detector can never abort a verified run.
+        """
+        if self._obs_divergence is None:
+            return None
+        if obs_replans_used >= max(0, cfg.max_obs_replan):
+            return None
+        try:
+            reason = self._obs_divergence(trace)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("VGGHarness: observation_divergence raised: %s", exc)
+            return None
+        return reason if reason else None
+
+    def _obs_replan_decompose(
+        self,
+        task: str,
+        world_context: str,
+        context_provider: Callable[[], str] | None,
+        failures: list[FailureRecord],
+        prior_tree: GoalTree | None,
+        reason: str,
+    ) -> GoalTree | None:
+        """Re-decompose after an observed divergence on a verified run (S4-4).
+
+        Builds a FRESH world context via *context_provider* (so the new plan sees
+        CURRENT state, not the stale T=0 context), threads the detector's *reason*
+        + the prior plan's validation notes into the decompose context, fires the
+        ``on_replan`` callback, and returns the new GoalTree (or ``None`` on
+        decompose failure). The run-scoped Blackboard is intentionally NOT reset:
+        the prior run's captured observations (e.g. the latest detect set) remain
+        addressable so a foreach in the new plan iterates the CURRENT set.
+        """
+        if self._on_replan:
+            try:
+                self._on_replan(
+                    "Re-planning on observed divergence: "
+                    f"{reason or 'live observation changed'}"
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        fresh_context = self._current_context(world_context, context_provider)
+        if reason:
+            fresh_context += (
+                "\n\nObservation diverged from the previous plan (re-plan around the "
+                f"CURRENT observed state):\n  - {reason}"
+            )
+        prior_notes = tuple(getattr(prior_tree, "validation_notes", ()) or ())
+        logger.info(
+            "VGGHarness: observation-driven replan (reason=%r)", reason or "(none)"
+        )
+        return self._decompose_with_context(task, fresh_context, failures, prior_notes)
 
     def _decompose_with_context(
         self,
@@ -282,6 +404,35 @@ class VGGHarness:
                     break
             except ImportError:
                 pass
+
+            # Stage 4 (S4-2): a foreach node expands at runtime into N children.
+            # Delegate the whole expansion to the executor (it reads the producing
+            # step's list off the run blackboard and binds the iteration var per
+            # item). Layer-1 strategy retry does not apply to the loop node itself;
+            # each expanded child still carries its own verify.
+            if getattr(sub_goal, "foreach", None) is not None:
+                expanded = self._executor._execute_foreach(sub_goal, self._on_step)
+                steps.extend(expanded)
+                for child in expanded:
+                    if self._executor._stats is not None:
+                        try:
+                            self._executor._stats.record(
+                                strategy_name=child.strategy,
+                                sub_goal_name=child.sub_goal_name,
+                                success=child.success,
+                                duration_sec=child.duration_sec,
+                            )
+                        except Exception:
+                            pass
+                    if not child.success:
+                        failures.append(FailureRecord(
+                            sub_goal_name=child.sub_goal_name,
+                            strategy_tried=child.strategy,
+                            error=child.error,
+                            step_index=i,
+                        ))
+                        overall_success = False
+                continue
 
             step = self._execute_step_with_retry(sub_goal, i, cfg.max_step_retries)
             steps.append(step)

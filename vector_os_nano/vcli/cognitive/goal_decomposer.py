@@ -23,7 +23,7 @@ import logging
 import re
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
 
 _LOG = logging.getLogger(__name__)
 
@@ -566,6 +566,12 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             if isinstance(dep, str) and dep in valid_names and dep != name
         )
 
+        # Stage 4 (S4-1): optional FOREACH control-flow spec. Parsed + validated
+        # here; not yet expanded at execution time (S4-2). Body strategies are
+        # validated against the SAME world vocab as top-level steps; an unknown
+        # body strategy is cleared with the same fail-loud note.
+        foreach = self._validate_foreach(raw.get("foreach"), name, valid_names, notes)
+
         return SubGoal(
             name=name,
             description=description,
@@ -575,6 +581,89 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             strategy=strategy,
             strategy_params=strategy_params,
             fail_action=fail_action,
+            foreach=foreach,
+        )
+
+    def _validate_foreach(
+        self,
+        raw: Any,
+        owner_name: str,
+        valid_names: set[str],
+        notes: "list[str] | None" = None,
+    ) -> ForEachSpec | None:
+        """Validate a raw ``foreach`` block into a ForEachSpec, or None.
+
+        Shape (all parsed by pure dict access — never evaluated)::
+
+            "foreach": {
+              "source_step": "<name of an earlier step producing the list>",
+              "source_path": "<dotted path INTO that step's result_data list>",
+              "var": "<iteration variable name, default 'item'>",
+              "body": [ <sub_goal template>, ... ]
+            }
+
+        Returns None (a plain leaf step) when *raw* is absent or malformed —
+        fail-safe, never raising into decomposition. ``source_step`` must name an
+        earlier sub_goal in the tree; an unknown reference drops the foreach with a
+        fail-loud note. Body templates are validated with the SAME world-vocab
+        rules as top-level steps (unknown body strategies cleared + noted). The
+        per-item binding ``${var.field}`` is left as data on the body templates —
+        S4-1 does NOT expand it; the Blackboard's pure path traversal resolves it
+        at execution time (S4-2).
+        """
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            if notes is not None:
+                notes.append(
+                    f"sub_goal {owner_name!r}: foreach must be an object — ignored"
+                )
+            return None
+
+        source_step = str(raw.get("source_step", "")).strip()
+        source_path = str(raw.get("source_path", "")).strip()
+        if not source_step or not source_path:
+            if notes is not None:
+                notes.append(
+                    f"sub_goal {owner_name!r}: foreach requires 'source_step' and "
+                    "'source_path' — ignored"
+                )
+            return None
+
+        # The producing step must be a real, earlier sub_goal in this tree.
+        if source_step not in valid_names or source_step == owner_name:
+            if notes is not None:
+                valid = ", ".join(sorted(valid_names)) or "(none)"
+                notes.append(
+                    f"sub_goal {owner_name!r}: foreach.source_step {source_step!r} "
+                    f"is not a known step; known steps: {valid}"
+                )
+            return None
+
+        var = str(raw.get("var", "item")).strip() or "item"
+
+        raw_body = raw.get("body", [])
+        if not isinstance(raw_body, list):
+            raw_body = []
+        # Body templates may depend on each other within the body; build the set
+        # of body names so intra-body depends_on validates. They are validated
+        # against the same strategy/verify vocab as top-level steps.
+        body_names: set[str] = {
+            str(t.get("name", ""))
+            for t in raw_body
+            if isinstance(t, dict) and t.get("name")
+        }
+        body: list[SubGoal] = []
+        for raw_t in raw_body:
+            template = self._validate_sub_goal(raw_t, body_names, notes)
+            if template is not None:
+                body.append(template)
+
+        return ForEachSpec(
+            source_step=source_step,
+            source_path=source_path,
+            var=var,
+            body=tuple(body),
         )
 
     def _validate_verify(self, verify: str) -> str | None:

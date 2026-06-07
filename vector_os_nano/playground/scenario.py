@@ -38,6 +38,12 @@ class Scenario:
             "placed in the scene's drop-zone" without hand-passing raw coordinates.
             ``None`` (the default) means the scene defines no region and
             ``placed_count()`` counts every resting object.
+        rooms: an optional mapping of room name -> axis-aligned bounding box
+            ``(x_min, y_min, x_max, y_max)`` for a mobile-base (Go2) scene. The
+            base ``visited(room)`` verify predicate checks the base's planar
+            position against the named box, so a navigation sub-goal can verify
+            "reached the kitchen" by scene name without hand-passing coordinates.
+            Empty (the default) means the scene declares no named rooms.
     """
 
     id: str
@@ -46,3 +52,4 @@ class Scenario:
     task_hint: str
     object_names: tuple[str, ...] = field(default_factory=tuple)
     place_region: tuple[float, float, float, float] | None = None
+    rooms: dict[str, tuple[float, float, float, float]] = field(default_factory=dict)

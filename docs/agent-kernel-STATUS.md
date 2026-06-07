@@ -65,13 +65,25 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   per-step PASS/FAIL + replan) rendered in the live CLI. Sim-oracle is the deterministic verify
   source (ADR-008 C1); VLM `detect`/`describe` stays the agent's perception skill. 719 tests green
   + 1 marked live-LLM smoke; real headless `MuJoCoArm` oracle test passes in isolation.
+- **Stage 4 (control-flow IR) + Go2 2nd embodiment (this commit)** — `ForEachSpec` + an additive
+  `SubGoal.foreach` field (frozen-safe); `GoalDecomposer` parses/validates a `foreach` node (fail-loud
+  on unknown source_step / body strategy); `GoalExecutor` EXPANDS it at runtime from a producing step's
+  `result_data` via the Blackboard pure `${path}` traversal (per-item var binding, no eval); `VGGHarness`
+  obs-driven mid-tree replan hook. Proven: "grab everything" -> scan -> detect_all -> foreach(obj):
+  pick(obj)/place(obj), leaf count == detected count, every verify flips on real oracle state. **Go2**:
+  quadruped scenario (`go2_room`, has_base) with sim-oracle base predicates (`at_position`/`facing`/
+  `visited`) + go2-only NL decompose; arm scenarios unaffected. 777 green + 3 marked live smokes. Known
+  follow-ups (next workflow): live decomposer prompt not yet taught the `foreach` JSON (mock-only on the
+  live path); foreach reads a producing-step output, not the verify-namespace detect predicate (synthetic
+  producer in tests); harness double-records foreach child stats; a `foreach` missing `depends_on` can
+  silently iterate zero (auto-inject `source_step`).
 
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —
 `git checkout` it before committing.
 
-## Next — Stage 4 (control-flow IR) then 2nd embodiment (in progress; ADR-008 two tracks)
+## Next — finish the live foreach path + harden, then Stage 5 (ADR-008 two tracks)
 
 Full plan: **[agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md)**. Remaining stages:
 
@@ -79,10 +91,11 @@ Full plan: **[agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md)**. Rem
   and `detect_objects`/`describe_scene` are real via the **deterministic sim oracle** (shipped in
   Playground v1). Still open: the VLM `MuJoCoPerception`/`DetectSkill` perception path, referring-
   expression resolution ("the red cup" -> object_id), and `ObjectMemory` re-sync.
-- **Stage 4 (control-flow IR + observation-driven replan)** — `foreach`/`until`/`if` constructs
-  in the goal model so "把所有东西抓一遍" is expressible; executor expands `foreach` at runtime
-  from a producing step's output; mid-tree replan triggered by live observations, not only
-  failure strings.
+- **Stage 4 (control-flow IR + observation-driven replan)** — SHIPPED (this commit): additive
+  `foreach` in the goal model; executor expands it at runtime from a producing step's output;
+  obs-driven mid-tree replan hook. "把所有东西抓一遍" works end-to-end on the mock backend.
+  Remaining for the LIVE path: teach the decomposer prompt the `foreach` JSON; wire a real
+  detect-producing step; harness stats + missing-`depends_on` hardening. (`until`/`if` deferred.)
 - **Stage 5 (unify the two planning paths)** — merge the VGG path and the tool_use path into
   one closed-loop controller.
 
@@ -97,9 +110,11 @@ remain open. Work proceeds on two parallel tracks across the seam contract — s
 [ARCHITECTURE.md](ARCHITECTURE.md) §5/§7 and
 [ADR-008](architecture-decisions/ADR-008-playground-parallel-track.md).
 
-**In progress (long-line workflow):** **Stage 4 — control-flow IR** (`foreach` over detected objects
-so "把所有东西抓一遍" is expressible + observation-driven mid-tree replan), then a **second embodiment**
-in the playground (e.g. Go2). Kernel track then continues toward **Stage 5** (unify the planning paths).
+**Shipped (this commit):** Stage 4 control-flow IR (`foreach` expand + obs-replan hook) and the Go2
+second embodiment; 777 green. **Next (autonomous workflow):** finish the LIVE foreach path (teach the
+decomposer prompt; wire a real detect-producing step) + harden (harness stats double-count; foreach
+`depends_on` auto-inject) + an adversarial code-review pass; then **Stage 5** (unify the VGG and
+tool_use planning paths).
 
 ## Pointers
 

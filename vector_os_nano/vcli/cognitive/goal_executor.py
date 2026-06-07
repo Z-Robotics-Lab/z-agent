@@ -21,6 +21,7 @@ from typing import Any, Callable
 
 from vector_os_nano.vcli.cognitive.types import (
     ExecutionTrace,
+    ForEachSpec,
     GoalTree,
     StepRecord,
     SubGoal,
@@ -160,6 +161,18 @@ class GoalExecutor:
                     break
             except ImportError:
                 pass
+
+            # Stage 4 (S4-2): a foreach node is not a leaf step — it expands at
+            # runtime into N concrete children (the body instantiated once per
+            # item of the producing step's list). Execute the expansion in order;
+            # each child carries its own verify and is recorded/captured normally.
+            if getattr(sub_goal, "foreach", None) is not None:
+                expanded = self._execute_foreach(sub_goal, on_step)
+                steps.extend(expanded)
+                if any(not s.success for s in expanded):
+                    overall_success = False
+                    break  # abort remaining
+                continue
 
             step = self._execute_sub_goal(sub_goal)
             steps.append(step)
@@ -418,6 +431,200 @@ class GoalExecutor:
             error="verification failed",
             fallback_used=False,
             result_data={"output": exec_output, "verify_value": verify_value},
+        )
+
+    # ------------------------------------------------------------------
+    # FOREACH expansion (Stage 4, S4-2)
+    # ------------------------------------------------------------------
+
+    def _resolve_foreach_items(self, spec: ForEachSpec) -> list[Any]:
+        """Read the producing step's iterable from the blackboard (pure traversal).
+
+        The list is reached through the SAME ``${step.path}`` convention every
+        other step reference uses — resolved by the Blackboard's pure dict/list
+        traversal, never ``eval``. ``result_data`` is captured wrapped under an
+        ``"output"`` key (``{"output": <strategy output>, "verify_value": ...}``),
+        so the producing list is most naturally addressed as
+        ``<source_step>.output.<source_path>``; we also try the bare
+        ``<source_step>.<source_path>`` for a producer that stored the list at the
+        top level. The first form that resolves to a list wins.
+
+        Returns an empty list when there is no blackboard, the path does not
+        resolve to a list, or resolution raises — an empty (or unresolved)
+        producer yields zero children, never an error.
+        """
+        if self._blackboard is None:
+            return []
+        path = spec.source_path.strip(".")
+        candidates = (
+            f"${{{spec.source_step}.output.{path}}}",
+            f"${{{spec.source_step}.{path}}}",
+        )
+        for ref in candidates:
+            try:
+                resolved = self._blackboard.resolve(ref)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("GoalExecutor: foreach resolve raised: %s", exc)
+                return []
+            if isinstance(resolved, list):
+                return list(resolved)
+        logger.info(
+            "GoalExecutor: foreach source %r.%r did not resolve to a list — "
+            "zero iterations",
+            spec.source_step,
+            spec.source_path,
+        )
+        return []
+
+    def _execute_foreach(
+        self,
+        sub_goal: SubGoal,
+        on_step: Callable[[StepRecord], None] | None = None,
+    ) -> list[StepRecord]:
+        """Expand + execute a foreach node, returning each child's StepRecord.
+
+        Reads the producing step's list from the blackboard, then for each item
+        instantiates the body templates once and executes them IN ORDER, each with
+        its own per-step verify. The iteration variable is bound by storing the
+        item on the run blackboard under ``spec.var`` BEFORE each child executes,
+        so a body reference like ``${obj.name}`` resolves through the existing pure
+        dict/list path traversal (never string eval/format). Child outputs are
+        captured to the blackboard as usual.
+
+        Stops at the first failed child (mirrors the leaf abort semantics). An
+        empty producing list yields zero children — not an error.
+        """
+        spec = sub_goal.foreach
+        records: list[StepRecord] = []
+        if spec is None:  # defensive — caller only dispatches real foreach nodes
+            return records
+        if not spec.body:
+            return records
+
+        items = self._resolve_foreach_items(spec)
+        for index, item in enumerate(items):
+            # --- Abort check (mirror the leaf loop) ---
+            try:
+                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                if is_abort_requested():
+                    abort_step = StepRecord(
+                        sub_goal_name=f"{sub_goal.name}[{index}]",
+                        strategy="",
+                        success=False,
+                        verify_result=False,
+                        duration_sec=0.0,
+                        error="aborted",
+                        fallback_used=False,
+                    )
+                    records.append(abort_step)
+                    if on_step is not None:
+                        try:
+                            on_step(abort_step)
+                        except Exception:  # noqa: BLE001
+                            pass
+                    break
+            except ImportError:
+                pass
+
+            # Bind the current item under the iteration var so body references
+            # (``${var.field}``) resolve via pure blackboard traversal. The item
+            # must be a dict for the blackboard to hold it; a non-dict item is
+            # wrapped under ``"value"`` so ``${var.value}`` is still reachable.
+            self._bind_iteration_var(spec.var, item)
+
+            stop = False
+            for template in spec.body:
+                child = self._instantiate_body_template(template, sub_goal, index)
+                step = self._execute_sub_goal(child)
+                records.append(step)
+
+                if self._stats is not None:
+                    try:
+                        self._stats.record(
+                            strategy_name=step.strategy,
+                            sub_goal_name=step.sub_goal_name,
+                            success=step.success,
+                            duration_sec=step.duration_sec,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("GoalExecutor: stats.record raised: %s", exc)
+
+                if on_step is not None:
+                    try:
+                        on_step(step)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("GoalExecutor: on_step callback raised: %s", exc)
+
+                if not step.success:
+                    stop = True
+                    break
+            if stop:
+                break
+
+        return records
+
+    def _bind_iteration_var(self, var: str, item: Any) -> None:
+        """Store the current foreach item on the blackboard under *var*.
+
+        Fail-soft: a missing blackboard simply means body references stay
+        unresolved (passthrough) rather than aborting. A non-dict item is wrapped
+        under ``"value"`` so the blackboard (which only holds dicts) can store it
+        and ``${var.value}`` remains reachable.
+        """
+        if self._blackboard is None:
+            return
+        payload = item if isinstance(item, dict) else {"value": item}
+        try:
+            self._blackboard.put(var, payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("GoalExecutor: foreach var bind raised: %s", exc)
+
+    def _instantiate_body_template(
+        self,
+        template: SubGoal,
+        owner: SubGoal,
+        index: int,
+    ) -> SubGoal:
+        """Return a per-item concrete child from a body *template*.
+
+        The child gets a unique, traceable name (``<owner>[<index>].<template>``)
+        and drops intra-body ``depends_on`` (the body runs sequentially in list
+        order under the executor, so positional order is the dependency).
+
+        The iteration var has ALREADY been bound on the blackboard by the caller,
+        so both the child's ``verify`` expression and its ``strategy_params`` are
+        materialised here by the Blackboard's PURE ``${var.field}`` traversal —
+        plain dict/list/string substitution, never eval/format. Resolving the
+        verify string yields concrete literal data (e.g. ``picked('mug')``) that
+        the AST-sandboxed GoalVerifier then evaluates; strategy_params resolution
+        is idempotent with the executor's pre-exec ``_resolve_params`` pass.
+        """
+        import dataclasses
+
+        verify = template.verify
+        params = template.strategy_params
+        bb = self._blackboard
+        if bb is not None:
+            try:
+                verify = bb.resolve(template.verify)
+                if not isinstance(verify, str):
+                    verify = template.verify  # a stray exact-ref returned non-str
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("GoalExecutor: foreach verify bind raised: %s", exc)
+                verify = template.verify
+            try:
+                params = bb.resolve(dict(template.strategy_params))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("GoalExecutor: foreach params bind raised: %s", exc)
+                params = template.strategy_params
+
+        return dataclasses.replace(
+            template,
+            name=f"{owner.name}[{index}].{template.name}",
+            depends_on=(),
+            verify=verify,
+            strategy_params=params,
+            foreach=None,
         )
 
     # ------------------------------------------------------------------

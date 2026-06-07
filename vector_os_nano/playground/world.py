@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""PlaygroundWorld — a parallel-track world for tabletop arm scenarios.
+"""PlaygroundWorld — a parallel-track world for tabletop arm + Go2 base scenarios.
 
 The playground is a SEPARATE world track (ADR-008). It integrates with the
 kernel ONLY across the versioned public contract: the four registrations (tools,
@@ -10,10 +10,14 @@ surface. The dependency edge is strictly ONE-WAY: this package imports the kerne
 (``vcli.worlds.base``) + ``hardware``/``skills``; the kernel never imports the
 playground except through the world registry's lazy hook.
 
-For now the playground reuses the robot persona and single-sources its decompose
+The playground reuses the robot persona and single-sources its decompose
 vocabulary from the skill registry (like ``RobotWorld``). Its distinct, owned
-contribution is the verify namespace: deterministic sim-oracle predicates over
-the connected arm + the scenario's known objects.
+contribution is the verify namespace: deterministic sim-oracle predicates. The
+predicate set is chosen by the scenario's embodiment — ARM scenarios (tabletop)
+contribute arm/scene predicates over the connected arm + known objects; the GO2
+scenario (a mobile-base quadruped, ``has_base``) contributes base predicates
+(at_position / facing / visited) over the connected base. This proves the seam
+generalizes across embodiments with no embodiment-specific code in the kernel.
 """
 
 from __future__ import annotations
@@ -26,6 +30,11 @@ from vector_os_nano.playground.verify.arm_predicates import (
     make_arm_at_home,
     make_holding_object,
     make_placed_count,
+)
+from vector_os_nano.playground.verify.base_predicates import (
+    make_at_position,
+    make_facing,
+    make_visited,
 )
 from vector_os_nano.playground.verify.scene_predicates import (
     make_detect_objects,
@@ -50,8 +59,25 @@ class PlaygroundWorld:
     def scenario(self) -> Scenario:
         return self._scenario
 
+    @property
+    def embodiment(self) -> str:
+        """The hardware family this scenario targets (e.g. ``"arm"``/``"go2"``)."""
+        return self._scenario.embodiment
+
+    def has_base(self) -> bool:
+        """True for a mobile-base scenario (Go2), False for an arm scenario.
+
+        Reported from the scenario's embodiment so callers/tests can inspect the
+        world's intent. NOTE: the engine still gates the base primitives in the
+        decompose vocab from the *connected agent* (``agent._base``), not from
+        the world — keeping the mechanism world-agnostic. A go2 scenario backed
+        by an agent that has a ``_base`` therefore puts walk_forward/turn/
+        scan_360 + the go2 skills in vocab and enables base verify predicates.
+        """
+        return self._scenario.embodiment == "go2"
+
     def is_robot(self) -> bool:
-        # An arm scenario drives (simulated) robot hardware.
+        # Both arm and base scenarios drive (simulated) robot hardware.
         return True
 
     def persona_blocks(self) -> tuple[str, str]:
@@ -68,11 +94,23 @@ class PlaygroundWorld:
         """Return the playground's deterministic sim-oracle verify predicates.
 
         The engine (INC2) merges these on top of its dev/robot bindings and the
-        empty perception stubs, so ``detect_objects`` / ``describe_scene`` here
-        REPLACE the stubs while the playground world is active. All predicates
-        are bound to *agent* + the scenario's known objects and fail safe when
-        the arm is unavailable.
+        empty perception stubs additively. The predicate set is selected by the
+        scenario's embodiment:
+
+        - ARM scenarios (tabletop) contribute arm/scene predicates over the
+          connected arm + the scenario's known objects; ``detect_objects`` /
+          ``describe_scene`` REPLACE the engine's empty perception stubs.
+        - the GO2 scenario contributes base predicates (at_position / facing /
+          visited) over the connected base + the scenario's named rooms.
+
+        All predicates are bound to *agent* and fail safe when the hardware is
+        unavailable (never raise into the GoalVerifier sandbox).
         """
+        if self.has_base():
+            return self._base_verify_namespace(agent)
+        return self._arm_verify_namespace(agent)
+
+    def _arm_verify_namespace(self, agent: Any) -> dict[str, Any]:
         objects = self._scenario.object_names
         return {
             "detect_objects": make_detect_objects(agent, objects),
@@ -85,6 +123,17 @@ class PlaygroundWorld:
             "placed_count": make_placed_count(
                 agent, default_region=self._scenario.place_region
             ),
+        }
+
+    def _base_verify_namespace(self, agent: Any) -> dict[str, Any]:
+        # The scenario's named rooms become the source of truth for visited(),
+        # so a navigation sub-goal verifies "reached <room>" by scene name
+        # without hand-passing raw coordinates.
+        rooms = self._scenario.rooms
+        return {
+            "at_position": make_at_position(agent),
+            "facing": make_facing(agent),
+            "visited": make_visited(agent, rooms),
         }
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:

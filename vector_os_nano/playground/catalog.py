@@ -54,10 +54,43 @@ TABLETOP_TRAY = Scenario(
     place_region=_TRAY_REGION,
 )
 
+# ---------------------------------------------------------------------------
+# Go2 quadruped — a second embodiment (E-1). Proves the playground/seam
+# generalizes beyond the arm: a mobile-base scene whose verify predicates read
+# base ground truth (position / heading) instead of arm joints.
+# ---------------------------------------------------------------------------
+
+# The go2 room scene from the installed hardware package (never a machine path).
+# QUIRK: loading the go2 sim rewrites scene_room_piper.xml's absolute asset paths;
+# this scenario references scene_room.xml (the non-piper variant) but tests must
+# still "git checkout" scene_room_piper.xml if any go2 load touches it.
+_GO2_SIM_DIR = Path(__file__).resolve().parent.parent / "hardware" / "sim" / "mjcf" / "go2"
+
+# Named rooms as axis-aligned (x_min, y_min, x_max, y_max) boxes in the world
+# frame. These are the scenario-owned contract the base ``visited`` predicate
+# reads against — a navigation sub-goal verifies "reached <room>" by name. The
+# go2 spawns near the origin; the rooms partition the room scene into named
+# quadrants so navigation goals can be grounded without raw coordinates.
+_GO2_ROOMS: dict[str, tuple[float, float, float, float]] = {
+    "start": (-1.0, -1.0, 1.0, 1.0),
+    "kitchen": (1.0, -1.0, 4.0, 1.0),
+    "hallway": (-1.0, 1.0, 1.0, 4.0),
+    "bedroom": (1.0, 1.0, 4.0, 4.0),
+}
+
+GO2_ROOM = Scenario(
+    id="go2_room",
+    embodiment="go2",
+    scene_xml=str(_GO2_SIM_DIR / "scene_room.xml"),
+    task_hint="Navigate the room with the Go2 quadruped (walk, turn, explore).",
+    rooms=_GO2_ROOMS,
+)
+
 # id -> Scenario. Additive: new preset scenes append here.
 SCENARIOS: dict[str, Scenario] = {
     TABLETOP.id: TABLETOP,
     TABLETOP_TRAY.id: TABLETOP_TRAY,
+    GO2_ROOM.id: GO2_ROOM,
 }
 
 

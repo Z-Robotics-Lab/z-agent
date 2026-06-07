@@ -150,7 +150,7 @@ intent gate (should_use_vgg)                  [Stage 5 TODO: drop keyword gate]
           |                                                          |
           v                                                          |
         GoalDecompose (LLM; vocab single-sourced from registry)     |
-          -> GoalTree (frozen DAG) [Stage 4 TODO: + foreach/if]     |
+          -> GoalTree (frozen DAG; foreach SHIPPED, until/if TODO)  |
           |                                                          |
           v   for each sub-goal in topological order:               |
         StrategySelector -> executor_type (world-scoped, fail-loud) |
@@ -263,7 +263,8 @@ relative to `vector_os_nano/`.
 - `template_library.py` — compiled reusable plan templates; backs the no-LLM fast path.
 - `experience_compiler.py` — turns successful verified traces into templates (no
   fine-tuning).
-- `types.py` — frozen plan structures (`GoalTree`, `SubGoal`, `StepRecord`).
+- `types.py` — frozen plan structures (`GoalTree`, `SubGoal`, `StepRecord`, `ForEachSpec`);
+  `SubGoal.foreach` carries a control-flow loop the executor expands at runtime.
 - `observation.py` — the verified-loop observation surface: a pure JSON-safe export view over the
   frozen types (`step_view` / `run_snapshot`) + plain-text renderers; what a front-end renders.
 
@@ -275,10 +276,12 @@ relative to `vector_os_nano/`.
   named `resolve_world_named`); worlds self-register via lazy factories (the seam-as-contract entry).
 
 **Playground track** (`playground/` — a separate, parallel-developed world track; ADR-008)
-- `world.py` / `scenario.py` / `catalog.py` — `PlaygroundWorld` + frozen `Scenario` + the preset
-  catalog (`tabletop`, `tabletop_tray`); registers into the kernel `WorldRegistry` via a lazy hook.
-- `verify/` — the deterministic sim-oracle verify predicates (`holding_object` / `arm_at_home` /
-  `placed_count` / `detect_objects` / `describe_scene`) the world OWNS and contributes across the seam.
+- `world.py` / `scenario.py` / `catalog.py` — embodiment-aware `PlaygroundWorld` + frozen `Scenario`
+  + the preset catalog (arm: `tabletop`, `tabletop_tray`; quadruped: `go2_room`); registers into the
+  kernel `WorldRegistry` via a lazy hook.
+- `verify/` — the deterministic sim-oracle verify predicates the world OWNS and contributes across the
+  seam: arm (`holding_object`/`arm_at_home`/`placed_count`/`detect_objects`/`describe_scene`) and Go2
+  base (`at_position`/`facing`/`visited`).
 
 **Tools, routing, prompt, session, permissions**
 - `vcli/tools/` — general tools (file/bash/glob/grep/web) + world-contributed tool wrappers.

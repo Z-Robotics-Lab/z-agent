@@ -12,6 +12,36 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class ForEachSpec:
+    """Control-flow FOREACH spec attached to a SubGoal (Stage 4, S4-1).
+
+    Declares that a sub-goal's *body* is instantiated once per item of a list
+    produced by an EARLIER step. The list is reached through the SAME pure
+    ``${step.path}`` Blackboard convention every other step reference uses — e.g.
+    ``detect_all.objects`` resolves to the detect step's ``result_data["objects"]``
+    list. Each iteration binds the item to ``var`` (default ``"item"``); body
+    sub-goal templates reference the item's fields with that var name (e.g.
+    ``${obj.name}`` in strategy_params / verify), which the per-item binder
+    resolves by PURE dict/list traversal — never string eval/format.
+
+    S4-1 only models + parses + validates this spec; expansion at execution time
+    is deferred to S4-2. All fields are frozen so the spec is safe to share.
+    """
+
+    # Producing step name (the step whose result_data holds the iterable).
+    source_step: str
+    # Dotted path INTO that step's result_data reaching the list to iterate, e.g.
+    # ``"objects"`` or ``"objects.detections"``. Resolved by the Blackboard's pure
+    # dict/list traversal; never evaluated.
+    source_path: str
+    # Iteration variable name bound to each item (referenced as ``${<var>.<field>}``
+    # inside body templates). Defaults to ``"item"``.
+    var: str = "item"
+    # Body templates instantiated once per item. Empty tuple is a no-op loop.
+    body: tuple["SubGoal", ...] = ()
+
+
+@dataclass(frozen=True)
 class SubGoal:
     """A single verifiable step in a goal decomposition tree."""
 
@@ -23,6 +53,13 @@ class SubGoal:
     strategy: str = ""
     strategy_params: dict = field(default_factory=dict)
     fail_action: str = ""
+    # Stage 4 (S4-1) control flow: an optional FOREACH spec. When present, this
+    # sub-goal is a loop node whose ``body`` is instantiated once per item of the
+    # list produced by ``foreach.source_step``. None (the default) means a plain
+    # leaf step — preserving every existing positional/keyword constructor and
+    # keeping no-foreach plans byte-unaffected. Expansion is S4-2; S4-1 only
+    # models + parses + validates the spec. Field is LAST + defaulted (frozen-safe).
+    foreach: "ForEachSpec | None" = None
 
 
 @dataclass(frozen=True)

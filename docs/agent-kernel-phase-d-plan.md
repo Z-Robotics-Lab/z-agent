@@ -1,6 +1,6 @@
 # Verified Agent Kernel — Phase D Plan (closed-loop controller: grounding, control-flow, unification)
 
-- Status: **Stage 4 (control-flow IR) — in progress (long-line workflow).** Playground v1 + the seam-contract prelude shipped (registry, world-owned verify-ns merge, observation surface, tabletop NL-verified loop); arm grounding (Stage 3) done via the deterministic sim oracle. 719 tests green. See ADR-008.
+- Status: **Stage 4 (control-flow IR) — SHIPPED (foreach expand + obs-replan hook); Go2 2nd embodiment shipped.** Playground v1 + seam-contract prelude shipped earlier. Next: finish the live foreach path (decomposer prompt + real detect producer) + harden, then Stage 5. 777 tests green. See ADR-008.
 - Date: 2026-06-05; updated 2026-06-06
 - Branch: `feat/verified-agent-kernel`
 - Related: [ARCHITECTURE.md](ARCHITECTURE.md), [agent-kernel-STATUS.md](agent-kernel-STATUS.md),
