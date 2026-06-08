@@ -216,6 +216,23 @@ def build_system_prompt(
         }
     )
 
+    # -- Static (cacheable) unified personality ------------------------------
+    # Vector's identity/voice — ONE layer across every world (dev / arm / go2).
+    # The world persona above supplies the domain ROLE + tools; this supplies the
+    # consistent VOICE. Kernel-owned and world-agnostic (it carries no embodiment-
+    # specific content), loaded from ~/.vector/personality.md with a built-in
+    # default. Sits below the system/developer prompt and above project context,
+    # per the layered composition. (Cache note: lives below the world persona, so a
+    # world switch re-sends it; it is small. Move it above the persona blocks if a
+    # cross-world-stable cache prefix ever matters more than this ordering.)
+    blocks.append(
+        {
+            "type": "text",
+            "text": _load_personality(),
+            "cache_control": {"type": "ephemeral"},
+        }
+    )
+
     # -- Dynamic: hardware state ---------------------------------------------
     if agent is not None:
         hw_text = _format_hardware(agent)
@@ -345,17 +362,27 @@ def _format_world(agent: Any) -> str:
     return "\n".join(lines)
 
 
+# Project-context filenames recognized in the working directory, in precedence
+# order. VECTOR.md is Vector's own; AGENTS.md is the cross-tool standard; CLAUDE.md
+# is honored for repos already carrying one. The FIRST one found in cwd is used.
+_PROJECT_CONTEXT_FILES: tuple[str, ...] = ("VECTOR.md", "AGENTS.md", "CLAUDE.md")
+
+
 def _load_vector_md(cwd: Path | None) -> str:
-    """Load VECTOR.md from cwd and/or ~/.vector/VECTOR.md."""
+    """Load project context from cwd (VECTOR.md / AGENTS.md / CLAUDE.md) + ~/.vector/VECTOR.md."""
     parts: list[str] = []
 
     if cwd is not None:
-        local_path = cwd / "VECTOR.md"
-        if local_path.is_file():
-            try:
-                parts.append(local_path.read_text(encoding="utf-8").strip())
-            except OSError:
-                pass
+        for fname in _PROJECT_CONTEXT_FILES:
+            local_path = cwd / fname
+            if local_path.is_file():
+                try:
+                    text = local_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    continue
+                if text:
+                    parts.append(text)
+                    break  # first project-context file found wins
 
     home_path = Path.home() / ".vector" / "VECTOR.md"
     if home_path.is_file():
@@ -367,3 +394,39 @@ def _load_vector_md(cwd: Path | None) -> str:
             pass
 
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Unified personality (kernel-owned, world-agnostic)
+# ---------------------------------------------------------------------------
+
+# The SAME Vector identity across every world. The world persona supplies the
+# domain ROLE; this supplies the VOICE. Must stay embodiment-agnostic — anything
+# robot- or dev-specific belongs to the world persona, not here.
+DEFAULT_PERSONALITY = """\
+[Personality]
+You are Vector — the same agent whether you are driving a robot arm, a quadruped, or writing code.
+Voice: direct, grounded, and calm. State the short plan, act, then report what you actually verified.
+Principles:
+- Verify before you claim something is done; report the evidence, not a vibe.
+- When a step fails, say so plainly with the observation and re-plan — never paper over it.
+- Ask before irreversible or outward-facing actions; act decisively on reversible ones.
+- One identity across every embodiment and world; only the body and the task change."""
+
+
+def _load_personality() -> str:
+    """Return the unified Vector personality block (kernel-owned, world-agnostic).
+
+    Primary source is ``~/.vector/personality.md`` (user-authored); falls back to
+    ``DEFAULT_PERSONALITY``. The SAME identity is used in every world, so this must
+    not carry embodiment-specific content — that is the world persona's job.
+    """
+    path = Path.home() / ".vector" / "personality.md"
+    if path.is_file():
+        try:
+            content = path.read_text(encoding="utf-8").strip()
+            if content:
+                return content
+        except OSError:
+            pass
+    return DEFAULT_PERSONALITY.strip()
