@@ -348,6 +348,15 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   detect + 6 foreach picks ALL PASS, trace success=True. Deterministic regression test
   (`tests/vcli/test_detect_foreach_contract.py`); 1026 green. STILL OPEN under R2-7: observation-driven
   replan robustness, embodiment asymmetry, richer skills/evals.
+  **[/loop iter 5: manipulation chains validated + place verify grounded].** Executed more multi-step
+  chains end-to-end live (real deepseek, headless): 把香蕉放到左边 (detect->pick(hold)->place), 拿起香蕉递给我
+  (pick->handover), 把所有东西都放到左边 (detect->foreach(pick+place ×6)) — ALL succeed, every step PASS. No
+  functional bug — the R2-2/R2-3/R2-7 fixes made manipulation robust across task shapes. BUT found a verify-
+  moat weakness: `place` declared `verify_hint = "placed_count() >= 1"`, which is trivially true in a
+  region-less robot world (all resting objects count) — it verified nothing. Fixed to `not holding_object()`
+  (grounded: a place RELEASES the held object; empirically holding flips True->False across pick(hold)->place),
+  which discriminates a real place from a failed one. New pick->place regression test
+  (`tests/vcli/test_pick_place_chain.py`); 1027 green.
 
 ## Autonomous /loop prompt (the standing mission for owner-away iterations)
 
