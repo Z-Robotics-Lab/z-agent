@@ -166,6 +166,12 @@ class DetectSkill:
 
             summary = {
                 "object_id": obj_id,
+                # Expose BOTH "name" and "label" (same value): a downstream foreach
+                # binds a per-item field (e.g. "${item.name}") into a skill param, and
+                # the decompose example / the playground detect producer use "name"
+                # while this skill historically used "label". Carrying both keeps the
+                # producer->foreach->skill contract robust to whichever the planner emits.
+                "name": det.label,
                 "label": det.label,
                 "confidence": round(det.confidence, 4),
                 "has_3d": has_3d,

@@ -338,9 +338,16 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
 - **R2-6 — stderr / ROS2-proxy ERROR bleed into the rich panels.** `ERROR:...go2_ros2_proxy` / `sim_tool`
   lines interleave with the live boxes. Step-4 quieting covered skills/perception/hardware but ERROR-level
   ROS2-proxy noise still bleeds; fix stderr handling around the go2 launch + quiet the proxy in sim.
-- **R2-7 — capability (not a bug): generalization + longer chains.** Reduce embodiment asymmetry; harden
-  multi-step planning + observation-driven replan; the foreach grasp fallback emitted "grab_one -> Cannot
-  locate target object" after the timeout — inspect the replan path.
+- **R2-7 — capability: generalization + longer chains. [PARTIAL — /loop iter 4: grab-everything long chain
+  now works end-to-end].** Found + fixed a producer/consumer contract bug that broke the grab-everything long
+  chain: a "grab everything" plan decomposes to detect -> foreach(pick ${item.name}), but the robot-world
+  `DetectSkill` produced objects keyed by `label` only (the foreach example + the playground producer use
+  `name`), so `${item.name}` didn't resolve -> pick "Cannot locate target object" on the first item ->
+  whole chain failed. Fix: DetectSkill now exposes BOTH `name` and `label` (robust to whichever field the
+  planner emits). Validated live (real deepseek-v4-flash, headless): "把所有东西抓一遍" executes end-to-end —
+  detect + 6 foreach picks ALL PASS, trace success=True. Deterministic regression test
+  (`tests/vcli/test_detect_foreach_contract.py`); 1026 green. STILL OPEN under R2-7: observation-driven
+  replan robustness, embodiment asymmetry, richer skills/evals.
 
 ## Autonomous /loop prompt (the standing mission for owner-away iterations)
 
