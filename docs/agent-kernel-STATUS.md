@@ -171,22 +171,53 @@ controller; drop the keyword intent gate) per that plan.
   [architecture-decisions/ADR-008-playground-parallel-track.md](architecture-decisions/ADR-008-playground-parallel-track.md)
 - Superseded/historical docs (phase-b plan, vgg-design-spec, pick_top_down, sysnav, agent-kernel.md) live in git history — `git log --all -- <path>`. No working-tree archive.
 
+## Known live bugs — "grab a thing" fails (found 2026-06-08, real cli + deepseek + MuJoCo)
+
+CONFIRMED WORKING: chat answers cleanly; the MuJoCo viewer now opens (mjpython re-exec fixed);
+NL routes to real arm skills (go_home/detect/pick, no 'unmatched'). BUT "抓一个东西"/"抓香蕉"
+fails end-to-end, and the CLI segfaulted. Priorities for the next pass:
+
+- **P0 — SEGFAULT.** `zsh: segmentation fault vector-cli` mid-run. Almost certainly MuJoCo
+  thread-safety: the passive viewer runs on the main thread (mjpython) while VGG executes skills
+  on a BACKGROUND thread (`vgg_execute_async`) that reads/mutates `mjData` — MuJoCo is not
+  thread-safe. Fix first (it crashes): marshal mujoco access onto the viewer thread / lock /
+  step+render on one thread.
+- **P0 — PERCEPTION/GROUNDING (why grab fails).** detect finds nothing ("No detections found",
+  "Perception failed, falling back to world model", "Cannot locate target object") even though
+  the MuJoCo scene HAS the objects. The robot arm world's detect uses the VLM path, which fails in
+  sim. The PLAYGROUND already solved this with the DETERMINISTIC sim-oracle (`get_object_positions`).
+  FIX = bring the playground's sim-oracle grounding into the plain robot arm world (this is the
+  earlier design choice (a), now clearly correct — VLM is the wrong tool in sim).
+- **P1 — VERIFY-SATISFIABILITY.** Every step fails verify even when the action physically succeeds:
+  go_home fails `certainty()` (engine stub -> 0.0), detect fails `len(detect_objects())>0` (stub ->
+  []). `engine._build_verifier_namespace` falls through to stubs in the plain arm world. Same root
+  as P0-grounding.
+- **P1 — VERIFY-FN CHOICE.** The decompose vocab picks `certainty()` for `home` (meaningless);
+  should pick `arm_at_home()`/`holding_object()` etc. Wire the playground arm predicates as the
+  robot-world verify namespace and teach the vocab to pick the right per-skill predicate.
+- **P1 — LOG SPAM (skills).** The WF1 quieting only covered `vcli.cognitive`; `skills.pick`/
+  `.calibration` still flood the REPL. Broaden to the `vector_os_nano` skill/perception loggers.
+- **P2 — HARDCODED PATH.** `skills/calibration.py` warns about
+  `/Users/yusenthebot/Desktop/vector_ws/config/workspace_calibration.yaml` (another machine's path).
+  Give a sane default / skip calibration in sim (identity is fine for the sim-oracle).
+
+UNIFYING FIX: bring the playground's deterministic sim-oracle grounding (ADR-008 C1) into the plain
+robot arm world — closes P0-perception + P1-verify + P1-verify-fn together. P0-segfault is separate
+(thread-safety) and goes first. Fixed-this-session (committed, verified): unmatched-retry, log spam
+(vcli.cognitive only), meta-routing, decompose JSON robustness, replan validation, mjpython viewer.
+
 ## Next-session kickoff prompt (paste this to start)
 
-> 继续 vector-os-nano(分支 `feat/verified-agent-kernel`;只动这个项目,不碰 UniLab go2arm-grasp)。
-> 这个 session 的目标:**完全跟上进度、彻底理解项目**,然后等我给方向再动手。
+> 继续 vector-os-nano(分支 `feat/verified-agent-kernel`;只动这个项目,不碰 UniLab)。当前模型
+> deepseek-v4-flash(config 已设)。上个 session 修了一批 live bug 并提交(unmatched/日志/meta 路由/
+> decompose JSON/replan 校验/mjpython viewer),但**真机最简单的"抓一个东西"还是做不到**,而且 CLI 段错误。
 >
-> 按顺序读,边读边建立全貌:
-> 1. `docs/agent-kernel-STATUS.md` — 当前在哪、已 ship 什么、下一步(resume 锚点)。
-> 2. `docs/ARCHITECTURE.md` — 北极星与架构思想(NL 控制一切;闭环控制器;kernel/world seam)。
-> 3. `docs/agent-kernel-phase-d-plan.md` — 下一阶段施工图(Stage 3 grounding 开始;0-2 已 ship)。
-> 4. 需要时翻 `docs/agent-kernel-phase-c-plan.md`、`docs/cli-tool-system.md`、`docs/skill-protocol.md`。
+> 先读:`docs/agent-kernel-STATUS.md`(看"Known live bugs"那节)→ `docs/ARCHITECTURE.md` → 记忆
+> `vector-os-nano-live-hardening`。然后按优先级解决,**每步用真 cli + deepseek + MuJoCo 窗口 live 验证、
+> 多重审核、绿了再提交**:
+> 1. **P0 段错误**:`vgg_execute_async` 后台线程访问 mjData + 主线程 viewer → MuJoCo 非线程安全 → segfault。先定位再修(把 mujoco 访问收敛到一个线程 / 加锁)。
+> 2. **P0 抓取失败的根因**:机器人臂世界的 detect 走 VLM,在 sim 里检测不到场景里明明存在的物体。把 playground 已验证的**确定性 sim-oracle**(`get_object_positions`)接进机器人臂世界的 detect + verify 命名空间(ADR-008 C1 的做法推广到 robot world)。
+> 3. **P1 verify 接地 + 选对谓词**(home→arm_at_home、pick→holding_object)、**P1 技能层日志降噪**、**P2 calibration 硬编码路径**。
+> 4. 目标:`打开so101的sim` → `抓香蕉` 能**端到端成功**(每步 verify 真过),窗口里看得到机械臂抓起香蕉,控制台干净,不崩。
 >
-> 读完用**你自己的话**跟我确认(展示理解,别复述目录):
-> - 一句话:vector-os-nano 是什么、北极星是什么。
-> - 现在能做什么 / 不能做什么(单技能 NL 控制 ✓;长链规划 ✗,根因是什么)。
-> - Stage 0-2 分别解决了什么、还剩 Stage 3-5 解决什么。
-> - 工作树里哪些改动未提交、测试状态(`git status` + `pytest tests/vcli`)。
-> - 你建议 Stage 3 从哪个子任务开始,为什么。
->
-> 先别写代码、别开 workflow。等我确认你的理解与方向后再开始。
+> 先复现+诊断 P0 段错误和抓取失败,跟我确认根因和方案,再动手。
