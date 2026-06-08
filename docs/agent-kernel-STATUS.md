@@ -303,10 +303,14 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   pick/place/home/scan/wave/handover + go2 walk/turn/patrol/explore all declare durations; `_FOREACH_EXAMPLE`
   body 15→45. 26 new tests (both floored-pass + control-timeout); 995 green. OWNER WINDOW CHECK: confirm the
   real-time grasp now completes without a false timeout.
-- **R2-3 — "抓个东西" (singular, unbound) expands to a foreach grabbing EVERY object.** A singular "grab
-  something" should grab ONE (e.g. the nearest), not iterate all. Teach the decompose to distinguish singular
-  vs "all/每个" (LLM-side intent), and/or the unbound grab -> single nearest. (Earlier idea: unbound -> nearest
-  in pick, language-neutral.)
+- **R2-3 — "抓个东西" (singular) grabbed EVERY object via foreach. [FIXED — /loop iter 2].** Two parts:
+  (A) LLM intent — decomposer guidance teaches singular ("a/one/something/一个/个/随便") -> a SINGLE action step
+  (no foreach), plural ("all/every/每个/所有/一遍") -> foreach over the detected list (prompt text = LLM layer,
+  world-agnostic). (B) language-neutral skill fallback — an UNBOUND pick (object_label/object/query/target/
+  object_id all empty) grabs the NEAREST object (min xy-dist), gated on a sim arm (`hasattr get_object_positions`);
+  real hardware unchanged; NO keyword tables. Validated live (real deepseek-v4-flash): 抓个东西 -> 1 pick step,
+  empty params -> nearest; 抓香蕉 -> detect+pick(object_label=香蕉); 把所有东西抓一遍 -> foreach (regressions OK).
+  9 + 3 new tests; 1007 green.
 - **R2-4 — Ctrl-C does not exit cleanly under mjpython + sync GUI exec.** Owner had to ^C^C then type `quit`.
   The synchronous GUI exec path (Step 1) + permission prompt swallow KeyboardInterrupt. Make ^C abort the
   running task and return to the prompt; a second ^C / `quit` exits cleanly.

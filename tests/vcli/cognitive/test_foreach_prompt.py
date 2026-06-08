@@ -202,6 +202,58 @@ def test_mock_foreach_plan_still_validates_after_prompt_change() -> None:
 
 
 # ---------------------------------------------------------------------------
+# R2-3 — Singular-vs-ALL guidance is present and foreach docs are intact.
+# ---------------------------------------------------------------------------
+
+
+def test_singular_guidance_in_prompt() -> None:
+    """R2-3 Part A: the rendered prompt teaches singular-vs-ALL intent.
+
+    The guidance must appear in the text the LLM reads (the system prompt), so
+    a singular-grab task is NOT mapped to a foreach loop.  We check for key
+    phrases that are meaningful to the LLM but do NOT constitute a keyword
+    table in code — the text lives entirely inside a prompt string (the LLM
+    layer), not in any branching logic.
+    """
+    text = _robot_decomposer()._build_system_prompt()[0]["text"]
+
+    # The singular-vs-ALL guidance block must be present.
+    assert "Singular vs. ALL" in text or "SINGULAR" in text.upper(), (
+        "singular-vs-ALL guidance missing from prompt"
+    )
+    # The guidance must distinguish ALL/EACH from a single unspecified item.
+    assert "foreach" in text                    # loop construct still taught
+    assert "NO foreach" in text or "no foreach" in text.lower(), (
+        "prompt must say NO foreach for singular intent"
+    )
+    # Object target left blank for singular — skill resolves nearest.
+    assert "blank" in text.lower() or "BLANK" in text, (
+        "prompt must instruct leaving target blank for singular intent"
+    )
+
+
+def test_singular_guidance_present_on_arm_decomposer() -> None:
+    """The singular guidance is world-neutral — it survives an arm-only world."""
+    text = _arm_decomposer()._build_system_prompt()[0]["text"]
+    assert "NO foreach" in text or "no foreach" in text.lower(), (
+        "singular guidance must be present on arm decomposer too"
+    )
+    # Foreach docs must still be there (guidance adds to, not replaces, foreach).
+    assert "source_step" in text
+    assert "${item.name}" in text
+
+
+def test_foreach_docs_still_intact_after_singular_guidance() -> None:
+    """Adding singular guidance must not disturb the existing foreach docs."""
+    text = _robot_decomposer()._build_system_prompt()[0]["text"]
+    # All original foreach fields must remain.
+    for field in ("source_step", "source_path", "var", "body"):
+        assert field in text, f"foreach field {field!r} missing after singular guidance"
+    assert "${item.name}" in text
+    assert "## Loop Example" in text
+
+
+# ---------------------------------------------------------------------------
 # Optional live-LLM smoke (deselected from the canonical gate).
 # ---------------------------------------------------------------------------
 

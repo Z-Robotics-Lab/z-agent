@@ -463,6 +463,34 @@ class PickSkill:
     # Target position resolution
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _nearest_object_name(context: SkillContext) -> Optional[str]:
+        """Return the name of the nearest free-body object in the sim scene.
+
+        Used ONLY when NO target is bound (object_label/object/query/target/
+        object_id are all absent/empty).  Keyed on EMPTY binding — zero language
+        matching — so it is safe for any language or caller.
+
+        Requires context.arm to expose get_object_positions() (sim oracle only;
+        real hardware won't have it — caller guards with hasattr in the caller).
+
+        Returns the object name closest to the base origin by sqrt(x²+y²), or
+        None when no free objects are present.
+        """
+        arm = context.arm  # property: returns first arm or legacy field
+        if arm is None:
+            return None
+        try:
+            positions: dict = arm.get_object_positions()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[PICK] _nearest_object_name: get_object_positions failed: %s", exc)
+            return None
+        if not positions:
+            return None
+        # Pick nearest by XY distance from base origin (language-neutral: structure only).
+        nearest = min(positions.items(), key=lambda kv: kv[1][0] ** 2 + kv[1][1] ** 2)
+        return nearest[0]
+
     def _get_target_base_pos(
         self,
         params: dict,
@@ -471,6 +499,7 @@ class PickSkill:
         """Resolve target object position in base frame.
 
         Resolution order (matches the code below):
+        0. No target bound + sim oracle available → nearest object (R2-3).
         1. context.perception → live re-detect + density cluster (preferred when
            a perception backend is present; the object may have moved).
         2. world_model by object_id → get_object().
@@ -482,6 +511,25 @@ class PickSkill:
         Returns:
             (3,) numpy array in base frame metres, or None if unresolvable.
         """
+        # R2-3: no target bound → resolve to nearest scene object via sim oracle.
+        # "No target bound" means all standard target params are absent/empty —
+        # keyed entirely on EMPTY binding, zero language matching.
+        _no_target = not any([
+            params.get("object_label"),
+            params.get("object"),
+            params.get("query"),
+            params.get("target"),
+            params.get("object_id"),
+        ])
+        if _no_target and hasattr(context.arm, "get_object_positions"):
+            nearest = self._nearest_object_name(context)
+            if nearest is not None:
+                logger.info("[PICK] no target bound -> nearest object %r", nearest)
+                # Inject the resolved name so the normal perception/world-model
+                # path runs unchanged — behaviour when a target IS bound is untouched.
+                params = dict(params)  # shallow copy; never mutate the caller's dict
+                params["object_label"] = nearest
+
         # ALWAYS re-detect with perception if available (object may have moved).
         # Honour whatever reasonable param name the planner bound the target to
         # (language-neutral param-name fallbacks — no keyword matching).

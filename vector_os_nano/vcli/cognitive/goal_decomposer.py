@@ -193,7 +193,16 @@ Rules:
   - Inside body templates, reference the current item's fields as a string
     "${<var>.<field>}" (e.g. "${item.name}") in strategy_params or verify. This
     is resolved per item by safe path lookup — never code, never eval.
-  - body templates use the SAME strategies/verify functions as top-level steps."""
+  - body templates use the SAME strategies/verify functions as top-level steps.
+
+## Singular vs. ALL intent — CRITICAL
+Use a foreach loop ONLY when the task explicitly means EVERY / ALL items
+(keywords like "all", "every", "each", "所有", "每个", "全部", "一个个", "一遍").
+When the task asks to act on ONE / ANY single unspecified item
+(e.g. "a thing", "one object", "something", "一个", "个", "随便", "某个"),
+use a SINGLE action step — NO foreach — and leave the object target param
+BLANK (empty string or omit it entirely); the skill will resolve the nearest
+object autonomously. Never iterate over all objects for a singular request."""
 
     # Example decomposition
     _EXAMPLE = """\
