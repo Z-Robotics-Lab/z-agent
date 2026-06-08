@@ -100,6 +100,16 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   "我希望你去打开终端" -> answer-only `VGG [PASS] answer`. 938 green. Followups: remove dead
   `goal_decomposer._parse_and_validate`; meta guard is keyword-based (fails safe).
 
+- **Live-hardening III (this commit)** — the MuJoCo viewer never opened ("mjpython not found —
+  arm sim will run headless") even though mjpython IS installed at `.venv-nano/bin/mjpython`. Root
+  cause: BOTH re-exec paths computed the venv path as `parents[N]`-from-`__file__`, off by one, so
+  they looked in `$HOME` and never found mjpython. Fixed with a shared `locate_mjpython()` helper
+  (vcli/tools/sim_tool.py) that derives mjpython from `sys.executable`'s dir (the venv bin/),
+  depth-independent and NOT `resolve()`-d (resolving follows the venv symlink to the base
+  interpreter's bin, where mjpython is absent). Both `cli._maybe_reexec_under_mjpython` and
+  `SimStartTool._reexec_under_mjpython_with_sim` use it. 5 regression tests. Human visual check:
+  `vector-cli --sim` (or NL "start the arm sim") in a real terminal should now open a MuJoCo window.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —

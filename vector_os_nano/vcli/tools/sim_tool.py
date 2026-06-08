@@ -30,6 +30,31 @@ from vector_os_nano.vcli.tools.base import (
 logger = logging.getLogger(__name__)
 
 
+def locate_mjpython(executable: str | None = None) -> str | None:
+    """Locate the ``mjpython`` launcher for the running environment.
+
+    mjpython lives next to the running interpreter (the venv's ``bin/``), so it is
+    derived from ``sys.executable`` — deliberately NOT ``resolve()``-d: resolving
+    follows the venv's ``python`` symlink to the base interpreter's ``bin``, where
+    mjpython is absent. Falls back to ``shutil.which``. Returns an absolute path
+    string, or ``None`` when mjpython is not installed.
+
+    (Regression guard: a prior off-by-one ``parents[N]``-from-``__file__`` path
+    resolved to ``$HOME``, so mjpython was never found and the viewer silently fell
+    back to headless. Deriving from ``sys.executable`` is depth-independent.)
+    """
+    import os
+    import shutil
+    import sys
+    from pathlib import Path
+
+    exe = executable or sys.executable
+    cand = Path(exe).parent / "mjpython"
+    if cand.is_file() and os.access(str(cand), os.X_OK):
+        return str(cand)
+    return shutil.which("mjpython")
+
+
 @tool(
     name="start_simulation",
     description="Start a robot simulation (arm or go2 quadruped) with isaac, mujoco, or gazebo backend. No restart needed.",
@@ -295,11 +320,7 @@ class SimStartTool:
         if _os.environ.get("VECTOR_REEXEC") == "1":
             return  # already re-exec'd; do not loop
 
-        venv_mjpy = _Path(__file__).resolve().parents[4] / ".venv-nano" / "bin" / "mjpython"
-        mjpython: str | None = (
-            str(venv_mjpy) if venv_mjpy.is_file() and _os.access(str(venv_mjpy), _os.X_OK)
-            else _shutil.which("mjpython")
-        )
+        mjpython: str | None = locate_mjpython()
         if not mjpython:
             print(
                 "Warning: mjpython not found — arm sim will run headless "

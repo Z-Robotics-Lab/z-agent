@@ -1178,13 +1178,12 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
     except Exception:
         pass  # mujoco not importable yet; proceed to re-exec attempt
 
-    # Locate mjpython
-    mjpython: str | None = None
-    venv_mjpy = Path(__file__).resolve().parents[3] / ".venv-nano" / "bin" / "mjpython"
-    if venv_mjpy.is_file() and os.access(str(venv_mjpy), os.X_OK):
-        mjpython = str(venv_mjpy)
-    else:
-        mjpython = shutil.which("mjpython")
+    # Locate mjpython next to the running interpreter (the venv's bin/) — robust
+    # regardless of where this file sits or how the CLI was launched. The old
+    # parents[N]-from-__file__ computation was off by one and resolved to $HOME, so
+    # mjpython was never found and the viewer silently fell back to headless.
+    from vector_os_nano.vcli.tools.sim_tool import locate_mjpython
+    mjpython: str | None = locate_mjpython()
 
     if not mjpython:
         print(
