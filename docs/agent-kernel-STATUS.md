@@ -98,14 +98,16 @@ Full plan: **[agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md)**. Rem
   `{"objects":[...],"count":N}` captured to the Blackboard; `DETECT_STRATEGY="detect_objects_skill"`)
   replaces the synthetic primitive; harness no longer double-records foreach child stats; a `foreach`
   missing `depends_on` auto-injects its `source_step`. (`until`/`if` deferred.)
-- **Stage 5 (unify the two planning paths)** — IN PROGRESS (additive, no routing cut-over yet):
-  **S5.0** observable `classify_intent` -> `IntentDecision` (shipped). **S5.1** ONE shared tool-dispatch
-  seam (`vcli/tool_execution.py`: `resolve_permission` + `execute_resolved_tool`) that BOTH `run_turn`
-  and the VGG `ToolDispatcher` call — parity-tested, byte-identical per caller. **S5.2** answer-only
-  GoalTree shape (a 0-action `verify="True"` plan for pure conversation; the evidence gate distinguishes
-  a legitimate answer-only step from an action step with no evidence — moat intact). S5.1/S5.2 are
-  dark-launched. **Next: S5.3** `run_turn_unified` (always decompose; answer-only for chat),
-  parity-tested + dark-launched, then **S5.4** cut over cli.py + MCP and drop the `should_use_vgg` gate.
+- **Stage 5 (unify the two planning paths)** — SHIPPED. **S5.0** observable `classify_intent` ->
+  `IntentDecision`. **S5.1** ONE shared tool-dispatch seam (`vcli/tool_execution.py`). **S5.2** answer-only
+  GoalTree shape (moat intact). **S5.3** `VectorEngine.run_turn_unified` — ONE closed-loop controller that
+  produces a GoalTree for EVERY shape (answer-only chat / 1-step skill / N-step DAG), runs the harness loop
+  through the shared dispatch seam, returns a `UnifiedTurnResult` (parity-tested). **S5.4** cut-over: both
+  frontends (`cli.py` REPL + `mcp/`) call `run_turn_unified`, so every turn — chat included — is a verified
+  trace; `should_use_vgg` is now a cheap routing HINT (incl. the conversational-question guard), not a fork
+  in front of verify; `VECTOR_LEGACY_TURN=1` restores the old ReAct fork for one release. Live-confirmed:
+  "hello"/"为什么这么慢" answer directly via an answer-only step (`VGG [PASS] answer`), real commands still
+  plan+verify. Reasoning-model TUI (`vcli/turn_status.py`) cleaned up.
 
 **Phase C.3** (real specialized model in the robot world) **is blocked behind Stage 3** — a
 grounded arm decomposer is the prerequisite. C.3/C.4 decisions remain open

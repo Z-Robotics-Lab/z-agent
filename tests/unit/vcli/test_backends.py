@@ -563,3 +563,90 @@ class TestCreateBackend:
             )
         call_kwargs = mock_openai.call_args
         assert call_kwargs.kwargs.get("base_url") == custom_url
+
+
+# ---------------------------------------------------------------------------
+# Streaming: reasoning-model deltas (on_reasoning heartbeat, never in text)
+# ---------------------------------------------------------------------------
+
+
+def _delta(content: Any = None, reasoning_content: Any = None) -> Any:
+    """Build a fake OpenAI streaming delta. No tool_calls; optional reasoning."""
+    d = MagicMock()
+    d.content = content
+    d.tool_calls = None
+    # getattr(delta, "reasoning_content", None) must return the value (or None).
+    d.reasoning_content = reasoning_content
+    d.reasoning = None
+    return d
+
+
+def _chunk(delta: Any, finish_reason: Any = None) -> Any:
+    choice = MagicMock()
+    choice.delta = delta
+    choice.finish_reason = finish_reason
+    chunk = MagicMock()
+    chunk.choices = [choice]
+    chunk.usage = None
+    return chunk
+
+
+class TestOpenAICompatReasoningStream:
+    """A reasoning model emits hidden reasoning deltas (delta.content is None),
+    then the real answer. on_reasoning fires for the think phase; on_text for the
+    answer; the reasoning trace never lands in the response text."""
+
+    def _backend(self) -> Any:
+        from vector_os_nano.vcli.backends.openai_compat import OpenAICompatBackend
+
+        with patch("openai.OpenAI"):
+            return OpenAICompatBackend(api_key="k", model="deepseek-v4-flash")
+
+    def test_reasoning_deltas_routed_to_on_reasoning_not_text(self) -> None:
+        backend = self._backend()
+        # Think phase: content is None, reasoning_content carries the trace.
+        # Answer phase: content carries the text, reasoning_content is None.
+        stream = [
+            _chunk(_delta(content=None, reasoning_content="let me ")),
+            _chunk(_delta(content=None, reasoning_content="think")),
+            _chunk(_delta(content="Hello")),
+            _chunk(_delta(content=" world"), finish_reason="stop"),
+        ]
+        backend._client = MagicMock()
+        backend._client.chat.completions.create.return_value = iter(stream)
+
+        seen_text: list[str] = []
+        seen_reasoning: list[str] = []
+        resp = backend.call(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            system=[],
+            max_tokens=128,
+            on_text=seen_text.append,
+            on_reasoning=seen_reasoning.append,
+        )
+
+        assert seen_reasoning == ["let me ", "think"]
+        assert seen_text == ["Hello", " world"]
+        # The hidden reasoning trace must NOT be in the final response text.
+        assert resp.text == "Hello world"
+        assert "think" not in resp.text
+
+    def test_no_on_reasoning_callback_is_safe(self) -> None:
+        # Backwards compatible: omitting on_reasoning must not error even when the
+        # provider emits reasoning deltas.
+        backend = self._backend()
+        stream = [
+            _chunk(_delta(content=None, reasoning_content="thinking")),
+            _chunk(_delta(content="done"), finish_reason="stop"),
+        ]
+        backend._client = MagicMock()
+        backend._client.chat.completions.create.return_value = iter(stream)
+
+        resp = backend.call(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            system=[],
+            max_tokens=128,
+        )
+        assert resp.text == "done"

@@ -155,6 +155,49 @@ class IntentDecision:
         return self.route == "vgg"
 
 
+@dataclass(frozen=True)
+class UnifiedTurnResult:
+    """Immutable result of ONE closed-loop turn (Stage 5, S5.3).
+
+    The single result type the unified controller (``run_turn_unified``) returns
+    for EVERY interaction shape — answer-only chat, a 1-step skill/tool plan, or an
+    N-step DAG. Unlike the two legacy surfaces (``TurnResult`` for ReAct,
+    ``ExecutionTrace`` for VGG), this carries BOTH the assistant text AND the
+    verified-loop trace so a front-end can render the answer and the per-step
+    PASS/FAIL the same way regardless of shape.
+
+    Fields:
+        text:    the assistant's answer text (the chat answer for an answer-only
+                 turn; the empty string or a status line for an action plan whose
+                 surface is the trace/snapshot).
+        trace:   the ``ExecutionTrace`` the harness produced — ALWAYS present
+                 (answer-only turns produce a 1-step trivially-verified trace, so
+                 verify is never bypassed; rule 5). ``None`` only when VGG is not
+                 available at all.
+        snapshot: the JSON-safe run-complete EXPORT VIEW for *trace* (goal tree +
+                 per-step views + replan notes + outcome), or an empty dict when
+                 there is no trace. Pure observation surface — never re-derived.
+        intent:  the observable :class:`IntentDecision` that shaped this turn (the
+                 cheap pre-classifier hint), surfaced for logs / inspection.
+        tool_calls: the tool calls executed while producing the answer (the
+                 answer-only path may legitimately call read-only tools through the
+                 ReAct loop before answering). Empty for a pure plan turn.
+        verified: convenience — True when *trace* succeeded AND passed the evidence
+                 gate (answer-only steps are evidence-backed by design; an action
+                 step with no deterministic predicate is NOT). Computed by the
+                 controller so a caller need not re-run the gate.
+        usage:   cumulative token usage across every backend round-trip in the turn.
+    """
+
+    text: str
+    trace: "ExecutionTrace | None"
+    snapshot: dict[str, Any]
+    intent: IntentDecision
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    verified: bool = False
+    usage: TokenUsage = field(default_factory=TokenUsage)
+
+
 # ---------------------------------------------------------------------------
 # Internal batching type
 # ---------------------------------------------------------------------------
@@ -1182,6 +1225,7 @@ class VectorEngine:
         on_tool_end: Callable[[str, ToolResult], None] | None = None,
         ask_permission: Callable[[str, dict[str, Any]], str] | None = None,
         app_state: dict[str, Any] | None = None,
+        on_reasoning: Callable[[str], None] | None = None,
     ) -> TurnResult:
         """Run one user turn through the tool_use agent loop.
 
@@ -1200,6 +1244,9 @@ class VectorEngine:
             on_tool_end:    Called after each tool execution with (tool_name, result).
             ask_permission: For "ask"-level permissions, called with (tool_name, params).
                             Returns "y" (allow once), "a" (always allow), or "n" (deny).
+            on_reasoning:   Called with each hidden reasoning chunk (reasoning models
+                            only). Used purely for a live "thinking…" heartbeat during
+                            the no-text gap; never part of the returned text.
 
         Returns:
             TurnResult with the final assistant text, all tool calls, stop reason, and
@@ -1252,13 +1299,18 @@ class VectorEngine:
                 tools = self._registry.to_anthropic_schemas()
 
             # Backend handles streaming, format conversion, and retry
-            response: LLMResponse = self._backend.call(
-                messages=messages,
-                tools=tools,
-                system=self._system_prompt,
-                max_tokens=self._max_tokens,
-                on_text=on_text,
-            )
+            # Only forward on_reasoning when a caller actually wants the heartbeat,
+            # so backends (and test mocks) that predate the kwarg keep working.
+            _call_kwargs: dict[str, Any] = {
+                "messages": messages,
+                "tools": tools,
+                "system": self._system_prompt,
+                "max_tokens": self._max_tokens,
+                "on_text": on_text,
+            }
+            if on_reasoning is not None:
+                _call_kwargs["on_reasoning"] = on_reasoning
+            response: LLMResponse = self._backend.call(**_call_kwargs)
 
             final_text = response.text
             stop_reason = response.stop_reason
@@ -1298,6 +1350,218 @@ class VectorEngine:
             stop_reason=stop_reason,
             usage=total_usage,
         )
+
+    # ------------------------------------------------------------------
+    # Stage 5 (S5.3) — unified closed-loop controller (DARK-LAUNCHED)
+    # ------------------------------------------------------------------
+
+    def run_turn_unified(
+        self,
+        user_message: str,
+        session: Session,
+        agent: Any = None,
+        on_text: Callable[[str], None] | None = None,
+        on_tool_start: Callable[[str, dict[str, Any]], None] | None = None,
+        on_tool_end: Callable[[str, ToolResult], None] | None = None,
+        ask_permission: Callable[[str, dict[str, Any]], str] | None = None,
+        app_state: dict[str, Any] | None = None,
+        on_reasoning: Callable[[str], None] | None = None,
+    ) -> UnifiedTurnResult:
+        """Run ONE user turn through the unified closed loop (Stage 5, S5.3).
+
+        DARK-LAUNCHED — nothing in ``cli.py`` / ``mcp/server.py`` calls this yet;
+        it is exercised by tests (and is reachable behind an opt-in only). The two
+        legacy paths (``run_turn`` and ``vgg_decompose``/``vgg_execute``) are left
+        intact and unmodified.
+
+        North star (rule 1): every interaction is a CLOSED loop. This method ALWAYS
+        produces a :class:`GoalTree` and runs the SAME harness loop (topo-execute
+        via the one tool-dispatch seam -> capture to Blackboard -> deterministic
+        verify -> replan on fail/divergence), then returns ONE
+        :class:`UnifiedTurnResult`:
+
+        - **Answer-only / conversation** (greeting, question, non-actionable chat):
+          ``classify_intent`` routes it to ``tool_use`` — the cheap pre-classifier
+          (the intent-router conversational guard) keeps trivial chat off full
+          decomposition. The ReAct ``run_turn`` loop produces the answer (preserving
+          streaming ``on_text``, the 7-layer permission gate + interactive ask, tool
+          hooks, and any read-only tool the chat turn legitimately calls), and its
+          text is wrapped into a 0-action ``answer_only`` GoalTree (the S5.2 shape)
+          that the harness then runs: verify is trivially true, and the evidence
+          gate recognises a legitimate evidence-free answer step. The moat is NOT
+          bypassed — an action step with no predicate still fails the gate.
+
+        - **Plan** (single skill / tool, or a complex N-step DAG): ``classify_intent``
+          routes it to ``vgg``; ``vgg_decompose`` builds the GoalTree (1-step fast
+          path or LLM decomposition) and the harness verifies + replans as today.
+
+        When VGG is unavailable, this degrades to a plain ``run_turn`` wrapped with a
+        ``None`` trace (no closed loop is possible without the cognitive layer) — the
+        text is still returned so the turn is never silently dropped.
+        """
+        intent = self.classify_intent(user_message)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "unified turn route=%s reason=%s complex=%s",
+                intent.route, intent.reason, intent.complex,
+            )
+
+        if intent.use_vgg:
+            return self._unified_plan_turn(user_message, intent)
+        return self._unified_answer_turn(
+            user_message, session, agent, on_text,
+            on_tool_start, on_tool_end, ask_permission, app_state, on_reasoning,
+            intent,
+        )
+
+    def _unified_answer_turn(
+        self,
+        user_message: str,
+        session: Session,
+        agent: Any,
+        on_text: Callable[[str], None] | None,
+        on_tool_start: Callable[[str, dict[str, Any]], None] | None,
+        on_tool_end: Callable[[str, ToolResult], None] | None,
+        ask_permission: Callable[[str, dict[str, Any]], str] | None,
+        app_state: dict[str, Any] | None,
+        on_reasoning: Callable[[str], None] | None,
+        intent: IntentDecision,
+    ) -> UnifiedTurnResult:
+        """Conversation turn: ReAct produces the answer, harness verifies it.
+
+        The answer text comes from the ReAct ``run_turn`` loop (so streaming,
+        permissions, tool hooks, and read-only tool calls are all preserved exactly
+        as the tool_use path owns them). That text is then wrapped as a 0-action
+        ``answer_only`` GoalTree and run through the SAME harness loop so the turn
+        produces a verified-loop trace (trivially-true verify) and one observation
+        surface — closing the loop for chat too, without weakening the moat.
+        """
+        turn = self.run_turn(
+            user_message,
+            session,
+            agent=agent,
+            on_text=on_text,
+            on_tool_start=on_tool_start,
+            on_tool_end=on_tool_end,
+            ask_permission=ask_permission,
+            app_state=app_state,
+            on_reasoning=on_reasoning,
+        )
+
+        trace, snapshot, verified = self._verify_answer_plan(user_message, turn.text)
+        return UnifiedTurnResult(
+            text=turn.text,
+            trace=trace,
+            snapshot=snapshot,
+            intent=intent,
+            tool_calls=list(turn.tool_calls),
+            verified=verified,
+            usage=turn.usage,
+        )
+
+    def _verify_answer_plan(
+        self, user_message: str, answer_text: str
+    ) -> "tuple[ExecutionTrace | None, dict[str, Any], bool]":
+        """Wrap *answer_text* in an answer-only GoalTree and run the harness on it.
+
+        Returns ``(trace, snapshot, verified)``. When VGG is unavailable there is no
+        closed loop to run, so the trace/snapshot are empty and ``verified`` is
+        False (the answer text is still surfaced by the caller). The evidence gate
+        is consulted in the DEV world (strict) — an answer-only step is exempt by
+        design; a robot world bypasses the gate as elsewhere.
+        """
+        if not (_VGG_AVAILABLE and self._vgg_enabled and self._goal_executor is not None):
+            return None, {}, False
+
+        tree = GoalDecomposer.answer_plan(user_message, answer_text)
+        try:
+            trace = self.vgg_execute(tree)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("unified: answer-plan execution failed: %s", exc)
+            return None, {}, False
+
+        snapshot = self._snapshot_safe(trace)
+        verified = bool(trace.success) and self._evidence_ok(trace)
+        return trace, snapshot, verified
+
+    def _unified_plan_turn(
+        self, user_message: str, intent: IntentDecision
+    ) -> UnifiedTurnResult:
+        """Action/plan turn: decompose to a GoalTree and run the harness loop.
+
+        Reuses the existing VGG path (``vgg_decompose`` -> ``vgg_execute``) so the
+        deterministic per-step verify, Blackboard binding, foreach expansion, and
+        the replan layers are all unchanged — only the RESULT is re-surfaced as the
+        unified type. If decomposition unexpectedly yields no tree (the classifier
+        said vgg but the decomposer declined), there is nothing to verify; surface
+        an empty trace rather than silently dropping the turn (fail loud, rule 8).
+        """
+        tree = self.vgg_decompose(user_message)
+        if tree is None:
+            logger.warning(
+                "unified: classify_intent routed to vgg but vgg_decompose "
+                "returned no GoalTree for %r — empty trace", user_message
+            )
+            return UnifiedTurnResult(
+                text="", trace=None, snapshot={}, intent=intent,
+            )
+
+        trace = self.vgg_execute(tree)
+        snapshot = self._snapshot_safe(trace)
+        verified = bool(trace.success) and self._evidence_ok(trace)
+        # The plan surface is the trace/snapshot; the answer text of an answer-only
+        # step (if the decomposer produced one) is surfaced as the turn text.
+        text = self._answer_text_from_trace(trace)
+        return UnifiedTurnResult(
+            text=text,
+            trace=trace,
+            snapshot=snapshot,
+            intent=intent,
+            verified=verified,
+        )
+
+    def _evidence_ok(self, trace: "ExecutionTrace") -> bool:
+        """Run the evidence gate for *trace* under the active world (fail-safe).
+
+        Mirrors the CLI's gate call: a robot world bypasses (async motor skills use
+        ``verify="True"``); the dev world is strict. Any failure reading the gate
+        is treated as "not verified" so the moat never silently passes.
+        """
+        try:
+            from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+            world = getattr(self, "_world", None)
+            is_robot = bool(world.is_robot()) if world is not None else False
+            return bool(evidence_passed(trace, is_robot=is_robot))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("unified: evidence gate read failed: %s", exc)
+            return False
+
+    def _snapshot_safe(self, trace: "ExecutionTrace") -> dict[str, Any]:
+        """Return the run snapshot EXPORT VIEW for *trace*, or ``{}`` on failure."""
+        try:
+            return self.vgg_run_snapshot(trace)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("unified: run_snapshot failed: %s", exc)
+            return {}
+
+    @staticmethod
+    def _answer_text_from_trace(trace: "ExecutionTrace") -> str:
+        """Extract an answer-only step's text from *trace*, or ``""``.
+
+        A plan may legitimately be (or include) an ``answer_only`` step; surface its
+        captured text as the turn's assistant text. Pure read over the trace —
+        never re-derives or evaluates anything.
+        """
+        sg_by_name = {sg.name: sg for sg in trace.goal_tree.sub_goals}
+        for step in trace.steps:
+            sg = sg_by_name.get(step.sub_goal_name)
+            if sg is None or not getattr(sg, "answer_only", False):
+                continue
+            data = getattr(step, "result_data", {}) or {}
+            text = (data.get("output") or {}).get("text") if isinstance(data, dict) else None
+            if isinstance(text, str) and text:
+                return text
+        return ""
 
     # ------------------------------------------------------------------
     # Internal: tool partitioning and dispatch

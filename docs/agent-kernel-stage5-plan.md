@@ -1,10 +1,11 @@
 # Verified Agent Kernel — Stage 5 Plan (unify the two planning paths)
 
-- Status: **SCOUT — design + one safe additive step shipped.** The
-  observable intent decision (`VectorEngine.classify_intent` ->
-  `IntentDecision`) is in the working tree; `vgg_decompose` now single-sources its
-  fork through it. No behaviour change; full canonical suite green (803 passed, 4
-  skipped). The rest of this doc is the plan; nothing else is implemented yet.
+- Status: **SHIPPED.** S5.0 (observable `classify_intent`), S5.1 (shared tool-dispatch
+  seam `vcli/tool_execution.py`), S5.2 (answer-only GoalTree), S5.3 (`run_turn_unified`
+  closed-loop controller + `UnifiedTurnResult`), S5.4 (cut over cli.py + MCP; the keyword
+  gate is now a routing HINT, not a verify fork; `VECTOR_LEGACY_TURN=1` fallback). Every
+  turn — chat included — is a verified-loop trace. Live-confirmed on deepseek-v4-flash.
+  The sections below are the original plan, retained for the rationale.
 - Date: 2026-06-08
 - Branch: `feat/verified-agent-kernel`
 - Related: [ARCHITECTURE.md](ARCHITECTURE.md) §4 (planning flow),

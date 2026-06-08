@@ -51,6 +51,7 @@ from vector_os_nano.vcli.session import (
 )
 from vector_os_nano.vcli.permissions import PermissionContext
 from vector_os_nano.vcli.prompt import build_system_prompt
+from vector_os_nano.vcli.turn_status import TurnStatus
 from vector_os_nano.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
 
 logger = logging.getLogger(__name__)
@@ -1526,22 +1527,54 @@ def main(argv: list[str] | None = None) -> None:
                 continue
 
             try:
-                streamed_text: list[str] = []
-                live_ref: Live | None = None
+                # Single in-place progress region for the whole turn. A reasoning
+                # model (DeepSeek) streams NO text for several seconds while it
+                # thinks; the region shows one calm "thinking…" status that resolves
+                # into the streamed answer — it is paused/cleared before any
+                # tool-execution line is printed so box frames never stack and the
+                # prompt is not duplicated.
+                _turn_started = time.monotonic()
+
+                def _status_content(text: str, elapsed: float, is_thinking: bool) -> Panel:
+                    if is_thinking:
+                        dots = "." * (int(elapsed) % 4)
+                        label = f"thinking{dots}" + (
+                            f"  [dim]{elapsed:.0f}s[/]" if elapsed >= 1 else ""
+                        )
+                        return Panel(
+                            Text.from_markup(label, style="dim italic"),
+                            title=V_LABEL,
+                            title_align="left",
+                            border_style=DIM_TEAL,
+                            padding=(0, 1),
+                            width=min(console.width, 80),
+                        )
+                    return Panel(
+                        text,
+                        title=V_LABEL,
+                        title_align="left",
+                        border_style=TEAL,
+                        padding=(0, 1),
+                        width=min(console.width, 80),
+                    )
+
+                status = TurnStatus(
+                    content_factory=_status_content,
+                    live_factory=lambda renderable: Live(
+                        renderable,
+                        console=console,
+                        refresh_per_second=8,
+                        transient=True,
+                    ),
+                )
 
                 def on_text(chunk: str) -> None:
-                    streamed_text.append(chunk)
-                    if live_ref is not None:
-                        live_ref.update(
-                            Panel(
-                                "".join(streamed_text),
-                                title=V_LABEL,
-                                title_align="left",
-                                border_style=TEAL,
-                                padding=(0, 1),
-                                width=min(console.width, 80),
-                            )
-                        )
+                    status.update_text(chunk)
+
+                def on_reasoning(_chunk: str) -> None:
+                    # Hidden reasoning trace: keep the "thinking…" status alive with
+                    # an elapsed counter; never rendered as answer text.
+                    status.thinking(time.monotonic() - _turn_started)
 
                 def _format_tool_display(name: str, p: dict[str, Any]) -> str:
                     """Context-aware tool call display."""
@@ -1664,20 +1697,39 @@ def main(argv: list[str] | None = None) -> None:
                     elapsed = time.monotonic() - _tool_start_times.pop(name, time.monotonic())
                     display = _tool_displays.pop(name, name)
                     tag = "[green]ok[/]" if not result.is_error else "[red]fail[/]"
-                    console.print(f"  [{TEAL}]▸[/] {display} {tag} [dim]{elapsed:.1f}s[/]")
-
-                    # Show result summary for important tools
                     summary = _format_result_summary(name, result)
-                    if summary:
-                        console.print(summary)
+                    # Pause the live region BEFORE printing — printing into an active
+                    # Live interleaves with its redraw and re-stacks the box frame.
+                    with status.paused():
+                        console.print(f"  [{TEAL}]▸[/] {display} {tag} [dim]{elapsed:.1f}s[/]")
+                        if summary:
+                            console.print(summary)
 
                     # Hook explore event callback after sim/explore tools run
                     if name in ("start_simulation", "explore"):
                         _setup_explore_events(console)
 
-                # --- VGG: try cognitive pipeline ---
-                # Covers both complex tasks AND motor actions (navigate, patrol)
-                goal_tree = engine.vgg_decompose(user_input)
+                # --- Routing (Stage 5, S5.4 cut-over) ---
+                # The keyword gate is now an OPTIMIZATION HINT, not a correctness
+                # fork: classify_intent (the single, observable decision the unified
+                # controller uses) decides only the RENDERING shape here.
+                #   * vgg route  -> the async plan renderer below (CLI stays
+                #     responsive; this IS the unified plan path: vgg_decompose ->
+                #     vgg_execute, deterministic verify + replan).
+                #   * tool_use route -> run_turn_unified, which produces the answer
+                #     via the ReAct loop AND closes the loop with a verified
+                #     answer-only trace (chat is verified too; the moat is intact).
+                # VECTOR_LEGACY_TURN=1 restores the exact pre-cutover fork
+                # (vgg_decompose-then-run_turn) for one release as a fallback.
+                _legacy_turn = os.environ.get("VECTOR_LEGACY_TURN") == "1"
+                if _legacy_turn:
+                    goal_tree = engine.vgg_decompose(user_input)
+                else:
+                    goal_tree = (
+                        engine.vgg_decompose(user_input)
+                        if engine.classify_intent(user_input).use_vgg
+                        else None
+                    )
                 if goal_tree is not None:
                     # Show plan BEFORE execution
                     console.print()
@@ -1752,13 +1804,12 @@ def main(argv: list[str] | None = None) -> None:
                     continue  # CLI immediately available for next input
 
                 # --- Normal tool_use path ---
-                thinking_panel = Panel(
-                    Text("thinking...", style="dim italic"),
-                    title=V_LABEL,
-                    title_align="left",
-                    border_style=DIM_TEAL, padding=(0, 1),
-                    width=min(console.width, 80),
-                )
+                # Pause the live region around any interactive permission prompt so
+                # the prompt is not drawn into (and duplicated by) the live box.
+                def _ask_permission_paused(n: str, p: dict[str, Any]) -> str:
+                    with status.paused():
+                        return ask_permission(n, p)
+
                 # Suppress ROS2/subprocess log noise during engine turn
                 _saved_stderr = sys.stderr
                 try:
@@ -1766,8 +1817,10 @@ def main(argv: list[str] | None = None) -> None:
                 except OSError:
                     pass
                 try:
-                    with Live(thinking_panel, console=console, refresh_per_second=8, transient=True) as live:
-                        live_ref = live
+                    status.start()  # one live region for the whole turn
+                    if _legacy_turn:
+                        # Legacy fallback (VECTOR_LEGACY_TURN=1): the open ReAct loop
+                        # with no closed-loop verify — kept one release.
                         turn_result: TurnResult = engine.run_turn(
                             user_message=user_input,
                             session=session,
@@ -1775,10 +1828,30 @@ def main(argv: list[str] | None = None) -> None:
                             on_text=on_text,
                             on_tool_start=on_tool_start,
                             on_tool_end=on_tool_end,
-                            ask_permission=lambda n, p: ask_permission(n, p),
+                            ask_permission=_ask_permission_paused,
                             app_state=app_state,
+                            on_reasoning=on_reasoning,
+                        )
+                    else:
+                        # Unified controller: the ReAct loop produces the answer
+                        # (streaming, permissions, tool hooks, P0 stop all preserved
+                        # by run_turn underneath) and the harness wraps it in a
+                        # verified answer-only trace — closing the loop for chat too.
+                        turn_result = engine.run_turn_unified(
+                            user_message=user_input,
+                            session=session,
+                            agent=app_state.get("agent"),
+                            on_text=on_text,
+                            on_tool_start=on_tool_start,
+                            on_tool_end=on_tool_end,
+                            ask_permission=_ask_permission_paused,
+                            app_state=app_state,
+                            on_reasoning=on_reasoning,
                         )
                 finally:
+                    # Stop/clear the single region BEFORE printing the final answer,
+                    # so the box never stacks and the prompt is not duplicated.
+                    status.stop()
                     sys.stderr = _saved_stderr
 
                 # Final response: highlighted panel with braille V title

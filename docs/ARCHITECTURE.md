@@ -142,16 +142,25 @@ versus shipped — see Section 7 for stage status.
 NL input
   |
   v
-intent gate (should_use_vgg)                  [Stage 5 TODO: drop keyword gate]
-  |-- simple/alias --> FAST PATH: 1-step verified plan (no LLM)
-  |-- complex ------> VGG path:
+run_turn_unified (ONE closed-loop controller — both frontends call it)
+  classify_intent  ==> IntentDecision{route, reason, complex}   [HINT, not a verify gate]
+  |   (should_use_vgg is now a cheap shape PRE-CLASSIFIER feeding the controller,
+  |    incl. the conversational-question guard; it no longer forks AROUND verify)
+  |
+  |-- tool_use route (chat / question / greeting):
+  |     ReAct run_turn produces the answer (streaming, permissions, hooks, P0 stop)
+  |       -> wrap as a 0-action answer-only GoalTree -> harness verify (trivially true)
+  |       -> evidence gate EXEMPTS the answer-only step (an action step with no
+  |          predicate still FAILS the gate — the moat is intact)
+  |
+  |-- vgg route (simple/alias or complex):
         build world_context  <--------------------------------------+
           [Stage 3 TODO: + structured perception / grounding]       |
           |                                                          |
           v                                                          |
         GoalDecompose (LLM; vocab single-sourced from registry)     |
           -> GoalTree (frozen DAG; foreach SHIPPED, until/if TODO)  |
-          |                                                          |
+          |   (1-step fast path stays deterministic — no LLM)        |
           v   for each sub-goal in topological order:               |
         StrategySelector -> executor_type (world-scoped, fail-loud) |
           |                                                          |
@@ -165,14 +174,21 @@ intent gate (should_use_vgg)                  [Stage 5 TODO: drop keyword gate]
           |        (fresh world_context + validation_notes;
           v         Stage 4 TODO: observation-driven, mid-tree)
         verified done (evidence-gated)
+  |
+  v
+UnifiedTurnResult{text, trace, snapshot, intent, tool_calls, verified, usage}
 ```
 
-The fast path stays deterministic (no LLM call) for single skills and aliases. The VGG
-path is the closed loop: each execution writes its output to the Blackboard; later steps
-bind to those outputs via `${step.output.path}` references; verification returns both a
-gate boolean and the raw value (recorded on the step); and every re-plan rebuilds
-`world_context` from scratch so the planner sees the latest observations and the prior
-attempt's validation notes.
+Both frontends (`vector-cli`, `vector-os-mcp`) call `run_turn_unified`, so EVERY turn —
+chat included — produces a verified-loop trace; the keyword gate is a routing **hint**,
+not a fork in front of verify. `VECTOR_LEGACY_TURN=1` restores the pre-cut-over open
+`run_turn` ReAct loop for one release as a fallback. The 1-step fast path stays
+deterministic (no LLM call) for single skills and aliases. The VGG path is the closed
+loop: each execution writes its output to the Blackboard; later steps bind to those
+outputs via `${step.output.path}` references; verification returns both a gate boolean
+and the raw value (recorded on the step); and every re-plan rebuilds `world_context` from
+scratch so the planner sees the latest observations and the prior attempt's validation
+notes.
 
 ---
 
