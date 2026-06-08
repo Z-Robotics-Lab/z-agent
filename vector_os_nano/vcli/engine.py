@@ -50,9 +50,22 @@ try:
     )
     from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal, StepRecord
     from vector_os_nano.vcli.cognitive.vgg_harness import VGGHarness, HarnessConfig
+    # Single-source the generic target-binding / prefer-suggested-verify guidance
+    # so the engine's neutral intro carries exactly what the registry vocab does.
+    from vector_os_nano.vcli.cognitive.vocab_from_registry import (
+        _TARGET_BINDING_GUIDANCE,
+    )
     _VGG_AVAILABLE = True
 except ImportError:
     _VGG_AVAILABLE = False
+    # Fallback copy kept in lockstep with vocab_from_registry._TARGET_BINDING_GUIDANCE.
+    _TARGET_BINDING_GUIDANCE = (
+        "When a step acts on a SPECIFIC object/target named in the task, copy "
+        "that target into the chosen strategy's object/object_label/query/target "
+        "parameter — never leave a known target blank. "
+        "Prefer each strategy's 'suggested verify' predicate for that step's "
+        "verify expression."
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -585,7 +598,7 @@ class VectorEngine:
         "You are a robot task planner. Decompose the user's task into verifiable "
         "sub-goals, each with a deterministic verify predicate over the robot's "
         "world state. Choose a strategy for steps that must act; leave strategy "
-        "empty for pure checks."
+        "empty for pure checks. " + _TARGET_BINDING_GUIDANCE
     )
 
     def _build_registry_vocab_kwargs(

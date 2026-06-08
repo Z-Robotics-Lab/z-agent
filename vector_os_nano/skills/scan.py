@@ -38,6 +38,8 @@ class ScanSkill:
 
     name: str = "scan"
     description: str = "Move arm to scan position for workspace observation"
+    # No meaningful state predicate — the always-safe truthy literal.
+    verify_hint: str = "True"
     parameters: dict = {}
     preconditions: list[str] = []
     postconditions: list[str] = []

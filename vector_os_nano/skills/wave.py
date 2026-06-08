@@ -38,6 +38,8 @@ class WaveSkill:
 
     name: str = "wave"
     description: str = "Wave the arm to greet the user"
+    # No meaningful state predicate — the always-safe truthy literal.
+    verify_hint: str = "True"
     parameters: dict = {}
     preconditions: list[str] = []
     postconditions: list[str] = []

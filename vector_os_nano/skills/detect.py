@@ -37,12 +37,14 @@ class DetectSkill:
     """
 
     name: str = "detect"
-    description: str = "Detect objects in the workspace using VLM. IMPORTANT: use simple English queries like 'all objects', 'red cup', 'bottle'. Do NOT use Chinese or long phrases as the query."
+    description: str = "Detect objects in the workspace using VLM. The query is a natural-language noun/phrase in ANY language (e.g. 'banana' / '香蕉' / 'red cup' / '红色杯子'), or 'all objects' to detect everything."
+    # Success predicate this skill is verified against (single-source for the planner).
+    verify_hint: str = "len(detect_objects()) > 0"
     parameters: dict = {
         "query": {
             "type": "string",
             "required": True,
-            "description": "Simple English noun or phrase: 'all objects', 'red cup', 'banana', 'bottle'. Must be English. Do NOT use Chinese.",
+            "description": "Target to detect, as a natural-language noun/phrase in ANY language (e.g. 'banana' / '香蕉' / 'red cup' / '红色杯子'), or 'all objects' to detect everything. Copy the object named in the task here.",
         }
     }
     preconditions: list[str] = []

@@ -38,6 +38,8 @@ class DescribeSkill:
 
     name: str = "describe"
     description: str = "Describe what the camera sees using VLM scene understanding"
+    # Success predicate this skill is verified against (single-source for the planner).
+    verify_hint: str = "describe_scene() != ''"
     parameters: dict = {
         "question": {
             "type": "string",

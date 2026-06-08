@@ -69,6 +69,8 @@ class PlaceSkill:
 
     name: str = "place"
     description: str = "Place held object at a location: front, left, right, center, back, front_left, front_right, back_left, back_right"
+    # Success predicate this skill is verified against (single-source for the planner).
+    verify_hint: str = "placed_count() >= 1"
     failure_modes: list[str] = ["no_arm", "ik_unreachable", "move_failed"]
     parameters: dict = {
         "location": {

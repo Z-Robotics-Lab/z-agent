@@ -138,6 +138,27 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   playground suite still 95 green; 953 green total; ruff clean. NEXT (Step 3) makes the decompose
   actually USE them + bind the target object label so "抓香蕉" picks the banana.
 
+- **Live-hardening VI (this commit) — Step 3: LLM-side grasp generalization.** The decompose
+  emitted EMPTY `strategy_params` for a grasp step (the registry-derived examples filled only
+  REQUIRED params; pick's `object_label` is optional → never demonstrated), so "抓香蕉" ran pick
+  with no label → query degraded to the literal "object" → fail. Fix EQUIPS the LLM (the owner's
+  principle: language understanding belongs in the LLM, not hardcoded keyword tables):
+  (1) per-skill `verify_hint` declared on each arm skill (pick→`holding_object()`, home→
+  `arm_at_home()`, detect→`len(detect_objects())>0`, place→`placed_count()>=1`, describe→
+  `describe_scene()!=''`, else `True`) — single-sourced (the skill owns its success predicate),
+  surfaced via `to_schemas()` into the decompose vocab as a per-strategy "suggested verify" line +
+  used as the example's verify expr. (2) Planner-intro guidance (both `_DEFAULT_PLANNER_INTRO` and
+  engine `_NEUTRAL_PLANNER_INTRO`, single-sourced via `_TARGET_BINDING_GUIDANCE`): copy a named
+  target into the strategy's object/object_label/query/target param, and prefer the suggested verify.
+  (3) `_build_examples` now shows an object-ish param BOUND (priority order: object_label > object >
+  query > target > label > item; object_id excluded as a handle; string-typed only — fixes an
+  over-match that bound a string into a float coord param). (4) pick reads the target from any of
+  object_label/object/query/target/object_id (param-name flexibility, language-neutral). (5) detect/
+  pick descriptions no longer forbid Chinese — natural-language targets in any language are accepted;
+  NO bilingual keyword tables added anywhere. World-agnostic + single-source preserved. 960 green,
+  ruff clean. PENDING: live real-deepseek bilingual decompose check (抓香蕉 / grab the bottle /
+  拿起红色杯子 / 把所有东西抓一遍) that the LLM actually binds the target + picks the right verify.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —
@@ -215,8 +236,9 @@ fails end-to-end, and the CLI segfaulted. Priorities for the next pass:
   (not the VLM), so `detect("banana")` works. The live "No detections found for 'object'" was caused
   by the decompose emitting an EMPTY `strategy_params` for the pick step → the query degraded to the
   literal default "object" (which the oracle correctly doesn't match). The grounding half (verify
-  predicates) is now FIXED (RobotWorld contributes the sim-oracle predicates). The remaining half —
-  the decompose must extract the target entity and bind it to the pick param — is **Step 3**.
+  predicates) is now FIXED (RobotWorld contributes the sim-oracle predicates). The binding half —
+  the decompose must extract the target entity and bind it to the pick param — is FIXED IN CODE
+  (Live-hardening VI), PENDING the live real-deepseek confirmation that the LLM binds it.
 - **P1 — VERIFY-SATISFIABILITY. [FIXED — Live-hardening V, this commit].** `RobotWorld` now
   contributes real `detect_objects`/`describe_scene`/`holding_object`/`arm_at_home`/`placed_count`
   (sim oracle), so verify can pass for a sim arm. `certainty()` is still a stub — Step 3 steers the

@@ -94,6 +94,9 @@ class PickSkill:
 
     name: str = "pick"
     description: str = "Pick up an object. Use mode='hold' to keep it, mode='drop' to discard it to the side."
+    # Success predicate this skill is verified against (single-source for the
+    # planner; kernel rules 3 + 5). References the arm verify namespace.
+    verify_hint: str = "holding_object()"
     parameters: dict = {
         "object_id": {
             "type": "string",
@@ -104,7 +107,11 @@ class PickSkill:
         "object_label": {
             "type": "string",
             "required": False,
-            "description": "Label of the object to pick (e.g. 'mug', 'banana')",
+            "description": (
+                "Target object to pick, as a natural-language noun/phrase in ANY "
+                "language (e.g. 'banana' / '香蕉' / 'red cup' / '红色杯子'). "
+                "Copy the object named in the task here."
+            ),
             "source": "world_model.objects.label",
         },
         "mode": {
@@ -450,17 +457,30 @@ class PickSkill:
     ) -> Optional[np.ndarray]:
         """Resolve target object position in base frame.
 
-        Resolution order:
-        1. object_id → look up in world_model.get_object()
-        2. object_label → look up in world_model.get_objects_by_label()
-        3. context.perception → live camera sampling with density cluster
+        Resolution order (matches the code below):
+        1. context.perception → live re-detect + density cluster (preferred when
+           a perception backend is present; the object may have moved).
+        2. world_model by object_id → get_object().
+        3. world_model by object_label → get_objects_by_label().
+
+        The target label is read from whichever param the planner bound it to
+        (object_label / object / query / target / object_id), language-neutral.
 
         Returns:
             (3,) numpy array in base frame metres, or None if unresolvable.
         """
-        # ALWAYS re-detect with perception if available (object may have moved)
+        # ALWAYS re-detect with perception if available (object may have moved).
+        # Honour whatever reasonable param name the planner bound the target to
+        # (language-neutral param-name fallbacks — no keyword matching).
         if context.perception is not None:
-            label = params.get("object_label") or params.get("object_id") or "object"
+            label = (
+                params.get("object_label")
+                or params.get("object")
+                or params.get("query")
+                or params.get("target")
+                or params.get("object_id")
+                or "object"
+            )
             logger.info("[PICK] Live perception for %r (always re-detect)", label)
             result = self._sample_from_perception(params, context)
             if result is not None:
@@ -475,7 +495,12 @@ class PickSkill:
                 logger.info("[PICK] Fallback: world_model object_id=%s", obj_id)
                 return np.array([obj.x, obj.y, obj.z], dtype=float)
 
-        label = params.get("object_label")
+        label = (
+            params.get("object_label")
+            or params.get("object")
+            or params.get("query")
+            or params.get("target")
+        )
         if label:
             objects = context.world_model.get_objects_by_label(label)
             valid = [o for o in objects if abs(o.x) > 0.01 or abs(o.y) > 0.01]
@@ -503,8 +528,16 @@ class PickSkill:
         Step 3: Density cluster (1.5cm threshold) to find modal position.
         Step 4: camera_to_base() using calibration transform.
         """
-        # Resolve query label: try object_label, then extract from object_id, then "object"
-        query = params.get("object_label") or params.get("object") or ""
+        # Resolve query label from whatever reasonable param name the planner
+        # bound the target to (language-neutral — no keyword matching here, just
+        # widened param-name fallbacks), then object_id, then "object".
+        query = (
+            params.get("object_label")
+            or params.get("object")
+            or params.get("query")
+            or params.get("target")
+            or ""
+        )
         if not query:
             obj_id = params.get("object_id", "")
             # Extract label from object_id like "battery_0" → "battery"

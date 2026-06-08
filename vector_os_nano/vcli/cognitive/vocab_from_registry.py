@@ -35,13 +35,40 @@ _BASE_PRIMITIVE_DESCRIPTIONS: dict[str, str] = {
     "scan_360": "Rotate 360 degrees while recording observations",
 }
 
+# Generic, world-agnostic planner guidance appended to every intro. Phrased
+# without any embodiment-specific noun (no arm/go2 vocabulary) so it applies to
+# every world's skills uniformly: (i) bind a known target into the chosen
+# strategy's object param, (ii) prefer each strategy's declared success
+# predicate for the step's verify.
+_TARGET_BINDING_GUIDANCE: str = (
+    "When a step acts on a SPECIFIC object/target named in the task, copy that "
+    "target into the chosen strategy's object/object_label/query/target "
+    "parameter — never leave a known target blank. "
+    "Prefer each strategy's 'suggested verify' predicate for that step's verify "
+    "expression."
+)
+
 _DEFAULT_PLANNER_INTRO: str = (
     "You are a robot task planner. Decompose the user's task into verifiable "
     "sub-goals, each with a deterministic verify predicate. Choose a strategy "
-    "for every step that must act; leave strategy empty for pure checks."
+    "for every step that must act; leave strategy empty for pure checks. "
+    + _TARGET_BINDING_GUIDANCE
 )
 
 _SKILL_SUFFIX = "_skill"
+
+# Param names that name an object/target the planner should bind a task entity
+# to. Used to (a) surface the right param to fill and (b) show a BOUND example
+# so the planner learns the shape of binding. PRIORITY-ORDERED: the example binds
+# the FIRST present (highest-priority) one. World-agnostic — these are conventional
+# natural-language target param NAMES, not domain nouns. ``object_id`` is
+# intentionally EXCLUDED: it is a world-model HANDLE, not a natural-language target
+# the planner should bind a task noun into.
+_OBJECT_PARAM_NAMES: tuple[str, ...] = (
+    "object_label", "object", "query", "target", "label", "item",
+)
+# Neutral placeholder when a param's description carries no usable sample noun.
+_NEUTRAL_TARGET_VALUE: str = "target"
 
 
 def _strategy_name(skill_name: str) -> str:
@@ -49,18 +76,32 @@ def _strategy_name(skill_name: str) -> str:
     return f"{skill_name}{_SKILL_SUFFIX}"
 
 
+def _verify_hint(schema: dict[str, Any]) -> str:
+    """Return a skill's declared success predicate, or the safe ``True`` literal.
+
+    Single-sourced from the skill's ``verify_hint`` (surfaced by
+    ``Skill.to_schemas``); a skill that declares none gets the always-safe
+    truthy literal so the planner always has a concrete suggestion.
+    """
+    hint = str(schema.get("verify_hint", "") or "").strip()
+    return hint or "True"
+
+
 def _format_params_block(schema: dict[str, Any]) -> str:
     """Render one skill's parameters as a readable strategy-params help line.
 
     Mirrors the spirit of dev.py's ``_DEV_STRATEGY_PARAMS_HELP``: skill name
     then each param's name/type and whether it is required. Skills with no
-    parameters render an explicit ``{}`` so the LLM knows none are needed.
+    parameters render an explicit ``{}`` so the LLM knows none are needed. A
+    final ``suggested verify:`` line surfaces the skill's declared success
+    predicate so the planner can prefer it for that step's verify expression.
     """
     name = str(schema.get("name", ""))
     strat = _strategy_name(name)
+    hint_line = f"      suggested verify: {_verify_hint(schema)}"
     params = schema.get("parameters") or {}
     if not isinstance(params, dict) or not params:
-        return f"  - {strat}: {{}}"
+        return f"  - {strat}: {{}}\n{hint_line}"
 
     lines = [f"  - {strat}:"]
     for pname, spec in params.items():
@@ -72,6 +113,7 @@ def _format_params_block(schema: dict[str, Any]) -> str:
             required = False
         flag = "required" if required else "optional"
         lines.append(f'      "{pname}": <{ptype}, {flag}>')
+    lines.append(hint_line)
     return "\n".join(lines)
 
 
@@ -89,7 +131,7 @@ def _build_examples(
     if not schemas:
         return ""
 
-    verify_fn = _pick_verify_fn(verify_signatures)
+    fallback_verify_fn = _pick_verify_fn(verify_signatures)
     chosen = schemas[:2]
     sub_goals: list[str] = []
     prev_name: str | None = None
@@ -97,7 +139,10 @@ def _build_examples(
         skill_name = str(schema.get("name", f"skill_{idx}"))
         strat = _strategy_name(skill_name)
         step_name = f"step_{idx + 1}_{skill_name}"
-        verify_expr = f"{verify_fn}()" if verify_fn else "True"
+        # Prefer the skill's declared success predicate so the example teaches the
+        # single-sourced verify; fall back to a real verify-fn name only when the
+        # skill declares no hint.
+        verify_expr = _example_verify_expr(schema, fallback_verify_fn)
         depends = f'["{prev_name}"]' if prev_name else "[]"
         params = _example_params(schema)
         sub_goals.append(
@@ -129,20 +174,104 @@ def _build_examples(
     )
 
 
+def _example_verify_expr(
+    schema: dict[str, Any], fallback_verify_fn: str | None
+) -> str:
+    """Return the verify expression to show for *schema*'s example step.
+
+    Prefers the skill's declared ``verify_hint`` (single-source) so the example
+    teaches the same predicate the params-help suggests; otherwise falls back to
+    a real verify-function call, then to the safe ``True`` literal.
+    """
+    hint = str(schema.get("verify_hint", "") or "").strip()
+    if hint:
+        return hint
+    if fallback_verify_fn:
+        return f"{fallback_verify_fn}()"
+    return "True"
+
+
+def _is_object_param(pname: str, spec: Any) -> bool:
+    """True if *pname*/*spec* is a natural-language target param a task binds to.
+
+    World-agnostic, matched by the explicit conventional NAME set AND a string
+    type. The type guard keeps numeric/coordinate/ID params (e.g. a float ``x``
+    whose description happens to say "Target X in metres") from being bound a
+    string. Matching is by name only — a description mention ("target"/"object"/
+    "label") was too loose: it wrongly matched float coordinates and free-form
+    ``question`` params.
+    """
+    if pname not in _OBJECT_PARAM_NAMES:
+        return False
+    if isinstance(spec, dict):
+        ptype = str(spec.get("type", "")).strip().lower()
+        # Only a string-typed param holds a natural-language target ("" = type
+        # unstated, allowed since the name is already a strong signal).
+        return ptype in ("", "string", "str")
+    return True
+
+
+def _sample_target_value(spec: Any) -> str:
+    """Derive a concrete sample value for an object-ish param from its schema.
+
+    Parses an ``e.g. 'X'`` token out of the param description when present (so
+    the sample is the skill's own example, in whatever language it states);
+    otherwise uses a neutral noun. Never hardcodes a domain noun here.
+    """
+    if isinstance(spec, dict):
+        desc = str(spec.get("description", ""))
+        lower = desc.lower()
+        marker = "e.g."
+        idx = lower.find(marker)
+        if idx != -1:
+            after = desc[idx + len(marker):]
+            # Take the first single-quoted token after the marker, e.g. 'banana'.
+            start = after.find("'")
+            if start != -1:
+                end = after.find("'", start + 1)
+                if end != -1:
+                    token = after[start + 1: end].strip()
+                    if token:
+                        return token
+    return _NEUTRAL_TARGET_VALUE
+
+
 def _example_params(schema: dict[str, Any]) -> str:
-    """Return a minimal JSON object literal for a skill's required params."""
+    """Return a JSON object literal for a skill's example params.
+
+    Shows required params plus — crucially — an object-ish param BOUND to a
+    concrete sample value (even when optional), so the planner learns the SHAPE
+    of binding a task target into the strategy. The sample value is derived from
+    the schema only (the param description's ``e.g. 'X'`` token, else a neutral
+    noun), keeping this world-agnostic.
+    """
     params = schema.get("parameters") or {}
     if not isinstance(params, dict):
         return "{}"
-    required = [
-        pname
-        for pname, spec in params.items()
-        if isinstance(spec, dict) and spec.get("required")
-    ]
-    if not required:
+
+    pairs: list[str] = []
+    seen: set[str] = set()
+    # First: bind the HIGHEST-PRIORITY natural-language target param (if present)
+    # to a concrete sample so the example shows the binding SHAPE. Iterate the
+    # priority order, NOT declaration order — so e.g. pick binds object_label (the
+    # NL label the planner_intro tells the model to fill), never object_id.
+    for cand in _OBJECT_PARAM_NAMES:
+        spec = params.get(cand)
+        if spec is not None and _is_object_param(cand, spec):
+            pairs.append(f'"{cand}": "{_sample_target_value(spec)}"')
+            seen.add(cand)
+            break
+    # Then: include any remaining required params (empty string placeholders).
+    for pname, spec in params.items():
+        if pname in seen:
+            continue
+        if isinstance(spec, dict) and spec.get("required"):
+            pairs.append(f'"{pname}": ""')
+            seen.add(pname)
+
+    if not pairs:
         return "{}"
-    pairs = ", ".join(f'"{p}": ""' for p in required)
-    return "{" + pairs + "}"
+    return "{" + ", ".join(pairs) + "}"
 
 
 def _pick_verify_fn(verify_signatures: dict[str, str]) -> str | None:

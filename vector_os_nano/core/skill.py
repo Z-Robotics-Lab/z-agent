@@ -374,6 +374,10 @@ class SkillRegistry:
                 "preconditions": list(s.preconditions),
                 "postconditions": list(s.postconditions),
                 "effects": dict(s.effects),
+                # Per-skill success predicate the planner should prefer for this
+                # step's verify expression (single-source; optional attribute).
+                # Defaults to the always-safe "True" when a skill declares none.
+                "verify_hint": getattr(s, "verify_hint", "") or "True",
             }
             if aliases:
                 schema["aliases"] = aliases

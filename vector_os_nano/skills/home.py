@@ -31,6 +31,8 @@ class HomeSkill:
 
     name: str = "home"
     description: str = "Move arm to home position and open gripper"
+    # Success predicate this skill is verified against (single-source for the planner).
+    verify_hint: str = "arm_at_home()"
     parameters: dict = {}
     preconditions: list[str] = []
     postconditions: list[str] = ["gripper_empty"]
