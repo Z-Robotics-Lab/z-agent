@@ -1436,6 +1436,10 @@ def main(argv: list[str] | None = None) -> None:
         provider_display = f"Claude {_oauth.get('subscriptionType', 'auth')}"
     elif provider == "openrouter":
         provider_display = "OpenRouter"
+    elif base_url and "deepseek" in base_url:
+        provider_display = "DeepSeek"
+    elif provider == "openai_compat":
+        provider_display = "OpenAI-compatible"
     elif base_url and "localhost" in base_url:
         provider_display = f"Local ({base_url})"
     else:

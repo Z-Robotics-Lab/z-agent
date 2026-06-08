@@ -231,6 +231,30 @@ class IntentRouter:
         if self.is_complex(user_message):
             return True
 
+        # Conversational questions / greetings → tool_use (answer directly), so a
+        # question like "为什么一开始那么卡" is NOT mis-routed into a plan just because
+        # an action verb appears incidentally as a substring (here "开始" inside the
+        # adverb "一开始"). Genuinely multi-step asks were already caught by
+        # is_complex above, so this only short-circuits simple, non-actionable Q&A.
+        _stripped = msg_lower.strip()
+        _ZH_Q = (
+            "为什么", "为何", "怎么", "怎样", "如何", "是什么", "什么是",
+            "是不是", "能不能", "可不可以", "有没有",
+        )
+        _EN_Q = (
+            "why ", "how ", "what ", "what's", "who ", "when ", "where ",
+            "which ", "can you", "could you", "do you", "does ", "is it",
+            "are you",
+        )
+        if (
+            _stripped.endswith("?")
+            or _stripped.endswith("？")
+            or _stripped.endswith(("吗", "呢", "吧"))
+            or any(q in _stripped for q in _ZH_Q)
+            or any(_stripped.startswith(q) for q in _EN_Q)
+        ):
+            return False
+
         # Skill match → VGG (1-step GoalTree, no LLM needed)
         if skill_registry is not None:
             try:
