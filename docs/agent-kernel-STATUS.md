@@ -319,36 +319,48 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   multi-step planning + observation-driven replan; the foreach grasp fallback emitted "grab_one -> Cannot
   locate target object" after the timeout — inspect the replan path.
 
-## Autonomous /loop prompt (the standing instruction for owner-away iterations)
+## Autonomous /loop prompt (the standing mission for owner-away iterations)
 
-Run via `/loop <this prompt>` (no interval => self-paced). Each firing = ONE focused fix/improve increment.
+Run via `/loop <this prompt>` (no interval => self-paced). Mission-oriented + high-autonomy: each firing
+advances the mission as far as it safely can, not a single tiny edit.
 
-> Autonomous iteration on **vector-os-nano** (branch `feat/verified-agent-kernel`; ONLY this project, never
-> UniLab). Model deepseek-v4-flash (config set). NORTH STAR: a generalizable **PHYSICAL agent for robots** —
-> NL controls everything via a grounded CLOSED loop (decompose -> plan -> execute -> verify -> replan); sim is
-> a MEANS, not the end. Leverage the LLM throughout the cognitive layer (language/planning/selection); keep
-> grounding/verify/safety DETERMINISTIC (verify is the moat). Every fix must GENERALIZE across embodiments
-> (arm AND go2 AND future) and tasks — never an arm-only / banana-only patch.
+> **Mission: advance vector-os-nano toward a generalizable PHYSICAL agent for robots.** Iterate autonomously
+> (owner away; auto-approve on; branch `feat/verified-agent-kernel`; ONLY this project, never UniLab). This is
+> a mission, not a checklist: make natural language truly control a robot through a grounded CLOSED loop
+> (understand -> decompose -> plan -> execute -> verify -> replan -> recover), generalizing across embodiments
+> (arm, go2, future) AND tasks. Simulation is a MEANS; the end is a physical robot agent. Push the LLM through
+> the whole cognitive layer (language, decomposition, planning, strategy/verify selection, recovery); keep
+> grounding/verify/safety DETERMINISTIC — verify is the moat, never LLM-graded. Prefer fixes that remove an
+> embodiment asymmetry or generalize a mechanism over one-off patches.
 >
-> EACH ITERATION:
-> 1. Read `docs/agent-kernel-STATUS.md` ("Known live bugs — ROUND 2" backlog) -> `docs/ARCHITECTURE.md` ->
->    memories `vector-os-nano-live-hardening`, `vector-os-nano-language-layer`, `workflow-model-tiering`.
-> 2. Pick the ONE highest-value item (or discover a new one by running the REAL cli + deepseek and
->    reproducing). Reproduce + diagnose root cause FIRST.
-> 3. Fix via a focused dynamic **Workflow** (implement -> adversarial review (2-3 lenses) -> critic), 2-3
->    increments max (avoids the StructuredOutput flake). Pin agent models per `workflow-model-tiering`.
-> 4. VALIDATE: full suite green (`.venv-nano/bin/python -m pytest tests/vcli tests/unit/vcli -q`) + headless
->    real-cli/deepseek where possible. Some issues (GUI window, real-time timing, Ctrl-C under mjpython) ONLY
->    reproduce in the owner's window — reason carefully, add what headless coverage you can, and CLEARLY hand
->    the visual/timing check to the owner; never claim a GUI-visual works unverified.
-> 5. Self-review the real git diff. Green-then-commit ISOLATED, with STATUS (+ ARCHITECTURE if structure
->    changed) updated in the SAME commit (Doc Governance). Update the relevant memory. **Do NOT push.**
->    `git checkout mjcf/go2/scene_room_piper.xml` if a go2 test dirtied it.
-> 6. Halt-on-red (salvage partial green). Record progress + the next item in STATUS so the next firing
->    resumes cleanly. Then schedule the next iteration.
+> Each iteration, ORIENT then act with judgment — you have wide latitude:
+> - ORIENT: read `docs/agent-kernel-STATUS.md` (live-bug backlog + where-are-we/next), `docs/ARCHITECTURE.md`,
+>   and memories `vector-os-nano-live-hardening` / `-language-layer` / `workflow-model-tiering`. Optionally run
+>   the real cli + deepseek to feel current state and discover issues.
+> - CHOOSE a meaningful objective — a bug class, a capability, an architectural improvement — that moves the
+>   mission forward. You MAY pursue a FARTHER goal across several workflows/edits in one iteration; don't
+>   artificially stop at one tiny change. Decompose it yourself and advance as far as you safely can.
+> - BUILD: reproduce/diagnose first, then implement via focused dynamic **Workflows** (implement -> 2-3
+>   adversarial reviewers -> critic), chaining as many as the objective needs. Pin agent models per
+>   `workflow-model-tiering`. Write/extend tests for logic that matters; add evals where output quality matters.
+> - VERIFY HONESTLY: keep the canonical suite green (`.venv-nano/bin/python -m pytest tests/vcli
+>   tests/unit/vcli -q`); validate behavior headless with the real cli + deepseek wherever possible. Some
+>   things only reproduce in the owner's mjpython window (GUI render, real-time timing, Ctrl-C under mjpython)
+>   — reason carefully, add what headless coverage you can, and CLEARLY hand the visual/timing confirmation to
+>   the owner. Never claim a GUI-visual works unverified.
+> - COMMIT + RECORD: self-review the real diff; green-then-commit in isolated, logically-scoped commits,
+>   updating STATUS (+ ARCHITECTURE if structure/contracts changed) and the relevant memory in the SAME commit
+>   (Doc Governance). Record what you did + what's next so the next iteration resumes cleanly. **Do NOT push.**
+>   `git checkout mjcf/go2/scene_room_piper.xml` if a go2 test dirtied it.
 >
-> Backlog now: R2-1 go2 sim headless (generalize the mjpython/viewer GUI across embodiments) · R2-2 grasp
-> real-time timeout (timeouts must fit real-time sim) · R2-3 singular "抓个东西" -> grab ONE not foreach-all ·
-> R2-4 Ctrl-C clean exit under mjpython · R2-5 permission prompt blocks mid-task in sim · R2-6 ROS2-proxy
-> ERROR bleed into panels · R2-7 longer-chain robustness + replan. See STATUS for details. Prefer the fix that
-> removes an embodiment asymmetry or generalizes a mechanism over a one-off patch.
+> DON'T interrupt the owner to ask — make reasonable decisions and proceed. Only stop/surface on a GENUINE
+> blocker: the canonical suite goes red and you can't get it green (halt-on-red; salvage + commit partial
+> green), something needs the owner's GUI/hardware confirmation, or an action would be destructive /
+> irreversible / outward-facing (push, deploy, delete owner data). Otherwise keep advancing the mission,
+> iteration after iteration, then schedule the next one.
+>
+> Current backlog (advance any; not exhaustive — discover more): R2-1 go2 sim headless (generalize the
+> mjpython/viewer GUI across embodiments) · R2-2 grasp real-time timeout (timeouts must fit real-time sim) ·
+> R2-3 singular "抓个东西" -> grab ONE not foreach-all · R2-4 Ctrl-C clean exit under mjpython · R2-5 permission
+> prompt blocks mid-task in sim · R2-6 ROS2-proxy ERROR bleed into panels · R2-7 longer-chain robustness +
+> replan + richer skills/evals. See STATUS for details.
