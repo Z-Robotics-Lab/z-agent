@@ -290,11 +290,21 @@ owner must run the window; reason carefully + hand the visual/timing checks to t
 REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix must GENERALIZE across embodiments
 (arm AND go2 AND future), never an arm-only/banana-only patch. Backlog (rough priority):
 
-- **R2-1 — Go2 sim opens HEADLESS (no window) while the arm opens one.** "启动 go2 带臂" ran headless;
-  owner: "无法打开 go2 的 sim … 应该是一个可泛化的操作." The mjpython re-exec + passive-viewer GUI must
-  generalize across embodiments. Investigate the go2 launch path (`--sim-go2` / NL "启动go2") vs the arm
-  re-exec guard + `MuJoCoGo2` viewer (gui flag, `_viewer`/`viewer`). Make the viewer a ONE world-agnostic
-  mechanism, not arm-only.
+- **R2-1 — Go2 sim opens HEADLESS (no window) while the arm opens one.** [DIAGNOSED — fix is a dedicated
+  iteration]. ROOT CAUSE: the arm re-execs the WHOLE CLI under mjpython (`SimStartTool._reexec_under_mjpython_
+  with_sim`, sim_tool.py:159) → in-process `MuJoCoArm` `launch_passive` gets the mjpython main thread. The go2
+  path (`_start_go2`, sim_tool.py:401) launches a SEPARATE subprocess via `scripts/launch_explore.sh`, whose
+  bridge line is `python3 go2_vnav_bridge.py $NO_GUI` (launch_explore.sh:75) — plain `python3`, NOT mjpython.
+  On macOS `MuJoCoGo2.launch_passive` needs mjpython, so the go2 bridge viewer silently runs headless. FIX
+  DIRECTION (generalize the viewer mechanism): run the go2 bridge subprocess under mjpython on macOS when a
+  window is wanted (mirror the arm's mjpython requirement; e.g. pick the interpreter = mjpython on
+  darwin+gui else python3, for the bridge line only — the nav/TARE nodes don't need a viewer). RISK +
+  OWNER-GATED: `MuJoCoGo2` runs a background `_physics_thread` that calls `self._viewer.sync()` off the main
+  thread (mujoco_go2.py ~511); under mjpython that is the SAME cross-thread GLFW hazard the arm segfault fix
+  (118f886) addressed — opening the go2 window may segfault unless the go2 viewer/physics-thread access is
+  ALSO made single-thread-safe. So the dedicated R2-1 iteration must (a) launch the bridge under mjpython AND
+  (b) make the go2 viewer thread-safe, then HAND the window-opens-without-crashing check to the owner (cannot
+  be verified headless). Likely subsumes R2-6 (the go2 launch ERROR bleed).
 - **R2-2 — Grasp TIMES OUT under the real-time GUI. [FIXED — /loop iter 1].** Was: a completed pick (22.7s
   real-time under the viewer) was falsely marked timeout (foreach-body limit 15s) → bad replan. Fixed with
   skill-declared `typical_duration_sec` (single-source) + a GoalExecutor floor: effective timeout =
