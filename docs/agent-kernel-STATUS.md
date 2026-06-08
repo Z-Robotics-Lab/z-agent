@@ -376,6 +376,24 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   OWNER-GATED and need a live `--sim` window: R2-1 go2 viewer (generalize mjpython launch + go2 physics-thread
   viewer safety), R2-4 Ctrl-C under mjpython, R2-6 ROS2 ERROR bleed. The deeper R2-7 detect-verify
   close-the-loop is a design call worth doing with owner input. Cadence lengthened; loop keeps a slow heartbeat.
+  **[/loop iter 9: detect-honest-success — verify moat hole closed].** DONE: DetectSkill now returns
+  success=False when a SPECIFIC query finds nothing (target absent), while a GENERIC "all objects"-type query
+  stays success-with-empty (grab-everything foreach still no-ops cleanly). Reuses the existing generic-term
+  set (lifted to `_GENERIC_QUERIES`; no new keyword table). Closes the hole where a detect step PASSED having
+  found nothing for a specific target. Matrix verified + tests (renamed `test_detect_specific_target_not_found
+  _returns_failure` + new generic-empty test); 1029 green; ruff clean.
+  **NEW HIGH-PRIORITY FINDING (top R2-7 next target, needs careful design / owner input):** live "抓起苹果"
+  (apple absent) is STOCHASTIC — when the LLM binds `object_label='苹果'`, pick fails fast + honest (correct);
+  when the LLM emits an UNBOUND pick, R2-3's unbound->nearest grabs the NEAREST object and pick's
+  `holding_object()` verify passes -> **FALSE SUCCESS** (grabbed a non-apple, reported done). Root tension:
+  unbound->nearest is load-bearing for genuine generic grabs ("抓个东西") but masks a binding failure for a
+  named-but-unbound target; and `holding_object()` checks "holding SOMETHING", not "holding the REQUESTED
+  target". Design options (pick one with owner input): (a) make holding_object TARGET-AWARE
+  (`holding_object('banana')` checks that specific object at the EE) + have pick verify against the bound
+  target; (b) disambiguate generic-intent vs binding-failure at decompose (explicit "any" marker for generic
+  grabs; a named target MUST bind or the step fails, never silently nearest); (c) strengthen entity-binding
+  reliability so a named target is always bound. (a)+(b) together is the principled fix. Do NOT just remove
+  unbound->nearest — it breaks "抓个东西".
 
 ## Autonomous /loop prompt (the standing mission for owner-away iterations)
 
