@@ -278,18 +278,77 @@ robot arm world — closes P0-perception + P1-verify + P1-verify-fn together. P0
 (thread-safety) and goes first. Fixed-this-session (committed, verified): unmatched-retry, log spam
 (vcli.cognitive only), meta-routing, decompose JSON robustness, replan validation, mjpython viewer.
 
-## Next-session kickoff prompt (paste this to start)
+ROUND 1 STATUS: ALL FIXED + committed (118f886 segfault, 75cbdba grounding, 4a2edf7 decompose binding,
+f53bd04 verify target-free, c953d72 z_offset grasp). Headless end-to-end works; real deepseek bilingual
+decompose validated.
 
-> 继续 vector-os-nano(分支 `feat/verified-agent-kernel`;只动这个项目,不碰 UniLab)。当前模型
-> deepseek-v4-flash(config 已设)。上个 session 修了一批 live bug 并提交(unmatched/日志/meta 路由/
-> decompose JSON/replan 校验/mjpython viewer),但**真机最简单的"抓一个东西"还是做不到**,而且 CLI 段错误。
+## Known live bugs — ROUND 2 (found 2026-06-08, real GUI run: mjpython window + deepseek)
+
+The arm sim now opens a window and "抓香蕉" decomposes correctly. But a live GUI session surfaced issues
+that ONLY reproduce under the real mjpython window / real-time sim (headless tests cannot catch them — the
+owner must run the window; reason carefully + hand the visual/timing checks to the owner). NORTH STAR
+REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix must GENERALIZE across embodiments
+(arm AND go2 AND future), never an arm-only/banana-only patch. Backlog (rough priority):
+
+- **R2-1 — Go2 sim opens HEADLESS (no window) while the arm opens one.** "启动 go2 带臂" ran headless;
+  owner: "无法打开 go2 的 sim … 应该是一个可泛化的操作." The mjpython re-exec + passive-viewer GUI must
+  generalize across embodiments. Investigate the go2 launch path (`--sim-go2` / NL "启动go2") vs the arm
+  re-exec guard + `MuJoCoGo2` viewer (gui flag, `_viewer`/`viewer`). Make the viewer a ONE world-agnostic
+  mechanism, not arm-only.
+- **R2-2 — Grasp TIMES OUT under the real-time GUI.** `step_4_grab_each[0].grab_item` timeout 22.7s (limit
+  15s). Under a live viewer, `MuJoCoArm.move_to` syncs to wall-clock, so the full pick motion sequence runs
+  in REAL TIME (~20s+) and blows the 15s step/foreach-body timeout. Headless pick is ~3s (no real-time
+  sleeps) so headless tests miss this. Fix: timeouts must fit real-time sim — raise the pick/motor step
+  timeout (skill-declared durations, or scale the decompose `timeout_sec` for motor skills), and/or speed up
+  pick. World-agnostic (go2 walk/patrol have the same real-time issue).
+- **R2-3 — "抓个东西" (singular, unbound) expands to a foreach grabbing EVERY object.** A singular "grab
+  something" should grab ONE (e.g. the nearest), not iterate all. Teach the decompose to distinguish singular
+  vs "all/每个" (LLM-side intent), and/or the unbound grab -> single nearest. (Earlier idea: unbound -> nearest
+  in pick, language-neutral.)
+- **R2-4 — Ctrl-C does not exit cleanly under mjpython + sync GUI exec.** Owner had to ^C^C then type `quit`.
+  The synchronous GUI exec path (Step 1) + permission prompt swallow KeyboardInterrupt. Make ^C abort the
+  running task and return to the prompt; a second ^C / `quit` exits cleanly.
+- **R2-5 — Permission prompt blocks mid-task under the live region.** "自己想个任务做" -> "Allow scan?
+  [y/n/a]" hung (input not consumed under mjpython/the live region). Sim skills (scan/detect/...) are safe:
+  auto-allow safe sim skills (or `--no-permission` default in sim), and/or fix the prompt rendering so it
+  reads input outside the live region.
+- **R2-6 — stderr / ROS2-proxy ERROR bleed into the rich panels.** `ERROR:...go2_ros2_proxy` / `sim_tool`
+  lines interleave with the live boxes. Step-4 quieting covered skills/perception/hardware but ERROR-level
+  ROS2-proxy noise still bleeds; fix stderr handling around the go2 launch + quiet the proxy in sim.
+- **R2-7 — capability (not a bug): generalization + longer chains.** Reduce embodiment asymmetry; harden
+  multi-step planning + observation-driven replan; the foreach grasp fallback emitted "grab_one -> Cannot
+  locate target object" after the timeout — inspect the replan path.
+
+## Autonomous /loop prompt (the standing instruction for owner-away iterations)
+
+Run via `/loop <this prompt>` (no interval => self-paced). Each firing = ONE focused fix/improve increment.
+
+> Autonomous iteration on **vector-os-nano** (branch `feat/verified-agent-kernel`; ONLY this project, never
+> UniLab). Model deepseek-v4-flash (config set). NORTH STAR: a generalizable **PHYSICAL agent for robots** —
+> NL controls everything via a grounded CLOSED loop (decompose -> plan -> execute -> verify -> replan); sim is
+> a MEANS, not the end. Leverage the LLM throughout the cognitive layer (language/planning/selection); keep
+> grounding/verify/safety DETERMINISTIC (verify is the moat). Every fix must GENERALIZE across embodiments
+> (arm AND go2 AND future) and tasks — never an arm-only / banana-only patch.
 >
-> 先读:`docs/agent-kernel-STATUS.md`(看"Known live bugs"那节)→ `docs/ARCHITECTURE.md` → 记忆
-> `vector-os-nano-live-hardening`。然后按优先级解决,**每步用真 cli + deepseek + MuJoCo 窗口 live 验证、
-> 多重审核、绿了再提交**:
-> 1. **P0 段错误**:`vgg_execute_async` 后台线程访问 mjData + 主线程 viewer → MuJoCo 非线程安全 → segfault。先定位再修(把 mujoco 访问收敛到一个线程 / 加锁)。
-> 2. **P0 抓取失败的根因**:机器人臂世界的 detect 走 VLM,在 sim 里检测不到场景里明明存在的物体。把 playground 已验证的**确定性 sim-oracle**(`get_object_positions`)接进机器人臂世界的 detect + verify 命名空间(ADR-008 C1 的做法推广到 robot world)。
-> 3. **P1 verify 接地 + 选对谓词**(home→arm_at_home、pick→holding_object)、**P1 技能层日志降噪**、**P2 calibration 硬编码路径**。
-> 4. 目标:`打开so101的sim` → `抓香蕉` 能**端到端成功**(每步 verify 真过),窗口里看得到机械臂抓起香蕉,控制台干净,不崩。
+> EACH ITERATION:
+> 1. Read `docs/agent-kernel-STATUS.md` ("Known live bugs — ROUND 2" backlog) -> `docs/ARCHITECTURE.md` ->
+>    memories `vector-os-nano-live-hardening`, `vector-os-nano-language-layer`, `workflow-model-tiering`.
+> 2. Pick the ONE highest-value item (or discover a new one by running the REAL cli + deepseek and
+>    reproducing). Reproduce + diagnose root cause FIRST.
+> 3. Fix via a focused dynamic **Workflow** (implement -> adversarial review (2-3 lenses) -> critic), 2-3
+>    increments max (avoids the StructuredOutput flake). Pin agent models per `workflow-model-tiering`.
+> 4. VALIDATE: full suite green (`.venv-nano/bin/python -m pytest tests/vcli tests/unit/vcli -q`) + headless
+>    real-cli/deepseek where possible. Some issues (GUI window, real-time timing, Ctrl-C under mjpython) ONLY
+>    reproduce in the owner's window — reason carefully, add what headless coverage you can, and CLEARLY hand
+>    the visual/timing check to the owner; never claim a GUI-visual works unverified.
+> 5. Self-review the real git diff. Green-then-commit ISOLATED, with STATUS (+ ARCHITECTURE if structure
+>    changed) updated in the SAME commit (Doc Governance). Update the relevant memory. **Do NOT push.**
+>    `git checkout mjcf/go2/scene_room_piper.xml` if a go2 test dirtied it.
+> 6. Halt-on-red (salvage partial green). Record progress + the next item in STATUS so the next firing
+>    resumes cleanly. Then schedule the next iteration.
 >
-> 先复现+诊断 P0 段错误和抓取失败,跟我确认根因和方案,再动手。
+> Backlog now: R2-1 go2 sim headless (generalize the mjpython/viewer GUI across embodiments) · R2-2 grasp
+> real-time timeout (timeouts must fit real-time sim) · R2-3 singular "抓个东西" -> grab ONE not foreach-all ·
+> R2-4 Ctrl-C clean exit under mjpython · R2-5 permission prompt blocks mid-task in sim · R2-6 ROS2-proxy
+> ERROR bleed into panels · R2-7 longer-chain robustness + replan. See STATUS for details. Prefer the fix that
+> removes an embodiment asymmetry or generalizes a mechanism over a one-off patch.
