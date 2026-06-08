@@ -164,7 +164,7 @@ class GoalDecomposer:
       "name": "<unique snake_case identifier>",
       "description": "<human-readable step description>",
       "verify": "<Python expression using ONLY the verify functions listed below>",
-      "timeout_sec": <float, default 30.0>,
+      "timeout_sec": <float, default 30.0 — use 45+ for slow motor / long-running skill steps under a live sim, short values for pure checks>,
       "depends_on": ["<name of preceding sub_goal>"],
       "strategy": "<one of KNOWN_STRATEGIES or empty string>",
       "strategy_params": {},
@@ -305,7 +305,7 @@ Loop example — "do <something> to every detected object, one by one":
             "description": "act on the current object",
             "verify": "True",
             "strategy": "<act>_skill",
-            "timeout_sec": 15,
+            "timeout_sec": 45,
             "depends_on": [],
             "strategy_params": {"target": "${item.name}"},
             "fail_action": ""

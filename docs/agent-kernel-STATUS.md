@@ -295,12 +295,14 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   generalize across embodiments. Investigate the go2 launch path (`--sim-go2` / NL "启动go2") vs the arm
   re-exec guard + `MuJoCoGo2` viewer (gui flag, `_viewer`/`viewer`). Make the viewer a ONE world-agnostic
   mechanism, not arm-only.
-- **R2-2 — Grasp TIMES OUT under the real-time GUI.** `step_4_grab_each[0].grab_item` timeout 22.7s (limit
-  15s). Under a live viewer, `MuJoCoArm.move_to` syncs to wall-clock, so the full pick motion sequence runs
-  in REAL TIME (~20s+) and blows the 15s step/foreach-body timeout. Headless pick is ~3s (no real-time
-  sleeps) so headless tests miss this. Fix: timeouts must fit real-time sim — raise the pick/motor step
-  timeout (skill-declared durations, or scale the decompose `timeout_sec` for motor skills), and/or speed up
-  pick. World-agnostic (go2 walk/patrol have the same real-time issue).
+- **R2-2 — Grasp TIMES OUT under the real-time GUI. [FIXED — /loop iter 1].** Was: a completed pick (22.7s
+  real-time under the viewer) was falsely marked timeout (foreach-body limit 15s) → bad replan. Fixed with
+  skill-declared `typical_duration_sec` (single-source) + a GoalExecutor floor: effective timeout =
+  `max(sub_goal.timeout_sec, skill.typical_duration_sec)`, so a completed motor action is never falsely failed
+  even if the LLM under-estimates. World-agnostic (generic getattr, no executor-side skill map); arm
+  pick/place/home/scan/wave/handover + go2 walk/turn/patrol/explore all declare durations; `_FOREACH_EXAMPLE`
+  body 15→45. 26 new tests (both floored-pass + control-timeout); 995 green. OWNER WINDOW CHECK: confirm the
+  real-time grasp now completes without a false timeout.
 - **R2-3 — "抓个东西" (singular, unbound) expands to a foreach grabbing EVERY object.** A singular "grab
   something" should grab ONE (e.g. the nearest), not iterate all. Teach the decompose to distinguish singular
   vs "all/每个" (LLM-side intent), and/or the unbound grab -> single nearest. (Earlier idea: unbound -> nearest

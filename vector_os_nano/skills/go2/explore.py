@@ -699,6 +699,12 @@ class ExploreSkill:
         "Runs in the BACKGROUND — you can give other commands while exploring. "
         "Use stop() to halt exploration."
     )
+    # Typical REAL-TIME startup duration (non-blocking launch + initial movement):
+    # the skill returns immediately (exploration is a background thread), but the
+    # executor waits via _wait_for_async_skill which polls until is_exploring()
+    # returns False; 150s is a conservative floor for open-ended exploration.
+    # GoalExecutor floors the step timeout at this value (R2-2).
+    typical_duration_sec: float = 150.0
     parameters: dict = {}
     preconditions: list[str] = []
     postconditions: list[str] = []

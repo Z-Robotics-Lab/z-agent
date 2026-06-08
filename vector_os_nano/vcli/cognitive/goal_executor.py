@@ -307,10 +307,19 @@ class GoalExecutor:
         exec_success, exec_error, exec_output = self._execute_strategy(result)
         elapsed = time.monotonic() - step_start
 
-        # Check timeout (takes priority over execution result)
-        if elapsed > sub_goal.timeout_sec:
+        # Check timeout (takes priority over execution result).
+        # R2-2: floor the effective limit at the skill's declared real-time duration
+        # so a live-viewer pick/place (20s+) is never falsely marked timeout just
+        # because the LLM emitted a small timeout_sec (e.g. 15s). The floor is
+        # opt-in — a skill without typical_duration_sec is unaffected.
+        effective_timeout = self._effective_timeout(sub_goal.timeout_sec, strategy_name)
+        if elapsed > effective_timeout:
             error_msg = (
-                f"timeout after {elapsed:.3f}s (limit {sub_goal.timeout_sec}s)"
+                f"timeout after {elapsed:.3f}s "
+                f"(limit {effective_timeout:.1f}s"
+                + (f"; plan said {sub_goal.timeout_sec:.1f}s"
+                   if effective_timeout != sub_goal.timeout_sec else "")
+                + ")"
             )
             logger.warning("GoalExecutor: %s — %s", sub_goal.name, error_msg)
             return StepRecord(
@@ -1052,6 +1061,33 @@ class GoalExecutor:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _effective_timeout(self, plan_timeout: float, strategy_name: str) -> float:
+        """Return max(plan_timeout, skill.typical_duration_sec or 0).
+
+        R2-2 floor: slow motor skills declare a typical real-time duration; the
+        executor floors the step's effective timeout at that value so a completed
+        motor action is not falsely failed under a live MuJoCo viewer even when the
+        LLM underestimates timeout_sec. A skill without typical_duration_sec (or no
+        registry) leaves plan_timeout unchanged — the floor is fully opt-in.
+
+        Args:
+            plan_timeout: the sub_goal.timeout_sec from the decomposed plan.
+            strategy_name: the resolved skill name (already _skill-suffix-stripped,
+                           as returned by _extract_name).
+        """
+        if not strategy_name or self._skill_registry is None:
+            return plan_timeout
+        try:
+            skill = self._skill_registry.get(strategy_name)
+        except Exception:  # noqa: BLE001
+            return plan_timeout
+        if skill is None:
+            return plan_timeout
+        floor = getattr(skill, "typical_duration_sec", 0.0)
+        if not isinstance(floor, (int, float)):
+            return plan_timeout
+        return max(plan_timeout, float(floor))
 
     def _make_step(
         self,
