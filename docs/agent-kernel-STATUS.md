@@ -110,6 +110,19 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   `SimStartTool._reexec_under_mjpython_with_sim` use it. 5 regression tests. Human visual check:
   `vector-cli --sim` (or NL "start the arm sim") in a real terminal should now open a MuJoCo window.
 
+- **Live-hardening IV (this commit) — P0 segfault fixed.** "抓香蕉" segfaulted because
+  `engine.vgg_execute_async` ran skills on a background `vgg-executor` thread that called
+  `mj_step` + `viewer.sync()` on `mjData`/GLFW, racing the main-thread passive viewer
+  (MuJoCo data + GLFW are not thread-safe; GLFW is main-thread-only on macOS). Fix: a
+  world-agnostic `VectorEngine._has_live_viewer()` (duck-types the agent's `_arm`/`_base`
+  for a live viewer) gates `vgg_execute_async` — when a viewer is live it runs
+  `vgg_execute` SYNCHRONOUSLY on the caller's (viewer-owning) thread; the background-thread
+  path is byte-identical for the headless/dev case. `KeyboardInterrupt` still propagates
+  (the inner handler catches `Exception`, not `BaseException`). 3 regression tests
+  (`tests/vcli/test_segfault_sync_exec.py`); 946 green. `vgg_execute_async` is the ONLY
+  background sim access (the tool_use/ReAct path already runs sync on the main thread).
+  HUMAN VISUAL CHECK still needed: "抓香蕉" in a real `--sim` terminal must no longer crash.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —
@@ -177,11 +190,11 @@ CONFIRMED WORKING: chat answers cleanly; the MuJoCo viewer now opens (mjpython r
 NL routes to real arm skills (go_home/detect/pick, no 'unmatched'). BUT "抓一个东西"/"抓香蕉"
 fails end-to-end, and the CLI segfaulted. Priorities for the next pass:
 
-- **P0 — SEGFAULT.** `zsh: segmentation fault vector-cli` mid-run. Almost certainly MuJoCo
-  thread-safety: the passive viewer runs on the main thread (mjpython) while VGG executes skills
-  on a BACKGROUND thread (`vgg_execute_async`) that reads/mutates `mjData` — MuJoCo is not
-  thread-safe. Fix first (it crashes): marshal mujoco access onto the viewer thread / lock /
-  step+render on one thread.
+- **P0 — SEGFAULT. [FIXED — Live-hardening IV, this commit].** Was: `vgg_execute_async`'s
+  background thread stepped `mjData` + `viewer.sync()` while the main-thread viewer rendered
+  (MuJoCo/GLFW not thread-safe). Fixed by running execution synchronously on the viewer-owning
+  thread when a viewer is live (`_has_live_viewer()` gate). Needs the owner's live `--sim`
+  visual confirmation that "抓香蕉" no longer crashes.
 - **P0 — PERCEPTION/GROUNDING (why grab fails).** detect finds nothing ("No detections found",
   "Perception failed, falling back to world model", "Cannot locate target object") even though
   the MuJoCo scene HAS the objects. The robot arm world's detect uses the VLM path, which fails in

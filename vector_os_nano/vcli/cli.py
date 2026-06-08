@@ -1824,8 +1824,12 @@ def main(argv: list[str] | None = None) -> None:
                             f"Steps:\n{step_summary}"
                         )
 
+                    # Runs on a background thread (CLI stays responsive) EXCEPT
+                    # when a GUI viewer is live — then it executes synchronously
+                    # on this thread (MuJoCo/GLFW is single-thread-only on
+                    # macOS) and the prompt returns once the arm finishes.
                     engine.vgg_execute_async(goal_tree, on_complete=_on_vgg_complete)
-                    continue  # CLI immediately available for next input
+                    continue  # next input (immediately when headless)
 
                 # --- Normal tool_use path ---
                 # Pause the live region around any interactive permission prompt so

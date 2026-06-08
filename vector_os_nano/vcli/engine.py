@@ -1068,20 +1068,32 @@ class VectorEngine:
         goal_tree: "GoalTree",
         on_complete: "Callable[[ExecutionTrace], None] | None" = None,
     ) -> None:
-        """Execute GoalTree in background thread. CLI remains responsive.
+        """Execute a GoalTree, off the caller's thread WHEN that is safe.
 
         Uses VGGHarness (with retry logic) when available, otherwise falls
         back to raw GoalExecutor.
 
+        Threading: by default this runs on a background daemon thread so the
+        CLI stays responsive. BUT when a GUI MuJoCo viewer is live
+        (``_has_live_viewer()``), it runs SYNCHRONOUSLY on the caller's thread
+        instead — MuJoCo mjData/GLFW are not thread-safe (GLFW is main-thread-
+        only on macOS), so the viewer-owning thread must be the only one that
+        touches the sim. In that case the caller blocks until execution
+        finishes (acceptable: the user is watching the arm move, not typing).
+
         Args:
             goal_tree: The goal tree to execute.
-            on_complete: Called when execution finishes (in background thread).
+            on_complete: Called when execution finishes (on the background
+                thread, or inline on the caller's thread when a viewer is live).
         """
         import threading
 
         self._vgg_cancel = threading.Event()
 
         def _run() -> None:
+            # Catch Exception (not BaseException) so KeyboardInterrupt still
+            # propagates to the REPL's try/except KeyboardInterrupt (cli.py),
+            # preserving Ctrl-C abort of an in-flight goal.
             try:
                 trace = self.vgg_execute(goal_tree)
                 if on_complete:
@@ -1089,9 +1101,42 @@ class VectorEngine:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("VGG async execution failed: %s", exc)
 
+        # WHY: MuJoCo mjData and GLFW are not thread-safe (GLFW must be touched
+        # only on the main thread on macOS). When a GUI viewer is live, the
+        # caller's thread owns it; running skills on a background thread would
+        # access mjData/GLFW concurrently with the main-thread render and
+        # segfault. So when a viewer is live, execute synchronously on the
+        # caller's (viewer-owning) thread. The background thread stays ONLY for
+        # the headless/dev path (no viewer), where the CLI must stay responsive.
+        if self._has_live_viewer():
+            self._vgg_thread = None
+            _run()
+            return
+
         t = threading.Thread(target=_run, name="vgg-executor", daemon=True)
         t.start()
         self._vgg_thread = t
+
+    def _has_live_viewer(self) -> bool:
+        """True when a connected sim has an OPEN GUI viewer.
+
+        MuJoCo data and GLFW are not thread-safe (GLFW must be touched only on
+        the main thread on macOS). When a viewer is live, skill execution must
+        run on the viewer-owning thread, never a background thread, or
+        concurrent mjData/GLFW access segfaults. World-agnostic: duck-types the
+        connected agent's arm/base hardware for a live viewer handle (no world
+        import, no embodiment-specific branch — kernel rule 7).
+        """
+        agent = getattr(self, "_vgg_agent", None)
+        if agent is None:
+            return False
+        for attr in ("_arm", "_base"):
+            hw = getattr(agent, attr, None)
+            if hw is None:
+                continue
+            if getattr(hw, "_viewer", None) is not None or getattr(hw, "viewer", None) is not None:
+                return True
+        return False
 
     def _build_world_context(self, force: bool = False) -> str:
         """Build a brief world context string for the GoalDecomposer.
