@@ -244,9 +244,13 @@ These are the contracts the kernel guarantees. Anything that violates them is a 
   lets the agentic kernel and the playground be built as separate, parallel tracks (ADR-008).
   Status: world selection now goes through `WorldRegistry` (`resolve_world` / `resolve_world_named`)
   and the engine MERGES the active world's `build_verify_namespace` additively — so a world (e.g.
-  the playground) OWNS its predicates. Remaining debt: the legacy robot bindings still live in
-  `engine._build_verifier_namespace` (a full migration into `RobotWorld` is deferred); the merge is
-  additive, so behaviour is byte-identical for the robot/dev worlds today.
+  the playground) OWNS its predicates. The deterministic ARM sim-oracle predicates are now
+  single-sourced in the kernel (`vcli/worlds/arm_sim_oracle.py`) and contributed by BOTH
+  `PlaygroundWorld` AND `RobotWorld` (the latter binds them whenever a sim arm — one exposing
+  `get_object_positions` — is connected), so detect/verify are grounded in the plain robot arm
+  world, not just the playground. Remaining debt: the legacy scalar bindings (`get_position` /
+  dev predicates / the non-sim perception stubs) still live in `engine._build_verifier_namespace`
+  and merge additively; the real-hardware (no sim oracle) grounding path is deferred to Stage 3.
 
 ---
 
@@ -295,9 +299,11 @@ relative to `vector_os_nano/`.
 - `world.py` / `scenario.py` / `catalog.py` — embodiment-aware `PlaygroundWorld` + frozen `Scenario`
   + the preset catalog (arm: `tabletop`, `tabletop_tray`; quadruped: `go2_room`); registers into the
   kernel `WorldRegistry` via a lazy hook.
-- `verify/` — the deterministic sim-oracle verify predicates the world OWNS and contributes across the
-  seam: arm (`holding_object`/`arm_at_home`/`placed_count`/`detect_objects`/`describe_scene`) and Go2
-  base (`at_position`/`facing`/`visited`).
+- `verify/` — sim-oracle verify predicates contributed across the seam. The ARM predicates
+  (`holding_object`/`arm_at_home`/`placed_count`/`detect_objects`/`describe_scene`) are SINGLE-SOURCED
+  in the kernel at `vcli/worlds/arm_sim_oracle.py` (so `RobotWorld` can reuse them without the kernel
+  importing the playground); `playground/verify/arm_predicates.py` + `scene_predicates.py` are thin
+  re-export shims. The Go2 base predicates (`at_position`/`facing`/`visited`) still live here.
 
 **Tools, routing, prompt, session, permissions**
 - `vcli/tools/` — general tools (file/bash/glob/grep/web) + world-contributed tool wrappers.

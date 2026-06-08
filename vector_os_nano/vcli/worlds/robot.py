@@ -34,9 +34,38 @@ class RobotWorld:
         return None
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
-        # The engine builds the robot verify namespace directly
-        # (engine._build_verifier_namespace). Nothing extra to add here.
-        return {}
+        # Ground the verifier on the SIM arm's deterministic oracle. The engine
+        # builds its dev/robot bindings + empty perception stubs first
+        # (engine._build_verifier_namespace), then merges THIS on top — so when a
+        # sim arm is present these predicates REPLACE the stubs (detect_objects->[],
+        # describe_scene->"") with real ground-truth lookups, and the planner's
+        # verify allowlist (derived from this namespace) gains the arm predicates.
+        #
+        # Single-sourced from the kernel-side arm_sim_oracle (ADR-008 C1 / kernel
+        # rule 3); lazily imported here so the module load stays robot-free per the
+        # file's stated intent. object_names=() => all scene objects (the plain
+        # robot world has no Scenario to declare a known-set).
+        arm = getattr(agent, "_arm", None)
+        if arm is None or not hasattr(arm, "get_object_positions"):
+            # Real-hardware / no-arm path: contribute nothing, leaving the engine
+            # namespace byte-identical (Stage 3 VLM grounding is a separate future
+            # concern — not the sim oracle).
+            return {}
+        from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+            make_arm_at_home,
+            make_describe_scene,
+            make_detect_objects,
+            make_holding_object,
+            make_placed_count,
+        )
+
+        return {
+            "detect_objects": make_detect_objects(agent, ()),
+            "describe_scene": make_describe_scene(agent, ()),
+            "holding_object": make_holding_object(agent),
+            "arm_at_home": make_arm_at_home(agent),
+            "placed_count": make_placed_count(agent),
+        }
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
         # No-op in C.1 — the robot path keeps its skill/primitive routing,

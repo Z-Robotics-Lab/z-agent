@@ -123,6 +123,21 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   background sim access (the tool_use/ReAct path already runs sync on the main thread).
   HUMAN VISUAL CHECK still needed: "抓香蕉" in a real `--sim` terminal must no longer crash.
 
+- **Live-hardening V (this commit) — P0/P1 grounding: RobotWorld now has real verify predicates.**
+  The plain robot arm world (`RobotWorld`, used by the normal `--sim` grasp path) returned `{}` for
+  `build_verify_namespace`, so the engine kept its stubs (`detect_objects -> []`, `certainty -> 0.0`)
+  and EVERY verify failed. Fixed by single-sourcing the deterministic sim-oracle predicate factories
+  into a new kernel module `vcli/worlds/arm_sim_oracle.py` (moved out of `playground/verify/`, which
+  the kernel must not import per ADR-008; the two playground files are now thin re-export shims) and
+  having `RobotWorld.build_verify_namespace(agent)` return the 5 arm/scene predicates
+  (`detect_objects`/`describe_scene`/`holding_object`/`arm_at_home`/`placed_count`, `object_names=()`
+  = all scene objects) WHENEVER a sim arm (`hasattr get_object_positions`) is connected; real hardware
+  / no arm still returns `{}` (byte-identical). Because the decompose verify allowlist is derived from
+  the verify namespace, the planner now also gains these as allowed verify predicates. 7 new tests
+  (`tests/vcli/test_robot_world_grounding.py`, incl. an engine end-to-end proving the stub is REPLACED);
+  playground suite still 95 green; 953 green total; ruff clean. NEXT (Step 3) makes the decompose
+  actually USE them + bind the target object label so "抓香蕉" picks the banana.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —
@@ -195,16 +210,17 @@ fails end-to-end, and the CLI segfaulted. Priorities for the next pass:
   (MuJoCo/GLFW not thread-safe). Fixed by running execution synchronously on the viewer-owning
   thread when a viewer is live (`_has_live_viewer()` gate). Needs the owner's live `--sim`
   visual confirmation that "抓香蕉" no longer crashes.
-- **P0 — PERCEPTION/GROUNDING (why grab fails).** detect finds nothing ("No detections found",
-  "Perception failed, falling back to world model", "Cannot locate target object") even though
-  the MuJoCo scene HAS the objects. The robot arm world's detect uses the VLM path, which fails in
-  sim. The PLAYGROUND already solved this with the DETERMINISTIC sim-oracle (`get_object_positions`).
-  FIX = bring the playground's sim-oracle grounding into the plain robot arm world (this is the
-  earlier design choice (a), now clearly correct — VLM is the wrong tool in sim).
-- **P1 — VERIFY-SATISFIABILITY.** Every step fails verify even when the action physically succeeds:
-  go_home fails `certainty()` (engine stub -> 0.0), detect fails `len(detect_objects())>0` (stub ->
-  []). `engine._build_verifier_namespace` falls through to stubs in the plain arm world. Same root
-  as P0-grounding.
+- **P0 — PERCEPTION/GROUNDING. [PARTLY FIXED — Live-hardening V, this commit].** Correction to the
+  original hypothesis: the CLI arm path ALREADY wires the deterministic `MuJoCoPerception` oracle
+  (not the VLM), so `detect("banana")` works. The live "No detections found for 'object'" was caused
+  by the decompose emitting an EMPTY `strategy_params` for the pick step → the query degraded to the
+  literal default "object" (which the oracle correctly doesn't match). The grounding half (verify
+  predicates) is now FIXED (RobotWorld contributes the sim-oracle predicates). The remaining half —
+  the decompose must extract the target entity and bind it to the pick param — is **Step 3**.
+- **P1 — VERIFY-SATISFIABILITY. [FIXED — Live-hardening V, this commit].** `RobotWorld` now
+  contributes real `detect_objects`/`describe_scene`/`holding_object`/`arm_at_home`/`placed_count`
+  (sim oracle), so verify can pass for a sim arm. `certainty()` is still a stub — Step 3 steers the
+  per-skill verify choice away from it (home -> `arm_at_home()`, pick -> `holding_object()`).
 - **P1 — VERIFY-FN CHOICE.** The decompose vocab picks `certainty()` for `home` (meaningless);
   should pick `arm_at_home()`/`holding_object()` etc. Wire the playground arm predicates as the
   robot-world verify namespace and teach the vocab to pick the right per-skill predicate.
