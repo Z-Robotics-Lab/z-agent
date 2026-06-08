@@ -835,9 +835,13 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             _LOG.warning("GoalDecomposer: dunder in verify expression — rejecting")
             return None
 
-        # AST parse check
+        # AST parse check. Suppress SyntaxWarning from sloppy LLM escape sequences
+        # (e.g. '\.') — they parse fine but would spam '<unknown>' to the console.
+        import warnings  # noqa: PLC0415
         try:
-            tree = ast.parse(verify, mode="eval")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                tree = ast.parse(verify, mode="eval")
         except SyntaxError:
             _LOG.warning("GoalDecomposer: SyntaxError in verify: %r", verify)
             return None

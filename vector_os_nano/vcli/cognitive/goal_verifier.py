@@ -125,13 +125,21 @@ class GoalVerifier:
             _LOG.warning("GoalVerifier: dunder name rejected in expression: %r", expression)
             return False, None
 
-        # AST safety check
+        # AST safety check. LLM-authored expressions can carry sloppy escape
+        # sequences (e.g. '\.'); they parse fine (the escape becomes a literal)
+        # but ast.parse would emit a SyntaxWarning to '<unknown>' on the user's
+        # console. Suppress that noise — it is model output, not a code defect.
+        import warnings  # noqa: PLC0415
         try:
-            tree = ast.parse(expression, mode="eval")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                tree = ast.parse(expression, mode="eval")
         except SyntaxError:
             # Try statement mode to produce a better error message for blocked constructs
             try:
-                stmt_tree = ast.parse(expression, mode="exec")
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", SyntaxWarning)
+                    stmt_tree = ast.parse(expression, mode="exec")
                 for node in ast.walk(stmt_tree):
                     if isinstance(node, _BLOCKED_NODE_TYPES):
                         _LOG.warning(
