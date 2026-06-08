@@ -124,6 +124,24 @@ def resolve_credentials(
     provider = "anthropic"
     base_url = cli_base_url
 
+    # Explicit OpenAI-compatible provider (e.g. DeepSeek's native API) selected in
+    # config. Highest priority so it is the default at CLI startup, and returns
+    # early to BYPASS the OpenRouter "anthropic/" prefix below — a DeepSeek model id
+    # such as "deepseek-v4-flash" has no slash and must NOT be mangled. Additive:
+    # only taken when the config explicitly sets ``provider: deepseek``; every other
+    # provider path is unchanged. Routes to the OpenAI-compatible backend
+    # (create_backend sends any non-"anthropic" provider there).
+    if not cli_api_key and config.get("provider") == "deepseek":
+        ds_key = config.get("deepseek_api_key", "")
+        if ds_key:
+            ds_model = cli_model or config.get("deepseek_model") or "deepseek-v4-flash"
+            ds_base = (
+                cli_base_url
+                or config.get("deepseek_base_url")
+                or "https://api.deepseek.com"
+            )
+            return ds_key, "openai_compat", ds_model, ds_base
+
     if not api_key:
         # Vector CLI's own OAuth credentials (independent rate limits)
         from vector_os_nano.vcli.oauth import load_credentials
