@@ -339,6 +339,7 @@ class SimStartTool:
         from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
         from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
         from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
+        from vector_os_nano.skills.pick import SIM_PICK_CONFIG
         arm = MuJoCoArm(gui=gui)
         arm.connect()
         gripper = MuJoCoGripper(arm)
@@ -348,7 +349,7 @@ class SimStartTool:
             arm=arm,
             gripper=gripper,
             perception=perception,
-            config={"skills": {"pick": {"hardware_offsets": False}}},
+            config={"skills": {"pick": dict(SIM_PICK_CONFIG)}},
         )
 
     # ------------------------------------------------------------------

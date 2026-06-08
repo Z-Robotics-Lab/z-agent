@@ -356,21 +356,24 @@ def create_sim_stack(headless: bool = True) -> Agent:
     from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # noqa: PLC0415
     from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # noqa: PLC0415
     from vector_os_nano.perception.calibration import Calibration  # noqa: PLC0415
+    from vector_os_nano.skills.pick import SIM_PICK_CONFIG  # noqa: PLC0415
 
     _log(f"[MCP] Starting MuJoCo simulation (headless={headless})...")
 
     cfg = _load_config_with_fallback()
 
-    # Sim-specific overrides (mirrors run.py _init_sim)
-    cfg.setdefault("skills", {}).setdefault("pick", {}).update(
+    # Sim-specific overrides (mirrors run.py _init_sim).
+    # Start from SIM_PICK_CONFIG (single-sourced: hardware_offsets=False, z_offset=0.0)
+    # then layer in MCP-specific geometry tuning on top.
+    _pick_cfg = dict(SIM_PICK_CONFIG)
+    _pick_cfg.update(
         {
-            "z_offset": 0.0,
             "x_offset": 0.0,
             "pre_grasp_height": 0.04,
-            "hardware_offsets": False,
             "wrist_roll_offset": math.pi / 2,
         }
     )
+    cfg.setdefault("skills", {}).setdefault("pick", {}).update(_pick_cfg)
     cfg.setdefault("skills", {}).setdefault("home", {}).setdefault(
         "joint_values", [0.0, 0.0, 0.0, 0.0, 0.0]
     )

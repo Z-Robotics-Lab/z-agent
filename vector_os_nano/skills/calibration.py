@@ -12,41 +12,40 @@ No ROS2 imports — pure Python + numpy.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import yaml
 
 logger = logging.getLogger(__name__)
 
-# Default calibration file location (same as skill_node_v2.py)
-_DEFAULT_CALIB_FILE = str(
-    Path.home() / "Desktop" / "vector_ws" / "config" / "workspace_calibration.yaml"
-)
-
 
 def load_calibration(calib_file: str | None = None) -> np.ndarray:
     """Load camera→base_link 4x4 affine transform matrix from YAML.
 
-    If the file does not exist, returns a 4x4 identity matrix and logs a
-    warning. The identity fallback allows skills to run without a calibration
-    file (positions will be in camera frame, which is wrong, but at least the
-    pipeline doesn't crash).
+    File resolution order:
+      1. ``calib_file`` argument (explicit caller override).
+      2. ``VECTOR_CALIB_FILE`` environment variable.
+      3. None — no calibration file configured.
+
+    When no file is configured or the resolved path does not exist, returns
+    a 4x4 identity matrix and logs at DEBUG level.  Absence of a calibration
+    file is the expected state in simulation (the oracle returns world-frame
+    coordinates directly), so it is not a warning.
 
     Args:
-        calib_file: path to workspace_calibration.yaml.  When None, the
-            default path under ~/Desktop/vector_ws/config/ is used.
+        calib_file: explicit path to workspace_calibration.yaml, or None to
+            fall back to the VECTOR_CALIB_FILE env var (then to identity).
 
     Returns:
         4x4 numpy float64 array representing the homogeneous transform.
     """
-    path = calib_file or _DEFAULT_CALIB_FILE
-    if not Path(path).exists():
-        logger.warning(
-            "No calibration file at %s — using identity transform. "
-            "Run calibrate_workspace first for accurate picks.",
-            path,
+    path: str | None = calib_file or os.environ.get("VECTOR_CALIB_FILE")
+    if not path or not Path(path).exists():
+        logger.debug(
+            "No calibration file configured/found%s — using identity transform.",
+            f" (tried {path})" if path else "",
         )
         return np.eye(4)
 

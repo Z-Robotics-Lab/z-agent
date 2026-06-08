@@ -501,17 +501,16 @@ def _init_agent(args: argparse.Namespace) -> Any:
             from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
             from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
             from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
+            from vector_os_nano.skills.pick import SIM_PICK_CONFIG
             arm = MuJoCoArm(gui=not getattr(args, "headless", False))
             arm.connect()
             gripper = MuJoCoGripper(arm)
             perception = MuJoCoPerception(arm)
-            # hardware_offsets compensate for real-rig URDF/gripper error; in sim the
-            # MuJoCo positions are exact, so disable them to keep grasps centered.
             return Agent(
                 arm=arm,
                 gripper=gripper,
                 perception=perception,
-                config={"skills": {"pick": {"hardware_offsets": False}}},
+                config={"skills": {"pick": dict(SIM_PICK_CONFIG)}},
             )
 
         # --- Go2 full stack: MuJoCo + ROS2 bridge + nav stack + VLM + Rerun ---
@@ -1200,32 +1199,43 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
     os.execve(mjpython, [mjpython, "-m", "vector_os_nano.vcli.cli"] + sys.argv[1:], new_env)
 
 
-# Cognitive package logger whose per-step WARNINGs are duplicated by the rich
-# step UI on the REPL console; quieted on the non-verbose REPL (see _setup_logging).
-_COGNITIVE_LOGGER = "vector_os_nano.vcli.cognitive"
+# Loggers whose per-step INFO/WARNING lines are pure REPL noise on the non-verbose
+# console (the rich step UI already surfaces every failure).  Quieted to ERROR on
+# the non-verbose REPL; restored to NOTSET under --verbose.
+_QUIET_LOGGERS: tuple[str, ...] = (
+    "vector_os_nano.vcli.cognitive",   # step-failure WARNINGs duplicated by rich UI
+    "vector_os_nano.skills",           # [PICK]/[SCAN] INFO lines
+    "vector_os_nano.perception",       # perception pipeline INFO lines
+    "vector_os_nano.hardware",         # [SIM DETECT] INFO/WARNING lines
+)
+
+# Back-compat alias used by the existing tests.
+_COGNITIVE_LOGGER = _QUIET_LOGGERS[0]
 
 
 def _setup_logging(verbose: bool) -> None:
     """Configure logging for the REPL entry path (CLI only).
 
-    --verbose -> root DEBUG and full cognitive-layer logging (nothing quieted).
+    --verbose -> root DEBUG; all noisy sub-package loggers restored to NOTSET so
+    they inherit the root level (full logging preserved).
 
-    Non-verbose -> root WARNING, but the cognitive-layer WARNINGs are raised to
-    ERROR. Every step failure (e.g. "no strategy matched", "execution failed")
-    is ALREADY surfaced in the rich step UI ("[FAIL] ..."); the duplicate console
-    WARNINGs — emitted 2x per step across retries — are pure noise. The quieting
-    is scoped to the cognitive package only (NOT the root logger), so real ERRORs
-    still surface and the engine logger is unaffected. Library code and the test
-    suite never call this — only the CLI entry path does.
+    Non-verbose -> root WARNING; the sub-package loggers in _QUIET_LOGGERS are
+    pinned to ERROR so their INFO/WARNING lines don't flood the console.  Every
+    step failure is ALREADY surfaced in the rich step UI ("[FAIL] ..."); the
+    duplicate log lines are pure noise.  The quieting is scoped to those specific
+    package prefixes — NOT the root logger — so real ERRORs still surface and the
+    engine/kernel loggers are unaffected.  Library code and the test suite never
+    call this function; it is the CLI entry path only.
     """
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
-        # Undo any prior non-verbose quieting (e.g. a re-exec/relaunch in-process)
-        # so --verbose always restores full cognitive-layer logging.
-        logging.getLogger(_COGNITIVE_LOGGER).setLevel(logging.NOTSET)
+        # Undo any prior non-verbose quieting so --verbose always restores full logging.
+        for name in _QUIET_LOGGERS:
+            logging.getLogger(name).setLevel(logging.NOTSET)
     else:
         logging.basicConfig(level=logging.WARNING)
-        logging.getLogger(_COGNITIVE_LOGGER).setLevel(logging.ERROR)
+        for name in _QUIET_LOGGERS:
+            logging.getLogger(name).setLevel(logging.ERROR)
 
 
 def main(argv: list[str] | None = None) -> None:

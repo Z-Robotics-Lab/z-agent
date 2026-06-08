@@ -71,6 +71,13 @@ _WORKSPACE_MAX_DIST: float = 0.35   # 35 cm
 # Calibrated home joints (DEFAULT_HOME_VALUES in v2)
 _DEFAULT_HOME_JOINTS: list[float] = [-0.014, -1.238, 0.562, 0.858, 0.311]
 
+# Sim-mode pick configuration (single source of truth for all sim agent constructors).
+# In simulation the oracle returns EXACT world-frame coordinates, so both the
+# z_offset (which compensates for real gripper/finger geometry in hardware) and
+# hardware_offsets (which absorb URDF/servo/tip-to-link errors) must be zeroed.
+# Leaving _DEFAULT_Z_OFFSET=0.10 intact — that is the correct real-rig default.
+SIM_PICK_CONFIG: dict = {"hardware_offsets": False, "z_offset": 0.0}
+
 
 @skill(
     aliases=["grab", "grasp", "take", "抓", "拿", "抓起", "抓住", "抓取", "拿起", "取"],

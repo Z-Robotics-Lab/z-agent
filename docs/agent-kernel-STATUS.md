@@ -163,8 +163,22 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   which the language-neutral oracle (English names) can't match -> detect verify failed. Fixed by strengthening
   _TARGET_BINDING_GUIDANCE: use the suggested verify EXACTLY as written, target goes ONLY in strategy_params,
   never as an argument inside verify. Re-validated: detect verify is now the query-less len(detect_objects())>0
-  (passes), every step verify satisfiable. STILL PENDING: headless PHYSICAL grasp (does pick actually grab the
-  banana so holding_object() flips True — tests IK/coords) + owner's GUI window visual check.
+  (passes), every step verify satisfiable. (Headless PHYSICAL grasp now also works — see Live-hardening VII;
+  only the owner's GUI window visual check remains.)
+
+- **Live-hardening VII (this commit) — Step 4: sim grasp config + REPL polish. END-TO-END GRASP WORKS.**
+  (1) PHYSICAL GRASP: pick added `z_offset=0.10` (10cm, real-rig tuning) to the object z before grasping,
+  so in sim (exact coords) the gripper closed 10cm ABOVE the object — the skill reported success but
+  `holding_object()` stayed False (verify-as-moat caught the fake success). Fixed with a single-sourced
+  `SIM_PICK_CONFIG = {"hardware_offsets": False, "z_offset": 0.0}` (skills/pick.py) used at all 3 sim
+  agent constructors (cli.py, sim_tool.py, mcp/server.py); `_DEFAULT_Z_OFFSET=0.10` kept for real hardware.
+  VALIDATED headless: ALL 6 objects (banana/mug/bottle/screwdriver/duck/lego) grasp + lift to z~0.26,
+  `holding_object()=True`. New real grasp regression `tests/vcli/test_sim_grasp_e2e.py`. (2) LOG SPAM: the
+  REPL non-verbose quieting now covers `vector_os_nano.{skills,perception,hardware}` (not just cognitive)
+  via a single `_QUIET_LOGGERS` tuple. (3) CALIBRATION: removed the hardcoded `~/Desktop/vector_ws/...` path;
+  resolution is now arg > `VECTOR_CALIB_FILE` env > identity, and absent calib logs at DEBUG (was a WARNING
+  flood). 969 green + new calibration tests. THE FULL CHAIN now works headless end-to-end: NL (中/英) ->
+  decompose binds target -> detect verify passes -> pick physically grasps -> holding_object() True.
 
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
@@ -253,11 +267,11 @@ fails end-to-end, and the CLI segfaulted. Priorities for the next pass:
 - **P1 — VERIFY-FN CHOICE.** The decompose vocab picks `certainty()` for `home` (meaningless);
   should pick `arm_at_home()`/`holding_object()` etc. Wire the playground arm predicates as the
   robot-world verify namespace and teach the vocab to pick the right per-skill predicate.
-- **P1 — LOG SPAM (skills).** The WF1 quieting only covered `vcli.cognitive`; `skills.pick`/
-  `.calibration` still flood the REPL. Broaden to the `vector_os_nano` skill/perception loggers.
-- **P2 — HARDCODED PATH.** `skills/calibration.py` warns about
-  `/Users/yusenthebot/Desktop/vector_ws/config/workspace_calibration.yaml` (another machine's path).
-  Give a sane default / skip calibration in sim (identity is fine for the sim-oracle).
+- **P1 — LOG SPAM (skills). [FIXED — Live-hardening VII].** REPL non-verbose quieting now covers
+  `vector_os_nano.{skills,perception,hardware}` via a single `_QUIET_LOGGERS` tuple.
+- **P2 — HARDCODED PATH. [FIXED — Live-hardening VII].** `skills/calibration.py` no longer hardcodes
+  the `~/Desktop/vector_ws/...` path; resolution is arg > `VECTOR_CALIB_FILE` env > identity, and an
+  absent calib file logs at DEBUG (was a WARNING flood). Identity is correct for the sim oracle.
 
 UNIFYING FIX: bring the playground's deterministic sim-oracle grounding (ADR-008 C1) into the plain
 robot arm world — closes P0-perception + P1-verify + P1-verify-fn together. P0-segfault is separate

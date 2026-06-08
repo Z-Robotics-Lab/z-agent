@@ -29,17 +29,24 @@ from vector_os_nano.vcli import cli
 
 COGNITIVE = "vector_os_nano.vcli.cognitive"
 
+# Additional namespaces that FIX 2 extends the quieting to.
+QUIET_NAMESPACES = [
+    "vector_os_nano.vcli.cognitive",
+    "vector_os_nano.skills",
+    "vector_os_nano.perception",
+    "vector_os_nano.hardware",
+]
+
 
 @pytest.fixture(autouse=True)
-def _restore_cognitive_logger_level():
-    """Snapshot/restore the cognitive logger level so tests don't leak state
-    into the rest of the suite (the canonical green set must stay clean)."""
-    log = logging.getLogger(COGNITIVE)
-    saved = log.level
+def _restore_quiet_logger_levels():
+    """Snapshot/restore all quietable logger levels so tests don't leak state."""
+    saved = {name: logging.getLogger(name).level for name in QUIET_NAMESPACES}
     try:
         yield
     finally:
-        log.setLevel(saved)
+        for name, level in saved.items():
+            logging.getLogger(name).setLevel(level)
 
 
 def test_non_verbose_quiets_cognitive_logger():
@@ -104,3 +111,31 @@ def test_sibling_loggers_not_quieted():
         assert engine_log.isEnabledFor(logging.WARNING)
     finally:
         engine_log.setLevel(saved)
+
+
+def test_all_noisy_namespaces_quieted_non_verbose():
+    """Non-verbose: skills, perception, hardware loggers are also quieted to ERROR."""
+    for name in QUIET_NAMESPACES:
+        logging.getLogger(name).setLevel(logging.NOTSET)
+    cli._setup_logging(verbose=False)
+    for name in QUIET_NAMESPACES:
+        log = logging.getLogger(name)
+        assert log.getEffectiveLevel() >= logging.ERROR, (
+            f"{name} should be quieted to ERROR in non-verbose mode"
+        )
+        assert not log.isEnabledFor(logging.WARNING), (
+            f"{name} should not emit WARNINGs in non-verbose mode"
+        )
+
+
+def test_all_noisy_namespaces_restored_verbose():
+    """--verbose restores all quieted namespaces to NOTSET."""
+    # Simulate prior non-verbose quieting on all namespaces.
+    for name in QUIET_NAMESPACES:
+        logging.getLogger(name).setLevel(logging.ERROR)
+    cli._setup_logging(verbose=True)
+    for name in QUIET_NAMESPACES:
+        log = logging.getLogger(name)
+        assert log.level == logging.NOTSET, (
+            f"{name} should be NOTSET (not pinned) under --verbose"
+        )
