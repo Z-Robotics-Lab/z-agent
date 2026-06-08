@@ -78,6 +78,17 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   producer in tests); harness double-records foreach child stats; a `foreach` missing `depends_on` can
   silently iterate zero (auto-inject `source_step`).
 
+- **Live-hardening (this commit)** — fixes found by running the real CLI on deepseek-v4-flash:
+  (1) arm VGG "unmatched" — `VGGHarness` cleared a step's explicit strategy on retry; on a baseless
+  arm world the empty-strategy selector fell to the `fallback/unmatched` route, destroying the valid
+  `scan_skill` and masking the real attempt-0 verify miss. Fixed with a `_retry_strategy()` selector
+  probe that keeps a valid explicit strategy when clearing would resolve to fallback/invalid
+  (world-agnostic; go2 path byte-identical; fail-loud preserved). (2) REPL WARNING log spam — the
+  cognitive-package logger is raised to ERROR on the non-verbose REPL (`_setup_logging`; full logs
+  under `--verbose`). Live-confirmed: "扫一眼看看" routes to scan_skill/describe_skill, no "unmatched",
+  clean console. KNOWN residual (separate, Phase D grounding): the scan step may still fail on a
+  verify miss (now surfaced HONESTLY, not masked); and a replan can still emit a hallucinated skill.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —

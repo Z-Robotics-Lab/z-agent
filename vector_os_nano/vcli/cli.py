@@ -1201,16 +1201,41 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
     os.execve(mjpython, [mjpython, "-m", "vector_os_nano.vcli.cli"] + sys.argv[1:], new_env)
 
 
+# Cognitive package logger whose per-step WARNINGs are duplicated by the rich
+# step UI on the REPL console; quieted on the non-verbose REPL (see _setup_logging).
+_COGNITIVE_LOGGER = "vector_os_nano.vcli.cognitive"
+
+
+def _setup_logging(verbose: bool) -> None:
+    """Configure logging for the REPL entry path (CLI only).
+
+    --verbose -> root DEBUG and full cognitive-layer logging (nothing quieted).
+
+    Non-verbose -> root WARNING, but the cognitive-layer WARNINGs are raised to
+    ERROR. Every step failure (e.g. "no strategy matched", "execution failed")
+    is ALREADY surfaced in the rich step UI ("[FAIL] ..."); the duplicate console
+    WARNINGs — emitted 2x per step across retries — are pure noise. The quieting
+    is scoped to the cognitive package only (NOT the root logger), so real ERRORs
+    still surface and the engine logger is unaffected. Library code and the test
+    suite never call this — only the CLI entry path does.
+    """
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
+        # Undo any prior non-verbose quieting (e.g. a re-exec/relaunch in-process)
+        # so --verbose always restores full cognitive-layer logging.
+        logging.getLogger(_COGNITIVE_LOGGER).setLevel(logging.NOTSET)
+    else:
+        logging.basicConfig(level=logging.WARNING)
+        logging.getLogger(_COGNITIVE_LOGGER).setLevel(logging.ERROR)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
     # --- macOS mjpython re-exec guard (must be before any credential/agent init) ---
     _maybe_reexec_under_mjpython(args)
 
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.WARNING)
+    _setup_logging(args.verbose)
 
     # Resolve API key + provider from CLI flags > env vars > config file
     from vector_os_nano.vcli.config import resolve_credentials

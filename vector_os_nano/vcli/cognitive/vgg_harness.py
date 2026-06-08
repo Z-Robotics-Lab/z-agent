@@ -486,14 +486,26 @@ class VGGHarness:
             if attempt == 0:
                 step = self._executor._execute_sub_goal(sub_goal)
             else:
-                # Clear strategy to let selector pick an alternative
+                # Retry: normally clear the explicit strategy so the selector can
+                # pick a *different* alternative (in case the original strategy is
+                # what failed). But only do so when the cleared, empty-strategy
+                # selector path can actually re-derive a usable strategy. On a
+                # world with no fallback route for this sub-goal (e.g. a baseless
+                # arm world: GO2 keyword ladder gated off + no registry alias
+                # match) clearing resolves to the opaque ``fallback``/``unmatched``
+                # (or ``invalid``) result, which would DESTROY a valid explicit
+                # strategy and mask the real failure (rule 8: fail loud with the
+                # real cause, never a silent wrong fallback). In that case keep the
+                # original explicit strategy so the step routes to the real skill
+                # and surfaces the honest failure. World-agnostic: the decision is
+                # driven solely by what the selector resolves, not the embodiment.
                 retry_goal = SubGoal(
                     name=sub_goal.name,
                     description=sub_goal.description,
                     verify=sub_goal.verify,
                     timeout_sec=sub_goal.timeout_sec,
                     depends_on=sub_goal.depends_on,
-                    strategy="",  # force selector to pick fresh
+                    strategy=self._retry_strategy(sub_goal),
                     strategy_params=sub_goal.strategy_params,
                     fail_action="",
                 )
@@ -510,3 +522,50 @@ class VGGHarness:
                 )
 
         return step  # return last failed attempt
+
+    def _retry_strategy(self, sub_goal: SubGoal) -> str:
+        """Choose the strategy string for a retry attempt.
+
+        Returns ``""`` (clear → let the selector pick a fresh alternative) only
+        when the empty-strategy selector path can actually re-derive a usable
+        strategy for this sub-goal. If clearing would resolve to a
+        non-actionable result — the opaque ``fallback``/``unmatched`` or a
+        fail-loud ``invalid`` (e.g. a baseless arm world where the GO2 keyword
+        ladder is gated off and the registry alias match misses) — the original
+        explicit strategy is KEPT instead, so the step routes to the real skill
+        and surfaces the honest failure rather than throwing the valid strategy
+        away (rule 8). No explicit strategy to begin with → nothing to preserve,
+        so the path is byte-identical (``""``).
+
+        Probe uses the harness's selector when available, falling back to the
+        executor's selector; if neither exposes ``select`` the historical clear
+        behaviour is preserved.
+        """
+        original = sub_goal.strategy
+        if not original:
+            return ""  # no explicit strategy — byte-identical to old clear path
+
+        selector = self._selector or getattr(self._executor, "_selector", None)
+        select = getattr(selector, "select", None)
+        if not callable(select):
+            return ""  # cannot probe — preserve historical behaviour
+
+        cleared = SubGoal(
+            name=sub_goal.name,
+            description=sub_goal.description,
+            verify=sub_goal.verify,
+            timeout_sec=sub_goal.timeout_sec,
+            depends_on=sub_goal.depends_on,
+            strategy="",
+            strategy_params=sub_goal.strategy_params,
+            fail_action="",
+        )
+        try:
+            probe = select(cleared)
+        except Exception:  # noqa: BLE001 — probe is best-effort; never break retry
+            return ""
+        # A cleared strategy that resolves to a real, actionable executor is a
+        # genuine alternative → clear. Otherwise keep the explicit strategy.
+        if getattr(probe, "executor_type", None) in {"fallback", "invalid"}:
+            return original
+        return ""
