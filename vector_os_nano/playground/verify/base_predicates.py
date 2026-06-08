@@ -170,3 +170,52 @@ def _is_box(box: Any) -> bool:
     except (TypeError, ValueError):
         return False
     return True
+
+
+def make_rooms_producer(
+    rooms: dict[str, tuple[float, float, float, float]],
+) -> Callable[..., dict[str, Any]]:
+    """Build a rooms PRODUCING-STEP callable over the scenario's named rooms.
+
+    The Go2 counterpart of ``scene_predicates.make_detect_producer``: an EXECUTOR
+    primitive (NOT a verify predicate) that "locates" the rooms a navigation chain
+    should visit and wraps them as a producing step's structured output —
+    ``{"rooms": [{"name", "x", "y"}, ...], "count": N}``. The executor captures
+    that dict to the run Blackboard under the step name, so a downstream
+    ``foreach`` whose ``source_step`` points at this step resolves
+    ``source_step.rooms`` to the REAL room list (pure path traversal, never eval).
+    This gives the Go2 "visit each room one by one" foreach a real producing step,
+    exactly as the arm grab-everything foreach reads from ``make_detect_producer``.
+
+    Each emitted room carries its NAME (the contract the ``visited(room)`` verify
+    predicate reads) plus the centre ``(x, y)`` of its axis-aligned box, so a body
+    template can navigate by name (``visited('${room.name}')``) or by coordinate
+    (``at_position(${room.x}, ${room.y})``). The room set is the SAME
+    scenario-owned source of truth ``visited`` reads, so the producer and the
+    verifier never diverge.
+
+    Deterministic and fail-safe: an empty / malformed room map yields
+    ``{"rooms": [], "count": 0}`` — never raises into the executor. Rooms are
+    emitted in sorted name order so the produced list is stable across runs.
+    """
+
+    room_boxes = {
+        str(name): tuple(float(v) for v in box)
+        for name, box in (rooms or {}).items()
+        if _is_box(box)
+    }
+
+    def rooms_producer(**_: Any) -> dict[str, Any]:
+        out: list[dict[str, Any]] = []
+        for name in sorted(room_boxes):
+            x_min, y_min, x_max, y_max = room_boxes[name]
+            out.append(
+                {
+                    "name": name,
+                    "x": (x_min + x_max) / 2.0,
+                    "y": (y_min + y_max) / 2.0,
+                }
+            )
+        return {"rooms": out, "count": len(out)}
+
+    return rooms_producer

@@ -34,10 +34,12 @@ from vector_os_nano.playground.verify.arm_predicates import (
 from vector_os_nano.playground.verify.base_predicates import (
     make_at_position,
     make_facing,
+    make_rooms_producer,
     make_visited,
 )
 from vector_os_nano.playground.verify.scene_predicates import (
     make_detect_objects,
+    make_detect_producer,
     make_describe_scene,
 )
 from vector_os_nano.vcli.prompt import ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTIONS
@@ -135,6 +137,46 @@ class PlaygroundWorld:
             "facing": make_facing(agent),
             "visited": make_visited(agent, rooms),
         }
+
+    # The strategy name a decompose plan emits for the detect PRODUCING step. It
+    # is distinct from the ``detect_objects`` verify PREDICATE: the predicate is
+    # a verify-namespace callable returning a bare list, while this is an executor
+    # primitive whose result_data ({"objects": [...]}) is captured to the
+    # Blackboard so a downstream foreach source_step resolves the real list.
+    DETECT_STRATEGY: str = "detect_objects_skill"
+
+    # The strategy name a Go2 decompose plan emits for the rooms PRODUCING step —
+    # the base counterpart of DETECT_STRATEGY. It "locates" the scenario's named
+    # rooms and writes a ``{"rooms": [...]}`` list whose result_data the executor
+    # captures to the Blackboard, so a "visit each room one by one" foreach whose
+    # source_step points at it resolves the REAL room list (pure path traversal).
+    # Distinct from the ``visited``/``at_position`` verify PREDICATES: those are
+    # verify-namespace callables; this is an executor primitive producing a list.
+    ROOMS_STRATEGY: str = "locate_rooms_skill"
+
+    def build_step_primitives(self, agent: Any) -> dict[str, Any]:
+        """Return executor PRIMITIVES this world provides as producing steps.
+
+        Distinct from :meth:`build_verify_namespace` (verify predicates): these
+        are run by the GoalExecutor as strategy steps, and their structured
+        output is captured to the Blackboard so later steps (e.g. a ``foreach``)
+        can consume it.
+
+        - ARM scenarios provide a single detect producer that performs the
+          deterministic sim-oracle detection and writes an ``{"objects": [...]}``
+          list — the real perception output a grab-everything foreach iterates.
+        - the GO2 scenario provides a rooms producer that "locates" the scenario's
+          named rooms and writes a ``{"rooms": [...]}`` list — the producing step
+          a "visit each room one by one" foreach iterates. The room set is the
+          SAME scenario-owned source of truth ``visited`` reads, so the producer
+          and the verifier never diverge.
+
+        Keyed by the strategy name a plan emits (DETECT_STRATEGY / ROOMS_STRATEGY).
+        """
+        if self.has_base():
+            return {self.ROOMS_STRATEGY: make_rooms_producer(self._scenario.rooms)}
+        objects = self._scenario.object_names
+        return {self.DETECT_STRATEGY: make_detect_producer(agent, objects)}
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
         # No-op for now: the playground keeps the kernel's skill/primitive routing.

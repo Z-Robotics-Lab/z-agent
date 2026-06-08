@@ -144,14 +144,14 @@ def _make_primitives(agent: _StubAgent) -> dict[str, Any]:
         # Perception sweep — no state change; verify uses describe_scene().
         return {"scanned": True}
 
-    def detect_all(**_: Any) -> dict[str, Any]:
-        # Produce the detected-objects list the foreach iterates. Shape matches
-        # the playground detect_objects() oracle: {"name", "x", "y", "z"}.
-        objs = [
-            {"name": name, "x": p[0], "y": p[1], "z": p[2]}
-            for name, p in sorted(arm.get_object_positions().items())
-        ]
-        return {"objects": objs, "count": len(objs)}
+    # The detect PRODUCING step is the REAL playground primitive — it runs the
+    # deterministic sim-oracle detection (the SAME ground truth the
+    # detect_objects() verify predicate reports) and writes {"objects": [...]}.
+    # No fabricated detect primitive: this is the real perception output the
+    # foreach iterates.
+    detect_producer = PlaygroundWorld(TABLETOP_TRAY).build_step_primitives(agent)[
+        PlaygroundWorld.DETECT_STRATEGY
+    ]
 
     def pick(object_label: str | None = None, **_: Any) -> dict[str, Any]:
         if object_label in arm.get_object_positions():
@@ -170,7 +170,7 @@ def _make_primitives(agent: _StubAgent) -> dict[str, Any]:
     # primitive (the foreach body's pick_skill/place_skill resolve here too).
     return {
         "scan_skill": scan,
-        "detect_all_skill": detect_all,
+        PlaygroundWorld.DETECT_STRATEGY: detect_producer,
         "pick_skill": pick,
         "place_skill": place,
     }
@@ -207,7 +207,7 @@ class _MockBackend:
 # as the arm skill set (no base): a go2/base strategy or a hallucinated skill must
 # be rejected. The body's pick/place are real arm skills; scan/detect are too.
 _ARM_STRATEGIES = frozenset(
-    {"scan_skill", "detect_all_skill", "pick_skill", "place_skill"}
+    {"scan_skill", PlaygroundWorld.DETECT_STRATEGY, "pick_skill", "place_skill"}
 )
 _ARM_VERIFY_FNS = frozenset(
     {"detect_objects", "describe_scene", "holding_object", "placed_count", "arm_at_home"}
@@ -231,7 +231,7 @@ def _grab_everything_plan() -> dict[str, Any]:
                 "name": "detect_all",
                 "description": "detect every object on the table",
                 "verify": "len(detect_objects()) > 0",
-                "strategy": "detect_all_skill",
+                "strategy": PlaygroundWorld.DETECT_STRATEGY,
                 "depends_on": ["scan"],
                 "strategy_params": {},
             },
@@ -362,17 +362,27 @@ def test_grab_everything_runs_end_to_end_verified() -> None:
     # The whole chain reached verified-done.
     assert trace.success is True
 
+    # The detect step is a REAL producing step: its captured result_data carries
+    # the deterministic sim-oracle objects list the foreach iterates (not a
+    # fabricated primitive). Read it straight off the trace.
+    detect_step = next(s for s in trace.steps if s.sub_goal_name == "detect_all")
+    detected = detect_step.result_data["output"]["objects"]
+    detected_count = len(detected)
+    assert detected_count == n  # the producer detected every scene object
+    assert {o["name"] for o in detected} == set(object_names)
+
     # Leaf count: scan + detect_all + (pick + place) per object.
     names = [s.sub_goal_name for s in trace.steps]
     assert names[0] == "scan"
     assert names[1] == "detect_all"
     foreach_steps = names[2:]
-    # The dynamic tree's pick/place leaf count EQUALS the detected object count.
+    # The dynamic tree's pick/place leaf count EQUALS the REAL detected object
+    # count from the producing step (not a hand-set N).
     pick_steps = [n_ for n_ in foreach_steps if n_.endswith(".pick_obj")]
     place_steps = [n_ for n_ in foreach_steps if n_.endswith(".place_obj")]
-    assert len(pick_steps) == n
-    assert len(place_steps) == n
-    assert len(foreach_steps) == 2 * n  # one pick + one place per object
+    assert len(pick_steps) == detected_count
+    assert len(place_steps) == detected_count
+    assert len(foreach_steps) == 2 * detected_count  # one pick + one place per object
 
     # Expansion is ordered: pick_obj then place_obj, per item index.
     expected = []
@@ -450,6 +460,58 @@ def test_grab_everything_snapshot_json_safe_and_reflects_expansion() -> None:
         "detect_all",
         "grab_each",
     ]
+
+
+# ---------------------------------------------------------------------------
+# F-2 — the foreach reads a REAL detect-producing step (not a fabricated one).
+#
+# The detect step's strategy is the playground's own producing primitive
+# (DETECT_STRATEGY). It runs the deterministic sim-oracle detection and writes
+# {"objects": [...]} as its result_data; the executor captures that to the
+# Blackboard so the foreach's source_step.objects resolves the REAL list. These
+# pin that the produced list is exactly what the detect_objects() oracle reports
+# and that it drives the loop's leaf count.
+# ---------------------------------------------------------------------------
+
+
+def test_detect_producer_output_matches_oracle_predicate() -> None:
+    object_names = TABLETOP_TRAY.object_names
+    agent = _StubAgent(object_names)
+    world = PlaygroundWorld(TABLETOP_TRAY)
+
+    # The producing primitive and the verify predicate read the SAME sim oracle.
+    producer = world.build_step_primitives(agent)[PlaygroundWorld.DETECT_STRATEGY]
+    detect_predicate = world.build_verify_namespace(agent)["detect_objects"]
+
+    produced = producer()
+    assert isinstance(produced, dict)
+    assert produced["count"] == len(object_names)
+    produced_names = sorted(o["name"] for o in produced["objects"])
+    predicate_names = sorted(o["name"] for o in detect_predicate())
+    assert produced_names == predicate_names == sorted(object_names)
+
+
+def test_foreach_iterates_real_produced_list_via_blackboard() -> None:
+    # End-to-end through the REAL producer: the captured objects list on the
+    # Blackboard is what the foreach iterates, so the leaf count equals the
+    # producer's detected count — no fabricated detect primitive anywhere.
+    object_names = TABLETOP_TRAY.object_names
+    agent = _StubAgent(object_names)
+    tree = _decompose_grab_everything(_grab_everything_plan())
+    executor = _executor(agent)
+
+    trace = executor.execute(tree)
+    assert trace.success is True
+
+    # The producing step's captured output is on the run blackboard under its name.
+    captured = executor.blackboard.get("detect_all")
+    assert captured is not None
+    produced_objects = captured["output"]["objects"]
+    assert {o["name"] for o in produced_objects} == set(object_names)
+
+    # Each produced object yielded exactly one pick + one place leaf.
+    pick_steps = [s for s in trace.steps if s.sub_goal_name.endswith(".pick_obj")]
+    assert len(pick_steps) == len(produced_objects)
 
 
 # ---------------------------------------------------------------------------

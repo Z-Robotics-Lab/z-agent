@@ -68,9 +68,23 @@ _GO2_SIM_DIR = Path(__file__).resolve().parent.parent / "hardware" / "sim" / "mj
 
 # Named rooms as axis-aligned (x_min, y_min, x_max, y_max) boxes in the world
 # frame. These are the scenario-owned contract the base ``visited`` predicate
-# reads against — a navigation sub-goal verifies "reached <room>" by name. The
-# go2 spawns near the origin; the rooms partition the room scene into named
-# quadrants so navigation goals can be grounded without raw coordinates.
+# reads against — a navigation sub-goal verifies "reached <room>" by name, and
+# the GO2 rooms producer (PlaygroundWorld.ROOMS_STRATEGY) emits exactly this set
+# as the list a "visit each room one by one" foreach iterates.
+#
+# PLACEHOLDER GEOMETRY — NOT yet reconciled with scene_room.xml. The bundled
+# scene_room.xml is a 20m x 14m house (see its top-down ASCII layout) whose REAL
+# rooms sit at very different coordinates: the Go2 spawns at ~(10, 3) in the open
+# central hallway; the kitchen is the x=14..20, y=0..5 box; the living room is
+# x=0..6, y=0..5; bedrooms are along y=10..14. The boxes below instead partition
+# a small origin-centred grid into named quadrants. They are deliberately kept
+# as-is because (a) the verify predicates + the foreach long-chain are proven
+# against a DETERMINISTIC stub/fake base whose pose this set grounds (no MuJoCo
+# load needed), and (b) existing E-1/E-2 tests assert against these exact boxes.
+# Reconciling to the real scene_room.xml room boxes (kitchen=(14,0,20,5), etc.)
+# and spawning the stub at (10, 3) is a follow-up once a navigation primitive
+# drives the base across the real 20m house. The mechanism (producer -> foreach
+# -> visited) is geometry-agnostic, so that swap is data-only.
 _GO2_ROOMS: dict[str, tuple[float, float, float, float]] = {
     "start": (-1.0, -1.0, 1.0, 1.0),
     "kitchen": (1.0, -1.0, 4.0, 1.0),

@@ -269,3 +269,94 @@ def test_foreach_non_object_is_ignored() -> None:
     tree = _decomposer(json.dumps(plan)).decompose("pick up every mug", "scene")
     assert tree.sub_goals[1].foreach is None
     assert any("foreach must be an object" in n for n in tree.validation_notes)
+
+
+# ---------------------------------------------------------------------------
+# H-1b — a foreach without depends_on must not be orderable before its producer.
+#
+# REAL BUG: the topological sort orders nodes by depends_on. A foreach node whose
+# author omitted depends_on could be placed BEFORE its producing step, so the
+# producer's list was not yet on the blackboard and the loop iterated ZERO times
+# while the run still reported success. Fix: the decomposer auto-injects the
+# foreach's source_step into depends_on. These tests pin the injection (and that a
+# plan already listing it is unchanged), plus that the loop then iterates N (not 0)
+# even with the producer authored AFTER the loop in the source list.
+# ---------------------------------------------------------------------------
+
+
+def test_foreach_missing_depends_on_gets_source_step_injected() -> None:
+    plan = _foreach_plan()
+    # Author OMITS the ordering edge entirely.
+    plan["sub_goals"][1]["depends_on"] = []
+
+    tree = _decomposer(json.dumps(plan)).decompose("pick up every mug", "scene")
+    loop = tree.sub_goals[1]
+    assert loop.foreach is not None
+    # source_step was injected so the loop can never precede its producer.
+    assert "detect_all" in loop.depends_on
+
+
+def test_foreach_existing_depends_on_unchanged() -> None:
+    plan = _foreach_plan()
+    # Author already lists the producer (the canonical plan does).
+    plan["sub_goals"][1]["depends_on"] = ["detect_all"]
+
+    tree = _decomposer(json.dumps(plan)).decompose("pick up every mug", "scene")
+    loop = tree.sub_goals[1]
+    assert loop.foreach is not None
+    # No duplicate injection — the edge appears exactly once.
+    assert loop.depends_on == ("detect_all",)
+
+
+def test_foreach_without_depends_on_iterates_n_not_zero() -> None:
+    """End-to-end: even with the producer authored AFTER the loop AND no
+    depends_on, the injected edge forces the producer to run first, so the loop
+    iterates the real N. Without the fix the loop would precede detect and run 0x.
+    """
+    from vector_os_nano.vcli.cognitive.blackboard import Blackboard
+    from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
+    from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+    from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
+
+    plan = _foreach_plan()
+    plan["sub_goals"][1]["depends_on"] = []  # omit ordering edge
+    # Author the loop BEFORE its producer in the source list, so without the
+    # injected edge the topo-sort would run the loop first (zero iterations).
+    plan["sub_goals"] = [plan["sub_goals"][1], plan["sub_goals"][0]]
+
+    tree = _decomposer(json.dumps(plan)).decompose("pick up every mug", "scene")
+
+    objects = [{"name": "mug"}, {"name": "cup"}, {"name": "bowl"}]
+    state: dict[str, Any] = {"picked": []}
+
+    def detect_skill(**_: Any) -> dict[str, Any]:
+        return {"objects": list(objects), "count": len(objects)}
+
+    def pick_skill(object_label: str | None = None, **_: Any) -> dict[str, Any]:
+        state["picked"].append(object_label)
+        return {"picked": object_label}
+
+    class _SkillSelector:
+        def select(self, sub_goal: Any) -> StrategyResult:
+            return StrategyResult(
+                "primitive", sub_goal.strategy, dict(sub_goal.strategy_params)
+            )
+
+    namespace = {
+        "detect_objects": lambda *a, **k: list(objects),
+        "holding_object": lambda *a, **k: bool(state["picked"]),
+    }
+    executor = GoalExecutor(
+        strategy_selector=_SkillSelector(),
+        verifier=GoalVerifier(namespace),
+        primitives={"detect_skill": detect_skill, "pick_skill": pick_skill},
+    )
+    executor.blackboard = Blackboard()
+
+    trace = executor.execute(tree)
+
+    assert trace.success is True
+    # The loop iterated the real N (not zero) because detect ran first.
+    grasp_steps = [s for s in trace.steps if ".grasp_one" in s.sub_goal_name]
+    assert len(grasp_steps) == len(objects)
+    assert state["picked"] == ["mug", "cup", "bowl"]

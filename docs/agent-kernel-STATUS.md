@@ -91,11 +91,13 @@ Full plan: **[agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md)**. Rem
   and `detect_objects`/`describe_scene` are real via the **deterministic sim oracle** (shipped in
   Playground v1). Still open: the VLM `MuJoCoPerception`/`DetectSkill` perception path, referring-
   expression resolution ("the red cup" -> object_id), and `ObjectMemory` re-sync.
-- **Stage 4 (control-flow IR + observation-driven replan)** — SHIPPED (this commit): additive
-  `foreach` in the goal model; executor expands it at runtime from a producing step's output;
-  obs-driven mid-tree replan hook. "把所有东西抓一遍" works end-to-end on the mock backend.
-  Remaining for the LIVE path: teach the decomposer prompt the `foreach` JSON; wire a real
-  detect-producing step; harness stats + missing-`depends_on` hardening. (`until`/`if` deferred.)
+- **Stage 4 (control-flow IR + observation-driven replan)** — SHIPPED: additive `foreach` in the
+  goal model; executor expands it at runtime from a producing step's output; obs-driven mid-tree
+  replan hook. LIVE path now wired: the decomposer prompt teaches the `foreach` JSON (`_FOREACH_EXAMPLE`)
+  so a real LLM can emit a loop; a real detect-producing step (`make_detect_producer` ->
+  `{"objects":[...],"count":N}` captured to the Blackboard; `DETECT_STRATEGY="detect_objects_skill"`)
+  replaces the synthetic primitive; harness no longer double-records foreach child stats; a `foreach`
+  missing `depends_on` auto-injects its `source_step`. (`until`/`if` deferred.)
 - **Stage 5 (unify the two planning paths)** — merge the VGG path and the tool_use path into
   one closed-loop controller.
 

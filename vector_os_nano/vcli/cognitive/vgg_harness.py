@@ -413,17 +413,11 @@ class VGGHarness:
             if getattr(sub_goal, "foreach", None) is not None:
                 expanded = self._executor._execute_foreach(sub_goal, self._on_step)
                 steps.extend(expanded)
+                # NOTE (H-1a): _execute_foreach already records each child's
+                # StrategyStats internally. Do NOT re-record here — doing so
+                # double-counts every foreach child whenever a live stats object
+                # is attached. We only need to harvest failures for replan context.
                 for child in expanded:
-                    if self._executor._stats is not None:
-                        try:
-                            self._executor._stats.record(
-                                strategy_name=child.strategy,
-                                sub_goal_name=child.sub_goal_name,
-                                success=child.success,
-                                duration_sec=child.duration_sec,
-                            )
-                        except Exception:
-                            pass
                     if not child.success:
                         failures.append(FailureRecord(
                             sub_goal_name=child.sub_goal_name,

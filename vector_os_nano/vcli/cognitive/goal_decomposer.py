@@ -154,11 +154,32 @@ class GoalDecomposer:
       "depends_on": ["<name of preceding sub_goal>"],
       "strategy": "<one of KNOWN_STRATEGIES or empty string>",
       "strategy_params": {},
-      "fail_action": "<optional: what to do on failure>"
+      "fail_action": "<optional: what to do on failure>",
+      "foreach": <optional loop block — OMIT for a plain step; see below>
     }
   ],
   "context_snapshot": "<optional: brief summary of world context used>"
-}"""
+}
+
+## Loops (foreach) — repeat a body once per item of a list
+To do the same action over EVERY item a prior step found (e.g. "grab everything,
+one by one"), add a "foreach" block to a sub_goal INSTEAD of writing the steps
+out by hand. Leave that sub_goal's own "strategy" empty (""); the body does the
+work. The loop reads its list from an EARLIER step's captured result:
+{
+  "foreach": {
+    "source_step": "<name of an earlier sub_goal that produced the list>",
+    "source_path": "<dotted path into that step's result to the list>",
+    "var": "<iteration variable name, e.g. 'item'>",
+    "body": [ <sub_goal templates, same shape as above, run once per item> ]
+  }
+}
+Rules:
+  - "source_step" MUST name an earlier sub_goal; the loop auto-depends on it.
+  - Inside body templates, reference the current item's fields as a string
+    "${<var>.<field>}" (e.g. "${item.name}") in strategy_params or verify. This
+    is resolved per item by safe path lookup — never code, never eval.
+  - body templates use the SAME strategies/verify functions as top-level steps."""
 
     # Example decomposition
     _EXAMPLE = """\
@@ -225,6 +246,58 @@ Response:
       "depends_on": ["walk_forward_2m"],
       "strategy_params": {"angle": -90},
       "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""
+
+    # World-neutral worked FOREACH example. Always appended to the prompt (NOT
+    # part of the per-world ``_EXAMPLE`` override), so every world — arm, go2, dev
+    # — is taught the loop shape with a concrete detect -> foreach(act) plan.
+    # Uses placeholder strategy names (``<detect>_skill`` / ``<act>_skill``) and
+    # the always-safe ``detect_objects()`` verify so it never hardcodes a specific
+    # world's vocabulary; the LLM substitutes its own real strategies.
+    _FOREACH_EXAMPLE: str = """\
+Loop example — "do <something> to every detected object, one by one":
+{
+  "goal": "do <something> to every detected object",
+  "sub_goals": [
+    {
+      "name": "detect_items",
+      "description": "detect every target object",
+      "verify": "len(detect_objects()) > 0",
+      "strategy": "<detect>_skill",
+      "timeout_sec": 10,
+      "depends_on": [],
+      "strategy_params": {},
+      "fail_action": ""
+    },
+    {
+      "name": "act_on_each",
+      "description": "act on each detected object, one by one",
+      "verify": "True",
+      "strategy": "",
+      "timeout_sec": 30,
+      "depends_on": ["detect_items"],
+      "strategy_params": {},
+      "fail_action": "",
+      "foreach": {
+        "source_step": "detect_items",
+        "source_path": "objects",
+        "var": "item",
+        "body": [
+          {
+            "name": "act_item",
+            "description": "act on the current object",
+            "verify": "True",
+            "strategy": "<act>_skill",
+            "timeout_sec": 15,
+            "depends_on": [],
+            "strategy_params": {"target": "${item.name}"},
+            "fail_action": ""
+          }
+        ]
+      }
     }
   ],
   "context_snapshot": ""
@@ -414,6 +487,9 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
 
 ## Example
 {self._EXAMPLE}
+
+## Loop Example
+{self._FOREACH_EXAMPLE}
 """
         return [
             {
@@ -571,6 +647,15 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
         # validated against the SAME world vocab as top-level steps; an unknown
         # body strategy is cleared with the same fail-loud note.
         foreach = self._validate_foreach(raw.get("foreach"), name, valid_names, notes)
+
+        # Stage 4 (H-1b): a foreach node iterates a list produced by its
+        # source_step, so it MUST be ordered AFTER that producer. If the author
+        # omitted the ordering edge, the topological sort could place the loop
+        # before its producer and it would iterate zero times while still
+        # reporting success. Auto-inject source_step into depends_on (idempotent —
+        # a plan that already lists it is unchanged).
+        if foreach is not None and foreach.source_step not in depends_on:
+            depends_on = depends_on + (foreach.source_step,)
 
         return SubGoal(
             name=name,

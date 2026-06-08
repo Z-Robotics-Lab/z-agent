@@ -77,6 +77,35 @@ def make_detect_objects(
     return detect_objects
 
 
+def make_detect_producer(
+    agent: Any, object_names: tuple[str, ...]
+) -> Callable[..., dict[str, Any]]:
+    """Build a detect PRODUCING-STEP callable bound to *agent* + scenario objects.
+
+    Unlike ``detect_objects`` (a verify-namespace PREDICATE that returns a bare
+    list), this is an EXECUTOR primitive: it runs the SAME deterministic
+    sim-oracle detection but wraps the result as a producing step's structured
+    output — ``{"objects": [...], "count": N}``. The executor captures that dict
+    to the run Blackboard under the step name, so a downstream ``foreach`` whose
+    ``source_step`` points at this step resolves ``source_step.objects`` to the
+    REAL detected list (pure path traversal, never eval). This closes the gap
+    where a foreach previously needed a fabricated detect primitive: a real
+    detect-producing step now carries the objects list.
+
+    Deterministic (sim oracle, no VLM) and fail-safe: an absent/unavailable arm
+    yields ``{"objects": [], "count": 0}`` — never raises into the executor. The
+    ``query`` argument (default ``""``) filters identically to ``detect_objects``.
+    """
+
+    detect = make_detect_objects(agent, object_names)
+
+    def detect_producer(query: str = "", **_: Any) -> dict[str, Any]:
+        objects = detect(query)
+        return {"objects": objects, "count": len(objects)}
+
+    return detect_producer
+
+
 def make_describe_scene(
     agent: Any, object_names: tuple[str, ...]
 ) -> Callable[[], str]:
