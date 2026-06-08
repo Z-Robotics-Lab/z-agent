@@ -22,6 +22,13 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
+from vector_os_nano.vcli.tool_execution import (
+    DECISION_ASK_DENY,
+    DECISION_CHECK_ERROR,
+    DECISION_DENY,
+    execute_resolved_tool,
+    resolve_permission,
+)
 from vector_os_nano.vcli.tools.base import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -88,6 +95,13 @@ class ToolDispatcher:
         Order: allowlist gate -> registry lookup -> ``PermissionContext.check``
         (which runs the tool's own ``check_permissions``: bash deny-list,
         file_write overwrite guard) -> ``ask`` resolution -> ``tool.execute``.
+
+        The allowlist gate and the ``(success, error)`` shape are this path's own;
+        the permission gate + execute core is the S5.1 shared seam
+        (``vcli.tool_execution``) the ReAct loop also uses. Because a sub-goal runs
+        autonomously, the seam is asked to fail closed on a buggy permission object
+        or resolver (``swallow_*`` flags) rather than propagate — matching this
+        path's pre-seam behaviour.
         """
         if not isinstance(tool_name, str) or not tool_name:
             return False, 'tool branch requires a non-empty params["tool"]'
@@ -100,32 +114,31 @@ class ToolDispatcher:
             args = {}
 
         ctx = self._make_context()
-        try:
-            perm = self._permissions.check(tool, args, ctx)
-        except Exception as exc:  # noqa: BLE001
-            return False, f"permission check error: {exc}"
+        decision = resolve_permission(
+            tool, args, ctx, self._permissions, self._ask,
+            swallow_check_errors=True,
+            swallow_always_allow_errors=True,
+        )
 
-        if perm.behavior == "deny":
-            return False, f"permission denied: {perm.reason or tool_name}"
-        if perm.behavior == "ask":
-            response = self._ask(tool_name, args) if self._ask else "n"
-            # Deny-by-default: only an explicit "y"/"a" allows. None, "", or any
-            # unexpected resolver output fails closed (the gate must never allow
-            # on an undecided/buggy resolver).
-            if response == "a":
-                try:
-                    self._permissions.add_always_allow(tool_name)
-                except Exception:  # noqa: BLE001
-                    pass
-            elif response != "y":
-                return False, f"permission denied for {tool_name} (resolver -> {response!r})"
+        if decision.kind == DECISION_CHECK_ERROR:
+            return False, f"permission check error: {decision.reason}"
+        if decision.kind == DECISION_DENY:
+            return False, f"permission denied: {decision.reason or tool_name}"
+        if decision.kind == DECISION_ASK_DENY:
+            return False, f"permission denied for {tool_name} (resolver -> {decision.reason})"
 
-        try:
-            result = tool.execute(args, ctx)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("ToolDispatcher: %s raised %s", tool_name, exc)
-            return False, f"tool error: {exc}"
+        result = execute_resolved_tool(
+            tool, args, ctx,
+            error_prefix="tool error",
+            on_error=lambda name, exc: logger.warning(
+                "ToolDispatcher: %s raised %s", name or tool_name, exc
+            ),
+        )
 
         is_error = bool(getattr(result, "is_error", False))
-        content = getattr(result, "content", "")
-        return (not is_error), ("" if not is_error else str(content))
+        if is_error:
+            # A raised tool already produced the "tool error: ..." content via the
+            # seam; surface it. A non-raising tool that returns is_error keeps the
+            # pre-seam contract of returning its own content as the error message.
+            return False, str(getattr(result, "content", ""))
+        return True, ""

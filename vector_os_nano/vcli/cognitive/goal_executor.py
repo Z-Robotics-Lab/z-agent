@@ -753,6 +753,8 @@ class GoalExecutor:
             return self._execute_tool(params)
         if executor_type == "capability":
             return self._execute_capability(name, params)
+        if executor_type == "answer":
+            return self._execute_answer(params)
         if executor_type == "invalid":
             # Fail-loud (Stage 2b): the selector resolved an explicit strategy
             # that is NOT a skill in this world. Surface a clear, named error
@@ -846,6 +848,32 @@ class GoalExecutor:
         # The dispatcher returns (success, error) only; expose the tool name as a
         # minimal structured output so downstream steps can reference the step ran.
         return success, error, {"tool": tool_name}
+
+    def _execute_answer(self, params: dict) -> tuple[bool, str, dict]:
+        """Return a pure-conversation answer step's text as structured output.
+
+        Stage 5 (S5.2). An answer-only step carries no robot evidence by design —
+        it is a degenerate, side-effect-free leaf that simply surfaces the
+        answer text so the harness/CLI can render it. The text is read from
+        ``params['answer']`` (the decomposer's answer plan) and exposed under the
+        captured-output ``"text"`` key (mirroring the chat capability's contract),
+        so a downstream step or the run snapshot can reference it via
+        ``${step.output.text}``.
+
+        This branch performs NO I/O and NO model call (the answer is already
+        decided by the time the plan is built); it never decides "done" — the
+        sub-goal's ``verify`` predicate does. Combined with the ``answer_only``
+        marker the evidence gate reads, this keeps the answer path cheap and the
+        moat intact (an action step with a sentinel verify is NOT treated as
+        answer-only and still fails the gate).
+
+        Returns:
+            (success: bool, error_message: str, output: dict)
+        """
+        text = params.get("answer", "") if isinstance(params, dict) else ""
+        if not isinstance(text, str):
+            text = str(text)
+        return True, "", {"text": text}
 
     def _execute_capability(self, name: str, params: dict) -> tuple[bool, str, dict]:
         """Route a sub-goal to a named routable capability (Phase C).

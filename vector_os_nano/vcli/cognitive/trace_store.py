@@ -37,8 +37,29 @@ _NO_EVIDENCE: frozenset[str] = frozenset({"", "True"})
 _DEFAULT_TRACES_DIR = Path.home() / ".vector" / "traces"
 
 # Bump when the on-disk shape changes; load_trace tolerates older/unknown keys.
-# v2 adds StepRecord.visual_override.
-_SCHEMA_VERSION = 2
+# v2 adds StepRecord.visual_override; v3 adds SubGoal.answer_only (S5.2).
+_SCHEMA_VERSION = 3
+
+# The ONLY side-effect-free dispatch route (``GoalExecutor._execute_answer`` does
+# no I/O and no model call). The evidence-gate exemption for a no-robot-evidence
+# step is bound to it, never to the LLM-controlled ``answer_only`` flag alone.
+_ANSWER_STRATEGY = "answer"
+
+
+def _is_answer_only(sub_goal: SubGoal) -> bool:
+    """True iff *sub_goal* is a legitimately-exempt answer-only step.
+
+    The evidence-gate relaxation (skip the real-predicate requirement) applies
+    ONLY to a step that is BOTH flagged ``answer_only`` AND routed through the
+    side-effect-free ``answer`` strategy. Tying the exemption to the zero-I/O
+    executor — not to the LLM-controlled ``answer_only`` bit alone — keeps the
+    moat (rule 5) intact: an LLM that sets ``answer_only: true`` on a
+    side-effecting strategy (``tool_call`` / a skill) does NOT get waived, because
+    that step still runs a real executor and so must carry deterministic evidence.
+    The decomposer additionally refuses the flag on non-``answer`` strategies, so
+    this gate and the decomposer agree; this check is the belt to that suspenders.
+    """
+    return bool(getattr(sub_goal, "answer_only", False)) and sub_goal.strategy == _ANSWER_STRATEGY
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +82,7 @@ def _trace_to_dict(trace: ExecutionTrace) -> dict[str, Any]:
                     "strategy": sg.strategy,
                     "strategy_params": sg.strategy_params,
                     "fail_action": sg.fail_action,
+                    "answer_only": getattr(sg, "answer_only", False),
                 }
                 for sg in trace.goal_tree.sub_goals
             ],
@@ -96,6 +118,7 @@ def _dict_to_trace(data: dict[str, Any]) -> ExecutionTrace:
             strategy=str(sg.get("strategy", "")),
             strategy_params=dict(sg.get("strategy_params", {}) or {}),
             fail_action=str(sg.get("fail_action", "")),
+            answer_only=bool(sg.get("answer_only", False)),
         )
         for sg in gt.get("sub_goals", []) or []
     )
@@ -166,9 +189,20 @@ def replay(trace: ExecutionTrace, verifier: Any) -> bool:
     *verifier* (a ``GoalVerifier``). Sentinel verifies (``""`` / ``"True"``) are
     skipped — they carry no evidence — and a trace with *no* deterministic
     predicate to replay returns False (nothing was actually checked).
+
+    Stage 5 (S5.2): an explicitly ``answer_only`` step carries no robot evidence
+    BY DESIGN — it is skipped exactly like a sentinel and never counts toward
+    ``checked``. This does NOT loosen the gate: the exemption is tied to the
+    side-effect-free ``answer`` strategy (``answer_only`` alone is fully
+    LLM-controlled, so it is NOT trusted to waive evidence for a step that runs a
+    side-effecting executor). An action step with a sentinel verify is still
+    non-evidence and a pure-answer trace still returns False (nothing deterministic
+    was checked).
     """
     checked = 0
     for sg in trace.goal_tree.sub_goals:
+        if _is_answer_only(sg):
+            continue
         expr = (sg.verify or "").strip()
         if expr in _NO_EVIDENCE:
             continue
@@ -188,6 +222,23 @@ def evidence_passed(trace: ExecutionTrace, is_robot: bool = False) -> bool:
     and ``replay`` in agreement). Robot world: always True — do not regress async
     motor skills that use ``verify="True"`` because no symbolic post-condition
     exists.
+
+    Stage 5 (S5.2): a step whose sub-goal is explicitly ``answer_only`` is a
+    pure-conversation step that carries no robot evidence BY DESIGN. It is exempt
+    from the real-predicate requirement (it would otherwise be indistinguishable
+    from an unverified action) but must still have ``verify_result`` True and not
+    be a visual override.
+
+    MOAT (rule 5): the exemption is keyed on ``answer_only`` AND tied to the
+    side-effect-free ``answer`` strategy (see ``_is_answer_only``). The
+    ``answer_only`` flag is fully LLM-controlled, so on its own it is no safer than
+    the verify string; binding it to the only executor that performs zero I/O
+    (``GoalExecutor._execute_answer``) means an LLM that sets ``answer_only: true``
+    on a side-effecting strategy (``tool_call`` / a skill) does NOT launder that
+    action past the gate — it still requires a real deterministic predicate. An
+    action step with a sentinel ``""`` / ``"True"`` verify is therefore still NOT
+    counted as verified. A trace with no non-answer step still requires at least
+    one answer_only step to have passed (an empty trace fails).
     """
     if is_robot:
         return True
@@ -196,7 +247,10 @@ def evidence_passed(trace: ExecutionTrace, is_robot: bool = False) -> bool:
     if not checked:
         return False
     return all(
-        (sg_by_name[s.sub_goal_name].verify or "").strip() not in _NO_EVIDENCE
+        (
+            _is_answer_only(sg_by_name[s.sub_goal_name])
+            or (sg_by_name[s.sub_goal_name].verify or "").strip() not in _NO_EVIDENCE
+        )
         and s.verify_result
         and not getattr(s, "visual_override", False)
         for s in checked

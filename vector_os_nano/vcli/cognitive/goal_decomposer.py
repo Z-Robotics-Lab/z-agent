@@ -444,6 +444,32 @@ Loop example — "do <something> to every detected object, one by one":
 
         return self._parse_and_validate(task, raw_text)
 
+    @staticmethod
+    def answer_plan(task: str, answer: str) -> GoalTree:
+        """Build a 0-action / answer-only GoalTree for pure conversation (S5.2).
+
+        Returns a single-``SubGoal`` tree whose step is explicitly ``answer_only``
+        (the evidence gate's marker), routes through the side-effect-free
+        ``answer`` strategy carrying the answer text, and verifies ``"True"`` (no
+        deterministic predicate exists for free-form chat). Because the step is
+        flagged ``answer_only``, the evidence gate treats it as a legitimate
+        no-robot-evidence step rather than an unverified action — the moat (rule 5)
+        is unaffected for real action steps.
+
+        Deterministic + no LLM call: the answer text is supplied by the caller.
+        Nothing routes to this yet (S5.2 is additive — no cut-over).
+        """
+        sg = SubGoal(
+            name="answer",
+            description=task,
+            verify="True",
+            timeout_sec=30.0,
+            strategy="answer",
+            strategy_params={"answer": answer},
+            answer_only=True,
+        )
+        return GoalTree(goal=task, sub_goals=(sg,), context_snapshot="")
+
     # ------------------------------------------------------------------
     # Prompt construction
     # ------------------------------------------------------------------
@@ -619,8 +645,43 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
                 )
             return None
 
-        # Validate strategy
-        if strategy and strategy not in self.KNOWN_STRATEGIES:
+        # Stage 5 (S5.2): an answer-only step is a pure-conversation leaf that
+        # carries no robot evidence by design. The decomposer marks it explicitly
+        # (``answer_only: true``) so the evidence gate can DISTINGUISH it from an
+        # action step that merely produced no evidence (rule 5 — the gate keys on
+        # this flag, never on the verify string). The dedicated ``answer`` strategy
+        # is the kernel-level dispatch route for such a step (mirrors how
+        # ``tool_call`` is recognized regardless of per-world vocab), so it is
+        # exempt from the unknown-strategy clearing below.
+        #
+        # MOAT (rule 5): ``answer_only`` is fully LLM-controlled, so it must NEVER
+        # waive the evidence gate for a step that runs a side-effecting executor.
+        # Bind the flag to the side-effect-free ``answer`` strategy (the only route
+        # that performs zero I/O — ``GoalExecutor._execute_answer``). An LLM that
+        # sets ``answer_only: true`` on an action strategy (``tool_call`` / a
+        # skill) has the flag REFUSED here (fail-loud note), so the step stays a
+        # real action that the gate still requires a deterministic predicate for.
+        # This is belt-and-suspenders with the gate, which also keys on
+        # ``strategy == 'answer'`` (trace_store.evidence_passed / replay).
+        answer_only = bool(raw.get("answer_only", False)) or strategy == "answer"
+        if answer_only and strategy != "answer":
+            _LOG.warning(
+                "GoalDecomposer: refusing answer_only on non-answer strategy %r "
+                "in sub_goal %r — answer_only is reserved for the side-effect-free "
+                "'answer' route",
+                strategy,
+                name,
+            )
+            if notes is not None:
+                notes.append(
+                    f"answer_only refused on sub_goal {name!r}: it is reserved for "
+                    f"the side-effect-free 'answer' strategy, not {strategy!r}"
+                )
+            answer_only = False
+
+        # Validate strategy. ``answer`` is a kernel dispatch route (like
+        # ``tool_call``), valid in every world — never cleared.
+        if strategy and strategy != "answer" and strategy not in self.KNOWN_STRATEGIES:
             _LOG.warning(
                 "GoalDecomposer: unknown strategy %r in sub_goal %r — clearing",
                 strategy,
@@ -648,6 +709,10 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
         # body strategy is cleared with the same fail-loud note.
         foreach = self._validate_foreach(raw.get("foreach"), name, valid_names, notes)
 
+        # An answer-only step is a conversation leaf — it never loops.
+        if answer_only:
+            foreach = None
+
         # Stage 4 (H-1b): a foreach node iterates a list produced by its
         # source_step, so it MUST be ordered AFTER that producer. If the author
         # omitted the ordering edge, the topological sort could place the loop
@@ -667,6 +732,7 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             strategy_params=strategy_params,
             fail_action=fail_action,
             foreach=foreach,
+            answer_only=answer_only,
         )
 
     def _validate_foreach(

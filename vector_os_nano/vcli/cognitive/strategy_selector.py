@@ -59,7 +59,7 @@ _STATS_MIN_SUCCESS_RATE: float = 0.5
 class StrategyResult:
     """Result of strategy selection."""
 
-    executor_type: str   # "skill" | "primitive" | "fallback" | "code" | "tool" | "capability"
+    executor_type: str   # "skill" | "primitive" | "fallback" | "code" | "tool" | "capability" | "answer"
     name: str            # skill name or primitive function name
     params: dict         # parameters to pass
 
@@ -269,6 +269,13 @@ class StrategySelector:
 
         if strategy == "tool_call":
             return StrategyResult("tool", "tool_call", params)
+
+        # Stage 5 (S5.2): an answer-only conversation step. Resolves to a
+        # side-effect-free "answer" executor that returns the step's answer text
+        # as structured output. The sub-goal carries answer_only=True (the
+        # evidence gate's explicit marker); this strategy is its dispatch route.
+        if strategy == "answer":
+            return StrategyResult("answer", "answer", params)
 
         # A strategy naming a registered routable capability (Phase C) — the
         # capability name IS the strategy; params is its input payload.

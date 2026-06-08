@@ -26,8 +26,14 @@ from vector_os_nano.vcli.backends import LLMBackend
 from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
 from vector_os_nano.vcli.permissions import PermissionContext
 from vector_os_nano.vcli.session import Session, TokenUsage
+from vector_os_nano.vcli.tool_execution import (
+    DECISION_ASK_ALLOW,
+    DECISION_ASK_DENY,
+    DECISION_DENY,
+    execute_resolved_tool,
+    resolve_permission,
+)
 from vector_os_nano.vcli.tools.base import (
-    PermissionResult,
     ToolContext,
     ToolRegistry,
     ToolResult,
@@ -1359,11 +1365,16 @@ class VectorEngine:
                 ToolCall(tool_name=tool_name, params=params, result=result, duration_sec=0.0, permission_action="denied"),
             )
 
-        # Permission check
-        perm: PermissionResult = self._permissions.check(tool, params, tool_context)
+        # Permission gate — shared with the VGG tool path via the S5.1 seam. The
+        # ReAct path does NOT swallow check/always-allow errors (a buggy
+        # permission object or resolver is a real bug it surfaces), matching its
+        # pre-seam behaviour.
+        decision = resolve_permission(
+            tool, params, tool_context, self._permissions, ask_permission,
+        )
 
-        if perm.behavior == "deny":
-            reason = perm.reason or f"Permission denied for {tool_name}"
+        if decision.kind == DECISION_DENY:
+            reason = decision.reason or f"Permission denied for {tool_name}"
             result = ToolResult(content=f"Permission denied: {reason}", is_error=True)
             logger.info("Permission denied for tool %r: %s", tool_name, reason)
             return (
@@ -1371,23 +1382,16 @@ class VectorEngine:
                 ToolCall(tool_name=tool_name, params=params, result=result, duration_sec=0.0, permission_action="denied"),
             )
 
-        if perm.behavior == "ask":
-            response = ask_permission(tool_name, params) if ask_permission else "n"
-            # Deny-by-default: only an explicit "y"/"a" allows; anything else
-            # (None, "", unexpected output) fails closed.
-            if response == "a":
-                self._permissions.add_always_allow(tool_name)
-            elif response != "y":
-                denial = f"Permission denied by user for {tool_name}"
-                result = ToolResult(content=denial, is_error=True)
-                logger.info("User denied permission for tool %r", tool_name)
-                return (
-                    {"tool_use_id": tc.id, "content": result.content, "is_error": True},
-                    ToolCall(tool_name=tool_name, params=params, result=result, duration_sec=0.0, permission_action="asked_denied"),
-                )
-            perm_action = "asked_allowed"
-        else:
-            perm_action = "allowed"
+        if decision.kind == DECISION_ASK_DENY:
+            denial = f"Permission denied by user for {tool_name}"
+            result = ToolResult(content=denial, is_error=True)
+            logger.info("User denied permission for tool %r", tool_name)
+            return (
+                {"tool_use_id": tc.id, "content": result.content, "is_error": True},
+                ToolCall(tool_name=tool_name, params=params, result=result, duration_sec=0.0, permission_action="asked_denied"),
+            )
+
+        perm_action = "asked_allowed" if decision.kind == DECISION_ASK_ALLOW else "allowed"
 
         # Execute the tool
         if on_tool_start is not None:
@@ -1399,11 +1403,13 @@ class VectorEngine:
             self._hooks.fire_pre(ToolHookContext(tool_name=tool_name, params=params))
 
         start = time.monotonic()
-        try:
-            result = tool.execute(params, tool_context)
-        except Exception as exc:
-            result = ToolResult(content=f"Tool error: {exc}", is_error=True)
-            logger.error("Tool %r raised %r", tool_name, exc, exc_info=True)
+        result = execute_resolved_tool(
+            tool, params, tool_context,
+            error_prefix="Tool error",
+            on_error=lambda _name, exc: logger.error(
+                "Tool %r raised %r", tool_name, exc, exc_info=True
+            ),
+        )
         duration = time.monotonic() - start
 
         # Post-hook

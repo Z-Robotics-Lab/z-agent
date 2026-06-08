@@ -60,6 +60,16 @@ class SubGoal:
     # keeping no-foreach plans byte-unaffected. Expansion is S4-2; S4-1 only
     # models + parses + validates the spec. Field is LAST + defaulted (frozen-safe).
     foreach: "ForEachSpec | None" = None
+    # Stage 5 (S5.2) answer-only marker. True when this step is a pure-conversation
+    # "answer" step that produces text and CARRIES NO ROBOT EVIDENCE BY DESIGN —
+    # NOT an action step whose evidence is merely missing. This flag (not a
+    # verify-string trick) is what lets the evidence gate DISTINGUISH a legitimate
+    # answer-only step from an action step that produced no evidence, so the moat
+    # (rule 5) is never weakened: an action step with a sentinel verify still fails
+    # the gate; only an explicitly-flagged answer step is exempt. Additive + LAST +
+    # defaulted False so every existing constructor and non-answer plan is
+    # byte-unaffected.
+    answer_only: bool = False
 
 
 @dataclass(frozen=True)
