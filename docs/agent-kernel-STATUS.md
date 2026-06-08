@@ -324,10 +324,17 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
 - **R2-4 — Ctrl-C does not exit cleanly under mjpython + sync GUI exec.** Owner had to ^C^C then type `quit`.
   The synchronous GUI exec path (Step 1) + permission prompt swallow KeyboardInterrupt. Make ^C abort the
   running task and return to the prompt; a second ^C / `quit` exits cleanly.
-- **R2-5 — Permission prompt blocks mid-task under the live region.** "自己想个任务做" -> "Allow scan?
-  [y/n/a]" hung (input not consumed under mjpython/the live region). Sim skills (scan/detect/...) are safe:
-  auto-allow safe sim skills (or `--no-permission` default in sim), and/or fix the prompt rendering so it
-  reads input outside the live region.
+- **R2-5 — Permission prompt blocks mid-task in sim. [FIXED — /loop iter 3].** "自己想个任务做" ->
+  "Allow scan? [y/n/a]" hung. Fixed: `SkillWrapperTool.check_permissions` auto-allows MOTOR skills when the
+  connected robot is SIMULATED (a sim action has no real-world consequence). Sim detected world-agnostically
+  by the hardware module package (`vector_os_nano.hardware.sim`, precise package match) across the agent's
+  arm/base/gripper. SAFETY: ALL-semantics — ANY real (non-sim) component keeps the confirmation gate (a mixed
+  sim-arm+real-base agent still asks), so a real actuator is never auto-allowed; read-only skills unchanged;
+  scoped to skills (bash/file/outward tools + the deny rail untouched). The VGG/executor path does NOT gate
+  skill permissions separately (only dev-world tool sub-goals), so one fix covers both paths. 17 tests
+  (incl. mixed-hardware safety); 1024 green. (Adversarial review caught + fixed an ANY-vs-ALL safety bug
+  before commit.) NOTE: the mjpython prompt-input rendering hang for OTHER (non-skill) prompts is separate
+  and owner-window-only.
 - **R2-6 — stderr / ROS2-proxy ERROR bleed into the rich panels.** `ERROR:...go2_ros2_proxy` / `sim_tool`
   lines interleave with the live boxes. Step-4 quieting covered skills/perception/hardware but ERROR-level
   ROS2-proxy noise still bleeds; fix stderr handling around the go2 launch + quiet the proxy in sim.
