@@ -53,6 +53,14 @@ def test_personality_is_world_agnostic_default():
     assert "one identity" in d
 
 
+def test_default_personality_curbs_over_eager_tool_use():
+    # Regression: deepseek over-explored on "hello" (read files, ran pwd). The
+    # personality must tell the agent to answer greetings/questions directly.
+    d = prompt.DEFAULT_PERSONALITY.lower()
+    assert "answer directly" in d
+    assert "do not read files" in d or "do not run commands" in d
+
+
 def test_project_context_recognizes_agents_md(tmp_path):
     (tmp_path / "AGENTS.md").write_text("agents-rules-here", encoding="utf-8")
     assert "agents-rules-here" in prompt._load_vector_md(tmp_path)
