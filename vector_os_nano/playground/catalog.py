@@ -72,24 +72,28 @@ _GO2_SIM_DIR = Path(__file__).resolve().parent.parent / "hardware" / "sim" / "mj
 # the GO2 rooms producer (PlaygroundWorld.ROOMS_STRATEGY) emits exactly this set
 # as the list a "visit each room one by one" foreach iterates.
 #
-# PLACEHOLDER GEOMETRY — NOT yet reconciled with scene_room.xml. The bundled
-# scene_room.xml is a 20m x 14m house (see its top-down ASCII layout) whose REAL
-# rooms sit at very different coordinates: the Go2 spawns at ~(10, 3) in the open
-# central hallway; the kitchen is the x=14..20, y=0..5 box; the living room is
-# x=0..6, y=0..5; bedrooms are along y=10..14. The boxes below instead partition
-# a small origin-centred grid into named quadrants. They are deliberately kept
-# as-is because (a) the verify predicates + the foreach long-chain are proven
-# against a DETERMINISTIC stub/fake base whose pose this set grounds (no MuJoCo
-# load needed), and (b) existing E-1/E-2 tests assert against these exact boxes.
-# Reconciling to the real scene_room.xml room boxes (kitchen=(14,0,20,5), etc.)
-# and spawning the stub at (10, 3) is a follow-up once a navigation primitive
-# drives the base across the real 20m house. The mechanism (producer -> foreach
-# -> visited) is geometry-agnostic, so that swap is data-only.
+# REAL GEOMETRY — reconciled with the bundled scene_room.xml (the 20m x 14m house;
+# see its top-down ASCII layout + ``f_*`` floor geoms). Each box is the room's
+# floor extent in the world frame, derived directly from the matching ``f_<room>``
+# plane geom ``pos +/- size`` (e.g. ``f_kitchen`` pos="17 2.5" size="3 2.5" =>
+# (14, 0, 20, 5)). The Go2 spawns at (10, 3, 0.35) (MuJoCoGo2._reset sets
+# data.qpos[0:3] = [10, 3, 0.35]) — inside the central ``hallway`` box. The
+# hallway is the open central span (x=6..14, y=0..10) the perimeter rooms open
+# onto; the bathroom box spans x=7..12 because the laundry was merged into it
+# (see the XML's "LAUNDRY (merged into bathroom)" section). Room centres here
+# match the canonical navigation room database in
+# tests/unit/test_navigate_skill_nav2.py (kitchen=(17, 2.5), hallway=(10, 5),
+# master_bedroom=(3.5, 12), ...). The mechanism (producer -> foreach -> visited)
+# is geometry-agnostic, so this is a pure data swap.
 _GO2_ROOMS: dict[str, tuple[float, float, float, float]] = {
-    "start": (-1.0, -1.0, 1.0, 1.0),
-    "kitchen": (1.0, -1.0, 4.0, 1.0),
-    "hallway": (-1.0, 1.0, 1.0, 4.0),
-    "bedroom": (1.0, 1.0, 4.0, 4.0),
+    "living_room": (0.0, 0.0, 6.0, 5.0),
+    "dining_room": (0.0, 5.0, 6.0, 10.0),
+    "kitchen": (14.0, 0.0, 20.0, 5.0),
+    "study": (14.0, 5.0, 20.0, 10.0),
+    "master_bedroom": (0.0, 10.0, 7.0, 14.0),
+    "guest_bedroom": (12.0, 10.0, 20.0, 14.0),
+    "bathroom": (7.0, 10.0, 12.0, 14.0),
+    "hallway": (6.0, 0.0, 14.0, 10.0),
 }
 
 GO2_ROOM = Scenario(

@@ -117,6 +117,38 @@ class TurnResult:
     usage: TokenUsage
 
 
+@dataclass(frozen=True)
+class IntentDecision:
+    """Immutable, inspectable record of the planning-path routing decision.
+
+    Stage 5 scout: today the engine forks between two planning paths — the VGG
+    closed loop (decompose -> execute -> verify -> replan) and the tool_use ReAct
+    loop (``run_turn``) — via the keyword intent gate (``should_use_vgg``). That
+    fork was previously buried as inline booleans inside ``vgg_decompose``. This
+    value object surfaces the SAME decision as a single observable artefact so the
+    eventual unification (one controller, gate dropped) has a stable, testable seam
+    and the decision can be logged / rendered without re-deriving it.
+
+    Fields:
+        route:  ``"vgg"`` (the cognitive closed loop owns this turn) or
+                ``"tool_use"`` (fall back to the ReAct tool loop).
+        reason: short, stable, human-readable explanation of why — for logs and
+                the observation surface. NOT parsed for control flow.
+        complex: the gate's complexity classification (multi-step / conditional /
+                scope), surfaced so a caller can tell a 1-step fast path from an
+                LLM-decomposed plan without re-running the keyword heuristic.
+    """
+
+    route: str  # "vgg" | "tool_use"
+    reason: str
+    complex: bool = False
+
+    @property
+    def use_vgg(self) -> bool:
+        """True when this turn should go through the VGG closed loop."""
+        return self.route == "vgg"
+
+
 # ---------------------------------------------------------------------------
 # Internal batching type
 # ---------------------------------------------------------------------------
@@ -707,6 +739,61 @@ class VectorEngine:
             ns.update(world_ns)
         return ns
 
+    def classify_intent(self, user_message: str) -> IntentDecision:
+        """Classify which planning path *user_message* should take (observable).
+
+        Stage 5 scout — a PURE, side-effect-free read of the same conditions
+        ``vgg_decompose`` uses to fork between the VGG closed loop and the
+        tool_use ReAct loop, returned as one inspectable :class:`IntentDecision`
+        instead of inline booleans. This does NOT change routing: ``vgg_decompose``
+        now consults this method, so the decision is single-sourced and can be
+        logged / rendered. The keyword intent gate (``should_use_vgg``) still owns
+        the call; unification (dropping the gate) is the future Stage-5 work.
+
+        Routing (in order):
+          * VGG not ready / no intent router            -> tool_use
+          * robot world without a connected base+arm    -> tool_use (sim not up)
+          * gate says not a VGG task                    -> tool_use
+          * otherwise                                   -> vgg
+        The ``complex`` flag mirrors ``IntentRouter.is_complex`` so a caller can
+        distinguish the deterministic 1-step fast path from an LLM decomposition.
+        """
+        if not self._vgg_enabled:
+            return IntentDecision(route="tool_use", reason="vgg-disabled")
+        if self._intent_router is None:
+            return IntentDecision(route="tool_use", reason="no-intent-router")
+
+        _agent = getattr(self, "_vgg_agent", None)
+        _world = getattr(self, "_world", None)
+        if _world is not None:
+            _is_robot = bool(_world.is_robot())
+        else:
+            _is_robot = _agent is not None  # back-compat: agent present => robot
+        if _is_robot and (
+            _agent is None
+            or (
+                getattr(_agent, "_base", None) is None
+                and getattr(_agent, "_arm", None) is None
+            )
+        ):
+            return IntentDecision(
+                route="tool_use", reason="robot-world-not-ready"
+            )
+
+        _sr = getattr(_agent, "_skill_registry", None) if _agent is not None else None
+        if not self._intent_router.should_use_vgg(user_message, skill_registry=_sr):
+            return IntentDecision(
+                route="tool_use", reason="gate-not-a-vgg-task"
+            )
+
+        is_complex = False
+        try:
+            is_complex = bool(self._intent_router.is_complex(user_message))
+        except Exception:  # noqa: BLE001 — classification only, never fatal
+            is_complex = False
+        reason = "vgg-complex" if is_complex else "vgg-actionable"
+        return IntentDecision(route="vgg", reason=reason, complex=is_complex)
+
     def try_vgg(self, user_message: str) -> "ExecutionTrace | None":
         """Attempt VGG pipeline for complex tasks (decompose + execute).
 
@@ -743,33 +830,24 @@ class VectorEngine:
         except ImportError:
             pass
 
-        if not self._vgg_enabled:
-            return None
-        if self._intent_router is None:
-            return None
-        _agent = getattr(self, "_vgg_agent", None)
-        _world = getattr(self, "_world", None)
-        # Robot world needs a functioning robot — don't decompose before sim
-        # starts. Dev world has no robot and operates over the dev verify
-        # namespace, so it is not gated on a connected base.
-        if _world is not None:
-            _is_robot = bool(_world.is_robot())
-        else:
-            _is_robot = _agent is not None  # back-compat: agent present => robot
-        if _is_robot and (
-            _agent is None
-            or (
-                getattr(_agent, "_base", None) is None
-                and getattr(_agent, "_arm", None) is None
+        # Single-source the routing decision (Stage 5 scout): classify_intent is a
+        # pure read of the same gate conditions, returned as an inspectable
+        # IntentDecision. Behaviour is unchanged — a non-vgg route here is exactly
+        # the set of conditions that previously returned None inline.
+        decision = self.classify_intent(user_message)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "intent route=%s reason=%s complex=%s",
+                decision.route, decision.reason, decision.complex,
             )
-        ):
-            return None
-        _sr = getattr(_agent, "_skill_registry", None) if _agent is not None else None
-        if not self._intent_router.should_use_vgg(user_message, skill_registry=_sr):
+        if not decision.use_vgg:
             return None
 
+        _agent = getattr(self, "_vgg_agent", None)
+        _sr = getattr(_agent, "_skill_registry", None) if _agent is not None else None
+
         # Fast path: single skill match → 1-step GoalTree, no LLM
-        if _sr is not None and not self._intent_router.is_complex(user_message):
+        if _sr is not None and not decision.complex:
             tree = self._try_skill_goal_tree(user_message, _sr)
             if tree is not None:
                 return tree

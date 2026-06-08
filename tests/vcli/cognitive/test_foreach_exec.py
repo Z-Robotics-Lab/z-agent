@@ -250,3 +250,91 @@ def test_foreach_runs_after_producing_step() -> None:
     assert names[0] == "detect"
     assert all("grasp_one" in n for n in names[1:])
     assert state["picked"] == ["mug", "banana"]
+
+
+# ---------------------------------------------------------------------------
+# Regression (CR): intra-BODY depends_on orders the body even when the body
+# templates are listed out of dependency order. Previously the body ran in raw
+# list order and silently ignored template-to-template depends_on, so a consumer
+# could run before its producer.
+# ---------------------------------------------------------------------------
+
+
+def test_foreach_body_honors_intra_body_depends_on() -> None:
+    from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+
+    order: list[str] = []
+
+    def detect(**_: Any) -> dict[str, Any]:
+        return {"objects": [{"name": "mug"}], "count": 1}
+
+    def producer(**_: Any) -> dict[str, Any]:
+        order.append("producer")
+        return {"ran": "producer"}
+
+    def consumer(**_: Any) -> dict[str, Any]:
+        order.append("consumer")
+        return {"ran": "consumer"}
+
+    primitives = {"detect": detect, "producer": producer, "consumer": consumer}
+    namespace = {
+        "detected": lambda: True,
+        # consumer's verify only holds once the producer has already run, so an
+        # out-of-order execution would make this verify fail.
+        "producer_ran": lambda: "producer" in order,
+        "ok": lambda: True,
+    }
+    executor = GoalExecutor(
+        strategy_selector=_DirectSelector(),
+        verifier=GoalVerifier(namespace),
+        primitives=primitives,
+    )
+    executor.blackboard = Blackboard()
+
+    tree = GoalTree(
+        goal="ordered body",
+        sub_goals=(
+            SubGoal(
+                name="detect",
+                description="d",
+                verify="detected()",
+                strategy="detect",
+            ),
+            SubGoal(
+                name="loop",
+                description="l",
+                verify="True",
+                strategy="",
+                depends_on=("detect",),
+                foreach=ForEachSpec(
+                    source_step="detect",
+                    source_path="objects",
+                    var="obj",
+                    body=(
+                        # consumer is listed FIRST but depends on producer.
+                        SubGoal(
+                            name="consumer",
+                            description="consume",
+                            verify="producer_ran()",
+                            strategy="consumer",
+                            depends_on=("producer",),
+                        ),
+                        SubGoal(
+                            name="producer",
+                            description="produce",
+                            verify="ok()",
+                            strategy="producer",
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    trace = executor.execute(tree)
+
+    assert trace.success is True
+    # producer ran before consumer despite the body listing consumer first.
+    assert order == ["producer", "consumer"]
+    names = [s.sub_goal_name for s in trace.steps]
+    assert names == ["detect", "loop[0].producer", "loop[0].consumer"]

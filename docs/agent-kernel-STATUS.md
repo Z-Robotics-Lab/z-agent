@@ -112,11 +112,13 @@ remain open. Work proceeds on two parallel tracks across the seam contract — s
 [ARCHITECTURE.md](ARCHITECTURE.md) §5/§7 and
 [ADR-008](architecture-decisions/ADR-008-playground-parallel-track.md).
 
-**Shipped (this commit):** Stage 4 control-flow IR (`foreach` expand + obs-replan hook) and the Go2
-second embodiment; 777 green. **Next (autonomous workflow):** finish the LIVE foreach path (teach the
-decomposer prompt; wire a real detect-producing step) + harden (harness stats double-count; foreach
-`depends_on` auto-inject) + an adversarial code-review pass; then **Stage 5** (unify the VGG and
-tool_use planning paths).
+**Shipped (on the branch):** playground v1, Stage 4 control-flow IR (`foreach` expand + obs-replan hook),
+Go2 2nd embodiment, the live foreach path (prompt teaches the loop + real detect-producing step) + bug
+fixes, an adversarial code-review pass, Go2 room geometry reconciled with the real `scene_room.xml`, and
+the **Stage 5 scout** (`classify_intent` -> an inspectable `IntentDecision`, a behaviour-preserving pure
+read of the routing gate). 803 green. **Stage 5 plan:** [agent-kernel-stage5-plan.md](agent-kernel-stage5-plan.md).
+**Next (autonomous workflow):** execute Stage 5 seam-safe staging (route both paths through the unified
+controller; drop the keyword intent gate) per that plan.
 
 ## Pointers
 

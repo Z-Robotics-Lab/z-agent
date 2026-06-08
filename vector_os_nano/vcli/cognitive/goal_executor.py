@@ -223,7 +223,17 @@ class GoalExecutor:
 
         Falls back to original order if a cycle is detected.
         """
-        sub_goals = list(goal_tree.sub_goals)
+        return self._topological_sort_list(list(goal_tree.sub_goals))
+
+    def _topological_sort_list(self, sub_goals_in: list[SubGoal]) -> list[SubGoal]:
+        """Order a flat list of SubGoals by their intra-list ``depends_on``.
+
+        Kahn's algorithm with original-order tie-breaking (deterministic). Deps
+        referencing names outside *sub_goals_in* are ignored, and a cycle falls
+        back to original order — identical semantics to the GoalTree variant, just
+        reusable for the foreach body (whose templates also carry ``depends_on``).
+        """
+        sub_goals = list(sub_goals_in)
         if not sub_goals:
             return sub_goals
 
@@ -502,6 +512,12 @@ class GoalExecutor:
             return records
 
         items = self._resolve_foreach_items(spec)
+        # The body runs once per item, but template-to-template ``depends_on`` must
+        # still order the body (e.g. place_obj depends_on pick_obj). Order the body
+        # ONCE by its intra-body deps; list order is the deterministic tie-break, so
+        # an already-ordered body is byte-unchanged. Without this, a body emitted
+        # out of dependency order would run a consumer before its producer.
+        ordered_body = self._topological_sort_list(list(spec.body))
         for index, item in enumerate(items):
             # --- Abort check (mirror the leaf loop) ---
             try:
@@ -533,7 +549,7 @@ class GoalExecutor:
             self._bind_iteration_var(spec.var, item)
 
             stop = False
-            for template in spec.body:
+            for template in ordered_body:
                 child = self._instantiate_body_template(template, sub_goal, index)
                 step = self._execute_sub_goal(child)
                 records.append(step)

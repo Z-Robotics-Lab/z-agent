@@ -64,10 +64,15 @@ from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
 # This stub advances that ground truth as the base primitives run, so the same
 # base predicates flip False->True step by step. No MuJoCo, fully deterministic.
 
-# The go2 spawns at the origin facing +x. The kitchen box is (1, -1, 4, 1); a
-# 2.5 m forward walk lands the base at (2.5, 0) — inside kitchen and within the
-# 0.5 m at_position tolerance of (2.5, 0).
-_KITCHEN_TARGET = (2.5, 0.0)
+# The go2 spawns at its REAL scene_room.xml pose (10, 3) in the central hallway
+# facing +x (MuJoCoGo2._reset sets data.qpos[0:3] = [10, 3, 0.35]). The REAL
+# kitchen box is (14, 0, 20, 5) (f_kitchen pos="17 2.5" size="3 2.5"); a 7 m
+# forward walk lands the base at (17, 3) — inside the kitchen and within the
+# 0.5 m at_position tolerance of (17, 3). The walk distance is the spawn-to-target
+# x-gap (17 - 10).
+_GO2_SPAWN = (10.0, 3.0, 0.3)
+_KITCHEN_TARGET = (17.0, 3.0)
+_WALK_DISTANCE = _KITCHEN_TARGET[0] - _GO2_SPAWN[0]
 
 
 class _StubBase:
@@ -80,8 +85,8 @@ class _StubBase:
     """
 
     def __init__(self) -> None:
-        # Spawn at the origin facing +x (heading 0).
-        self._position: list[float] = [0.0, 0.0, 0.3]
+        # Spawn at the REAL go2 scene pose (10, 3) in the hallway, facing +x.
+        self._position: list[float] = list(_GO2_SPAWN)
         self._heading: float = 0.0
         self._connected: bool = True
 
@@ -201,10 +206,10 @@ def _explore_room_plan() -> dict[str, Any]:
             {
                 "name": "walk_to_kitchen",
                 "description": "walk forward into the kitchen",
-                "verify": "visited('kitchen') and at_position(2.5, 0.0)",
+                "verify": "visited('kitchen') and at_position(17.0, 3.0)",
                 "strategy": "walk_forward",
                 "depends_on": [],
-                "strategy_params": {"distance": 2.5, "speed": 0.3},
+                "strategy_params": {"distance": _WALK_DISTANCE, "speed": 0.3},
             },
             {
                 "name": "scan",
@@ -223,7 +228,7 @@ def _explore_room_plan() -> dict[str, Any]:
                 "strategy_params": {},
             },
         ],
-        "context_snapshot": "Go2 at the origin facing +x; kitchen lies ahead.",
+        "context_snapshot": "Go2 in the hallway (10, 3) facing +x; kitchen lies ahead.",
     }
 
 
@@ -348,8 +353,9 @@ def test_explore_room_oracle_starts_false_each_step_flips() -> None:
     assert trace.success is True
     # After the run the base is grounded in the kitchen.
     assert ns["visited"]("kitchen") is True
-    # And it never strayed into the bedroom (a disjoint named room).
-    assert ns["visited"]("bedroom") is False
+    # And it never strayed into the guest bedroom (a disjoint named room across
+    # the house at y=10..14).
+    assert ns["visited"]("guest_bedroom") is False
 
 
 # ---------------------------------------------------------------------------
