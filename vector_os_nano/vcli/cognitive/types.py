@@ -70,6 +70,17 @@ class SubGoal:
     # defaulted False so every existing constructor and non-answer plan is
     # byte-unaffected.
     answer_only: bool = False
+    # Fail-loud marker for a HALLUCINATED strategy (rule 8). When the decomposer
+    # validates a step whose explicit ``strategy`` is not in the world's known set,
+    # it clears ``strategy`` to "" (so existing pure-check routing is unaffected)
+    # AND records the offending name here. A non-empty value tells the selector to
+    # resolve this step to the LOUD ``invalid`` route (clear, named error + valid
+    # set) instead of silently re-routing the cleared step through keyword/registry
+    # matching to a phantom skill or the opaque ``unmatched`` fallback. Empty (the
+    # default) means "no hallucination" — every existing constructor and every
+    # legitimately strategy-less (pure-check / foreach owner) plan is byte-
+    # unaffected. Additive + LAST + defaulted (frozen-safe, rule 6).
+    cleared_strategy: str = ""
 
 
 @dataclass(frozen=True)

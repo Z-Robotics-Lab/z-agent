@@ -113,6 +113,28 @@ class StrategySelector:
         if sub_goal.strategy:
             return self._resolve_explicit(sub_goal.strategy, sub_goal.strategy_params)
 
+        # Priority 1b (fail-loud, rule 8): a step whose explicit strategy was a
+        # HALLUCINATION carries the offending name on ``cleared_strategy`` (the
+        # decomposer cleared ``strategy`` to "" but stamped the name here). Resolve
+        # it to the LOUD ``invalid`` route — a clear, named error with the valid
+        # set — instead of letting the cleared (empty) strategy silently re-route
+        # through the keyword ladder / registry match to a phantom skill, or fall
+        # through to the opaque ``unmatched`` fallback. This fires on EVERY path
+        # (first decompose AND replan), since the decomposer stamps the marker on
+        # every validation. Registry-independent so even a registry-less world
+        # (default go2) fails loud rather than re-deriving a phantom by keyword.
+        cleared = getattr(sub_goal, "cleared_strategy", "")
+        if cleared:
+            valid = self._registered_skill_names()
+            return StrategyResult(
+                "invalid",
+                cleared,
+                {
+                    "strategy": cleared,
+                    "valid_strategies": sorted(valid) if valid is not None else [],
+                },
+            )
+
         # Priority 2: Name/description keyword rules
         name_lower = sub_goal.name.lower()
         desc_lower = sub_goal.description.lower()

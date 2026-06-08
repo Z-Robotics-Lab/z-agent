@@ -61,6 +61,20 @@ class GoalDecomposer:
     # Max sub-goals to prevent over-decomposition
     MAX_SUB_GOALS: int = 8
 
+    # Token budget for the decompose LLM call. A REASONING model (deepseek-v4-flash)
+    # emits a hidden reasoning_content trace BEFORE the final JSON content; that trace
+    # spends part of the completion budget, so a too-small max_tokens truncates the
+    # FINAL JSON (the only part the backend keeps), producing the "no JSON found" /
+    # "Expecting ',' delimiter" failures seen live. 2048 was tuned for non-reasoning
+    # models. 8192 gives ample headroom for the reasoning trace PLUS a full
+    # MAX_SUB_GOALS plan (worst-case plan JSON is well under ~2k tokens), so the final
+    # JSON is never the thing that gets cut. Configurable per instance/world.
+    DEFAULT_DECOMPOSE_MAX_TOKENS: int = 8192
+
+    # Bounded re-asks on a JSON extraction/parse failure (the model gets ONE terse
+    # "return ONLY valid JSON" nudge before we fall back loud). Keeps cost bounded.
+    DECOMPOSE_MAX_RETRIES: int = 1
+
     # Default strategies — overridden at runtime from actual SkillRegistry
     KNOWN_STRATEGIES: frozenset[str] = frozenset({
         "navigate_skill",
@@ -338,6 +352,7 @@ Loop example — "do <something> to every detected object, one by one":
         fallback_verify: "str | None" = None,
         planner_intro: "str | None" = None,
         has_base: bool = True,
+        decompose_max_tokens: "int | None" = None,
     ) -> None:
         """Initialise with an LLMBackend (must implement .call()).
 
@@ -357,10 +372,19 @@ Loop example — "do <something> to every detected object, one by one":
                      never taught the base primitives. Ignored when an explicit
                      ``strategies`` set is injected. Defaults True (robot/go2),
                      preserving existing behaviour.
+            decompose_max_tokens: completion-token budget for the decompose LLM
+                     call. Defaults to ``DEFAULT_DECOMPOSE_MAX_TOKENS`` (sized for a
+                     reasoning model whose hidden reasoning trace shares the budget).
         """
         self._backend = backend
         self._template_library = template_library
         self._skill_registry = skill_registry
+        # Token budget for the decompose call (reasoning-model-aware default).
+        self._decompose_max_tokens = (
+            decompose_max_tokens
+            if decompose_max_tokens is not None
+            else self.DEFAULT_DECOMPOSE_MAX_TOKENS
+        )
         # Cached system prompt — built once per instance, reused across decompose() calls.
         self._cached_system_prompt: list[dict[str, Any]] | None = None
 
@@ -430,19 +454,82 @@ Loop example — "do <something> to every detected object, one by one":
         system = self._cached_system_prompt
         messages = self._build_messages(task, world_context)
 
-        try:
-            response = self._backend.call(
-                messages=messages,
-                tools=[],
-                system=system,
-                max_tokens=2048,
+        # Decompose call + BOUNDED retry. A reasoning model can leak its trace,
+        # truncate, or wrap the JSON in fences/prose; on an extraction/parse miss
+        # we re-ask ONCE with a terse "return ONLY valid JSON" nudge before falling
+        # back. Each attempt is independent + idempotent (no state carried).
+        attempts = 1 + max(0, self.DECOMPOSE_MAX_RETRIES)
+        for attempt in range(attempts):
+            attempt_messages = (
+                messages if attempt == 0 else self._retry_messages(messages)
             )
-            raw_text = response.text
-        except Exception as exc:  # noqa: BLE001
-            _LOG.warning("GoalDecomposer: backend call failed: %s", exc)
-            return self._fallback_goal_tree(task)
+            try:
+                response = self._backend.call(
+                    messages=attempt_messages,
+                    tools=[],
+                    system=system,
+                    max_tokens=self._decompose_max_tokens,
+                )
+                raw_text = response.text
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("GoalDecomposer: backend call failed: %s", exc)
+                return self._fallback_goal_tree(task)
 
-        return self._parse_and_validate(task, raw_text)
+            json_str = self._extract_json(raw_text)
+            if json_str is not None:
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError as exc:
+                    _LOG.warning(
+                        "GoalDecomposer: JSON parse error (attempt %d/%d): %s",
+                        attempt + 1,
+                        attempts,
+                        exc,
+                    )
+                else:
+                    return self._build_goal_tree(task, data)
+            else:
+                _LOG.warning(
+                    "GoalDecomposer: no JSON found in response (attempt %d/%d)",
+                    attempt + 1,
+                    attempts,
+                )
+
+            if attempt + 1 < attempts:
+                _LOG.info("GoalDecomposer: re-asking with a JSON-only nudge")
+
+        # Every attempt failed to yield parseable JSON — fail loud, then fall back
+        # to a single-step plan (never fabricate a multi-step plan out of garbage).
+        _LOG.warning(
+            "GoalDecomposer: no valid JSON after %d attempt(s) — using fallback plan",
+            attempts,
+        )
+        return self._fallback_goal_tree(task)
+
+    def _retry_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Append a terse JSON-only nudge to the user turn for a bounded re-ask.
+
+        Additive + idempotent: builds a NEW list (never mutates the cached prompt)
+        and only strengthens the existing instruction — no new schema, no relaxed
+        validation. The nudge targets the exact reasoning-model failure mode:
+        leaked prose / code fences / a truncated final answer.
+        """
+        nudge = (
+            "\n\nIMPORTANT: Your previous reply could not be parsed. "
+            "Respond with ONLY the raw JSON object — no reasoning, no explanation, "
+            "no markdown code fences, no text before or after it."
+        )
+        retried = [dict(m) for m in messages]
+        if retried and retried[-1].get("role") == "user":
+            last = retried[-1]
+            content = last.get("content", "")
+            if isinstance(content, str):
+                last["content"] = content + nudge
+            else:
+                retried.append({"role": "user", "content": nudge.strip()})
+        else:
+            retried.append({"role": "user", "content": nudge.strip()})
+        return retried
 
     @staticmethod
     def answer_plan(task: str, answer: str) -> GoalTree:
@@ -550,17 +637,72 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
         return self._build_goal_tree(task, data)
 
     def _extract_json(self, text: str) -> str | None:
-        """Extract JSON from text, stripping markdown fences if present."""
-        # Try ```json ... ``` first
-        fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        """Extract the JSON object from a (possibly noisy) LLM response.
+
+        Robust against a REASONING model's output: a leaked reasoning preamble,
+        markdown code fences (```json ... ```), and trailing prose after the JSON
+        — including prose that itself contains stray braces. Strategy:
+
+        1. Prefer the contents of a fenced ```json``` / ``` block (the model was
+           told to emit raw JSON, but reasoning models often fence it anyway).
+        2. Otherwise scan for the OUTERMOST balanced ``{ ... }`` object, tracking
+           string literals + escapes so braces inside strings never miscount and
+           a trailing ``{curly}`` in prose can't over-capture (the old greedy
+           ``\\{.*\\}`` regex bug that produced "Extra data" / "Expecting ','").
+
+        Pure string scanning — NEVER eval/exec (rule: never execute model output).
+        Returns the JSON substring, or None if no balanced object is present.
+        """
+        if not text:
+            return None
+
+        # 1. Fenced block — extract its body, then balance-scan it. Using the
+        #    balanced scanner on the fence body (instead of a non-greedy regex)
+        #    means a multi-step plan with nested objects survives intact.
+        fence_match = re.search(r"```(?:json|JSON)?\s*(.*?)```", text, re.DOTALL)
         if fence_match:
-            return fence_match.group(1)
+            inner = self._first_balanced_object(fence_match.group(1))
+            if inner is not None:
+                return inner
 
-        # Try to find a bare { ... } block
-        brace_match = re.search(r"(\{.*\})", text, re.DOTALL)
-        if brace_match:
-            return brace_match.group(1)
+        # 2. No usable fence — balance-scan the whole text for the outermost {...}.
+        return self._first_balanced_object(text)
 
+    @staticmethod
+    def _first_balanced_object(text: str) -> str | None:
+        """Return the first top-level balanced ``{...}`` substring, or None.
+
+        Skips any leading prose/reasoning before the first ``{`` and stops at the
+        matching close brace (ignoring braces inside JSON string literals), so any
+        trailing prose is discarded. String-aware: handles ``"`` quotes and ``\\``
+        escapes. Does not parse JSON — only delimits a candidate for ``json.loads``.
+        """
+        start = text.find("{")
+        if start == -1:
+            return None
+
+        depth = 0
+        in_string = False
+        escaped = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+        # Unbalanced (e.g. truncated by max_tokens): no complete object.
         return None
 
     def _build_goal_tree(self, task: str, data: dict) -> GoalTree:
@@ -681,9 +823,22 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
 
         # Validate strategy. ``answer`` is a kernel dispatch route (like
         # ``tool_call``), valid in every world — never cleared.
+        #
+        # Fail-loud (rule 8): an unknown explicit strategy is a HALLUCINATION. We
+        # clear ``strategy`` to "" (so the validated tree never carries a phantom
+        # strategy name and existing pure-check / foreach routing is unaffected)
+        # AND stamp the offending name on ``cleared_strategy``. The latter routes
+        # this step to the selector's LOUD ``invalid`` path at execution, so a
+        # cleared hallucination surfaces a clear, named error with the valid set
+        # instead of silently re-routing through keyword/registry matching to a
+        # phantom skill (base world) or the opaque ``unmatched`` fallback (baseless
+        # world). This applies on EVERY decompose, including replan, because the
+        # harness re-decomposes through this same validator.
+        cleared_strategy = ""
         if strategy and strategy != "answer" and strategy not in self.KNOWN_STRATEGIES:
             _LOG.warning(
-                "GoalDecomposer: unknown strategy %r in sub_goal %r — clearing",
+                "GoalDecomposer: unknown strategy %r in sub_goal %r — clearing "
+                "(will fail loud at execution)",
                 strategy,
                 name,
             )
@@ -692,6 +847,7 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
                 notes.append(
                     f"strategy {strategy!r} is not valid; valid strategies: {valid}"
                 )
+            cleared_strategy = strategy
             strategy = ""
 
         # Validate depends_on
@@ -713,6 +869,15 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
         if answer_only:
             foreach = None
 
+        # A foreach loop OWNER legitimately carries an empty strategy (the body
+        # does the work). If the LLM additionally named a hallucinated strategy on
+        # the loop owner, the cleared name must NOT mark the owner ``invalid`` —
+        # that would fail the (otherwise valid) loop. The body templates are
+        # validated independently with the same fail-loud rules, so the
+        # hallucination is still caught where it actually executes.
+        if foreach is not None:
+            cleared_strategy = ""
+
         # Stage 4 (H-1b): a foreach node iterates a list produced by its
         # source_step, so it MUST be ordered AFTER that producer. If the author
         # omitted the ordering edge, the topological sort could place the loop
@@ -733,6 +898,7 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             fail_action=fail_action,
             foreach=foreach,
             answer_only=answer_only,
+            cleared_strategy=cleared_strategy,
         )
 
     def _validate_foreach(

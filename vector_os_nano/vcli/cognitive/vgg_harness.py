@@ -508,6 +508,13 @@ class VGGHarness:
                     strategy=self._retry_strategy(sub_goal),
                     strategy_params=sub_goal.strategy_params,
                     fail_action="",
+                    # Preserve the fail-loud hallucination marker (rule 8): a step
+                    # whose explicit strategy was an unknown hallucination must keep
+                    # surfacing the clear ``invalid`` error on every retry, never
+                    # silently re-route the cleared (empty) strategy to a phantom
+                    # skill / ``unmatched`` fallback. Empty for normal steps, so the
+                    # retry path is byte-identical for them.
+                    cleared_strategy=sub_goal.cleared_strategy,
                 )
                 step = self._executor._execute_sub_goal(retry_goal)
 

@@ -28,6 +28,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
 from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
 from vector_os_nano.vcli.engine import UnifiedTurnResult, VectorEngine
@@ -173,6 +175,74 @@ def test_question_answer_parity(tmp_path: Path) -> None:
     assert result.intent.route == "tool_use"  # conversational guard short-circuits
     assert result.text == "Because the sim warms up its caches first."
     assert result.trace is not None and result.trace.success is True
+    assert result.verified is True
+
+
+@pytest.mark.parametrize(
+    "msg",
+    [
+        "我希望你去打开终端",        # bug A: meta request, 去/打开 only incidental
+        "你能不能快一点",            # meta ask about the agent's behaviour
+        "今天天气不错",              # bare statement, no action
+    ],
+)
+def test_meta_request_answers_not_failed_plan(tmp_path: Path, msg: str) -> None:
+    """Bug A: a meta / non-actionable input ANSWERS — never a failed VGG decompose.
+
+    Before the fix, "我希望你去打开终端" routed to VGG (``去``/``打开`` tripped the
+    action-verb hint), the decomposer could not map it to any skill, and the
+    fallback ``execute_task`` step ran as ``unmatched`` → a hard failure with empty
+    text. The intent-router meta-request guard now routes it to the answer path: the
+    ReAct loop answers and the harness wraps it in a verified answer-only plan.
+    """
+    backend = _ChatBackend("我没有直接操作终端的能力，但可以告诉你怎么做。")
+    engine = _dev_engine(backend, lambda _n, _p: "y", tmp_path,
+                         intent_router=IntentRouter())
+    session = create_session(directory=tmp_path / "_sessions")
+
+    result = engine.run_turn_unified(msg, session)
+
+    # Routed to the answer path, not a failing decompose.
+    assert result.intent.route == "tool_use"
+    assert result.text == "我没有直接操作终端的能力，但可以告诉你怎么做。"
+    # CLOSED LOOP: a verified answer-only plan, NOT an 'unmatched' action step.
+    assert result.trace is not None
+    assert result.trace.success is True
+    assert result.verified is True
+    answer_sg = result.trace.goal_tree.sub_goals[0]
+    assert answer_sg.answer_only is True
+    assert answer_sg.strategy == "answer"
+    # No step failed as 'unmatched'/'fallback'.
+    assert all(s.strategy != "unmatched" for s in result.trace.steps)
+
+
+def test_meta_phrased_real_command_still_plans(tmp_path: Path, monkeypatch) -> None:
+    """A meta-phrased REAL command (skill match) still decomposes to a plan.
+
+    Guard: the meta-request fix must not regress genuine commands. A request-phrased
+    instruction that maps to a real action still routes to VGG. Here a forced-vgg
+    router stands in for the skill-match-first path, and the decomposer yields a real
+    tool_call plan — proving the answer redirect is scoped to unmappable meta input.
+    """
+    monkeypatch.chdir(tmp_path)
+    decompose = _goal_tree_json("note.txt", "noted\n",
+                                "path_contains('note.txt', 'noted')")
+
+    class _VggRouter(IntentRouter):
+        def should_use_vgg(self, msg, skill_registry=None) -> bool:
+            return True
+
+    backend = _DecomposeBackend(decompose)
+    engine = _dev_engine(backend, lambda _n, _p: "y", tmp_path,
+                         intent_router=_VggRouter())
+    session = create_session(directory=tmp_path / "_sessions")
+
+    result = engine.run_turn_unified("我希望你创建 note.txt", session)
+
+    assert result.intent.route == "vgg"
+    assert result.trace is not None
+    assert (tmp_path / "note.txt").read_text() == "noted\n"
+    assert result.trace.success is True
     assert result.verified is True
 
 

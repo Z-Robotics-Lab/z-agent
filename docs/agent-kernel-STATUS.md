@@ -89,6 +89,17 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   clean console. KNOWN residual (separate, Phase D grounding): the scan step may still fail on a
   verify miss (now surfaced HONESTLY, not masked); and a replan can still emit a hallucinated skill.
 
+- **Live-hardening II (this commit)** — decompose robustness on deepseek-v4-flash:
+  (A) META / non-actionable input ("我希望你去打开终端") answered instead of failing a VGG decompose —
+  `intent_router` meta-request guard (gated on a residual-motor check so politely-phrased REAL motor
+  commands like "请你巡逻" still plan). (B) decompose JSON robust for the reasoning model — budget raised
+  to `DEFAULT_DECOMPOSE_MAX_TOKENS=8192`, balanced-brace extraction (fences/preamble/trailing prose), a
+  bounded retry, then fail-loud to a single-step fallback (never a phantom plan). (C) hallucinated skills
+  rejected LOUDLY on replan — `SubGoal.cleared_strategy` (additive marker) routes a cleared/unknown
+  strategy to the `invalid` route with the valid set, never silently to `unmatched`. Live-confirmed:
+  "我希望你去打开终端" -> answer-only `VGG [PASS] answer`. 938 green. Followups: remove dead
+  `goal_decomposer._parse_and_validate`; meta guard is keyword-based (fails safe).
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —
