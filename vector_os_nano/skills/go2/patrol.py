@@ -25,7 +25,6 @@ from typing import Any
 
 from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.navigate import _detect_current_room
 
 logger = logging.getLogger(__name__)
 

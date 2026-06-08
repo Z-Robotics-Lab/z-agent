@@ -32,7 +32,7 @@ from typing import Optional
 
 import numpy as np
 
-from vector_os_nano.core.skill import Skill, SkillContext, skill
+from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 from vector_os_nano.skills.calibration import camera_to_base, load_calibration
 
@@ -244,7 +244,6 @@ class PickSkill:
         cfg = context.config.get("skills", {}).get("pick", {})
         z_offset: float = cfg.get("z_offset", _DEFAULT_Z_OFFSET)
         x_offset: float = cfg.get("x_offset", 0.0)
-        y_scale: float = cfg.get("y_scale", 1.0)
         pre_grasp_h: float = cfg.get("pre_grasp_height", _DEFAULT_PRE_GRASP_HEIGHT)
         home_joints: list[float] = (
             context.config.get("skills", {}).get("home", {}).get("joint_values", _DEFAULT_HOME_JOINTS)

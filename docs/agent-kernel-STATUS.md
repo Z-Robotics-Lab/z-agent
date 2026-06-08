@@ -368,6 +368,14 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   CN/descriptive query against the oracle's EN ground-truth names without aliases (which the language
   principle forbids); a real fix verifies against the detect STEP's own alias-aware output (Rule 4:
   close-the-loop) rather than a separate oracle call.
+  **[/loop iter 7: lint hygiene + cadence note].** Cleared the recurring dead-code in `skills/` (9 unused
+  `Skill`/etc. imports + a dead `y_scale` local) so future ruff signal is clean; 1029 green, no behavior
+  change. STATUS: the ARM touchstone is now thoroughly hardened end-to-end (perception, grounding, decompose
+  binding, real-time timeouts, singular/plural intent, long chains, place/handover, honest+fast failure,
+  grounded verify). Diminishing returns on solo-verifiable arm work — the remaining high-value items are
+  OWNER-GATED and need a live `--sim` window: R2-1 go2 viewer (generalize mjpython launch + go2 physics-thread
+  viewer safety), R2-4 Ctrl-C under mjpython, R2-6 ROS2 ERROR bleed. The deeper R2-7 detect-verify
+  close-the-loop is a design call worth doing with owner input. Cadence lengthened; loop keeps a slow heartbeat.
 
 ## Autonomous /loop prompt (the standing mission for owner-away iterations)
 

@@ -13,7 +13,6 @@ Velocity clamps (conservative for Milestone 1):
 from __future__ import annotations
 
 import logging
-import math
 
 from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
