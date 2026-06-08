@@ -156,8 +156,15 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   object_label/object/query/target/object_id (param-name flexibility, language-neutral). (5) detect/
   pick descriptions no longer forbid Chinese — natural-language targets in any language are accepted;
   NO bilingual keyword tables added anywhere. World-agnostic + single-source preserved. 960 green,
-  ruff clean. PENDING: live real-deepseek bilingual decompose check (抓香蕉 / grab the bottle /
-  拿起红色杯子 / 把所有东西抓一遍) that the LLM actually binds the target + picks the right verify.
+  ruff clean. VALIDATED live (real deepseek-v4-flash, headless grounded arm): 抓香蕉 / grab the bottle /
+  拿起红色的杯子 / 把所有东西抓一遍 all decompose to detect -> pick with the target BOUND into object_label
+  (香蕉/bottle/红色的杯子) + verify holding_object(); grab-everything emits foreach(object_label=${item.label}).
+  REFINEMENT (same pass): the LLM first injected the target into the detect verify (detect_objects('香蕉')),
+  which the language-neutral oracle (English names) can't match -> detect verify failed. Fixed by strengthening
+  _TARGET_BINDING_GUIDANCE: use the suggested verify EXACTLY as written, target goes ONLY in strategy_params,
+  never as an argument inside verify. Re-validated: detect verify is now the query-less len(detect_objects())>0
+  (passes), every step verify satisfiable. STILL PENDING: headless PHYSICAL grasp (does pick actually grab the
+  banana so holding_object() flips True — tests IK/coords) + owner's GUI window visual check.
 
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in

@@ -63,8 +63,12 @@ except ImportError:
         "When a step acts on a SPECIFIC object/target named in the task, copy "
         "that target into the chosen strategy's object/object_label/query/target "
         "parameter — never leave a known target blank. "
-        "Prefer each strategy's 'suggested verify' predicate for that step's "
-        "verify expression."
+        "Use each strategy's 'suggested verify' predicate EXACTLY as written for "
+        "that step's verify expression: put the target ONLY in strategy_params, "
+        "never as an argument inside the verify expression. The verifier checks "
+        "deterministic ground-truth state, not your target string — so e.g. a "
+        "detect step verifies with len(detect_objects()) > 0, NOT "
+        "detect_objects('<your target>')."
     )
 
 logger = logging.getLogger(__name__)
