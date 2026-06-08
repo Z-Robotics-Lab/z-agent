@@ -51,6 +51,12 @@ _DEFAULT_PRE_GRASP_HEIGHT: float = 0.06  # 6 cm above grasp — enough clearance
 # Maximum pick attempts before reporting failure
 _DEFAULT_MAX_RETRIES: int = 2
 
+# Failure diagnoses where retrying is futile: the target is genuinely not
+# detectable, so re-homing + re-detecting just repeats the same miss. Fail fast
+# (clearer + faster) instead of exhausting retries on an absent object. Transient
+# failures (ik_unreachable, move_failed, track_failed) still retry.
+_NO_RETRY_DIAGNOSES: frozenset[str] = frozenset({"object_not_found", "no_detections"})
+
 # Position sampling for density-cluster estimation (from _get_target_camera_pos)
 _DEFAULT_SAMPLE_COUNT: int = 20
 _DEFAULT_SAMPLE_INTERVAL: float = 0.05   # 50 ms
@@ -186,6 +192,13 @@ class PickSkill:
             last_diagnosis = last_result_data.get("diagnosis", "unknown")
             logger.warning("[PICK] Attempt %d failed: %s", attempt, last_error)
 
+            # Don't retry when the target is genuinely not detectable — re-homing
+            # and re-detecting just repeats the same miss (e.g. asked for an object
+            # that isn't in the scene). Fail fast and clearly.
+            if last_diagnosis in _NO_RETRY_DIAGNOSES:
+                logger.info("[PICK] %s — target not detectable; not retrying", last_diagnosis)
+                break
+
             if attempt < max_retries:
                 logger.info("[PICK] Returning home for retry ...")
                 context.arm.move_joints(home_joints, duration=_HOME_DURATION)
@@ -193,15 +206,20 @@ class PickSkill:
 
         # Merge retry metadata into the last attempt's result_data so callers
         # can inspect both the failure diagnosis and retry statistics.
+        attempts_made = attempt  # actual attempts (may be < max_retries if we failed fast)
         retry_data = dict(last_result_data)
         retry_data.update({
             "diagnosis": last_diagnosis,
-            "attempts": max_retries,
-            "hint": "All retry attempts exhausted.",
+            "attempts": attempts_made,
+            "hint": (
+                "Target not detectable — check the object is present/named correctly."
+                if last_diagnosis in _NO_RETRY_DIAGNOSES
+                else "All retry attempts exhausted."
+            ),
         })
         return SkillResult(
             success=False,
-            error_message=f"Pick failed after {max_retries} attempts: {last_error}",
+            error_message=f"Pick failed after {attempts_made} attempt(s): {last_error}",
             result_data=retry_data,
         )
 

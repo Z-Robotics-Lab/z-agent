@@ -357,6 +357,17 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   (grounded: a place RELEASES the held object; empirically holding flips True->False across pick(hold)->place),
   which discriminates a real place from a failed one. New pick->place regression test
   (`tests/vcli/test_pick_place_chain.py`); 1027 green.
+  **[/loop iter 6: pick fails fast on an absent target].** Probed failure recovery by executing "抓起苹果"
+  (no apple in scene): the robot correctly FAILS (success=False — moat held, no fake success), but it burned
+  ~28s exhausting pick retries (re-home + re-detect the same miss each attempt). Fix: pick now breaks out
+  immediately on a target-not-found diagnosis (`object_not_found` / `no_detections`) — retrying can't conjure
+  an absent object; transient failures (ik/move/track) still retry. Absent-target pick now fails in ~0.06s
+  (1 attempt vs max_retries). New regression test (`tests/vcli/test_pick_fail_fast.py`); 1029 green. KNOWN
+  RESIDUAL (deeper, deferred): a detect step's query-less verify (`len(detect_objects()) > 0`) FALSE-PASSES
+  when the specific target is absent (it counts other scene objects) — the verify can't match the user's
+  CN/descriptive query against the oracle's EN ground-truth names without aliases (which the language
+  principle forbids); a real fix verifies against the detect STEP's own alias-aware output (Rule 4:
+  close-the-loop) rather than a separate oracle call.
 
 ## Autonomous /loop prompt (the standing mission for owner-away iterations)
 
