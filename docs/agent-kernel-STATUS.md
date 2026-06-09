@@ -215,6 +215,20 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   MCP/eval + tests. The opt-in signature-string guard could later be made declarative. NEXT: W1.3
   scene_graph -> TextLLM adapter.
 
+- **Phase E W1.3 (this commit) — scene_graph spatial call behind a TextLLM adapter (core/ provider leak
+  removed).** `core/scene_graph.py:rank_rooms_for_goal` inlined a raw httpx POST with a HARDCODED
+  `openai/gpt-4o` + openrouter URL and read the PRIVATE `vlm._api_key` — an adapter break + provider leak in
+  `core/`. Replaced with a narrow injectable `TextLLM` Protocol (one method `complete_text(prompt) -> str`,
+  defined IN `core/` so `core/` never imports `vcli`); `rank_rooms_for_goal(goal, text_llm)` now calls
+  `text_llm.complete_text`, with the prompt + json.loads/regex-fallback parsing + graceful `[]` preserved
+  byte-identical. Default adapter `BackendTextLLM` (new `vcli/backends/text_llm_adapter.py`) wraps
+  `create_backend` (configured provider, DeepSeek default), never reads a private attr or hardcodes a model.
+  Path is now offline-mockable: harness tests inject a fake TextLLM (no httpx patching). Method-param injection
+  chosen because SceneGraph's ctor + its `cli.py`/`sim_tool.py` construction sites are the concurrent session's
+  (kept byte-identical). NOTE: `rank_rooms_for_goal` has no live caller yet (latent go2-nav path), so
+  `BackendTextLLM` has no live wiring — the deliverable is the decoupling + mockability. 57 harness + 1074
+  canonical green. NEXT: W1.4 playground build_step_primitives wire-into-live (or delete) — last Wave 1 item.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —

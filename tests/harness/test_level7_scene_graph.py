@@ -5,8 +5,8 @@
 
 Tests the SysNav-inspired hierarchical scene graph at
 ``vector_os_nano.core.scene_graph``.  Every test is pure Python — no
-MuJoCo, no real API calls.  VLM/HTTP interactions are patched with
-``unittest.mock``.
+MuJoCo, no real API calls.  The TextLLM adapter is replaced by a tiny
+in-process stub; no network I/O or httpx patching required.
 
 Layers under test
 -----------------
@@ -25,7 +25,7 @@ Test classes
     TestSceneGraphDataModel    L7-0  node dataclasses and basic graph ops
     TestViewpointLogic         L7-1  viewpoint threshold and coverage maths
     TestObjectMerge            L7-2  object creation and deduplication
-    TestVLMRoomSelection       L7-3  VLM-guided room ranking (mocked httpx)
+    TestVLMRoomSelection       L7-3  TextLLM-guided room ranking (fake stub)
     TestBackwardCompat         L7-4  SpatialMemory backward-compatible API
     TestPersistence            L7-5  YAML save/load round-trip
     TestObserveWithViewpoint   L7-6  full viewpoint-aware observation flow
@@ -40,6 +40,28 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Fake TextLLM stubs — no network, no httpx, no private attribute access
+# ---------------------------------------------------------------------------
+
+
+class _FakeTextLLM:
+    """Stub TextLLM that returns a canned JSON string for any prompt."""
+
+    def __init__(self, response: str) -> None:
+        self._response = response
+
+    def complete_text(self, prompt: str) -> str:  # noqa: ARG002
+        return self._response
+
+
+class _RaisingTextLLM:
+    """Stub TextLLM that always raises to exercise the graceful fallback."""
+
+    def complete_text(self, prompt: str) -> str:  # noqa: ARG002
+        raise RuntimeError("simulated LLM failure")
 
 # ---------------------------------------------------------------------------
 # Ensure repo root is importable
@@ -57,6 +79,7 @@ from vector_os_nano.core.scene_graph import (  # noqa: E402
     ObjectNode,
     RoomNode,
     SceneGraph,
+    TextLLM,
     ViewpointNode,
     _ROOM_AREA_DEFAULT,
     _VIEWPOINT_FOV_DEG,
@@ -413,92 +436,87 @@ class TestObjectMerge:
 
 
 # ===========================================================================
-# L7-3: VLM-guided room ranking (mocked httpx)
+# L7-3: TextLLM-guided room ranking (fake stub — no network, no httpx)
 # ===========================================================================
 
 
 class TestVLMRoomSelection:
-    """L7-3: VLM-guided room ranking (mock)."""
+    """L7-3: TextLLM-guided room ranking via injectable fake stub."""
 
     def test_rank_rooms_empty_graph(self) -> None:
         """rank_rooms_for_goal returns empty list when no rooms exist."""
         sg = _sg()
-        mock_vlm = MagicMock()
-        mock_vlm._api_key = "fake_key"
-        result = sg.rank_rooms_for_goal("find a chair", mock_vlm)
+        # Even with a real-looking adapter, an empty graph short-circuits before
+        # the LLM is called — so any stub (including one that raises) works.
+        text_llm = _FakeTextLLM('[]')
+        result = sg.rank_rooms_for_goal("find a chair", text_llm)
         assert result == []
 
-    def test_rank_rooms_with_mock_vlm(self) -> None:
-        """Mock httpx.Client returns a JSON ranking; rank_rooms_for_goal parses it."""
+    def test_rank_rooms_with_fake_text_llm(self) -> None:
+        """Fake TextLLM returns a JSON ranking; rank_rooms_for_goal parses it."""
         sg = _sg()
         sg.add_room(RoomNode(room_id="living_room", representative_description="cozy room"))
         sg.add_room(RoomNode(room_id="kitchen", representative_description="cooking area"))
         sg.merge_object(category="sofa", room_id="living_room", viewpoint_id="vp_1")
 
-        mock_vlm = MagicMock()
-        mock_vlm._api_key = "fake_key_abc"
-
         api_response = [
             {"room": "living_room", "reasoning": "has a sofa"},
             {"room": "kitchen", "reasoning": "unlikely for seating"},
         ]
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "choices": [
-                {"message": {"content": json.dumps(api_response)}}
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
+        text_llm = _FakeTextLLM(json.dumps(api_response))
 
-        mock_client_instance = MagicMock()
-        mock_client_instance.post.return_value = mock_resp
-        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
-        mock_client_instance.__exit__ = MagicMock(return_value=False)
-
-        with patch("httpx.Client", return_value=mock_client_instance):
-            result = sg.rank_rooms_for_goal("find a sofa", mock_vlm)
+        result = sg.rank_rooms_for_goal("find a sofa", text_llm)
 
         assert len(result) == 2
         assert result[0][0] == "living_room"
         assert "sofa" in result[0][1]
         assert result[1][0] == "kitchen"
 
-    def test_rank_rooms_vlm_failure_returns_empty(self) -> None:
-        """Network failure in rank_rooms_for_goal returns [] gracefully."""
+    def test_rank_rooms_text_llm_raises_returns_empty(self) -> None:
+        """LLM failure in rank_rooms_for_goal returns [] gracefully."""
         sg = _sg()
         sg.add_room(_room("bedroom"))
 
-        mock_vlm = MagicMock()
-        mock_vlm._api_key = "fake_key"
-
-        with patch("httpx.Client", side_effect=Exception("connection refused")):
-            result = sg.rank_rooms_for_goal("find a bed", mock_vlm)
+        result = sg.rank_rooms_for_goal("find a bed", _RaisingTextLLM())
 
         assert result == []
 
     def test_rank_rooms_malformed_json_returns_empty(self) -> None:
-        """Malformed VLM JSON response returns [] gracefully."""
+        """Malformed TextLLM response (unparseable JSON) returns [] gracefully."""
         sg = _sg()
         sg.add_room(_room("office"))
 
-        mock_vlm = MagicMock()
-        mock_vlm._api_key = "fake_key"
+        text_llm = _FakeTextLLM("not valid json {")
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "choices": [{"message": {"content": "not valid json {"}}]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        mock_client_instance = MagicMock()
-        mock_client_instance.post.return_value = mock_resp
-        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
-        mock_client_instance.__exit__ = MagicMock(return_value=False)
-
-        with patch("httpx.Client", return_value=mock_client_instance):
-            result = sg.rank_rooms_for_goal("find a desk", mock_vlm)
+        result = sg.rank_rooms_for_goal("find a desk", text_llm)
 
         assert result == []
+
+    def test_rank_rooms_protocol_compatibility(self) -> None:
+        """_FakeTextLLM satisfies the TextLLM Protocol structurally."""
+        # TextLLM is a non-runtime Protocol; we verify duck-typing by calling
+        # the method directly and ensuring the return type is str.
+        stub: TextLLM = _FakeTextLLM('[]')  # type: ignore[assignment]
+        response = stub.complete_text("test prompt")
+        assert isinstance(response, str)
+
+    def test_rank_rooms_no_private_key_access(self) -> None:
+        """rank_rooms_for_goal never reads _api_key from the adapter."""
+        # Build a stub that will raise AttributeError on any dunder/private access.
+        class _StrictTextLLM:
+            def complete_text(self, prompt: str) -> str:
+                return json.dumps([{"room": "kitchen", "reasoning": "only room"}])
+
+            def __getattr__(self, name: str) -> Any:
+                if name.startswith("_"):
+                    raise AttributeError(f"private attribute access: {name!r}")
+                raise AttributeError(name)
+
+        sg = _sg()
+        sg.add_room(_room("kitchen"))
+        result = sg.rank_rooms_for_goal("find something", _StrictTextLLM())
+        assert len(result) == 1
+        assert result[0][0] == "kitchen"
 
 
 # ===========================================================================

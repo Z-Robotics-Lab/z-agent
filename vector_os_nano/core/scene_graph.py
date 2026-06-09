@@ -29,11 +29,37 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# TextLLM Protocol — narrow injectable adapter for text-only LLM calls.
+# core/ depends ONLY on this Protocol; no vcli import needed.
+# ---------------------------------------------------------------------------
+
+
+class TextLLM(Protocol):
+    """Minimal protocol for a text-generation adapter.
+
+    Implementations live outside core/ (e.g. vcli/backends/text_llm_adapter.py)
+    so that core/ never imports vcli.  Stubs can be used in tests.
+    """
+
+    def complete_text(self, prompt: str) -> str:
+        """Send *prompt* to the language model and return the text response.
+
+        Args:
+            prompt: The full user-side prompt string.
+
+        Returns:
+            The model's text response as a string.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -471,14 +497,15 @@ class SceneGraph:
     # ------------------------------------------------------------------
 
     def rank_rooms_for_goal(
-        self, goal: str, vlm: Any,
+        self, goal: str, text_llm: TextLLM,
     ) -> list[tuple[str, str]]:
-        """Ask VLM which room most likely contains the goal target.
+        """Ask a TextLLM which room most likely contains the goal target.
 
         Args:
             goal: Natural language goal (e.g. "find the red chair").
-            vlm: Go2VLMPerception instance (has _call_vlm but we use
-                 a text-only call via _call_vlm_text).
+            text_llm: A TextLLM adapter whose complete_text() will be called
+                with a text-only prompt.  No provider, key, or model is
+                hardcoded here — those details belong in the adapter.
 
         Returns:
             List of (room_id, reasoning) sorted by relevance.
@@ -510,27 +537,10 @@ class SceneGraph:
         try:
             import json
             import re
-            import httpx
 
-            # Text-only call (no image)
-            headers = {
-                "Authorization": f"Bearer {vlm._api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": "openai/gpt-4o",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 300,
-            }
-            with httpx.Client(timeout=20.0) as client:
-                resp = client.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    json=payload, headers=headers,
-                )
-                resp.raise_for_status()
-                text = resp.json()["choices"][0]["message"]["content"]
+            text = text_llm.complete_text(prompt)
 
-            # Parse JSON
+            # Parse JSON — try direct parse first, then regex fallback
             clean = text.strip()
             data = None
             try:
