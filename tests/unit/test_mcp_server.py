@@ -68,10 +68,13 @@ def _make_mock_agent(skill_names: list[str] | None = None) -> MagicMock:
 def _make_mock_engine() -> MagicMock:
     """Build a minimal mock VectorEngine."""
     engine = MagicMock()
-    # run_turn returns a TurnResult-like object
+    # Both turn surfaces return a TurnResult-like object carrying .text. The MCP
+    # text path now routes through run_turn_unified (S5.4 cut-over); run_turn stays
+    # mocked for the legacy fallback.
     turn_result = MagicMock()
     turn_result.text = '{"success": true, "status": "completed"}'
     engine.run_turn.return_value = turn_result
+    engine.run_turn_unified.return_value = turn_result
     engine.vgg_decompose.return_value = None
     return engine
 
@@ -166,7 +169,7 @@ class TestVectorMCPServer:
         assert "camera://side" in uris
 
     def test_call_tool_natural_language(self) -> None:
-        """call_tool natural_language routes through engine.run_turn."""
+        """call_tool natural_language routes through the unified controller."""
         server, agent, engine, session = _make_server()
 
         result = asyncio.run(
@@ -174,10 +177,12 @@ class TestVectorMCPServer:
         )
         assert len(result) == 1
         assert result[0].type == "text"
-        engine.run_turn.assert_called_once()
+        # S5.4: free-form text flows through the one closed-loop controller.
+        engine.run_turn_unified.assert_called_once()
+        engine.run_turn.assert_not_called()
 
     def test_call_tool_direct_skill(self) -> None:
-        """call_tool for a named skill routes through engine.run_turn."""
+        """call_tool for a named skill routes through the unified controller."""
         server, agent, engine, session = _make_server(["home"])
 
         result = asyncio.run(
@@ -185,19 +190,31 @@ class TestVectorMCPServer:
         )
         assert len(result) == 1
         assert result[0].type == "text"
-        engine.run_turn.assert_called_once()
+        engine.run_turn_unified.assert_called_once()
+        engine.run_turn.assert_not_called()
 
     def test_call_tool_with_arguments(self) -> None:
-        """call_tool passes structured instruction to engine.run_turn."""
+        """call_tool passes structured instruction to the unified controller."""
         server, agent, engine, session = _make_server(["pick"])
 
         asyncio.run(
             _invoke_call_tool(server, "pick", {"object_label": "mug"})
         )
-        engine.run_turn.assert_called_once()
-        call_args = engine.run_turn.call_args[0]
+        engine.run_turn_unified.assert_called_once()
+        call_args = engine.run_turn_unified.call_args[0]
         assert "pick" in call_args[0]
         assert "mug" in call_args[0]
+
+    def test_call_tool_legacy_flag_uses_run_turn(self, monkeypatch) -> None:
+        """VECTOR_LEGACY_TURN=1 restores the legacy run_turn path (one release)."""
+        monkeypatch.setenv("VECTOR_LEGACY_TURN", "1")
+        server, agent, engine, session = _make_server()
+
+        asyncio.run(
+            _invoke_call_tool(server, "natural_language", {"instruction": "hi"})
+        )
+        engine.run_turn.assert_called_once()
+        engine.run_turn_unified.assert_not_called()
 
     def test_read_resource_world_state(self) -> None:
         """read_resource world://state returns JSON text."""

@@ -7,12 +7,17 @@ Public exports:
     PermissionContext — stateful permission checker for a single agent session
 
 Check order (mirrors Claude Code's hasPermissionsToUseTool):
-    1. no_permission flag  → allow everything immediately
-    2. Deny rules          → immediate deny
-    3. Tool check_permissions() returning "deny" → deny (bypasses all modes)
-    4. Session always-allow → allow
-    5. Read-only auto-allow
-    6. Default             → ask
+    1. Tool check_permissions() returning "deny" → deny (unconditional hard stop;
+       bypasses all modes, including --no-permission — a safety rail such as the
+       bash deny-list or a dangerous-path write is never disabled by a flag)
+    2. no_permission flag  → allow everything not intrinsically denied above
+    3. User deny_tools     → deny (a softer per-session preference that
+       --no-permission may override)
+    4. Tool check_permissions() returning "allow" → allow
+    5. Session always-allow → allow
+    6. Read-only auto-allow
+    7. Tool check_permissions() returning "ask" → ask
+    8. Default             → ask
 """
 from __future__ import annotations
 
@@ -63,38 +68,44 @@ class PermissionContext:
             A ``PermissionResult`` with behavior ``"allow"``, ``"deny"``, or
             ``"ask"``.
         """
-        # 0. no-permission mode — allow everything unconditionally
-        if self.no_permission:
-            return PermissionResult("allow")
-
         tool_name: str = getattr(tool, "name", "") or getattr(tool, "__tool_name__", "")
 
-        # 1. Deny rules (highest priority — overrides session_allow too)
-        if tool_name in self.deny_tools:
-            return PermissionResult("deny", f"Tool '{tool_name}' is denied")
-
-        # 2. Tool-specific safety check (can deny or allow explicitly)
+        # 1. Tool intrinsic safety check FIRST — an intrinsic "deny" (e.g. the
+        #    bash deny-list, a dangerous-path write) is an unconditional hard stop
+        #    evaluated even before no_permission, so a safety rail can never be
+        #    disabled by --no-permission. (User-configured deny_tools is a softer
+        #    preference, handled at step 3, that --no-permission may override.)
         tool_perm: PermissionResult | None = None
         if hasattr(tool, "check_permissions"):
             tool_perm = tool.check_permissions(params, tool_context)
             if tool_perm.behavior == "deny":
                 return tool_perm
-            if tool_perm.behavior == "allow":
-                return tool_perm
 
-        # 3. Session always-allow
+        # 2. no-permission mode — allow everything not intrinsically denied above.
+        if self.no_permission:
+            return PermissionResult("allow")
+
+        # 3. User deny rules
+        if tool_name in self.deny_tools:
+            return PermissionResult("deny", f"Tool '{tool_name}' is denied")
+
+        # 4. Tool-specific explicit allow
+        if tool_perm is not None and tool_perm.behavior == "allow":
+            return tool_perm
+
+        # 5. Session always-allow
         if tool_name in self.session_allow:
             return PermissionResult("allow")
 
-        # 4. Read-only auto-allow
+        # 6. Read-only auto-allow
         if hasattr(tool, "is_read_only") and tool.is_read_only(params):
             return PermissionResult("allow")
 
-        # 5. Propagate tool-specific "ask" (reuse result from step 2)
+        # 7. Propagate tool-specific "ask" (reuse result from step 2)
         if tool_perm is not None and tool_perm.behavior == "ask":
             return tool_perm
 
-        # 6. Default: ask
+        # 8. Default: ask
         return PermissionResult("ask", f"Allow {tool_name}?")
 
     def add_always_allow(self, tool_name: str) -> None:

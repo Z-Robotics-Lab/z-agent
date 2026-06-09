@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from vector_os_nano.core.skill import Skill, SkillContext, skill
+from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,12 @@ class HomeSkill:
 
     name: str = "home"
     description: str = "Move arm to home position and open gripper"
+    # Typical REAL-TIME (viewer-synced) duration: 3s arm move + gripper + overhead.
+    # GoalExecutor floors the step timeout at this value (R2-2) so a fast-emitted plan
+    # (e.g. timeout_sec=5) does not falsely mark home as timed-out under a live viewer.
+    typical_duration_sec: float = 12.0
+    # Success predicate this skill is verified against (single-source for the planner).
+    verify_hint: str = "arm_at_home()"
     parameters: dict = {}
     preconditions: list[str] = []
     postconditions: list[str] = ["gripper_empty"]

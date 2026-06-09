@@ -24,6 +24,12 @@ MOTOR_KEYWORDS: frozenset[str] = frozenset(
     {"arm", "gripper", "base", "motor", "joint", "move", "navigate"}
 )
 
+# The package all SIMULATED hardware adapters live under. A connected component
+# whose module is this package (or a sub-module of it) is a simulation; anything
+# else is real hardware. Precise package match (exact, or prefix + ".") so a name
+# like "vector_os_nano.hardware.simulated_real" never false-matches "...sim".
+_SIM_HW_PKG: str = "vector_os_nano.hardware.sim"
+
 # JSON Schema type mapping from Python / skill type names.
 _TYPE_MAP: dict[str, str] = {
     "str": "string",
@@ -43,6 +49,9 @@ class SkillWrapperTool:
     The wrapper is intentionally thin — it does not import any concrete skill
     class, so it works with any object that satisfies the Skill protocol.
     """
+
+    # Marker so the registry/SimStopTool can identify (and unregister) skill tools.
+    _is_skill_wrapper: bool = True
 
     def __init__(self, skill: Any, agent: Any) -> None:
         self.name: str = skill.name
@@ -66,7 +75,8 @@ class SkillWrapperTool:
         """
         preconditions_text = " ".join(str(p) for p in getattr(skill, "preconditions", []))
         effects_text = str(getattr(skill, "effects", {}))
-        combined = (preconditions_text + " " + effects_text).lower()
+        description_text = str(getattr(skill, "description", ""))
+        combined = (preconditions_text + " " + effects_text + " " + description_text).lower()
         return any(kw in combined for kw in MOTOR_KEYWORDS)
 
     @staticmethod
@@ -105,13 +115,25 @@ class SkillWrapperTool:
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         """Execute the wrapped skill and translate SkillResult -> ToolResult."""
         agent = context.agent if context.agent is not None else self._agent
-        skill_ctx = agent._build_context()
-        result = self._skill.execute(params, skill_ctx)
+        auto_steps = getattr(self._skill, "__skill_auto_steps__", None)
+        if auto_steps:
+            # Multi-step skill (e.g. pick = scan->detect->pick): run through the
+            # agent so the auto_steps prerequisites execute. Returns ExecutionResult.
+            result = agent.execute_skill(self.name, params)
+        else:
+            skill_ctx = agent._build_context()
+            result = self._skill.execute(params, skill_ctx)
         agent._sync_robot_state()
 
         if result.success:
             content = f"Skill '{self.name}' succeeded."
-            result_data: dict[str, Any] = result.result_data or {}
+            result_data: dict[str, Any] = getattr(result, "result_data", None) or {}
+            if not result_data:
+                # auto_steps skills return an ExecutionResult; the skill's own
+                # output lives in the last trace step, not on the top-level result.
+                _trace = getattr(result, "trace", None)
+                if _trace:
+                    result_data = getattr(_trace[-1], "result_data", None) or {}
             if result_data:
                 content += f"\nData: {result_data}"
             # Append robot state after motor skills for verification
@@ -128,7 +150,11 @@ class SkillWrapperTool:
             return ToolResult(content=content, metadata=result_data)
 
         # Failure with diagnosis + recovery hint
-        error_msg = result.error_message or f"Skill '{self.name}' failed."
+        error_msg = (
+            getattr(result, "error_message", None)
+            or getattr(result, "failure_reason", None)
+            or f"Skill '{self.name}' failed."
+        )
         diag = getattr(result, "diagnosis_code", None)
         if diag:
             error_msg += f" ({diag})"
@@ -160,11 +186,47 @@ class SkillWrapperTool:
         except Exception:
             return None
 
+    def _robot_is_simulated(self) -> bool:
+        """Return True when every connected hardware module is a simulated adapter.
+
+        R2-5 (auto-allow motor skills in sim): a sim robot has no real-world
+        consequence, so motor skills are safe to auto-allow. Real-hardware adapters
+        live outside ``vector_os_nano.hardware.sim.*`` — if any connected component
+        resolves to a non-sim module path, we return False and motor skills keep
+        their confirmation requirement. World-agnostic: duck-types the agent's arm,
+        base, and gripper attributes without importing any concrete class.
+        """
+        agent = self._agent
+        if agent is None:
+            return False
+        # SAFETY: require ALL present hardware to be simulated — return False on the
+        # FIRST real (non-sim) component. ANY-semantics would auto-allow a motor skill
+        # on a mixed agent (e.g. sim arm + real base), actuating real hardware without
+        # confirmation. Also require >=1 component present (a bare agent is not "sim").
+        found_sim = False
+        for attr in ("_arm", "_base", "_gripper"):
+            hw = getattr(agent, attr, None)
+            if hw is None:
+                continue
+            mod = type(hw).__module__
+            if not (mod == _SIM_HW_PKG or mod.startswith(_SIM_HW_PKG + ".")):
+                return False  # any real component -> require confirmation
+            found_sim = True
+        return found_sim
+
     def check_permissions(
         self, params: dict[str, Any], context: ToolContext
     ) -> PermissionResult:
-        """Motor skills require confirmation; read-only skills are auto-allowed."""
-        return PermissionResult("ask" if self._is_motor else "allow")
+        """Motor skills require confirmation on real hardware; read-only are always allowed.
+
+        R2-5: when the connected robot is simulated (all hardware paths start with
+        ``vector_os_nano.hardware.sim``), motor skills are auto-allowed — a sim action
+        has no real-world consequence. On real hardware the confirmation requirement
+        is preserved.
+        """
+        if self._is_motor and not self._robot_is_simulated():
+            return PermissionResult("ask")
+        return PermissionResult("allow")
 
     def is_read_only(self, params: dict[str, Any]) -> bool:
         return not self._is_motor

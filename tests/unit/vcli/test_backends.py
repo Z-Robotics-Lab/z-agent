@@ -541,6 +541,90 @@ class TestCreateBackend:
             )
         assert isinstance(backend, LLMBackend)
 
+
+# ---------------------------------------------------------------------------
+# BackendTextLLM adapter
+# ---------------------------------------------------------------------------
+
+
+class TestBackendTextLLM:
+    """Unit tests for vcli.backends.text_llm_adapter.BackendTextLLM.
+
+    Verifies:
+    - complete_text forwards the prompt to backend.call()
+    - complete_text returns response.text
+    - No private attribute access on the backend
+    - Returns '' when response.text is None
+    """
+
+    def _make_adapter(self, response_text: str) -> "tuple[Any, Any]":
+        """Return (adapter, mock_backend) with response_text canned."""
+        from vector_os_nano.vcli.backends.text_llm_adapter import BackendTextLLM
+        from vector_os_nano.vcli.backends.types import LLMResponse
+
+        mock_backend = MagicMock()
+        mock_backend.call.return_value = LLMResponse(text=response_text)
+        adapter = BackendTextLLM(mock_backend)
+        return adapter, mock_backend
+
+    def test_complete_text_returns_response_text(self) -> None:
+        adapter, _ = self._make_adapter("ranked rooms here")
+        result = adapter.complete_text("some prompt")
+        assert result == "ranked rooms here"
+
+    def test_complete_text_forwards_prompt_as_user_message(self) -> None:
+        adapter, mock_backend = self._make_adapter("ok")
+        adapter.complete_text("my prompt")
+        call_kwargs = mock_backend.call.call_args
+        messages = call_kwargs.kwargs.get("messages") or call_kwargs.args[0]
+        assert any(
+            m.get("role") == "user" and "my prompt" in m.get("content", "")
+            for m in messages
+        )
+
+    def test_complete_text_passes_empty_tools_and_system(self) -> None:
+        adapter, mock_backend = self._make_adapter("ok")
+        adapter.complete_text("hello")
+        _, kw = mock_backend.call.call_args
+        assert kw.get("tools") == [] or mock_backend.call.call_args.args
+        # Check via keyword args (preferred path)
+        if mock_backend.call.call_args.kwargs:
+            assert mock_backend.call.call_args.kwargs["tools"] == []
+            assert mock_backend.call.call_args.kwargs["system"] == []
+
+    def test_complete_text_none_response_returns_empty_string(self) -> None:
+        from vector_os_nano.vcli.backends.text_llm_adapter import BackendTextLLM
+        from vector_os_nano.vcli.backends.types import LLMResponse
+
+        mock_backend = MagicMock()
+        mock_backend.call.return_value = LLMResponse(text=None)  # type: ignore[arg-type]
+        adapter = BackendTextLLM(mock_backend)
+        result = adapter.complete_text("any")
+        assert result == ""
+
+    def test_adapter_does_not_read_private_attributes_from_backend(self) -> None:
+        """BackendTextLLM must never read dunder/private attrs from the backend."""
+        from vector_os_nano.vcli.backends.text_llm_adapter import BackendTextLLM
+        from vector_os_nano.vcli.backends.types import LLMResponse
+
+        accessed_private: list[str] = []
+
+        class _WatchdogBackend:
+            def call(self, **kw: Any) -> LLMResponse:
+                return LLMResponse(text="ok")
+
+            def __getattr__(self, name: str) -> Any:
+                if name.startswith("_"):
+                    accessed_private.append(name)
+                    raise AttributeError(f"private: {name}")
+                raise AttributeError(name)
+
+        adapter = BackendTextLLM(_WatchdogBackend())
+        adapter.complete_text("test")
+        # Filter out Python internals triggered during construction
+        user_private = [n for n in accessed_private if not n.startswith("__")]
+        assert user_private == [], f"private attrs accessed: {user_private}"
+
     def test_openrouter_uses_default_base_url(self) -> None:
         """When base_url is None, OpenRouter default URL is used."""
         with patch("openai.OpenAI") as mock_openai:
@@ -563,3 +647,90 @@ class TestCreateBackend:
             )
         call_kwargs = mock_openai.call_args
         assert call_kwargs.kwargs.get("base_url") == custom_url
+
+
+# ---------------------------------------------------------------------------
+# Streaming: reasoning-model deltas (on_reasoning heartbeat, never in text)
+# ---------------------------------------------------------------------------
+
+
+def _delta(content: Any = None, reasoning_content: Any = None) -> Any:
+    """Build a fake OpenAI streaming delta. No tool_calls; optional reasoning."""
+    d = MagicMock()
+    d.content = content
+    d.tool_calls = None
+    # getattr(delta, "reasoning_content", None) must return the value (or None).
+    d.reasoning_content = reasoning_content
+    d.reasoning = None
+    return d
+
+
+def _chunk(delta: Any, finish_reason: Any = None) -> Any:
+    choice = MagicMock()
+    choice.delta = delta
+    choice.finish_reason = finish_reason
+    chunk = MagicMock()
+    chunk.choices = [choice]
+    chunk.usage = None
+    return chunk
+
+
+class TestOpenAICompatReasoningStream:
+    """A reasoning model emits hidden reasoning deltas (delta.content is None),
+    then the real answer. on_reasoning fires for the think phase; on_text for the
+    answer; the reasoning trace never lands in the response text."""
+
+    def _backend(self) -> Any:
+        from vector_os_nano.vcli.backends.openai_compat import OpenAICompatBackend
+
+        with patch("openai.OpenAI"):
+            return OpenAICompatBackend(api_key="k", model="deepseek-v4-flash")
+
+    def test_reasoning_deltas_routed_to_on_reasoning_not_text(self) -> None:
+        backend = self._backend()
+        # Think phase: content is None, reasoning_content carries the trace.
+        # Answer phase: content carries the text, reasoning_content is None.
+        stream = [
+            _chunk(_delta(content=None, reasoning_content="let me ")),
+            _chunk(_delta(content=None, reasoning_content="think")),
+            _chunk(_delta(content="Hello")),
+            _chunk(_delta(content=" world"), finish_reason="stop"),
+        ]
+        backend._client = MagicMock()
+        backend._client.chat.completions.create.return_value = iter(stream)
+
+        seen_text: list[str] = []
+        seen_reasoning: list[str] = []
+        resp = backend.call(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            system=[],
+            max_tokens=128,
+            on_text=seen_text.append,
+            on_reasoning=seen_reasoning.append,
+        )
+
+        assert seen_reasoning == ["let me ", "think"]
+        assert seen_text == ["Hello", " world"]
+        # The hidden reasoning trace must NOT be in the final response text.
+        assert resp.text == "Hello world"
+        assert "think" not in resp.text
+
+    def test_no_on_reasoning_callback_is_safe(self) -> None:
+        # Backwards compatible: omitting on_reasoning must not error even when the
+        # provider emits reasoning deltas.
+        backend = self._backend()
+        stream = [
+            _chunk(_delta(content=None, reasoning_content="thinking")),
+            _chunk(_delta(content="done"), finish_reason="stop"),
+        ]
+        backend._client = MagicMock()
+        backend._client.chat.completions.create.return_value = iter(stream)
+
+        resp = backend.call(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            system=[],
+            max_tokens=128,
+        )
+        assert resp.text == "done"

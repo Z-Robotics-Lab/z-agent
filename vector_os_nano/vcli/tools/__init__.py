@@ -71,12 +71,18 @@ def discover_all_tools() -> list:
     ]
 
 
-# Category assignments for CategorizedToolRegistry
+# Category assignments for CategorizedToolRegistry.
+# "code" + "general" are the domain-general kernel toolset (work with no robot).
+# "robot" / "diag" / "system" are robot-world tools (disabled when no robot agent).
 _TOOL_CATEGORIES: dict[str, list[str]] = {
     "code": ["file_read", "file_write", "file_edit", "bash", "glob", "grep"],
+    "general": ["web_fetch"],
     "robot": ["world_query", "scene_graph_query"],
     "diag": ["ros2_topics", "ros2_nodes", "ros2_log", "nav_state", "terrain_status"],
-    "system": ["robot_status", "start_simulation", "stop_simulation", "web_fetch", "skill_reload", "open_foxglove"],
+    # Sim lifecycle: kept enabled even in the dev (no-robot) world so the user can
+    # spin up a sim conversationally ("start the arm sim").
+    "sim": ["start_simulation", "stop_simulation"],
+    "system": ["robot_status", "skill_reload", "open_foxglove"],
 }
 
 

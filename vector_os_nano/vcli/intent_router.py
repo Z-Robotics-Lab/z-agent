@@ -14,12 +14,14 @@ from __future__ import annotations
 
 # (keywords, categories) — checked in order, all matches accumulated
 _RULES: list[tuple[frozenset[str], tuple[str, ...]]] = [
-    # Code editing
+    # Code editing — "general" carries web_fetch; "system" (robot infra, e.g.
+    # skill_reload) is included for the robot world and gated off in the dev
+    # world via disable_category("system").
     (frozenset({
         "改", "修改", "编辑", "代码", "文件", "函数", "变量", "类",
         "edit", "fix", "code", "file", "function", "class", "import",
         "read", "write", "bug", "refactor", "重构", "写",
-    }), ("code", "system")),
+    }), ("code", "general", "system")),
 
     # Robot control
     (frozenset({
@@ -36,10 +38,15 @@ _RULES: list[tuple[frozenset[str], tuple[str, ...]]] = [
         "hz", "频率", "进程", "bridge",
     }), ("diag", "system")),
 
-    # Simulation
+    # Simulation — 'sim' (start/stop_simulation) stays enabled even in the dev
+    # world, so it must lead here or "start arm sim" routes only to disabled
+    # categories and the LLM gets zero tools.
+    # Headless phrases are included so they still resolve to the sim tool and the
+    # LLM can pass gui=false.
     (frozenset({
         "仿真", "sim", "simulation", "reset", "重置", "启动", "模拟",
-    }), ("system", "robot")),
+        "headless", "无窗口", "不要窗口", "no window",
+    }), ("sim", "system", "robot")),
 ]
 
 
@@ -126,6 +133,76 @@ _MOTOR_PATTERNS: tuple[str, ...] = (
     "巡逻", "patrol",
     "探索", "explore",
 )
+
+# Meta / first-person-request markers — input that is ABOUT the agent's own
+# behaviour or expresses a desire AT the agent, not a robot-actionable command.
+# e.g. "我希望你去打开终端" (I want YOU to open a terminal) is a meta request, not a
+# skill: it only trips the action-verb hint via "去"/"打开" as substrings. The meta
+# guard (see should_use_vgg) fires ONLY when, after stripping the marker, the
+# residual carries NO genuine motor/navigation signal — so a politely-phrased REAL
+# motor command ("请你巡逻", "I want you to go to the kitchen") still plans, while an
+# otherwise-unmappable meta request answers instead of failing a VGG decompose.
+# Substring match (Chinese) / prefix-or-substring (English).
+_META_REQUEST_MARKERS: tuple[str, ...] = (
+    # Chinese first-person desire / directive AT the agent
+    "我希望你", "我想让你", "我想要你", "我要你", "希望你能", "我希望", "我想让",
+    "你能不能", "你可不可以", "你可以", "你应该", "你需要", "麻烦你", "请你",
+    # English first-person desire / polite directive
+    "i want you", "i'd like you", "i would like you", "i need you",
+    "i wish you", "please ", "could you please", "can you please",
+)
+
+# Strong, unambiguous motor/navigation signals — a real robot command regardless of
+# polite phrasing. If any survives in the marker residual, the message PLANS.
+_STRONG_MOTOR_PATTERNS: tuple[str, ...] = (
+    "导航", "巡逻", "探索", "走到", "去到",
+    "navigate", "patrol", "explore", "go to", "goto",
+)
+
+# Weak directional particles: "去"/"到" mean navigation ONLY when followed by a
+# destination, not when followed by another (non-robot) action verb. "去厨房" is
+# navigation; "去打开终端" / "去运行测试" is "go DO X" — a meta request, not a skill.
+_DIRECTIONAL_PARTICLES: tuple[str, ...] = ("去", "到")
+
+# Non-robot action verbs that, immediately after a directional particle, mark a
+# "go do X" meta pattern (X is an app/system action, not a robot skill).
+_GO_DO_VERBS: tuple[str, ...] = (
+    "打开", "关闭", "开启", "运行", "启动", "执行", "安装", "下载",
+    "open", "close", "run", "launch", "install",
+)
+
+
+def _residual_has_motor_signal(msg_lower: str) -> bool:
+    """Return True if, after removing meta-request markers, a genuine motor /
+    navigation command remains.
+
+    This separates a politely-phrased REAL motor command ("请你巡逻", "I want you
+    to go to the kitchen") — which must still PLAN — from a meta request whose only
+    "actionability" is incidental ("我希望你去打开终端": "去"/"打开" are substrings of a
+    "go do X" ask, not a robot skill) — which must ANSWER.
+    """
+    residual = msg_lower
+    for marker in _META_REQUEST_MARKERS:
+        residual = residual.replace(marker, " ")
+
+    # Strong, unambiguous motor verb anywhere in the residual → real command.
+    if any(pat in residual for pat in _STRONG_MOTOR_PATTERNS):
+        return True
+
+    # Directional particle → navigation, UNLESS immediately followed by a go-do
+    # verb (then it is "go DO X", not "go TO <place>").
+    for particle in _DIRECTIONAL_PARTICLES:
+        start = 0
+        while True:
+            idx = residual.find(particle, start)
+            if idx < 0:
+                break
+            rest = residual[idx + len(particle):].lstrip()
+            if not any(rest.startswith(v) for v in _GO_DO_VERBS):
+                return True
+            start = idx + len(particle)
+
+    return False
 
 
 class IntentRouter:
@@ -214,6 +291,8 @@ class IntentRouter:
             # greedily matches "close" / "关闭").
             "仿真", "sim ", " sim", "simulation",
             "go2sim", "go2 sim", "armsim", "arm sim",
+            # Headless modifier — pass gui=false to start_simulation; not a VGG task.
+            "headless", "无窗口", "不要窗口", "no window",
         )
         if any(kw in msg_lower for kw in _SYSTEM_BYPASS):
             return False
@@ -222,7 +301,33 @@ class IntentRouter:
         if self.is_complex(user_message):
             return True
 
-        # Skill match → VGG (1-step GoalTree, no LLM needed)
+        # Conversational questions / greetings → tool_use (answer directly), so a
+        # question like "为什么一开始那么卡" is NOT mis-routed into a plan just because
+        # an action verb appears incidentally as a substring (here "开始" inside the
+        # adverb "一开始"). Genuinely multi-step asks were already caught by
+        # is_complex above, so this only short-circuits simple, non-actionable Q&A.
+        _stripped = msg_lower.strip()
+        _ZH_Q = (
+            "为什么", "为何", "怎么", "怎样", "如何", "是什么", "什么是",
+            "是不是", "能不能", "可不可以", "有没有",
+        )
+        _EN_Q = (
+            "why ", "how ", "what ", "what's", "who ", "when ", "where ",
+            "which ", "can you", "could you", "do you", "does ", "is it",
+            "are you",
+        )
+        if (
+            _stripped.endswith("?")
+            or _stripped.endswith("？")
+            or _stripped.endswith(("吗", "呢", "吧"))
+            or any(q in _stripped for q in _ZH_Q)
+            or any(_stripped.startswith(q) for q in _EN_Q)
+        ):
+            return False
+
+        # Skill match → VGG (1-step GoalTree, no LLM needed). Checked BEFORE the
+        # meta-request guard so a genuine command that happens to be phrased as a
+        # request ("我希望你去厨房" with a real navigate skill) still plans.
         if skill_registry is not None:
             try:
                 match = skill_registry.match(user_message)
@@ -230,6 +335,28 @@ class IntentRouter:
                     return True
             except Exception:
                 pass
+
+        # Meta / first-person-request guard → tool_use (answer directly). Reaching
+        # here means the message did NOT match a registered skill (or there is no
+        # registry). If it carries a meta/first-person-request marker ("我希望你…",
+        # "你能…", "I want you to…", "please …") AND the marker residual has NO genuine
+        # motor/navigation signal, it is a request about the agent's own actions — not
+        # a robot-actionable command — that only trips the action-verb hint below via
+        # an incidental substring (e.g. "去"/"打开" in "我希望你去打开终端"). Routing it to
+        # VGG produces a failing decompose (no skill maps), so answer it instead.
+        #
+        # CRITICAL (regression guard): the residual check runs BEFORE the motor /
+        # action-verb checks but is itself gated on having NO real motor signal, so a
+        # politely-phrased REAL motor command ("请你巡逻", "I want you to go to the
+        # kitchen", "请你导航到厨房") still falls through to the motor-pattern check and
+        # PLANS. The marker alone is NOT dispositive — a polite prefix never suppresses
+        # a genuine command. (SkillRegistry.match is prefix-only, so "请你巡逻" does NOT
+        # skill-match; the residual check is what keeps it on the planning path.)
+        if (
+            any(marker in msg_lower for marker in _META_REQUEST_MARKERS)
+            and not _residual_has_motor_signal(msg_lower)
+        ):
+            return False
 
         # Motor pattern keywords → VGG
         if any(pat in msg_lower for pat in _MOTOR_PATTERNS):

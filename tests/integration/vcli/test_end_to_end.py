@@ -19,21 +19,22 @@ Covered scenarios:
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from vector_os_nano.vcli.engine import TurnResult, VectorEngine
+from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
+from vector_os_nano.vcli.session import TokenUsage
 from vector_os_nano.vcli.permissions import PermissionContext
 from vector_os_nano.vcli.session import Session, create_session, load_session
-from vector_os_nano.vcli.tools.base import ToolRegistry, ToolResult
+from vector_os_nano.vcli.tools.base import ToolRegistry
 from vector_os_nano.vcli.tools.bash_tool import BashTool
 from vector_os_nano.vcli.tools.file_tools import FileReadTool
 from vector_os_nano.vcli.tools.search_tools import GlobTool, GrepTool
-from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool, wrap_skills
+from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
 from vector_os_nano.vcli.prompt import build_system_prompt
 
 
@@ -43,12 +44,15 @@ from vector_os_nano.vcli.prompt import build_system_prompt
 
 
 def make_mock_client(responses: list[Any]) -> MagicMock:
-    """Return a mock Anthropic client whose messages.create returns *responses* in sequence."""
-    client = MagicMock()
-    messages_mock = MagicMock()
-    messages_mock.create = MagicMock(side_effect=responses)
-    client.messages = messages_mock
-    return client
+    """Return a mock LLMBackend whose .call() returns *responses* in sequence.
+
+    (Historically a raw Anthropic client; the engine now drives an LLMBackend
+    abstraction, so this returns a backend whose .call records call_args and
+    yields the prepared LLMResponses.)
+    """
+    backend = MagicMock()
+    backend.call = MagicMock(side_effect=list(responses))
+    return backend
 
 
 def make_response(
@@ -56,18 +60,22 @@ def make_response(
     stop_reason: str = "end_turn",
     input_tokens: int = 100,
     output_tokens: int = 50,
-) -> MagicMock:
-    """Build a mock Anthropic response object."""
-    resp = MagicMock()
-    resp.content = content_blocks
-    resp.stop_reason = stop_reason
-    usage = MagicMock()
-    usage.input_tokens = input_tokens
-    usage.output_tokens = output_tokens
-    usage.cache_read_input_tokens = 0
-    usage.cache_creation_input_tokens = 0
-    resp.usage = usage
-    return resp
+) -> LLMResponse:
+    """Build an LLMResponse from text/tool_use marker blocks."""
+    text_parts: list[str] = []
+    tool_calls: list[LLMToolCall] = []
+    for b in content_blocks:
+        btype = getattr(b, "type", "")
+        if btype == "text":
+            text_parts.append(b.text)
+        elif btype == "tool_use":
+            tool_calls.append(LLMToolCall(id=b.id, name=b.name, input=b.input))
+    return LLMResponse(
+        text="".join(text_parts),
+        tool_calls=tool_calls,
+        stop_reason=stop_reason,
+        usage=TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens),
+    )
 
 
 def make_text_block(text: str) -> MagicMock:
@@ -94,16 +102,13 @@ def _make_engine_with_client(
     permissions: PermissionContext | None = None,
     system_prompt: list[dict[str, Any]] | None = None,
 ) -> VectorEngine:
-    """Create a VectorEngine whose internal _client is the supplied mock."""
-    with patch("vector_os_nano.vcli.engine.anthropic.Anthropic", return_value=mock_client):
-        engine = VectorEngine(
-            api_key="test-key",
-            registry=registry,
-            permissions=permissions or PermissionContext(no_permission=True),
-            system_prompt=system_prompt or [],
-        )
-    engine._client = mock_client
-    return engine
+    """Create a VectorEngine driven by the supplied mock backend."""
+    return VectorEngine(
+        backend=mock_client,
+        registry=registry,
+        permissions=permissions or PermissionContext(no_permission=True),
+        system_prompt=system_prompt or [],
+    )
 
 
 def _tmp_session(tmp_path: Path) -> Session:
@@ -264,7 +269,7 @@ class TestPermissionAskFlow:
         result: TurnResult = engine.run_turn(
             "echo something",
             session,
-            ask_permission=lambda name, params: True,
+            ask_permission=lambda name, params: "y",
         )
 
         assert len(result.tool_calls) == 1
@@ -292,7 +297,7 @@ class TestPermissionAskFlow:
         result: TurnResult = engine.run_turn(
             "echo something",
             session,
-            ask_permission=lambda name, params: False,
+            ask_permission=lambda name, params: "n",
         )
 
         assert len(result.tool_calls) == 1
@@ -422,20 +427,21 @@ class TestSystemPromptIncluded:
 
         engine.run_turn("hi", session)
 
-        # Verify the system= kwarg was passed to messages.create
-        call_kwargs = mock_client.messages.create.call_args
+        # Verify the system= kwarg was forwarded to the backend call
+        call_kwargs = mock_client.call.call_args
         assert call_kwargs is not None
         passed_system = call_kwargs.kwargs.get("system") or call_kwargs[1].get("system")
         assert passed_system == system_prompt
 
     def test_system_prompt_contains_role_text(self) -> None:
-        """build_system_prompt returns blocks containing the ROLE_PROMPT text."""
-        from vector_os_nano.vcli.prompt import ROLE_PROMPT
+        """build_system_prompt(agent=None) carries the dev persona role text."""
+        from vector_os_nano.vcli.prompt import DEV_ROLE_PROMPT
 
         blocks = build_system_prompt(agent=None)
         all_text = " ".join(b.get("text", "") for b in blocks)
-        assert "Vector" in all_text
-        assert ROLE_PROMPT.strip()[:40] in all_text
+        # agent=None selects the robot-free dev persona, not the robot ROLE_PROMPT.
+        assert DEV_ROLE_PROMPT.strip()[:40] in all_text
+        assert "agent" in all_text.lower()
 
 
 # ---------------------------------------------------------------------------

@@ -95,8 +95,16 @@ class MuJoCoPerception:
             aliases = _OBJECT_ALIASES.get(obj_name, [obj_name])
             matched = any(alias in query_lower for alias in aliases)
 
-            # Also match if query is generic ("all", "objects", "所有", "物体")
-            if not matched and any(kw in query_lower for kw in ["all", "所有", "物体", "objects", "everything"]):
+            # Also match if query is generic ("all", "objects", "所有", "物体").
+            # Word-boundary match so 'all' does not fire on 'ball'/'small'/'wall'.
+            if not matched and (
+                any(zh in query_lower for zh in ("所有", "物体"))
+                or query_lower in {"all", "objects", "everything", "all objects"}
+                or any(
+                    re.search(r"\b" + re.escape(kw) + r"\b", query_lower)
+                    for kw in ("all", "objects", "everything")
+                )
+            ):
                 matched = True
 
             if matched:
@@ -117,6 +125,20 @@ class MuJoCoPerception:
             logger.info("[SIM DETECT] No match for query '%s' in objects: %s",
                         query, list(objs.keys()))
         return results
+
+    def caption(self, length: str = "long") -> str:
+        """Describe the visible scene from MuJoCo ground truth (no VLM needed)."""
+        if not self._arm._connected:
+            return "I can't see anything — the camera is not connected."
+        objs = self._arm.get_object_positions()
+        if not objs:
+            return "I don't see any objects on the table."
+        labels = [name.replace("_", " ") for name in objs]
+        return "I can see: " + ", ".join(labels) + "."
+
+    def visual_query(self, question: str, **kwargs: Any) -> str:
+        """Answer a free-form question about the scene from ground truth."""
+        return self.caption()
 
     def track(self, detections: list[Detection]) -> list[TrackedObject]:
         """Return TrackedObjects with ground-truth 3D positions from MuJoCo.

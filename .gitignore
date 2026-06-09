@@ -41,7 +41,6 @@ oauth_credentials.json
 .gitnexus
 .claude/
 .webui_secret_key
-CLAUDE.md
 lib/
 MUJOCO_LOG.TXT
 .coverage
@@ -54,3 +53,7 @@ vector_os_nano/hardware/sim/scene_flat.xml
 # internal/deferred design notes (kept on disk, not shipped)
 docs/pick_top_down_known_issues.md
 docs/pick_top_down_spec.md
+
+# agent loop / session working state (not repo content)
+scratch/
+.hermes/

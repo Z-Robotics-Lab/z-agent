@@ -44,6 +44,7 @@ class LLMBackend(Protocol):
         system: list[dict[str, Any]],
         max_tokens: int,
         on_text: Callable[[str], None] | None = None,
+        on_reasoning: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Make an LLM API call and return a canonical response.
 
@@ -53,6 +54,9 @@ class LLMBackend(Protocol):
             system:   System prompt blocks in Anthropic format.
             max_tokens: Max output tokens.
             on_text:  Called incrementally with text chunks during streaming.
+            on_reasoning: Called incrementally with hidden reasoning/think chunks
+                during streaming (reasoning models only). Used purely for a live
+                "thinking…" heartbeat; never accumulated into the response text.
 
         Returns:
             LLMResponse with text, tool_calls, stop_reason, and usage.

@@ -12,12 +12,17 @@ Compilation pipeline:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal
 
 logger = logging.getLogger(__name__)
+
+# Suffixes shorter than this are too generic to safely parameterize (e.g. a
+# 2-char token would blindly rewrite unrelated substrings).
+_MIN_PARAM_VALUE_LEN = 3
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,11 @@ class SubGoalTemplate:
     timeout_sec: float = 30.0
     depends_on: tuple[str, ...] = ()
     fail_action: str = ""
+    # Strategy payload carried verbatim (concrete templates) or with values
+    # parameterized to ${param} (parameterized templates). Required so tool_call
+    # / code-as-policy sub-goals survive compile -> reuse — without it the
+    # {"tool": ..., "args": ...} payload is lost and reuse fails.
+    strategy_params: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -98,10 +108,34 @@ def _param_name_for_prefix(prefix: str, used_names: set[str]) -> str:
 
 
 def _replace_value(text: str, value: str, param: str) -> str:
-    """Replace all occurrences of `value` in `text` with `${param}`."""
-    if not value:
+    """Replace whole-word occurrences of `value` in `text` with `${param}`.
+
+    Uses a word boundary (not a blind substring replace) and skips very short
+    values, so a value like "room" does not corrupt "bedroom" and "pen" does not
+    corrupt "pencil".
+    """
+    if not value or len(value) < _MIN_PARAM_VALUE_LEN:
         return text
-    return text.replace(value, f"${{{param}}}")
+    return re.sub(rf"\b{re.escape(value)}\b", f"${{{param}}}", text)
+
+
+def _parameterize_payload(value: Any, value_to_param: dict[str, str]) -> Any:
+    """Recursively replace known values with ${param} inside a strategy payload.
+
+    Walks dicts/lists/strings so a tool_call payload like
+    {"args": {"room": "kitchen"}} becomes {"args": {"room": "${room}"}}.
+    Non-string leaves are returned unchanged.
+    """
+    if isinstance(value, str):
+        out = value
+        for val, param in value_to_param.items():
+            out = _replace_value(out, val, param)
+        return out
+    if isinstance(value, dict):
+        return {k: _parameterize_payload(v, value_to_param) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_parameterize_payload(v, value_to_param) for v in value]
+    return value
 
 
 def _build_sub_goal_template(
@@ -134,6 +168,7 @@ def _build_sub_goal_template(
         timeout_sec=sub_goal.timeout_sec,
         depends_on=tuple(dep_pats),
         fail_action=sub_goal.fail_action,
+        strategy_params=_parameterize_payload(sub_goal.strategy_params, value_to_param),
     )
 
 
@@ -212,6 +247,7 @@ class ExperienceCompiler:
                 timeout_sec=sg.timeout_sec,
                 depends_on=sg.depends_on,
                 fail_action=sg.fail_action,
+                strategy_params=dict(sg.strategy_params),
             )
             for sg in tree.sub_goals
         )
@@ -242,9 +278,11 @@ class ExperienceCompiler:
         used_params: set[str] = set()
 
         for i, (prefix, suffixes) in enumerate(zip(sig, position_suffixes)):
-            unique_suffixes = set(s for s in suffixes if s)
+            unique_suffixes = set(
+                s for s in suffixes if s and len(s) >= _MIN_PARAM_VALUE_LEN
+            )
             if len(unique_suffixes) <= 1:
-                continue  # this position is constant — skip
+                continue  # this position is constant (or too-short) — skip
 
             # All different values at this position → a parameter
             param = _param_name_for_prefix(prefix, used_params)

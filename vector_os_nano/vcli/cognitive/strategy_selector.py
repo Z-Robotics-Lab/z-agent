@@ -59,7 +59,7 @@ _STATS_MIN_SUCCESS_RATE: float = 0.5
 class StrategyResult:
     """Result of strategy selection."""
 
-    executor_type: str   # "skill" | "primitive" | "fallback" | "code"
+    executor_type: str   # "skill" | "primitive" | "fallback" | "code" | "tool" | "capability" | "answer"
     name: str            # skill name or primitive function name
     params: dict         # parameters to pass
 
@@ -72,9 +72,27 @@ class StrategySelector:
     a success rate > 50%, it overrides the rule-based choice.
     """
 
-    def __init__(self, skill_registry: Any = None, stats: Any = None) -> None:
+    def __init__(
+        self,
+        skill_registry: Any = None,
+        stats: Any = None,
+        capability_names: "frozenset[str] | set[str] | None" = None,
+        has_base: bool = True,
+    ) -> None:
         self._skill_registry = skill_registry
         self._stats = stats
+        # Registered routable-capability names (Phase C). An explicit strategy
+        # matching one of these resolves to capability dispatch. Empty => no
+        # capability routing (the path stays byte-identical).
+        self._capability_names = frozenset(capability_names) if capability_names else frozenset()
+        # Whether the connected agent has a mobile base (Stage 2b). When False
+        # (an arm-only world) the GO2 locomotion/observation keyword ladder and
+        # the base-primitive explicit names are skipped entirely — those routes
+        # call _require_base() on the executor side and would raise on an arm.
+        # Routing on a baseless world goes through explicit '<skill>_skill'
+        # resolution and the skill-registry alias match only. Defaults True so
+        # go2/robot behaviour stays byte-identical.
+        self._has_base = bool(has_base)
 
     # ------------------------------------------------------------------
     # Public API
@@ -95,6 +113,28 @@ class StrategySelector:
         if sub_goal.strategy:
             return self._resolve_explicit(sub_goal.strategy, sub_goal.strategy_params)
 
+        # Priority 1b (fail-loud, rule 8): a step whose explicit strategy was a
+        # HALLUCINATION carries the offending name on ``cleared_strategy`` (the
+        # decomposer cleared ``strategy`` to "" but stamped the name here). Resolve
+        # it to the LOUD ``invalid`` route — a clear, named error with the valid
+        # set — instead of letting the cleared (empty) strategy silently re-route
+        # through the keyword ladder / registry match to a phantom skill, or fall
+        # through to the opaque ``unmatched`` fallback. This fires on EVERY path
+        # (first decompose AND replan), since the decomposer stamps the marker on
+        # every validation. Registry-independent so even a registry-less world
+        # (default go2) fails loud rather than re-deriving a phantom by keyword.
+        cleared = getattr(sub_goal, "cleared_strategy", "")
+        if cleared:
+            valid = self._registered_skill_names()
+            return StrategyResult(
+                "invalid",
+                cleared,
+                {
+                    "strategy": cleared,
+                    "valid_strategies": sorted(valid) if valid is not None else [],
+                },
+            )
+
         # Priority 2: Name/description keyword rules
         name_lower = sub_goal.name.lower()
         desc_lower = sub_goal.description.lower()
@@ -102,44 +142,51 @@ class StrategySelector:
 
         result: StrategyResult | None = None
 
-        # Navigation
-        if any(kw in combined for kw in ("reach", "navigate", "go_to", "到", "去")):
-            room = sub_goal.strategy_params.get("room", sub_goal.description)
-            result = StrategyResult("skill", "navigate", {"room": room})
+        # GO2 locomotion/observation keyword ladder (base-world routes). These
+        # branches resolve to base/locomotion primitives and stance/observation
+        # skills that call _require_base() on the executor side; on a baseless
+        # world (an arm) they would raise, so the whole ladder is skipped and
+        # routing goes through '<skill>_skill' resolution + the registry alias
+        # match only. Gated behind has_base so go2 stays byte-identical.
+        if self._has_base:
+            # Navigation
+            if any(kw in combined for kw in ("reach", "navigate", "go_to", "到", "去")):
+                room = sub_goal.strategy_params.get("room", sub_goal.description)
+                result = self._route("navigate", {"room": room})
 
-        # Observation
-        elif any(kw in combined for kw in ("observe", "look", "scan", "看", "观察")):
-            result = StrategyResult("skill", "look", {})
+            # Observation
+            elif any(kw in combined for kw in ("observe", "look", "scan", "看", "观察")):
+                result = self._route("look", {})
 
-        # Detection
-        elif _word_match(("detect", "find", "check"), combined) or any(
-            kw in combined for kw in ("检测", "找", "检查")
-        ):
-            query = sub_goal.strategy_params.get("query", sub_goal.description)
-            result = StrategyResult("skill", "detect", {"query": query})
+            # Detection
+            elif _word_match(("detect", "find", "check"), combined) or any(
+                kw in combined for kw in ("检测", "找", "检查")
+            ):
+                query = sub_goal.strategy_params.get("query", sub_goal.description)
+                result = self._route("detect", {"query": query})
 
-        # Stance — stand / sit
-        elif _word_match(("stand",), combined):
-            result = StrategyResult("skill", "stand", {})
+            # Stance — stand / sit
+            elif _word_match(("stand",), combined):
+                result = StrategyResult("skill", "stand", {})
 
-        elif _word_match(("sit",), combined):
-            result = StrategyResult("skill", "sit", {})
+            elif _word_match(("sit",), combined):
+                result = StrategyResult("skill", "sit", {})
 
-        # Stop (primitive before walk to avoid 'stop' being caught by nothing)
-        elif _word_match(("stop",), combined):
-            result = StrategyResult("primitive", "stop", {})
+            # Stop (primitive before walk to avoid 'stop' being caught by nothing)
+            elif _word_match(("stop",), combined):
+                result = StrategyResult("primitive", "stop", {})
 
-        # Movement primitives
-        elif _word_match(("walk", "forward"), combined) or "前进" in combined:
-            dist = sub_goal.strategy_params.get("distance", 1.0)
-            result = StrategyResult("primitive", "walk_forward", {"distance_m": dist})
+            # Movement primitives
+            elif _word_match(("walk", "forward"), combined) or "前进" in combined:
+                dist = sub_goal.strategy_params.get("distance", 1.0)
+                result = StrategyResult("primitive", "walk_forward", {"distance_m": dist})
 
-        elif any(kw in combined for kw in ("turn", "rotate", "转")):
-            angle = sub_goal.strategy_params.get("angle", 1.57)
-            result = StrategyResult("primitive", "turn", {"angle_rad": angle})
+            elif any(kw in combined for kw in ("turn", "rotate", "转")):
+                angle = sub_goal.strategy_params.get("angle", 1.57)
+                result = StrategyResult("primitive", "turn", {"angle_rad": angle})
 
-        # Priority 3: Skill registry alias match
-        elif self._skill_registry is not None:
+        # Priority 3: Skill registry alias match (all worlds)
+        if result is None and self._skill_registry is not None:
             match = self._skill_registry.match(sub_goal.description)
             if match is not None:
                 result = StrategyResult("skill", match.skill_name, {})
@@ -193,23 +240,92 @@ class StrategySelector:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _route(self, name: str, params: dict) -> StrategyResult:
+        """Route a keyword-matched perception/planning step (Phase C.2).
+
+        If a routable capability named *name* is registered, dispatch to it (and
+        let measured stats later promote a better-performing alternative for the
+        same sub-goal pattern); otherwise fall back to the classical skill of the
+        same name. Inert until a world registers such a capability, so dev/robot
+        routing is unchanged today.
+        """
+        if name in self._capability_names:
+            return StrategyResult("capability", name, params)
+        return StrategyResult("skill", name, params)
+
+    def _registered_skill_names(self) -> "frozenset[str] | None":
+        """Return the set of registered skill names, or None if undeterminable.
+
+        Returns None when no registry is injected or its skill list cannot be
+        read — in that case the selector cannot fail-loud on an unknown skill and
+        keeps the by-convention behaviour (treat ``<X>_skill`` as a skill).
+        """
+        registry = self._skill_registry
+        if registry is None:
+            return None
+        lister = getattr(registry, "list_skills", None)
+        if not callable(lister):
+            return None
+        try:
+            return frozenset(str(n) for n in lister())
+        except Exception:  # noqa: BLE001
+            return None
+
     def _resolve_explicit(self, strategy: str, params: dict) -> StrategyResult:
         """Resolve an explicit strategy name to a StrategyResult.
 
         Mapping rules:
         - "code_as_policy" → executor_type="code", name="code_as_policy".
+        - "tool_call" → executor_type="tool", name="tool_call" (params carry
+          {"tool": <name>, "args": {...}}; dispatched through ToolDispatcher).
         - Ends with "_skill" → executor_type="skill", name=strategy minus suffix.
-        - In _PRIMITIVE_NAMES → executor_type="primitive".
+          When a registry is injected and the bare name is NOT a registered skill
+          (and not a known capability/primitive), resolve to executor_type=
+          "invalid" so the executor surfaces a clear, named error instead of
+          fabricating a phantom skill (Stage 2b fail-loud).
+        - In _PRIMITIVE_NAMES (and the agent has a base) → executor_type="primitive".
         - Otherwise → executor_type="skill" (assume skill by name convention).
         """
         if strategy == "code_as_policy":
             return StrategyResult("code", "code_as_policy", params)
 
+        if strategy == "tool_call":
+            return StrategyResult("tool", "tool_call", params)
+
+        # Stage 5 (S5.2): an answer-only conversation step. Resolves to a
+        # side-effect-free "answer" executor that returns the step's answer text
+        # as structured output. The sub-goal carries answer_only=True (the
+        # evidence gate's explicit marker); this strategy is its dispatch route.
+        if strategy == "answer":
+            return StrategyResult("answer", "answer", params)
+
+        # A strategy naming a registered routable capability (Phase C) — the
+        # capability name IS the strategy; params is its input payload.
+        if strategy in self._capability_names:
+            return StrategyResult("capability", strategy, params)
+
         if strategy.endswith(_SKILL_SUFFIX):
             skill_name = strategy[: -len(_SKILL_SUFFIX)]
+            valid = self._registered_skill_names()
+            # Fail-loud: a registry is present and the bare name is not a real
+            # skill (nor a capability) — do not fabricate a phantom skill. Base
+            # primitives are valid base routes only when the agent has a base.
+            if (
+                valid is not None
+                and skill_name not in valid
+                and strategy not in self._capability_names
+                and not (self._has_base and skill_name in _PRIMITIVE_NAMES)
+            ):
+                return StrategyResult(
+                    "invalid",
+                    strategy,
+                    {"strategy": strategy, "valid_strategies": sorted(valid)},
+                )
             return StrategyResult("skill", skill_name, params)
 
-        if strategy in _PRIMITIVE_NAMES:
+        # Base locomotion primitives are only routable on a world with a base;
+        # on a baseless world they would call _require_base() and raise.
+        if self._has_base and strategy in _PRIMITIVE_NAMES:
             # Normalize LLM-generated param names to match primitive signatures
             normalized = dict(params) if params else {}
             if strategy == "walk_forward" and "distance" in normalized:

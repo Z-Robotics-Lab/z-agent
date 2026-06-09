@@ -159,11 +159,19 @@ class TestReturnStructure:
 
 class TestContentPresence:
     def test_includes_role_description(self) -> None:
-        """First block carries the static role description (ROLE_PROMPT)."""
+        """With no robot agent, the first block is the general dev persona."""
         result = _build()
         first_text = result[0]["text"]
-        # Assert on stable role phrasing, not the brand token — the
-        # agent persona was intentionally renamed to "V" in a2ad980.
+        # Default (robot-free) persona: a general verified coding/automation agent.
+        assert "verified coding and automation agent" in first_text
+        assert "terminal" in first_text.lower()
+
+    def test_robot_persona_when_agent_present(self) -> None:
+        """A connected robot agent selects the robot persona."""
+        from types import SimpleNamespace
+
+        result = _build(agent=SimpleNamespace())
+        first_text = result[0]["text"]
         assert "AI core of a real robot" in first_text
         assert "quadruped" in first_text.lower()
 
@@ -337,9 +345,8 @@ class TestNoAgent:
         assert isinstance(result, list)
         assert len(result) >= 2
         combined = " ".join(b["text"] for b in result)
-        # Static role section still present (brand token renamed to
-        # "V" in a2ad980 — assert on stable role phrasing instead).
-        assert "AI core of a real robot" in combined
+        # Default persona (no robot) is the general dev agent.
+        assert "verified coding and automation agent" in combined
 
     def test_no_agent_no_hardware_section(self) -> None:
         """agent=None -> 'Current Hardware' section does not appear."""

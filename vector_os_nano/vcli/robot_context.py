@@ -19,14 +19,17 @@ logger = logging.getLogger(__name__)
 class RobotContextProvider:
     """Collects robot state and formats as Anthropic system block."""
 
-    def __init__(self, base: Any = None, scene_graph: Any = None) -> None:
+    def __init__(self, base: Any = None, scene_graph: Any = None, arm: Any = None) -> None:
         self._base = base
         self._sg = scene_graph
+        self._arm = arm
 
     def get_context_block(self) -> dict[str, str]:
         """Return Anthropic system block with current robot state."""
         lines: list[str] = []
-        has_hardware = self._base is not None or self._sg is not None
+        has_hardware = (
+            self._base is not None or self._sg is not None or self._arm is not None
+        )
 
         # Position + heading from base
         if self._base is not None:
@@ -70,13 +73,26 @@ class RobotContextProvider:
             except Exception:
                 pass
 
-        # Nav/explore state (lightweight checks, no ROS2 dependency)
-        try:
-            from vector_os_nano.skills.go2.explore import is_exploring, is_nav_stack_running
-            lines.append(f"Exploring: {'yes' if is_exploring() else 'no'}")
-            lines.append(f"Nav stack: {'running' if is_nav_stack_running() else 'stopped'}")
-        except ImportError:
-            pass
+        # Nav/explore state — only meaningful for a mobile base (Go2), not an
+        # arm-only sim, so don't inject quadruped fields into an arm prompt.
+        if self._base is not None:
+            try:
+                from vector_os_nano.skills.go2.explore import is_exploring, is_nav_stack_running
+                lines.append(f"Exploring: {'yes' if is_exploring() else 'no'}")
+                lines.append(f"Nav stack: {'running' if is_nav_stack_running() else 'stopped'}")
+            except ImportError:
+                pass
+
+        # Arm state (an arm-only sim has no base/scene_graph; still real hardware)
+        if self._arm is not None:
+            name = getattr(self._arm, "name", type(self._arm).__name__)
+            dof = getattr(self._arm, "dof", None)
+            lines.append(f"Arm: {name}" + (f" ({dof}-DOF)" if dof else "") + " connected")
+            try:
+                pos = self._arm.get_joint_positions()
+                lines.append("Joints: " + ", ".join(f"{v:.2f}" for v in pos))
+            except Exception:
+                pass
 
         if not has_hardware:
             return {"type": "text", "text": "[Robot State]\nNo hardware connected."}

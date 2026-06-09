@@ -250,7 +250,16 @@ class CategorizedToolRegistry(ToolRegistry):
 
     def register(self, tool_instance: Any, category: str = "default") -> None:  # type: ignore[override]
         super().register(tool_instance)
-        self._categories.setdefault(category, []).append(tool_instance.name)
+        names = self._categories.setdefault(category, [])
+        if tool_instance.name not in names:
+            names.append(tool_instance.name)
+
+    def unregister(self, name: str) -> None:
+        """Remove a tool by name from the registry and every category list."""
+        self._tools.pop(name, None)
+        for names in self._categories.values():
+            if name in names:
+                names.remove(name)
 
     def enable_category(self, category: str) -> None:
         """Re-enable a previously disabled category."""
@@ -273,10 +282,18 @@ class CategorizedToolRegistry(ToolRegistry):
                         (default behavior — backward compatible).
         """
         if categories is not None:
-            # Explicit category filter (from intent router)
+            # Explicit category filter (from intent router). Disabled categories
+            # are still excluded so disable_category() is authoritative on both
+            # the routed and the default paths (e.g. robot tools off in dev world).
             allowed: set[str] = set()
             for cat in categories:
+                if cat in self._disabled:
+                    continue
                 allowed.update(self._categories.get(cat, []))
+            disabled_tools: set[str] = set()
+            for cat in self._disabled:
+                disabled_tools.update(self._categories.get(cat, []))
+            allowed -= disabled_tools
             return [s for s in super().to_anthropic_schemas() if s["name"] in allowed]
 
         # Default: exclude disabled categories

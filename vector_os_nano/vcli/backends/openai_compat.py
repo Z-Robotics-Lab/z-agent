@@ -197,13 +197,16 @@ class OpenAICompatBackend:
         system: list[dict[str, Any]],
         max_tokens: int,
         on_text: Callable[[str], None] | None = None,
+        on_reasoning: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Call the OpenAI-compatible API with streaming and retry."""
         system_text = convert_system(system)
         oai_messages = convert_messages(messages, system_text)
         oai_tools = convert_tools(tools) if tools else None
 
-        return self._call_with_retry(oai_messages, oai_tools, max_tokens, on_text)
+        return self._call_with_retry(
+            oai_messages, oai_tools, max_tokens, on_text, on_reasoning
+        )
 
     # ------------------------------------------------------------------
     # Internal
@@ -215,13 +218,16 @@ class OpenAICompatBackend:
         tools: list[dict[str, Any]] | None,
         max_tokens: int,
         on_text: Callable[[str], None] | None,
+        on_reasoning: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Make the API call with exponential backoff retry."""
         last_exc: Exception | None = None
 
         for attempt in range(self._max_retries):
             try:
-                return self._call_streaming(messages, tools, max_tokens, on_text)
+                return self._call_streaming(
+                    messages, tools, max_tokens, on_text, on_reasoning
+                )
             except openai.RateLimitError as exc:
                 last_exc = exc
                 delay = 2**attempt
@@ -257,6 +263,7 @@ class OpenAICompatBackend:
         tools: list[dict[str, Any]] | None,
         max_tokens: int,
         on_text: Callable[[str], None] | None,
+        on_reasoning: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Make a streaming API call, accumulate text + tool calls, return LLMResponse."""
         kwargs: dict[str, Any] = {
@@ -290,6 +297,16 @@ class OpenAICompatBackend:
             # Finish reason
             if choice.finish_reason is not None:
                 finish_reason = choice.finish_reason
+
+            # Reasoning content (reasoning models: DeepSeek `reasoning_content`,
+            # some providers `reasoning`). Hidden trace — surfaced ONLY as a live
+            # "thinking…" heartbeat, never accumulated into the response text.
+            if on_reasoning is not None and delta is not None:
+                reasoning_chunk = getattr(delta, "reasoning_content", None) or getattr(
+                    delta, "reasoning", None
+                )
+                if reasoning_chunk:
+                    on_reasoning(reasoning_chunk)
 
             # Text content
             if delta and delta.content:

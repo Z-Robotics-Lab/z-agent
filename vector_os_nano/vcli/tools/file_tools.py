@@ -14,7 +14,7 @@ import difflib
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import ToolContext, ToolResult, tool
+from vector_os_nano.vcli.tools.base import PermissionResult, ToolContext, ToolResult, tool
 
 # ---------------------------------------------------------------------------
 # Security constants
@@ -204,11 +204,26 @@ class FileWriteTool:
         "required": ["file_path", "content"],
     }
 
+    def check_permissions(self, params: dict[str, Any], context: ToolContext) -> PermissionResult:
+        # Hard-deny writes to protected paths, mirroring the read path's guard.
+        # A "deny" here is unconditional (survives --no-permission / always-allow).
+        if _is_dangerous(_resolve(str(params.get("file_path", "")))):
+            return PermissionResult("deny", f"{params.get('file_path')} is a protected path")
+        return PermissionResult("ask")
+
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         file_path_str: str = params["file_path"]
         content: str = params["content"]
 
         path = _resolve(file_path_str)
+
+        # Defence in depth: also block protected paths at execute() so the guard
+        # holds even if a caller bypasses PermissionContext.
+        if _is_dangerous(path):
+            return ToolResult(
+                content=f"Access denied: {file_path_str} is a protected path.",
+                is_error=True,
+            )
 
         # Refuse to overwrite an existing file that was not read in this session
         if path.exists() and str(path) not in _get_read_files(context):
@@ -328,12 +343,25 @@ class FileEditTool:
         "required": ["file_path", "old_string", "new_string"],
     }
 
+    def check_permissions(self, params: dict[str, Any], context: ToolContext) -> PermissionResult:
+        # Hard-deny edits to protected paths (mirrors the read/write guards).
+        if _is_dangerous(_resolve(str(params.get("file_path", "")))):
+            return PermissionResult("deny", f"{params.get('file_path')} is a protected path")
+        return PermissionResult("ask")
+
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         file_path_str: str = params["file_path"]
         old_string: str = params["old_string"]
         new_string: str = params["new_string"]
 
         path = _resolve(file_path_str)
+
+        # Defence in depth: block protected paths even outside PermissionContext.
+        if _is_dangerous(path):
+            return ToolResult(
+                content=f"Access denied: {file_path_str} is a protected path.",
+                is_error=True,
+            )
 
         # 1. Read current content
         if not path.exists():

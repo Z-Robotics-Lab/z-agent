@@ -1,0 +1,189 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
+"""R2-3 regression — singular grab picks the NEAREST object when no target is bound.
+
+Two scenarios:
+  (a) execute_skill("pick", {}) — no object_label → the skill resolves the
+      nearest scene object (banana, at XY≈0.170m) via get_object_positions and
+      successfully grasps + lifts it.
+  (b) execute_skill("pick", {"object_label": "mug"}) — bound target → the mug
+      is gripped (NOT the nearest banana), confirming bound-target behaviour is
+      unchanged.
+
+The test is headless (gui=False) and deterministic — no LLM, no network.
+Requires mujoco; entire module is skipped when mujoco is absent.
+"""
+from __future__ import annotations
+
+import math
+
+import pytest
+
+# Guard: skip when mujoco is not installed (hardware or CI without sim deps).
+pytest.importorskip("mujoco", reason="mujoco not installed")
+
+from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
+from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
+from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
+from vector_os_nano.core.agent import Agent
+from vector_os_nano.skills import get_default_skills
+from vector_os_nano.skills.pick import SIM_PICK_CONFIG
+from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+
+
+# ---------------------------------------------------------------------------
+# Scene geometry (matches so101_mujoco.xml free bodies at sim start)
+# All distances are XY from origin; banana wins nearest.
+# ---------------------------------------------------------------------------
+
+# Confirmed nearest by computing sqrt(x²+y²) for each free body:
+#   banana (0.12, 0.12) → 0.170
+#   duck   (0.15,-0.10) → 0.180
+#   mug    (0.22, 0.05) → 0.226   ← bound-target test
+_NEAREST_OBJECT = "banana"
+_BOUND_TARGET = "mug"
+
+
+# ---------------------------------------------------------------------------
+# Fixtures — module-scoped for speed (one sim per module, two tests share it)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def sim_agent_unbound():
+    """Headless agent wired with SIM_PICK_CONFIG — for the unbound-target pick."""
+    arm = MuJoCoArm(gui=False)
+    arm.connect()
+    gripper = MuJoCoGripper(arm)
+    perception = MuJoCoPerception(arm)
+    agent = Agent(
+        arm=arm,
+        gripper=gripper,
+        perception=perception,
+        config={"skills": {"pick": dict(SIM_PICK_CONFIG)}},
+    )
+    # Re-register skills so the fixture-built agent uses the same set as CLI.
+    reg = get_default_skills()
+    for s in reg:
+        agent._skill_registry.register(s)
+    yield agent
+    arm.disconnect()
+
+
+@pytest.fixture(scope="module")
+def sim_agent_bound():
+    """Separate headless agent for the bound-target pick (fresh sim state)."""
+    arm = MuJoCoArm(gui=False)
+    arm.connect()
+    gripper = MuJoCoGripper(arm)
+    perception = MuJoCoPerception(arm)
+    agent = Agent(
+        arm=arm,
+        gripper=gripper,
+        perception=perception,
+        config={"skills": {"pick": dict(SIM_PICK_CONFIG)}},
+    )
+    reg = get_default_skills()
+    for s in reg:
+        agent._skill_registry.register(s)
+    yield agent
+    arm.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# (a) Unbound pick — no object_label → nearest object (banana) is lifted
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestPickUnboundNearest:
+    """R2-3: pick with no target resolves to the nearest scene object."""
+
+    def test_gripper_empty_before_pick(self, sim_agent_unbound: Agent) -> None:
+        """Pre-condition: gripper is empty before the unbound pick."""
+        holding = make_holding_object(sim_agent_unbound)
+        assert holding() is False, "Expected empty gripper before pick"
+
+    def test_nearest_object_is_banana(self, sim_agent_unbound: Agent) -> None:
+        """Sanity: get_object_positions confirms banana is closest to origin."""
+        arm = sim_agent_unbound._arm
+        positions = arm.get_object_positions()
+        assert _NEAREST_OBJECT in positions, f"{_NEAREST_OBJECT!r} not in scene"
+        # Verify banana is geometrically nearest by XY distance from origin.
+        nearest = min(
+            positions.items(),
+            key=lambda kv: kv[1][0] ** 2 + kv[1][1] ** 2,
+        )
+        assert nearest[0] == _NEAREST_OBJECT, (
+            f"Expected {_NEAREST_OBJECT!r} to be nearest, got {nearest[0]!r}"
+        )
+
+    def test_unbound_pick_succeeds(self, sim_agent_unbound: Agent) -> None:
+        """execute_skill('pick', {no object_label, mode=hold}) must succeed.
+
+        mode='hold' prevents the post-pick home step from opening the gripper
+        (same contract as the existing test_sim_grasp_e2e.py).  The binding
+        under test is NO object_label — target is resolved by the skill, not
+        the planner.
+        """
+        result = sim_agent_unbound.execute_skill("pick", {"mode": "hold"})
+        assert result.success, (
+            f"Unbound pick failed: {getattr(result, 'failure_reason', result)}"
+        )
+
+    def test_holding_after_unbound_pick(self, sim_agent_unbound: Agent) -> None:
+        """After unbound pick, holding_object() must be True."""
+        holding = make_holding_object(sim_agent_unbound)
+        assert holding() is True, "holding_object() must be True after unbound pick"
+
+    def test_nearest_object_is_lifted(self, sim_agent_unbound: Agent) -> None:
+        """The nearest object (banana) must be physically lifted > 5 cm."""
+        arm = sim_agent_unbound._arm
+        positions = arm.get_object_positions()
+        assert _NEAREST_OBJECT in positions, f"{_NEAREST_OBJECT!r} not in scene after pick"
+        z = positions[_NEAREST_OBJECT][2]
+        assert z > 0.05, (
+            f"{_NEAREST_OBJECT!r} should be lifted > 5cm, got z={z:.3f}m"
+        )
+
+
+# ---------------------------------------------------------------------------
+# (b) Bound-target pick — object_label="mug" → mug is gripped, not banana
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestPickBoundTargetUnchanged:
+    """Bound target must NOT be overridden by the nearest-object logic."""
+
+    def test_gripper_empty_before_bound_pick(self, sim_agent_bound: Agent) -> None:
+        holding = make_holding_object(sim_agent_bound)
+        assert holding() is False, "Expected empty gripper before bound pick"
+
+    def test_bound_pick_succeeds(self, sim_agent_bound: Agent) -> None:
+        result = sim_agent_bound.execute_skill(
+            "pick", {"object_label": _BOUND_TARGET, "mode": "hold"}
+        )
+        assert result.success, (
+            f"Bound pick({_BOUND_TARGET!r}) failed: "
+            f"{getattr(result, 'failure_reason', result)}"
+        )
+
+    def test_holding_after_bound_pick(self, sim_agent_bound: Agent) -> None:
+        holding = make_holding_object(sim_agent_bound)
+        assert holding() is True, "holding_object() must be True after bound pick"
+
+    def test_mug_is_lifted_not_banana(self, sim_agent_bound: Agent) -> None:
+        """The bound object (mug) is lifted; banana stays on the table."""
+        arm = sim_agent_bound._arm
+        positions = arm.get_object_positions()
+        mug_z = positions.get(_BOUND_TARGET, [0.0, 0.0, 0.0])[2]
+        assert mug_z > 0.05, (
+            f"{_BOUND_TARGET!r} should be lifted > 5cm, got z={mug_z:.3f}m"
+        )
+        # Banana should still be near table level (not lifted by this pick).
+        banana_z = positions.get(_NEAREST_OBJECT, [0.0, 0.0, 0.06])[2]
+        assert banana_z < 0.15, (
+            f"{_NEAREST_OBJECT!r} should stay on table, got z={banana_z:.3f}m"
+        )

@@ -44,8 +44,14 @@ class AnthropicBackend:
         system: list[dict[str, Any]],
         max_tokens: int,
         on_text: Callable[[str], None] | None = None,
+        on_reasoning: Callable[[str], None] | None = None,
     ) -> LLMResponse:
-        """Call Anthropic Messages API with streaming and retry."""
+        """Call Anthropic Messages API with streaming and retry.
+
+        ``on_reasoning`` is accepted for backend-protocol parity (used by reasoning
+        models via the OpenAI-compatible backend); Anthropic streaming here does not
+        emit a separate hidden reasoning channel, so it is ignored.
+        """
         return self._call_with_retry(messages, tools, system, max_tokens, on_text)
 
     # ------------------------------------------------------------------

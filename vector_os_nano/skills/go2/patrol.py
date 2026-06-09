@@ -25,7 +25,6 @@ from typing import Any
 
 from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.navigate import _detect_current_room
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +153,10 @@ class PatrolSkill:
             "description": "Total patrol timeout in seconds (default 300)",
         },
     }
+    # Typical REAL-TIME duration for visiting ~4 rooms: navigate (~20s each) + look
+    # per room (~10s) × 4 ≈ 120s; 90s is the floor for even a 2-room patrol.
+    # GoalExecutor floors the step timeout at this value (R2-2).
+    typical_duration_sec: float = 90.0
     preconditions: list[str] = []
     postconditions: list[str] = []
     effects: dict = {"patrolled": True}

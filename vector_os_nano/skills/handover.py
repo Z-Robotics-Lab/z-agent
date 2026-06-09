@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import time
 
-from vector_os_nano.core.skill import Skill, SkillContext, skill
+from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,11 @@ class HandoverSkill:
             "description": "Which side the user is on: 'right' (default) or 'left'",
         },
     }
+    # Typical REAL-TIME (viewer-synced) duration: rotate 3s + open gripper + home 3s +
+    # overhead ≈ 8–10s real-time; 25s gives margin.  GoalExecutor floors the step
+    # timeout at this value (R2-2) so a tight LLM-emitted timeout_sec is not a false
+    # failure under a live viewer.
+    typical_duration_sec: float = 25.0
     preconditions: list[str] = ["gripper_holding_any"]
     postconditions: list[str] = ["gripper_empty"]
     effects: dict = {"gripper_state": "open", "held_object": None}

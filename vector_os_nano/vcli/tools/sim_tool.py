@@ -30,6 +30,31 @@ from vector_os_nano.vcli.tools.base import (
 logger = logging.getLogger(__name__)
 
 
+def locate_mjpython(executable: str | None = None) -> str | None:
+    """Locate the ``mjpython`` launcher for the running environment.
+
+    mjpython lives next to the running interpreter (the venv's ``bin/``), so it is
+    derived from ``sys.executable`` — deliberately NOT ``resolve()``-d: resolving
+    follows the venv's ``python`` symlink to the base interpreter's ``bin``, where
+    mjpython is absent. Falls back to ``shutil.which``. Returns an absolute path
+    string, or ``None`` when mjpython is not installed.
+
+    (Regression guard: a prior off-by-one ``parents[N]``-from-``__file__`` path
+    resolved to ``$HOME``, so mjpython was never found and the viewer silently fell
+    back to headless. Deriving from ``sys.executable`` is depth-independent.)
+    """
+    import os
+    import shutil
+    import sys
+    from pathlib import Path
+
+    exe = executable or sys.executable
+    cand = Path(exe).parent / "mjpython"
+    if cand.is_file() and os.access(str(cand), os.X_OK):
+        return str(cand)
+    return shutil.which("mjpython")
+
+
 @tool(
     name="start_simulation",
     description="Start a robot simulation (arm or go2 quadruped) with isaac, mujoco, or gazebo backend. No restart needed.",
@@ -52,7 +77,11 @@ class SimStartTool:
             },
             "gui": {
                 "type": "boolean",
-                "description": "Open viewer/GUI window (default: true)",
+                "description": (
+                    "Open the viewer window (default: true). When the user says "
+                    "'headless' / '无窗口' / 'no window', pass gui=false to run "
+                    "without a display. A window is the default; gui=false suppresses it."
+                ),
                 "default": True,
             },
             "backend": {
@@ -118,6 +147,19 @@ class SimStartTool:
             else:
                 # Default: mujoco backend (existing paths unchanged)
                 if sim_type == "arm":
+                    # Pure-NL case: user launched plain vector-cli (no --sim flag),
+                    # then asked to start the arm sim. The startup re-exec guard
+                    # did not fire. If a window is wanted but the viewer cannot open
+                    # in this interpreter, re-exec the whole CLI under mjpython --sim.
+                    if gui and not self._viewer_available():
+                        import os as _os
+                        import sys as _sys
+                        _in_pytest = "pytest" in _sys.modules or bool(_os.environ.get("PYTEST_CURRENT_TEST"))
+                        if not _in_pytest:
+                            self._reexec_under_mjpython_with_sim()
+                            # _reexec_under_mjpython_with_sim() returned → mjpython missing;
+                            # fall through to headless launch.
+                            gui = False
                     agent = self._start_arm(gui=gui)
                 elif sim_type == "go2":
                     agent = self._start_go2(gui=gui, with_arm=with_arm)
@@ -131,27 +173,48 @@ class SimStartTool:
         app["scene_graph"] = getattr(agent, "_spatial_memory", None)
         app["skill_registry"] = getattr(agent, "_skill_registry", None)
 
-        # Register skill tools
+        # Register skill tools under the 'robot' category (matches the --sim path)
         registry = app.get("registry")
         if registry is not None:
             from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
             for skill_tool in wrap_skills(agent):
-                registry.register(skill_tool)
+                registry.register(skill_tool, category="robot")
+            # The bare dev-world startup disabled robot/diag; re-enable now that a
+            # robot is connected so skill + diag/status tools become visible.
+            if hasattr(registry, "enable_category"):
+                registry.enable_category("robot")
+                registry.enable_category("diag")
 
-        # Rebuild system prompt
+        # Rebuild the system prompt as a LIVE DynamicSystemPrompt with an arm-aware
+        # robot context, so subsequent turns correctly see the connected hardware
+        # (a bare list would freeze state and drop the [Robot State] block).
         engine = app.get("engine")
         if engine is not None:
             from vector_os_nano.vcli.prompt import build_system_prompt
-            engine._system_prompt = build_system_prompt(agent=agent, cwd=context.cwd)
+            from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
+            from vector_os_nano.vcli.robot_context import RobotContextProvider
+            from vector_os_nano.vcli.worlds import resolve_world
+            provider = RobotContextProvider(
+                base=getattr(agent, "_base", None),
+                scene_graph=getattr(agent, "_spatial_memory", None),
+                arm=getattr(agent, "_arm", None),
+            )
+            app["robot_ctx_provider"] = provider
+            static_blocks = build_system_prompt(
+                agent=agent, cwd=context.cwd, robot_context=provider,
+                world=resolve_world(agent),
+            )
+            engine._system_prompt = DynamicSystemPrompt(static_blocks, provider)
             # Reinit VGG with new agent so verifier has live robot state
             try:
                 engine.init_vgg(
                     agent=agent,
                     skill_registry=getattr(agent, "_skill_registry", None),
-                    on_vgg_step=getattr(engine, "_vgg_step_callback", None),
+                    on_vgg_step=app.get("vgg_step_callback"),
+                    world=resolve_world(agent),
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.warning("init_vgg after sim start failed: %s", _exc)
 
         # Report SceneGraph status
         sg = getattr(agent, "_spatial_memory", None)
@@ -222,12 +285,70 @@ class SimStartTool:
         return "; ".join(parts) or "nothing to stop"
 
     @staticmethod
+    def _viewer_available() -> bool:
+        """Return True if the MuJoCo passive viewer can open a window.
+
+        On macOS the viewer requires running under mjpython (which sets
+        mujoco.viewer._MJPYTHON). Returns True on non-macOS or when already
+        under mjpython; False otherwise.
+        """
+        import sys as _sys
+        if _sys.platform != "darwin":
+            return True
+        try:
+            import mujoco.viewer as _mjv  # type: ignore[import]
+            return bool(getattr(_mjv, "_MJPYTHON", None))
+        except Exception:
+            return False
+
+    @staticmethod
+    def _reexec_under_mjpython_with_sim() -> None:
+        """Re-exec the whole CLI under mjpython --sim for the pure-NL case.
+
+        Called when the user asks for an arm sim from a plain `vector-cli`
+        session (no --sim flag, so the startup re-exec guard did not fire)
+        and a window was requested but is not available.
+
+        Sets VECTOR_REEXEC=1 to prevent loops. If mjpython is missing, prints
+        a warning and returns (falls through to headless launch).
+        """
+        import os as _os
+        import sys as _sys
+
+        if _os.environ.get("VECTOR_REEXEC") == "1":
+            return  # already re-exec'd; do not loop
+
+        mjpython: str | None = locate_mjpython()
+        if not mjpython:
+            print(
+                "Warning: mjpython not found — arm sim will run headless "
+                "(install mujoco into .venv-nano for a viewer window).",
+                file=_sys.stderr,
+            )
+            return
+
+        new_env = _os.environ.copy()
+        new_env["VECTOR_REEXEC"] = "1"
+        _os.execve(mjpython, [mjpython, "-m", "vector_os_nano.vcli.cli", "--sim"] + _sys.argv[1:], new_env)
+
+    @staticmethod
     def _start_arm(gui: bool = True) -> Any:
         from vector_os_nano.core.agent import Agent  # type: ignore[import]
         from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
+        from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
+        from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
+        from vector_os_nano.skills.pick import SIM_PICK_CONFIG
         arm = MuJoCoArm(gui=gui)
         arm.connect()
-        return Agent(arm=arm)
+        gripper = MuJoCoGripper(arm)
+        perception = MuJoCoPerception(arm)
+        # Match the --sim flag path: full arm+gripper+perception, sim grasp offsets off.
+        return Agent(
+            arm=arm,
+            gripper=gripper,
+            perception=perception,
+            config={"skills": {"pick": dict(SIM_PICK_CONFIG)}},
+        )
 
     # ------------------------------------------------------------------
     # Pickable-object discovery: populate world_model from MJCF
@@ -363,6 +484,12 @@ class SimStartTool:
                 piper_gripper = PiperGripperROS2Proxy()
                 piper_gripper.connect()
                 logger.info("[sim_tool] Piper proxies connected (arm + gripper)")
+            except ImportError as exc:
+                # ROS2/piper proxy deps unavailable (expected on a macOS/Windows
+                # sim host): run without the piper proxy, NOT an error.
+                logger.debug("[sim_tool] Piper proxy unavailable (no ROS2): %s", exc)
+                piper_arm = None
+                piper_gripper = None
             except Exception as exc:
                 logger.error("[sim_tool] Piper proxy setup failed: %s", exc)
                 piper_arm = None
@@ -656,14 +783,26 @@ class SimStopTool:
         app["scene_graph"] = None
         app["skill_registry"] = None
 
-        # Rebuild system prompt without hardware context
+        # Revert dev-world tool visibility (robot/diag hidden again)
+        if registry is not None and hasattr(registry, "disable_category"):
+            registry.disable_category("robot")
+            registry.disable_category("diag")
+
+        # Rebuild a live (empty) DynamicSystemPrompt so state cleanly reverts to dev
         engine = app.get("engine")
         if engine is not None:
             try:
                 from vector_os_nano.vcli.prompt import build_system_prompt
-                engine._system_prompt = build_system_prompt(agent=None, cwd=context.cwd)
-            except Exception:
-                pass
+                from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
+                from vector_os_nano.vcli.robot_context import RobotContextProvider
+                provider = RobotContextProvider()
+                app["robot_ctx_provider"] = provider
+                static_blocks = build_system_prompt(
+                    agent=None, cwd=context.cwd, robot_context=provider
+                )
+                engine._system_prompt = DynamicSystemPrompt(static_blocks, provider)
+            except Exception as _exc:
+                logger.warning("system-prompt rebuild after sim stop failed: %s", _exc)
 
         return ToolResult(
             content=f"Simulation stopped. {summary}. Dropped {skills_dropped} skill tools."

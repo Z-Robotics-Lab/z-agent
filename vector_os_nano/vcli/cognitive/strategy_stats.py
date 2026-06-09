@@ -19,12 +19,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PATH = os.path.expanduser("~/.vector_os_nano/strategy_stats.json")
+_DEFAULT_PATH = os.path.expanduser("~/.vector/strategy_stats.json")
 
 
 @dataclass
@@ -59,8 +59,10 @@ class StrategyStats:
     are automatically bucketed by prefix pattern via ``extract_pattern()``.
 
     Args:
-        persist_path: Path to JSON persistence file.  Defaults to
-            ``~/.vector_os_nano/strategy_stats.json``.
+        persist_path: Path to the JSON persistence file. When ``None`` (the
+            default), the instance is in-memory only and performs no file I/O.
+            The module-level default location is ``~/.vector/strategy_stats.json``
+            (see ``_DEFAULT_PATH``).
     """
 
     def __init__(self, persist_path: str | None = None) -> None:
@@ -163,11 +165,13 @@ class StrategyStats:
         """Persist all records to the JSON file.
 
         No-op when persist_path is None (in-memory only mode).
-        Creates parent directories as needed.
+        Creates parent directories as needed. Written atomically (temp file +
+        ``os.replace``) so concurrent CLIs never read a half-written file.
         """
         if self._path is None:
             return
-        Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        path = Path(self._path)
+        path.parent.mkdir(parents=True, exist_ok=True)
         data = [
             {
                 "strategy_name": rec.strategy_name,
@@ -178,8 +182,13 @@ class StrategyStats:
             }
             for rec in self._records.values()
         ]
-        with open(self._path, "w") as f:
-            json.dump(data, f, indent=2)
+        try:
+            tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(data, indent=2))
+            os.replace(tmp, path)
+        except OSError as exc:
+            logger.warning("StrategyStats save failed: %s", exc)
+            return
         logger.debug("StrategyStats saved %d records to %s", len(data), self._path)
 
     def load(self) -> None:

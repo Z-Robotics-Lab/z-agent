@@ -23,7 +23,7 @@ import logging
 
 import numpy as np
 
-from vector_os_nano.core.skill import Skill, SkillContext, skill
+from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,17 @@ class PlaceSkill:
 
     name: str = "place"
     description: str = "Place held object at a location: front, left, right, center, back, front_left, front_right, back_left, back_right"
+    # Typical REAL-TIME (viewer-synced) duration in seconds: approach 3s + descent 2s +
+    # open gripper + lift 2s + home 3s + perception overhead ≈ 15–20s; 45s gives margin
+    # for a retry or a slow IK solve. GoalExecutor floors the step timeout at this value
+    # (R2-2) so a completed place is never falsely marked timeout under a live viewer.
+    typical_duration_sec: float = 45.0
+    # Success predicate this skill is verified against (single-source for the planner).
+    # A place RELEASES the held object, so the gripper ends empty: not holding_object()
+    # discriminates a real place (released -> False -> verify passes) from a failed one
+    # (still holding). Preferred over placed_count() >= 1, which is trivially true in a
+    # region-less robot world (all resting objects count) and so verifies nothing.
+    verify_hint: str = "not holding_object()"
     failure_modes: list[str] = ["no_arm", "ik_unreachable", "move_failed"]
     parameters: dict = {
         "location": {

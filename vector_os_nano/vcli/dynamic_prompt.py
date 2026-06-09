@@ -20,10 +20,14 @@ class DynamicSystemPrompt(list):
         self._provider = provider
         self._context_idx: int | None = None
 
-        # Find existing robot context block (if build_system_prompt already added one)
-        for i, block in enumerate(self):
+        # Find existing robot context block (if build_system_prompt already added one).
+        # Iterate via list.__iter__ to bypass our own __iter__ override (which would
+        # phantom-append a block during construction), and match on startswith so we
+        # don't latch onto the literal "[Robot State]" substring inside the static
+        # tool-instructions block (which would then get overwritten every turn).
+        for i, block in enumerate(list.__iter__(self)):
             text = block.get("text", "") if isinstance(block, dict) else ""
-            if "[Robot State]" in text:
+            if text.startswith("[Robot State]"):
                 self._context_idx = i
                 break
 

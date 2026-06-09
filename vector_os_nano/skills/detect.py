@@ -13,11 +13,20 @@ from __future__ import annotations
 import logging
 import time
 
-from vector_os_nano.core.skill import Skill, SkillContext, skill
+from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 from vector_os_nano.core.world_model import ObjectState
 
 logger = logging.getLogger(__name__)
+
+# Generic quantifier terms that the LLM normalises to when the user asks for
+# "everything" rather than a specific named target.  A detect call with one of
+# these queries is asking "tell me what's there at all" — an empty result is a
+# valid answer (empty scene).  A detect call for a SPECIFIC target (e.g. "apple",
+# "banana") that finds nothing means the target is absent; that is a failure, not a
+# success.  Lifted to a module constant so the label-rename logic below can reuse it
+# without duplicating the set.
+_GENERIC_QUERIES: frozenset[str] = frozenset({"all objects", "all", "objects", "everything"})
 
 
 @skill(
@@ -37,12 +46,14 @@ class DetectSkill:
     """
 
     name: str = "detect"
-    description: str = "Detect objects in the workspace using VLM. IMPORTANT: use simple English queries like 'all objects', 'red cup', 'bottle'. Do NOT use Chinese or long phrases as the query."
+    description: str = "Detect objects in the workspace using VLM. The query is a natural-language noun/phrase in ANY language (e.g. 'banana' / '香蕉' / 'red cup' / '红色杯子'), or 'all objects' to detect everything."
+    # Success predicate this skill is verified against (single-source for the planner).
+    verify_hint: str = "len(detect_objects()) > 0"
     parameters: dict = {
         "query": {
             "type": "string",
             "required": True,
-            "description": "Simple English noun or phrase: 'all objects', 'red cup', 'banana', 'bottle'. Must be English. Do NOT use Chinese.",
+            "description": "Target to detect, as a natural-language noun/phrase in ANY language (e.g. 'banana' / '香蕉' / 'red cup' / '红色杯子'), or 'all objects' to detect everything. Copy the object named in the task here.",
         }
     }
     preconditions: list[str] = []
@@ -74,11 +85,32 @@ class DetectSkill:
             )
 
         if not detections:
-            logger.info("[DETECT] No objects detected")
-            return SkillResult(
-                success=True,
-                result_data={"objects": [], "count": 0, "diagnosis": "no_detections", "query": query},
+            # Decide success based on query intent (R2-7 honest-success fix):
+            # - Generic "all objects" / "everything" queries: an empty scene is a
+            #   valid answer — the robot looked and found nothing; success=True so a
+            #   downstream foreach can no-op cleanly over the empty list.
+            # - Specific target queries (e.g. "apple", "苹果"): no detections means
+            #   the target is absent; the step genuinely failed — success=False so
+            #   the verify moat catches the miss instead of false-passing.
+            q = (params.get("query", "") or "").strip().lower()
+            generic = q in _GENERIC_QUERIES
+            logger.info(
+                "[DETECT] No objects detected (query=%r, generic=%s -> success=%s)",
+                query, generic, generic,
             )
+            result_data: dict = {
+                "objects": [],
+                "count": 0,
+                "diagnosis": "no_detections",
+                "query": query,
+            }
+            if not generic:
+                return SkillResult(
+                    success=False,
+                    error_message=f"No detections found for {query!r} (target not in scene?)",
+                    result_data=result_data,
+                )
+            return SkillResult(success=True, result_data=result_data)
 
         logger.info("[DETECT] VLM found %d object(s), getting 3D positions...", len(detections))
 
@@ -100,7 +132,7 @@ class DetectSkill:
             # If VLM returned the query as label (e.g., "all objects" for every detection),
             # give each object a unique name like "object_0", "object_1", etc.
             label = det.label
-            if label.lower() in ("all objects", "all", "objects", "everything"):
+            if label.lower() in _GENERIC_QUERIES:  # reuse the module constant
                 label = f"object_{idx}"
             safe_label = label.replace(" ", "_").lower()
 
@@ -164,6 +196,12 @@ class DetectSkill:
 
             summary = {
                 "object_id": obj_id,
+                # Expose BOTH "name" and "label" (same value): a downstream foreach
+                # binds a per-item field (e.g. "${item.name}") into a skill param, and
+                # the decompose example / the playground detect producer use "name"
+                # while this skill historically used "label". Carrying both keeps the
+                # producer->foreach->skill contract robust to whichever the planner emits.
+                "name": det.label,
                 "label": det.label,
                 "confidence": round(det.confidence, 4),
                 "has_3d": has_3d,

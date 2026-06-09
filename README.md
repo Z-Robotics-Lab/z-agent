@@ -8,6 +8,8 @@
   <b>Cross-embodiment robot OS: natural language control, industrial-grade navigation, sim-to-real.</b>
   <br>
   <b>No training. No fine-tuning. Just say what you want.</b>
+  <br>
+  <b>The agent decomposes any natural-language goal into a verified plan and executes long-chain tasks end-to-end — from "explore the house" to "pick up the mug".</b>
 </p>
 
 <p align="center">
@@ -39,6 +41,13 @@
 
 ---
 
+**New session or contributor? Read in order:**
+[`CLAUDE.md`](CLAUDE.md) (rules + governance) ->
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (system design) ->
+[`docs/agent-kernel-STATUS.md`](docs/agent-kernel-STATUS.md) (current state + next steps).
+
+---
+
 ## Architecture
 
 Two entry points, one engine:
@@ -48,7 +57,7 @@ vector-cli  ──┐
               ├─> VectorEngine ──> VGG / tool_use ──> skill.execute()
 vector-os-mcp┘         |
                        ├── VGG cognitive layer (task decomposition + verification + retry)
-                       ├── 39 tools (file ops, bash, ROS2 diag, skill wrappers)
+                       ├── 19 built-in tools (file ops, bash, ROS2 diag, sim, system) + arm skills as tools when connected
                        ├── LLM backend (Anthropic / OpenRouter / local)
                        └── permission system + session + intent router
 ```
@@ -68,6 +77,8 @@ pip install -e ".[all]"
 
 vector-cli                     # interactive AI agent
 vector-cli --sim-go2           # Go2 quadruped in MuJoCo
+vector-cli --sim               # SO-101 arm in MuJoCo — drive by natural language
+                               #   e.g. "wave", "go home", "pick up the mug"
 ```
 
 LLM config: create `config/user.yaml` with your provider credentials, or type `/login` in vector-cli to authenticate with Claude subscription.
@@ -96,14 +107,15 @@ vector> stop
   Stopped.
 ```
 
-**39 tools** across 4 categories:
+**19 built-in tools** across 5 categories (arm skills add 10 more tools when an arm agent is connected):
 
 | Category | Tools |
 |----------|-------|
 | code | file_read, file_write, file_edit, bash, glob, grep |
-| robot | 22 skills (walk, navigate, explore, pick, place...) + scene_graph_query |
+| robot | world_query, scene_graph_query (+ home, wave, scan, detect, describe, pick, place, gripper_open, gripper_close, handover when arm connected) |
 | diag | ros2_topics, ros2_nodes, ros2_log, nav_state, terrain_status |
-| system | robot_status, start_simulation, skill_reload, web_fetch, open_foxglove |
+| sim | start_simulation, stop_simulation |
+| system | robot_status, skill_reload, open_foxglove |
 
 **Slash commands:** `/help` `/model` `/tools` `/status` `/login` `/compact` `/clear` `/copy` `/export`
 
@@ -250,7 +262,7 @@ MCP resources: world://state, world://objects, world://robot, camera://overhead,
 
 ```
 vector_os_nano/
-├── vcli/              VectorEngine + VGG cognitive layer + 39 tools
+├── vcli/              VectorEngine + VGG cognitive layer + tools
 │   ├── engine.py      Core agent loop (run_turn, VGG decompose/execute)
 │   ├── cognitive/     GoalDecomposer, GoalExecutor, GoalVerifier, VGGHarness,
 │   │                  StrategySelector, ObjectMemory, VisualVerifier, abort
@@ -331,7 +343,7 @@ source ~/Desktop/SysNav/install/setup.bash
 cd ~/Desktop/vector_os_nano && vector-cli go2sim       # our shell
 ```
 
-See [`docs/sysnav_integration.md`](docs/sysnav_integration.md) for the full topic mapping, hardware requirements (Livox Mid-360 + 360-degree camera), and adapter contract. SysNav is licensed under PolyForm-Noncommercial-1.0.0; do not vendor its sources into this Apache 2.0 repository.
+The SysNav integration design (topic mapping, hardware requirements — Livox Mid-360 + 360-degree camera — and adapter contract) lives in git history: `git log --all -- docs/sysnav_integration.md`. SysNav is licensed under PolyForm-Noncommercial-1.0.0; do not vendor its sources into this Apache 2.0 repository.
 
 ---
 

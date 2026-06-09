@@ -18,7 +18,12 @@ from vector_os_nano.vcli.cognitive.experience_compiler import GoalTemplate, SubG
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PATH = os.path.expanduser("~/.vector_os_nano/goal_templates.json")
+_DEFAULT_PATH = os.path.expanduser("~/.vector/goal_templates.json")
+
+# On-disk shape v2 carries SubGoalTemplate.strategy_params so tool_call /
+# code-as-policy payloads survive compile -> reuse. The loader is tolerant:
+# v1 files (no strategy_params key) load with an empty payload, and unknown
+# keys are ignored — no migration needed.
 
 # ---------------------------------------------------------------------------
 # Known keyword sets for simple parameter extraction
@@ -49,10 +54,12 @@ def _sub_goal_template_to_dict(sgt: SubGoalTemplate) -> dict:
         "timeout_sec": sgt.timeout_sec,
         "depends_on": list(sgt.depends_on),
         "fail_action": sgt.fail_action,
+        "strategy_params": dict(getattr(sgt, "strategy_params", {}) or {}),
     }
 
 
 def _sub_goal_template_from_dict(d: dict) -> SubGoalTemplate:
+    sp = d.get("strategy_params", {})
     return SubGoalTemplate(
         name_pattern=d["name_pattern"],
         description_pattern=d["description_pattern"],
@@ -61,6 +68,7 @@ def _sub_goal_template_from_dict(d: dict) -> SubGoalTemplate:
         timeout_sec=float(d.get("timeout_sec", 30.0)),
         depends_on=tuple(d.get("depends_on", [])),
         fail_action=d.get("fail_action", ""),
+        strategy_params=dict(sp) if isinstance(sp, dict) else {},
     )
 
 
@@ -151,9 +159,36 @@ def _substitute(pattern: str, params: dict[str, str]) -> str:
     return result
 
 
+def _substitute_payload(value, params: dict[str, str]):
+    """Recursively substitute ${param} placeholders inside a strategy payload."""
+    if isinstance(value, str):
+        return _substitute(value, params)
+    if isinstance(value, dict):
+        return {k: _substitute_payload(v, params) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_substitute_payload(v, params) for v in value]
+    return value
+
+
 def _instantiate_sub_goal(sgt: SubGoalTemplate, params: dict[str, str]) -> SubGoal:
-    """Create a concrete SubGoal from a SubGoalTemplate and parameter values."""
+    """Create a concrete SubGoal from a SubGoalTemplate and parameter values.
+
+    Strategy payload resolution (in priority order):
+    1. A stored ``strategy_params`` on the template -> substitute ${param} in its
+       string leaves (carries tool_call/code payloads through reuse, verbatim for
+       concrete templates).
+    2. Back-compat: a strategy with no stored payload -> the extracted params
+       (the historical robot behaviour for templates compiled before v2).
+    3. No strategy -> empty payload.
+    """
     depends_on = tuple(_substitute(dep, params) for dep in sgt.depends_on)
+    stored = dict(getattr(sgt, "strategy_params", {}) or {})
+    if stored:
+        strategy_params = _substitute_payload(stored, params)
+    elif sgt.strategy:
+        strategy_params = dict(params)
+    else:
+        strategy_params = {}
     return SubGoal(
         name=_substitute(sgt.name_pattern, params),
         description=_substitute(sgt.description_pattern, params),
@@ -162,7 +197,7 @@ def _instantiate_sub_goal(sgt: SubGoalTemplate, params: dict[str, str]) -> SubGo
         timeout_sec=sgt.timeout_sec,
         depends_on=depends_on,
         fail_action=sgt.fail_action,
-        strategy_params=dict(params) if sgt.strategy else {},
+        strategy_params=strategy_params,
     )
 
 
@@ -174,7 +209,10 @@ class TemplateLibrary:
     """Store, retrieve, and persist GoalTemplates."""
 
     def __init__(self, persist_path: str | None = None) -> None:
-        self._path = persist_path or _DEFAULT_PATH
+        # None => in-memory only (no home-dir reads/writes), matching
+        # StrategyStats. _DEFAULT_PATH is a documented constant, not an
+        # automatic fallback.
+        self._path: str | None = persist_path
         self._templates: list[GoalTemplate] = []
         self.load()
 
@@ -218,12 +256,26 @@ class TemplateLibrary:
         return best
 
     def _matches_concrete(self, template: GoalTemplate, task: str) -> bool:
-        """Check if a task string is plausibly matched by a concrete template."""
+        """Check if a task string is matched by a concrete template.
+
+        Side-effecting sub-goals (``tool_call`` / ``code_as_policy``) require the
+        task to contain ALL words of the sub-goal name (full subset): a wrong
+        autonomous dispatch is far costlier than a missed cache hit, and a single
+        shared token (e.g. "write") must not hijack an unrelated task into a stale
+        tool_call. Non-side-effecting sub-goals (skills/primitives) keep the
+        lenient single-token match so synonym reuse still works ("go to kitchen"
+        -> a ``reach_kitchen`` template). A miss here just falls back to LLM
+        decomposition, which is the safe default.
+        """
         tokens = _tokenize(task)
-        # Use sub-goal name patterns (concrete, no placeholders) as signal
         for sgt in template.sub_goal_templates:
             name_words = set(sgt.name_pattern.lower().replace("_", " ").split())
-            if name_words & tokens:
+            if not name_words:
+                continue
+            if sgt.strategy in ("tool_call", "code_as_policy"):
+                if name_words.issubset(tokens):
+                    return True
+            elif name_words & tokens:
                 return True
         return False
 
@@ -246,7 +298,9 @@ class TemplateLibrary:
     # ------------------------------------------------------------------
 
     def save(self) -> None:
-        """Persist templates to JSON file."""
+        """Persist templates to JSON file (no-op in in-memory mode)."""
+        if self._path is None:
+            return
         path = Path(self._path)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -257,7 +311,9 @@ class TemplateLibrary:
             logger.warning("TemplateLibrary: save failed: %s", exc)
 
     def load(self) -> None:
-        """Load templates from JSON file (no-op if file absent or invalid)."""
+        """Load templates from JSON file (no-op in in-memory mode / if absent)."""
+        if self._path is None:
+            return
         path = Path(self._path)
         if not path.exists():
             return

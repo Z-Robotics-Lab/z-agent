@@ -207,10 +207,16 @@ async def handle_tool_call(
     - "diagnostics"      -> read hardware state from agent directly
     - "debug_perception" -> read perception pipeline from agent directly
     - "run_goal"         -> engine.vgg_decompose + engine.vgg_execute
-    - "natural_language" -> engine.run_turn(instruction, session) -> TurnResult.text
-    - direct skill       -> engine.run_turn(f"{skill} {args}", session) -> TurnResult.text
+    - "natural_language" -> the unified closed-loop controller -> answer text
+    - direct skill       -> the unified closed-loop controller -> answer text
 
-    Note: engine.run_turn() is synchronous; wrapped with asyncio.to_thread().
+    Stage 5 (S5.4) cut-over: free-form text now flows through the ONE closed-loop
+    controller (``run_turn_unified``) — every turn is decomposed-or-answered and
+    verified, with the keyword gate demoted to an optimization hint. Set
+    ``VECTOR_LEGACY_TURN=1`` to restore the old open ``run_turn`` ReAct loop for
+    one release as a fallback.
+
+    Note: both controllers are synchronous; wrapped with ``asyncio.to_thread()``.
 
     Returns a string suitable for MCP TextContent.
     """
@@ -229,13 +235,25 @@ async def handle_tool_call(
 
     if tool_name == "natural_language":
         instruction = arguments.get("instruction", "")
-        turn_result = await asyncio.to_thread(engine.run_turn, instruction, session)
-        return turn_result.text
+        return await asyncio.to_thread(_run_text_turn, engine, session, instruction)
 
     # Direct skill call: build natural language instruction string and run through engine
     instruction = _build_skill_instruction(tool_name, arguments)
-    turn_result = await asyncio.to_thread(engine.run_turn, instruction, session)
-    return turn_result.text
+    return await asyncio.to_thread(_run_text_turn, engine, session, instruction)
+
+
+def _run_text_turn(engine: Any, session: Any, instruction: str) -> str:
+    """Run one free-form turn through the unified controller; return the answer text.
+
+    Routes through ``run_turn_unified`` (the S5.4 cut-over) so every MCP text turn
+    is a verified closed loop. ``VECTOR_LEGACY_TURN=1`` falls back to the legacy
+    open ``run_turn`` ReAct loop for one release. Both surface ``.text``.
+    """
+    import os
+
+    if os.environ.get("VECTOR_LEGACY_TURN") == "1":
+        return engine.run_turn(instruction, session).text
+    return engine.run_turn_unified(instruction, session).text
 
 
 def _run_goal_via_vgg(engine: Any, goal: str) -> str:

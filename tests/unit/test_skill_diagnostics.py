@@ -730,8 +730,14 @@ class TestDetectSkillDiagnosticsSuccess:
         assert result.result_data.get("diagnosis") == "ok"
         assert "merged_count" in result.result_data
 
-    def test_detect_no_detections_returns_diagnosis(self):
-        """perception.detect returns [] -> diagnosis == 'no_detections' with query."""
+    def test_detect_specific_target_not_found_returns_failure(self):
+        """R2-7 honest-success: specific target absent -> success=False (moat fix).
+
+        When perception returns [] for a SPECIFIC query (e.g. "banana") the target
+        is not in the scene. Reporting success=True here was the moat hole — a verify
+        step counting objects would false-pass. Now success=False so the failure
+        is caught at the detect step itself, not silently swallowed.
+        """
         mock_perception = Mock()
         mock_perception.detect = Mock(return_value=[])
 
@@ -739,6 +745,27 @@ class TestDetectSkillDiagnosticsSuccess:
         context = _make_detect_ctx(perception=mock_perception)
         result = skill.execute({"query": "banana"}, context)
 
-        assert result.success is True
+        assert result.success is False
         assert result.result_data.get("diagnosis") == "no_detections"
         assert result.result_data.get("query") == "banana"
+        assert result.result_data.get("objects") == []
+        assert result.result_data.get("count") == 0
+
+    def test_detect_generic_query_empty_scene_returns_success(self):
+        """R2-7: generic 'all objects' with empty scene -> success=True.
+
+        A detect for 'all objects' on an empty table is a valid observation —
+        the robot looked and found nothing.  success=True lets a downstream
+        foreach no-op cleanly over the empty list.
+        """
+        mock_perception = Mock()
+        mock_perception.detect = Mock(return_value=[])
+
+        skill = DetectSkill()
+        context = _make_detect_ctx(perception=mock_perception)
+        result = skill.execute({"query": "all objects"}, context)
+
+        assert result.success is True
+        assert result.result_data.get("diagnosis") == "no_detections"
+        assert result.result_data.get("objects") == []
+        assert result.result_data.get("count") == 0

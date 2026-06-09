@@ -92,15 +92,28 @@ registry.match(input)     # Check @skill aliases
 
 ## Built-in Skills
 
+The 10 arm skills below are available when an arm agent is connected (via `vector-cli --sim` or a live SO-101 arm). They are wrapped as tools under the `robot` tool category by `SkillWrapperTool`.
+
 | Skill | Aliases | Direct | Auto-steps |
 |-------|---------|--------|------------|
 | home | go home, reset, 回家, 归位 | Yes | - |
+| wave | wave, 挥手, 打招呼 | No | wave |
 | scan | look, observe, 看看, 扫描 | Yes | - |
 | detect | find, search, 检测, 识别 | Yes | scan, detect |
+| describe | describe, what is, 描述, 这是什么 | Yes | - |
 | pick | grab, grasp, 抓, 拿, 抓起 | No | scan, detect, pick |
 | place | put, 放, 放下, 放到, 放置 | No | - |
 | gripper_open | open, release, 张开, 松开 | Yes | - |
 | gripper_close | close, grip, 夹紧, 合上 | Yes | - |
+| handover | handover, give, 递, 递给 | No | - |
+
+### Auto-steps and SkillWrapperTool
+
+`pick` declares `__skill_auto_steps__ = ["scan", "detect", "pick"]`. When the agent calls the `pick` tool, `SkillWrapperTool.execute()` reads this attribute and expands the call into the full step chain before any LLM planning — zero additional LLM calls for the common case.
+
+### Complex / Long-chain Tasks
+
+For multi-step or ambiguous goals (e.g. "把鸭子放到左前方", "整理桌面"), simple auto_steps expansion is insufficient. These route through the **VGG GoalDecomposer** in `vcli/cognitive/` (`goal_decomposer`, `goal_executor`, `goal_verifier`, `strategy_selector`, `vgg_harness`). The decomposer breaks the goal into a plan, verifies preconditions, and calls `agent.execute_skill()` for each step — this path may involve multiple LLM calls and is designed for robustness, not zero-LLM speed.
 
 ## Adding a Custom Skill
 

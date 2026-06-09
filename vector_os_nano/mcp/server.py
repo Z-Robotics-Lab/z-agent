@@ -201,6 +201,7 @@ def _build_engine(agent: Agent) -> tuple[Any, Any]:
     from vector_os_nano.vcli.prompt import build_system_prompt  # noqa: PLC0415
     from vector_os_nano.vcli.engine import VectorEngine  # noqa: PLC0415
     from vector_os_nano.vcli.session import create_session  # noqa: PLC0415
+    from vector_os_nano.vcli.worlds import resolve_world  # noqa: PLC0415
 
     # 1. Resolve credentials (Claude OAuth > env > config)
     api_key, provider, model, base_url = resolve_credentials()
@@ -228,7 +229,15 @@ def _build_engine(agent: Agent) -> tuple[Any, Any]:
     engine = VectorEngine(backend=backend, registry=registry, system_prompt=system_prompt)
 
     # 6. VGG cognitive layer
-    engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)
+    # Pass world= so engine._world (and thus the learning-tier is_robot gate) is set
+    # for this LIVE robot-control entry point — without it the executor would treat a
+    # robot motor step as a dev step and the W1.1 reward gate would record a passing
+    # verify="True" motor step as a FAILURE (robot-learning regression).
+    engine.init_vgg(
+        agent=agent,
+        skill_registry=agent._skill_registry,
+        world=resolve_world(agent),
+    )
 
     # 7. Session
     session = create_session(metadata={"source": "mcp", "model": model})
@@ -356,21 +365,24 @@ def create_sim_stack(headless: bool = True) -> Agent:
     from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # noqa: PLC0415
     from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # noqa: PLC0415
     from vector_os_nano.perception.calibration import Calibration  # noqa: PLC0415
+    from vector_os_nano.skills.pick import SIM_PICK_CONFIG  # noqa: PLC0415
 
     _log(f"[MCP] Starting MuJoCo simulation (headless={headless})...")
 
     cfg = _load_config_with_fallback()
 
-    # Sim-specific overrides (mirrors run.py _init_sim)
-    cfg.setdefault("skills", {}).setdefault("pick", {}).update(
+    # Sim-specific overrides (mirrors run.py _init_sim).
+    # Start from SIM_PICK_CONFIG (single-sourced: hardware_offsets=False, z_offset=0.0)
+    # then layer in MCP-specific geometry tuning on top.
+    _pick_cfg = dict(SIM_PICK_CONFIG)
+    _pick_cfg.update(
         {
-            "z_offset": 0.0,
             "x_offset": 0.0,
             "pre_grasp_height": 0.04,
-            "hardware_offsets": False,
             "wrist_roll_offset": math.pi / 2,
         }
     )
+    cfg.setdefault("skills", {}).setdefault("pick", {}).update(_pick_cfg)
     cfg.setdefault("skills", {}).setdefault("home", {}).setdefault(
         "joint_values", [0.0, 0.0, 0.0, 0.0, 0.0]
     )
