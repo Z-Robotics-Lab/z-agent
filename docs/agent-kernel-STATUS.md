@@ -368,9 +368,19 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   real hardware unchanged; NO keyword tables. Validated live (real deepseek-v4-flash): 抓个东西 -> 1 pick step,
   empty params -> nearest; 抓香蕉 -> detect+pick(object_label=香蕉); 把所有东西抓一遍 -> foreach (regressions OK).
   9 + 3 new tests; 1007 green.
-- **R2-4 — Ctrl-C does not exit cleanly under mjpython + sync GUI exec.** Owner had to ^C^C then type `quit`.
-  The synchronous GUI exec path (Step 1) + permission prompt swallow KeyboardInterrupt. Make ^C abort the
-  running task and return to the prompt; a second ^C / `quit` exits cleanly.
+- **R2-4 — Ctrl-C does not exit cleanly under mjpython. [FIXED IN CODE 2026-06-09 — OWNER WINDOW CHECK PENDING].**
+  Owner had to ^C^C then type `quit`. ROOT CAUSE (hypothesis): mjpython drives a Cocoa main loop and leaves
+  SIGINT bound to its own handler, so a single ^C is swallowed and never raises KeyboardInterrupt in the REPL
+  (the turn-level handler at cli.py never fires). FIX: (1) `_ensure_sigint_under_mjpython()` re-installs
+  `signal.default_int_handler` under mjpython (reuses `viewer_mode.running_under_mjpython`), so one ^C raises
+  KeyboardInterrupt -> aborts the running task -> returns to the prompt; (2) the stated UX is now explicit — a
+  single ^C during a task arms a pending-exit and a second consecutive ^C (or `quit`/Ctrl-D) exits cleanly
+  (`interrupt_pending` flag, reset on any input). Headless test `tests/unit/vcli/test_cli_sigint.py` (handler
+  restored under mjpython, untouched off it). OWNER WINDOW CHECK STILL NEEDED (cannot verify the real mjpython
+  signal path headless): in `vector-cli --sim-go2`, start a task, ^C once -> it aborts to the prompt; ^C again
+  -> exits. If a single ^C still does nothing, report the exact behavior (the SIGINT may be deferred inside a
+  blocking GLFW call — a cooperative interrupt check in the pump would be the next step). NOTE: cli.py carries
+  32 pre-existing ruff errors (lint debt unrelated to this change — my edits add zero); a separate chore.
 - **R2-5 — Permission prompt blocks mid-task in sim. [FIXED — /loop iter 3].** "自己想个任务做" ->
   "Allow scan? [y/n/a]" hung. Fixed: `SkillWrapperTool.check_permissions` auto-allows MOTOR skills when the
   connected robot is SIMULATED (a sim action has no real-world consequence). Sim detected world-agnostically

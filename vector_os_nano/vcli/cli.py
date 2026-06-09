@@ -1238,6 +1238,26 @@ def _setup_logging(verbose: bool) -> None:
             logging.getLogger(name).setLevel(logging.ERROR)
 
 
+def _ensure_sigint_under_mjpython() -> None:
+    """Restore Python's default Ctrl-C handling when running under mjpython.
+
+    mjpython drives a Cocoa main loop on macOS and can leave SIGINT bound to its
+    own handler, so a single Ctrl-C is swallowed instead of raising
+    KeyboardInterrupt in the REPL (R2-4: the owner had to ^C^C then type quit).
+    Re-installing the default int handler makes one Ctrl-C abort the running task
+    and return to the prompt. No-op off mjpython; harmless if it cannot be set
+    (e.g. not the main thread).
+    """
+    from vector_os_nano.hardware.sim.viewer_mode import running_under_mjpython
+    if not running_under_mjpython():
+        return
+    import signal
+    try:
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+    except (ValueError, OSError):
+        pass  # not the main thread / no SIGINT on this platform — leave as-is
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
@@ -1245,6 +1265,7 @@ def main(argv: list[str] | None = None) -> None:
     _maybe_reexec_under_mjpython(args)
 
     _setup_logging(args.verbose)
+    _ensure_sigint_under_mjpython()
 
     # Resolve API key + provider from CLI flags > env vars > config file
     from vector_os_nano.vcli.config import resolve_credentials
@@ -1509,6 +1530,9 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     _tool_start_times: dict[str, float] = {}
+    # Ctrl-C UX (R2-4): one ^C aborts a running task and returns to the prompt;
+    # a second consecutive ^C (at the prompt) exits cleanly. Reset on any input.
+    interrupt_pending = False
 
     try:
         while True:
@@ -1521,9 +1545,13 @@ def main(argv: list[str] | None = None) -> None:
             except EOFError:
                 break
             except KeyboardInterrupt:
-                console.print("\n[dim]Use quit or Ctrl-D to exit.[/dim]")
+                if interrupt_pending:
+                    break  # second consecutive Ctrl-C -> exit cleanly
+                interrupt_pending = True
+                console.print("\n[dim]Press Ctrl-C again or type quit to exit.[/dim]")
                 continue
 
+            interrupt_pending = False  # any successful input clears the pending exit
             user_input = raw.strip()
             if not user_input:
                 continue
@@ -1915,7 +1943,10 @@ def main(argv: list[str] | None = None) -> None:
                 console.print()
 
             except KeyboardInterrupt:
-                console.print("\n[yellow]Interrupted.[/yellow]")
+                # One Ctrl-C aborts the running task and returns to the prompt;
+                # arm the pending-exit so an immediate second Ctrl-C quits (R2-4).
+                interrupt_pending = True
+                console.print("\n[yellow]Interrupted.[/yellow] [dim](Ctrl-C again or 'quit' to exit)[/dim]")
             except Exception as exc:
                 err_str = str(exc)
                 if "429" in err_str or "rate_limit" in err_str:
