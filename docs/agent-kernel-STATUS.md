@@ -4,7 +4,7 @@ One-page "where are we / what's next" for the agent-kernel line of work. Read th
 when resuming; the detailed plans are linked at the bottom.
 
 - Branch: `feat/verified-agent-kernel`. Base: `master`. No PR yet.
-- Last updated: 2026-06-06.
+- Last updated: 2026-06-09.
 - Scope guard: this is **vector-os-nano only** — not the UniLab go2arm-grasp work.
 
 ## North star (restated 2026-06-05)
@@ -263,7 +263,19 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   typed signal, LLM reasons over it, matching the architecture). `StepRecord.failure_class` is the additive
   LAST field (defaulted `""`, rule 6; trace replay round-trips; not serialized, same as `result_data`). 17
   tests `tests/vcli/cognitive/test_failure_class.py`; 1104 green. FOLLOW-UPS (non-blocking): annotate the field
-  as `Literal[FailureClass]`; optional per-skill timeout table. NEXT: W2.3 ObjectMemory re-query-freshest.
+  as `Literal[FailureClass]`; optional per-skill timeout table.
+
+- **Phase E Wave 2 — IN PROGRESS (this is the resume point).** Done: W2.4 typed `failure_class` (`14ae43c`).
+  NEXT = **W2.3 ObjectMemory re-query-freshest** (DEFERRED, not started): the verify-namespace predicates
+  `objects_in_room`/`find_object` (bound in `engine.py:915-916`) read a once-synced stale `ObjectMemory`
+  cache; make the reads re-query the live SceneGraph (store the ref in `sync_from_scene_graph`, decay-cache
+  fallback, byte-identical when no ref). NOTE: two automated build attempts failed at the workflow layer
+  (the implement agent finished its edits but did not emit its final structured result — a harness flake, not
+  a code problem); revisit by implementing inline or re-running. After W2.3, Wave 2's non-conflicting items
+  are done -> owner picks the next segment (W2.1/W2.2 need process-lifecycle coordination with the parallel
+  GUI session; or Wave 3 structural W3.x; or back to the live-bug backlog). Detailed plan:
+  `docs/agent-kernel-phase-e-plan.md`. (Parallel session shipped R2-1/R2-4/R2-6/R2-7a/R2-8 + go2-base
+  grounding `2edeb25` on the same branch — interleaved, no conflicts.)
 
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
