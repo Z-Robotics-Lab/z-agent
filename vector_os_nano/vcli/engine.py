@@ -573,6 +573,20 @@ class VectorEngine:
             self._vgg_enabled = False
             return
 
+        # W1.2 — Pre-flight validator: surface vocab/route/verify-namespace drift
+        # at init time with an actionable error instead of an opaque mid-plan failure.
+        # The validator is wrapped so a bug in the validator itself never crashes a
+        # healthy startup; a genuine WorldRegistrationError IS re-raised.
+        _world_name = getattr(world, "name", repr(world)) if world is not None else "<no-world>"
+        try:
+            self._preflight_validate_world(
+                _vocab_kwargs, selector, ns, _world_name, _has_base
+            )
+        except ValueError:
+            raise  # genuine drift — fail loud
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("VGG: preflight validator internal error (ignored): %s", exc)
+
         try:
             self._goal_decomposer = decomposer
             self._goal_executor = executor
@@ -688,6 +702,148 @@ class VectorEngine:
             planner_intro=self._NEUTRAL_PLANNER_INTRO,
         )
         return vocab.as_kwargs()
+
+    # W1.2 — special strategy names that are ALWAYS valid routes (built-in to
+    # _resolve_explicit; never need a registry entry).
+    _ALWAYS_VALID_STRATEGIES: frozenset[str] = frozenset(
+        {"code_as_policy", "tool_call", "answer"}
+    )
+
+    def _preflight_validate_world(
+        self,
+        vocab_kwargs: dict,
+        selector: Any,
+        verify_ns: dict,
+        world_name: str,
+        has_base: bool,
+    ) -> None:
+        """Validate that vocab, selector routes, and verify namespace are consistent.
+
+        Called during ``init_vgg`` after all three components are built but before
+        the VGG harness is wired up. Raises ``ValueError`` with a multi-line,
+        actionable message when drift is detected between:
+        - the strategies the vocab teaches and the routes the selector can resolve, OR
+        - the verify-function names the vocab exposes and the names present in the
+          verify namespace.
+
+        SCOPE GUARD: only validates statically-knowable names.
+        - When ``selector._registered_skill_names()`` returns None (undeterminable,
+          e.g. a registry-less world), skill-route validation is SKIPPED with a
+          WARNING rather than a hard fail. This prevents false positives on any world
+          that does not expose a skill registry.
+        - Strategies that are always-valid built-ins (``code_as_policy``,
+          ``tool_call``, ``answer``), registered capabilities, or base primitives
+          (when ``has_base`` is True) are exempted from registry checks.
+        - Non-``_skill``-suffix strategies that are not in the above categories
+          resolve by convention (the selector treats them as skills). These are
+          skipped: the runtime won't produce ``executor_type="invalid"`` for them.
+        """
+        # --- collect the static vocab surfaces ---
+        strategy_names: frozenset[str] = frozenset(
+            vocab_kwargs.get("strategy_descriptions", {}).keys()
+        )
+        verify_fn_names: frozenset[str] = frozenset(
+            vocab_kwargs.get("verify_functions", frozenset())
+        )
+
+        bad_strategies: list[str] = []
+        bad_verify_fns: list[str] = []
+
+        # --- validate strategy routes ---
+        # Only strategies ending with "_skill" can produce executor_type="invalid"
+        # at runtime (via _resolve_explicit). All other strategies either hit an
+        # explicit built-in route (code_as_policy/tool_call/answer), match a
+        # capability, match a base primitive, or fall through to the convention
+        # "treat as skill" path (which never returns "invalid").
+        try:
+            from vector_os_nano.vcli.cognitive.strategy_selector import _PRIMITIVE_NAMES
+            _SKILL_SUFFIX = "_skill"
+        except Exception as _imp_exc:  # noqa: BLE001
+            logger.debug("preflight: strategy_selector import failed (%s) — skipping route check", _imp_exc)
+            _PRIMITIVE_NAMES = frozenset()
+            _SKILL_SUFFIX = "_skill"
+
+        registered_names = selector._registered_skill_names()
+        capability_names: frozenset[str] = getattr(selector, "_capability_names", frozenset())
+
+        if registered_names is None:
+            # Undeterminable — skip the route check with a warning only.
+            logger.warning(
+                "VGG preflight: world %r — skill registry is not available; "
+                "strategy-route validation skipped (undeterminable)",
+                world_name,
+            )
+        else:
+            for name in sorted(strategy_names):
+                # Always-valid built-in routes.
+                if name in self._ALWAYS_VALID_STRATEGIES:
+                    continue
+                # Registered capability — always routable.
+                if name in capability_names:
+                    continue
+                # Base primitive — valid only when the agent has a base.
+                if has_base and name in _PRIMITIVE_NAMES:
+                    continue
+                # Strategies ending in "_skill" are the only ones the selector can
+                # reject at runtime with executor_type="invalid".
+                if name.endswith(_SKILL_SUFFIX):
+                    bare = name[: -len(_SKILL_SUFFIX)]
+                    # Also valid if the bare name itself is a registered skill or a
+                    # base primitive (the selector accepts both forms).
+                    if bare not in registered_names and not (
+                        has_base and bare in _PRIMITIVE_NAMES
+                    ):
+                        bad_strategies.append(name)
+                # Non-_skill strategies not in any of the above categories are
+                # convention-routed (selector returns executor_type="skill"); they
+                # can never produce "invalid" at runtime, so skip them.
+
+        # --- validate verify-function names ---
+        # A name is "documented-lazy" (opt-in, conditionally bound) when its
+        # signature string contains "opt-in" or "may be disabled" — this is the
+        # convention used for verify predicates that are available only under
+        # specific conditions (e.g. tests_pass requires VECTOR_DEV_ALLOW_TESTS).
+        # Lazy names that are absent from verify_ns generate a WARNING only, not
+        # a hard fail, because their absence is a designed opt-in posture, not drift.
+        verify_fn_signatures: dict[str, str] = vocab_kwargs.get("verify_fn_signatures", {})
+        for fn_name in sorted(verify_fn_names):
+            if fn_name not in verify_ns:
+                sig = verify_fn_signatures.get(fn_name, "")
+                if "opt-in" in sig or "may be disabled" in sig:
+                    logger.debug(
+                        "VGG preflight: world %r — verify-fn %r absent from namespace "
+                        "(documented opt-in/lazy binding; not a drift error)",
+                        world_name,
+                        fn_name,
+                    )
+                else:
+                    bad_verify_fns.append(fn_name)
+
+        if not bad_strategies and not bad_verify_fns:
+            return  # all clear — silent
+
+        # --- build a multi-line actionable error message ---
+        lines: list[str] = [
+            f"World registration drift detected for world {world_name!r}.",
+            "The decompose vocabulary, strategy selector, and verify namespace are"
+            " out of sync. Fix the world registration before this world can start.",
+        ]
+        if bad_strategies:
+            valid_set = sorted(registered_names) if registered_names else []
+            lines.append("")
+            lines.append("Unresolvable strategy names (not a registered skill, capability, or base primitive):")
+            for s in bad_strategies:
+                lines.append(f"  - {s!r}")
+            lines.append(f"Valid registered skill names: {valid_set!r}")
+        if bad_verify_fns:
+            valid_fns = sorted(verify_ns.keys())
+            lines.append("")
+            lines.append("Verify-function names with no provider in the verify namespace:")
+            for f in bad_verify_fns:
+                lines.append(f"  - {f!r}")
+            lines.append(f"Valid verify-namespace names: {valid_fns!r}")
+
+        raise ValueError("\n".join(lines))
 
     def _build_verifier_namespace(self, agent: Any) -> dict[str, Any]:
         """Build function namespace for GoalVerifier from agent state.

@@ -198,6 +198,23 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   is_robot inconsistency on the MCP path). 1050 green (+ foreach-bypass / robot-collapse / MCP-world
   regression tests). NEXT: W1.2 fail-loud world-registration preflight validator.
 
+- **Phase E W1.2 (this commit) — fail-loud world-registration preflight validator.** `init_vgg` now calls
+  `engine._preflight_validate_world(vocab, selector, verify_ns, world_name, has_base)` after the
+  vocab/selector/verify-namespace are built (before the harness is wired). It asserts every taught strategy
+  resolves to a real route (registered skill / capability / base-primitive-if-`has_base` / always-valid
+  built-in) and every taught verify-function has a provider in the verify namespace — raising a MULTI-LINE
+  actionable error (offending names + valid set) so registration drift fails at BOOT, not as an opaque
+  mid-plan step failure (strengthens rule 8 / fail-loud). SCOPE GUARD (no false positives): an undeterminable
+  registry (`_registered_skill_names()` None) WARNS not raises; convention-routed (non-`_skill`) strategies are
+  skipped (they never route to `invalid` at runtime); a verify-fn whose signature is marked opt-in /
+  "may be disabled" (e.g. dev's `tests_pass`) is documented-lazy (DEBUG, not drift). All 3 real worlds
+  (dev/robot/playground) boot silently; additive (+156/-0, engine.py only). 12 tests
+  `tests/vcli/test_w12_preflight_validator.py`; 1067 green. KNOWN LIMITATION (follow-up): the CLI wraps
+  `init_vgg` in `try/except Exception: pass` (`cli.py`, the concurrent GUI session's file), so at the live CLI
+  a drift surfaces as "VGG disabled" rather than the loud error; it DOES fail loud at the engine boundary +
+  MCP/eval + tests. The opt-in signature-string guard could later be made declarative. NEXT: W1.3
+  scene_graph -> TextLLM adapter.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —
