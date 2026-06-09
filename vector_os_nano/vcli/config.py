@@ -111,12 +111,23 @@ def resolve_credentials(
 ) -> tuple[str, str, str, str | None]:
     """Resolve API key, provider, model, and base_url from all sources.
 
-    Priority: CLI flags > Claude OAuth > env vars > config file > OpenRouter.
+    Priority: CLI flags > DeepSeek (env/config) > Vector OAuth > Claude OAuth >
+              ANTHROPIC_API_KEY (env/config) > OPENROUTER_API_KEY (env/config).
+
+    A repo-root .env is loaded first so env vars set there participate in the
+    same priority order as real env vars. load_dotenv() is a no-op when no .env
+    exists, so all existing behaviour is byte-identical when .env is absent.
 
     Returns:
         (api_key, provider, model, base_url)
     """
     import os  # noqa: PLC0415
+    from dotenv import load_dotenv  # noqa: PLC0415
+
+    # Load repo-root .env into the process environment BEFORE reading any env var.
+    # Standard find-from-cwd behaviour: walks up from cwd until it finds .env.
+    # No-op when absent; existing env vars are NOT overwritten (override=False default).
+    load_dotenv()
 
     config = load_config()
 
@@ -124,23 +135,35 @@ def resolve_credentials(
     provider = "anthropic"
     base_url = cli_base_url
 
-    # Explicit OpenAI-compatible provider (e.g. DeepSeek's native API) selected in
-    # config. Highest priority so it is the default at CLI startup, and returns
-    # early to BYPASS the OpenRouter "anthropic/" prefix below — a DeepSeek model id
-    # such as "deepseek-v4-flash" has no slash and must NOT be mangled. Additive:
-    # only taken when the config explicitly sets ``provider: deepseek``; every other
-    # provider path is unchanged. Routes to the OpenAI-compatible backend
-    # (create_backend sends any non-"anthropic" provider there).
-    if not cli_api_key and config.get("provider") == "deepseek":
-        ds_key = config.get("deepseek_api_key", "")
-        if ds_key:
-            ds_model = cli_model or config.get("deepseek_model") or "deepseek-v4-flash"
-            ds_base = (
-                cli_base_url
-                or config.get("deepseek_base_url")
-                or "https://api.deepseek.com"
-            )
-            return ds_key, "openai_compat", ds_model, ds_base
+    # DeepSeek branch: OpenAI-compatible provider (model ids carry no slash and must
+    # NOT be mangled by the OpenRouter "anthropic/" prefix below).  Activated when:
+    #   - DEEPSEEK_API_KEY is present in env/.env, OR
+    #   - config explicitly sets ``provider: deepseek`` with a key.
+    # Opt-out: if VECTOR_PROVIDER is explicitly set to 'openrouter' or 'anthropic',
+    # skip this branch so the user can force the fallback even when a DS key exists.
+    ds_key = os.environ.get("DEEPSEEK_API_KEY", "") or config.get("deepseek_api_key", "")
+    _forced_provider = os.environ.get("VECTOR_PROVIDER", "").lower()
+    deepseek_selected = (
+        _forced_provider == "deepseek"
+        or bool(os.environ.get("DEEPSEEK_API_KEY", ""))
+        or config.get("provider") == "deepseek"
+    )
+    deepseek_opted_out = _forced_provider in ("openrouter", "anthropic")
+
+    if not cli_api_key and deepseek_selected and not deepseek_opted_out and ds_key:
+        ds_model = (
+            cli_model
+            or os.environ.get("DEEPSEEK_MODEL")
+            or config.get("deepseek_model")
+            or "deepseek-v4-flash"
+        )
+        ds_base = (
+            cli_base_url
+            or os.environ.get("DEEPSEEK_BASE_URL")
+            or config.get("deepseek_base_url")
+            or "https://api.deepseek.com"
+        )
+        return ds_key, "openai_compat", ds_model, ds_base
 
     if not api_key:
         # Vector CLI's own OAuth credentials (independent rate limits)
@@ -173,8 +196,8 @@ def resolve_credentials(
             if not base_url:
                 base_url = config.get("base_url", "") or "https://openrouter.ai/api/v1"
 
-    # Model resolution: CLI flag > config > default
-    model = cli_model or config.get("model", "claude-sonnet-4-6")
+    # Model resolution: CLI flag > VECTOR_MODEL env > config > default
+    model = cli_model or os.environ.get("VECTOR_MODEL") or config.get("model", "claude-sonnet-4-6")
 
     # Auto-prefix for OpenRouter, strip prefix for Anthropic direct
     if provider == "openrouter" and "/" not in model:
