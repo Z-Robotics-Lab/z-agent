@@ -9,6 +9,69 @@ async executor threads without defensive copying.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
+
+# --------------------------------------------------------------------------
+# Failure taxonomy (W2.4) — a small CLOSED set of lowercase, world-agnostic
+# class strings, plus "" for success / no-failure. This is a DETERMINISTIC
+# typed signal derived ONLY from already-available execution evidence
+# (exception type, the step's diagnosis, the verify-vs-execute distinction) —
+# NO new model call. It lets observation-driven replan branch on the failure
+# CLASS instead of an opaque stringified error (e.g. timeout -> a shorter
+# strategy; ik_fail -> an alternate grasp pose); the LLM does the adapting.
+#
+# Kept embodiment-neutral on purpose: ``ik_fail`` is named after the GENERIC
+# unreachable-target failure mode, not the arm — any world that surfaces an
+# ``ik_unreachable``/``unreachable`` diagnosis maps to it.
+# --------------------------------------------------------------------------
+
+FailureClass = Literal[
+    "",            # success / no failure
+    "timeout",     # the step exceeded its (floored) wall-clock limit
+    "verify_fail", # executed without error but the deterministic verify was False
+    "ik_fail",     # an unreachable-target / IK diagnosis (e.g. ik_unreachable)
+    "tool_error",  # a kernel-tool dispatch / permission / allowlist failure
+    "exec_error",  # any other execution failure (selector/skill raised, generic)
+]
+
+# The closed set, for validation + tests. Excludes "" (the success sentinel).
+FAILURE_CLASSES: frozenset[str] = frozenset(
+    {"timeout", "verify_fail", "ik_fail", "tool_error", "exec_error"}
+)
+
+# Diagnosis substrings (lowercased) that indicate an unreachable-target / IK
+# failure, regardless of embodiment. Matched as substrings so "ik_unreachable",
+# "unreachable", etc. all classify as ``ik_fail``.
+_IK_DIAGNOSIS_MARKERS: tuple[str, ...] = ("ik_unreachable", "unreachable", "ik_fail")
+
+
+def classify_exec_failure(
+    *,
+    executor_type: str = "",
+    diagnosis: str = "",
+) -> str:
+    """Classify a NON-timeout, NON-verify execution failure deterministically.
+
+    Used for the ``exec_success is False`` path (the strategy ran but reported a
+    failure, e.g. a skill returned ``success=False`` with a ``diagnosis``, or the
+    tool/capability branch failed). Derived ONLY from already-available signals —
+    the executor_type of the resolved strategy and the step's machine-readable
+    ``diagnosis`` — so there is NO new model call.
+
+    Mapping (most specific wins):
+      - a diagnosis naming an unreachable-target / IK failure -> ``ik_fail``
+      - the kernel-``tool`` executor branch                   -> ``tool_error``
+      - anything else                                         -> ``exec_error``
+
+    The caller owns the timeout (-> ``timeout``) and verify-miss
+    (-> ``verify_fail``) paths; this helper never returns those or ``""``.
+    """
+    diag = (diagnosis or "").strip().lower()
+    if diag and any(marker in diag for marker in _IK_DIAGNOSIS_MARKERS):
+        return "ik_fail"
+    if executor_type == "tool":
+        return "tool_error"
+    return "exec_error"
 
 
 @dataclass(frozen=True)
@@ -117,6 +180,17 @@ class StepRecord:
     # {"output": <strategy output dict>, "verify_value": <raw verify value>}.
     # Additive + keyword-default so existing positional constructors are unaffected.
     result_data: dict = field(default_factory=dict)
+    # W2.4 — DETERMINISTIC typed failure class for a FAILED step (one of
+    # FAILURE_CLASSES; "" for a success/no-failure step). Derived ONLY from
+    # already-available evidence (timeout vs verify-miss vs execution failure,
+    # plus the step's machine-readable ``diagnosis`` and executor_type) — NO new
+    # model call. The harness threads this into the replan/re-decompose context so
+    # the re-plan (LLM) can branch on the failure CLASS instead of parsing the
+    # opaque ``error`` string. SECURITY (rule 10): a bounded enum string ONLY —
+    # never raw exception detail, file paths, or secrets. Additive + LAST +
+    # defaulted "" so every existing positional/keyword constructor is
+    # byte-unaffected (rule 6).
+    failure_class: str = ""
 
 
 @dataclass(frozen=True)

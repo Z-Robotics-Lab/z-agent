@@ -26,6 +26,7 @@ from vector_os_nano.vcli.cognitive.types import (
     GoalTree,
     StepRecord,
     SubGoal,
+    classify_exec_failure,
 )
 
 logger = logging.getLogger(__name__)
@@ -330,9 +331,12 @@ class GoalExecutor:
                 result = self._selector.select(sub_goal)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("GoalExecutor: selector.select raised: %s", exc)
+                # The selector raised before any strategy ran — an unclassified
+                # execution failure (W2.4).
                 return self._make_step(sub_goal, result=None, success=False,
                                        verify_result=False, error=str(exc),
-                                       start=step_start, fallback_used=False)
+                                       start=step_start, fallback_used=False,
+                                       failure_class="exec_error")
 
         strategy_name = self._extract_name(result)
 
@@ -371,6 +375,7 @@ class GoalExecutor:
                 error=error_msg,
                 fallback_used=False,
                 result_data={"output": exec_output, "verify_value": None},
+                failure_class="timeout",  # W2.4: post-hoc step-timeout path
             )
 
         # If execution itself failed (skill not found, unknown type, etc.),
@@ -378,6 +383,16 @@ class GoalExecutor:
         if not exec_success:
             logger.warning(
                 "GoalExecutor: execution failed for %s: %s", sub_goal.name, exec_error
+            )
+            # W2.4: classify deterministically from already-available signals —
+            # the resolved strategy's executor_type and the step's machine-readable
+            # ``diagnosis`` (e.g. 'ik_unreachable'). NO new model call; the raw
+            # error string is NOT widened (rule 10 — failure_class is a bounded enum).
+            failure_class = classify_exec_failure(
+                executor_type=getattr(result, "executor_type", ""),
+                diagnosis=str(exec_output.get("diagnosis", ""))
+                if isinstance(exec_output, dict)
+                else "",
             )
             return StepRecord(
                 sub_goal_name=sub_goal.name,
@@ -388,6 +403,7 @@ class GoalExecutor:
                 error=exec_error,
                 fallback_used=False,
                 result_data={"output": exec_output, "verify_value": None},
+                failure_class=failure_class,
             )
 
         # Verify — yields (bool, raw value) from the same sandbox.
@@ -478,6 +494,9 @@ class GoalExecutor:
                 error="" if verify_result_after else "failed after fallback",
                 fallback_used=True,
                 result_data=fb_result_data,
+                # W2.4: executed without error but verify is still False after the
+                # fallback -> a verify-miss. "" on the success branch.
+                failure_class="" if verify_result_after else "verify_fail",
             )
 
         # No fallback, verification failed
@@ -490,6 +509,7 @@ class GoalExecutor:
             error="verification failed",
             fallback_used=False,
             result_data={"output": exec_output, "verify_value": verify_value},
+            failure_class="verify_fail",  # W2.4: executed OK but verify was False
         )
 
     # ------------------------------------------------------------------
@@ -1161,8 +1181,14 @@ class GoalExecutor:
         start: float,
         fallback_used: bool,
         result_data: dict | None = None,
+        failure_class: str = "",
     ) -> StepRecord:
-        """Convenience factory for StepRecord."""
+        """Convenience factory for StepRecord.
+
+        ``failure_class`` (W2.4) is the deterministic typed failure class for a
+        FAILED step (one of FAILURE_CLASSES; "" for success). Defaulted "" so
+        existing callers are unaffected.
+        """
         strategy_name = self._extract_name(result) if result is not None else ""
         return StepRecord(
             sub_goal_name=sub_goal.name,
@@ -1173,6 +1199,7 @@ class GoalExecutor:
             error=error,
             fallback_used=fallback_used,
             result_data=result_data or {},
+            failure_class=failure_class,
         )
 
     @staticmethod

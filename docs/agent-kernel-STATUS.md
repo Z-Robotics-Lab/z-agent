@@ -251,6 +251,20 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   (operability: W2.1 daemon+run-registry+status/stop/log, W2.2 RUN_ID watchdog orphan sweep, W2.3 ObjectMemory
   re-query-freshest, W2.4 typed failure_class into replan) — see `docs/agent-kernel-phase-e-plan.md`.
 
+- **Phase E W2.4 (this commit) — typed `failure_class` into the replan context. Wave 2 started.** Replan could
+  only see a stringified error. Now each FAILED `StepRecord` carries a DETERMINISTIC typed `failure_class` (a
+  closed set: `timeout` / `verify_fail` / `ik_fail` / `tool_error` / `exec_error`; `""` for success), derived
+  ONLY from already-available evidence (timeout-vs-verify-miss-vs-exec, the step's machine-readable
+  `diagnosis`, executor_type) with NO new model call. Classified at every executor failure site (timeout gate
+  first; selector-raise -> exec_error; exec-fail -> `classify_exec_failure(executor_type, diagnosis)`
+  most-specific-wins; verify-miss -> verify_fail). Threaded onto `FailureRecord` (additive last field) and into
+  the re-decompose context the decomposer sees: each failure line gets a `[failure_class]` tag + a per-class
+  adaptation hint block, so the LLM re-plan adapts to the typed signal (selector unchanged — deterministic
+  typed signal, LLM reasons over it, matching the architecture). `StepRecord.failure_class` is the additive
+  LAST field (defaulted `""`, rule 6; trace replay round-trips; not serialized, same as `result_data`). 17
+  tests `tests/vcli/cognitive/test_failure_class.py`; 1104 green. FOLLOW-UPS (non-blocking): annotate the field
+  as `Literal[FailureClass]`; optional per-skill timeout table. NEXT: W2.3 ObjectMemory re-query-freshest.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —

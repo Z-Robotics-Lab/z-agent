@@ -52,6 +52,15 @@ class FailureRecord:
     strategy_tried: str
     error: str
     step_index: int
+    # W2.4 — the DETERMINISTIC typed failure class for this failed step (one of
+    # types.FAILURE_CLASSES; "" when the producing StepRecord carried none). It
+    # is threaded into the re-decompose context so the LLM re-plan can branch on
+    # the failure CLASS (e.g. timeout -> a shorter/faster strategy; ik_fail -> an
+    # alternate grasp pose) instead of parsing the opaque ``error`` string.
+    # SECURITY (rule 10): a bounded enum string only — no raw exception detail or
+    # paths. Additive + LAST + defaulted "" so existing constructions are
+    # byte-unaffected (rule 6).
+    failure_class: str = ""
 
 
 class VGGHarness:
@@ -330,12 +339,19 @@ class VGGHarness:
         enriched_context = world_context
         if failures:
             failure_summary = "\n".join(
-                f"  - {f.sub_goal_name}: {f.strategy_tried} failed ({f.error})"
-                for f in failures[-5:]  # last 5 failures
+                self._format_failure_line(f) for f in failures[-5:]  # last 5 failures
             )
             enriched_context += (
                 f"\n\nPrevious failures (avoid these strategies):\n{failure_summary}"
             )
+            # W2.4: a small DETERMINISTIC hint per typed failure class present in
+            # the recent failures, so the LLM re-plan can ADAPT to the class
+            # (timeout -> shorter/faster; ik_fail -> alternate pose; ...). The
+            # value is the LLM reasoning over the typed signal — no brittle
+            # deterministic strategy switch in the selector.
+            hint_block = self._failure_class_hints(failures[-5:])
+            if hint_block:
+                enriched_context += f"\n{hint_block}"
 
         if prior_validation_notes:
             invalid = self._invalid_strategies_from_notes(prior_validation_notes)
@@ -356,6 +372,68 @@ class VGGHarness:
         except Exception as exc:
             logger.warning("VGGHarness: decompose raised: %s", exc)
             return None
+
+    # W2.4 — typed-failure-class context surfacing
+    # ------------------------------------------------------------------
+
+    # A short, deterministic adaptation hint per failure class. The LLM does the
+    # actual adapting; this only names the class + the kind of change that helps,
+    # so the re-plan reads a typed signal instead of guessing from the error
+    # string. Bounded enum keys only — no per-failure free text here.
+    _FAILURE_CLASS_HINTS: dict[str, str] = {
+        "timeout": (
+            "timeout: the step exceeded its time budget — prefer a shorter/faster "
+            "strategy or a larger timeout_sec."
+        ),
+        "ik_fail": (
+            "ik_fail: a target was unreachable — try an alternate grasp/approach "
+            "pose, reposition, or a different object."
+        ),
+        "verify_fail": (
+            "verify_fail: the step ran but its check did not pass — try a different "
+            "strategy or add a precondition step."
+        ),
+        "tool_error": (
+            "tool_error: a kernel tool was denied or failed — use an allowed "
+            "tool/strategy instead."
+        ),
+        "exec_error": (
+            "exec_error: the strategy raised or could not run — pick a valid, "
+            "registered strategy."
+        ),
+    }
+
+    @staticmethod
+    def _format_failure_line(f: "FailureRecord") -> str:
+        """Render one failure as a human-readable context line (W2.4).
+
+        Prefixes the typed ``[failure_class]`` tag (a bounded enum string) so the
+        re-decompose sees the CLASS, not just the opaque ``error``. The error text
+        itself is the StepRecord's existing ``error`` field — this change does NOT
+        widen what that captures (rule 10).
+        """
+        cls = getattr(f, "failure_class", "") or ""
+        tag = f" [{cls}]" if cls else ""
+        return f"  - {f.sub_goal_name}: {f.strategy_tried} failed{tag} ({f.error})"
+
+    @classmethod
+    def _failure_class_hints(cls, failures: list["FailureRecord"]) -> str:
+        """Build a deterministic per-class hint block for the recent failures.
+
+        One line per DISTINCT failure class present (in first-seen order), drawn
+        from the bounded ``_FAILURE_CLASS_HINTS`` table. Returns "" when no recent
+        failure carries a typed class, so the path is byte-identical for the
+        untyped/abort case.
+        """
+        seen: list[str] = []
+        for f in failures:
+            c = getattr(f, "failure_class", "") or ""
+            if c and c in cls._FAILURE_CLASS_HINTS and c not in seen:
+                seen.append(c)
+        if not seen:
+            return ""
+        lines = "\n".join(f"  - {cls._FAILURE_CLASS_HINTS[c]}" for c in seen)
+        return f"Failure classes observed (adapt the plan to each):\n{lines}"
 
     @staticmethod
     def _invalid_strategies_from_notes(notes: tuple[str, ...]) -> list[str]:
@@ -424,6 +502,7 @@ class VGGHarness:
                             strategy_tried=child.strategy,
                             error=child.error,
                             step_index=i,
+                            failure_class=getattr(child, "failure_class", ""),
                         ))
                         overall_success = False
                 continue
@@ -447,6 +526,7 @@ class VGGHarness:
                     strategy_tried=step.strategy,
                     error=step.error,
                     step_index=i,
+                    failure_class=getattr(step, "failure_class", ""),
                 ))
                 overall_success = False
                 # Don't break — try remaining steps that don't depend on this one

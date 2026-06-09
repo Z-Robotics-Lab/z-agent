@@ -291,7 +291,9 @@ relative to `vector_os_nano/`.
   fine-tuning). Compilation is EVIDENCE-GATED (W1.1): `engine._maybe_compile_experience`
   requires `trace.success AND _evidence_ok(trace)`, so only evidence-backed traces compile.
 - `types.py` — frozen plan structures (`GoalTree`, `SubGoal`, `StepRecord`, `ForEachSpec`);
-  `SubGoal.foreach` carries a control-flow loop the executor expands at runtime.
+  `SubGoal.foreach` carries a control-flow loop the executor expands at runtime. A failed
+  `StepRecord` carries a deterministic typed `failure_class` (W2.4: timeout/verify_fail/ik_fail/
+  tool_error/exec_error) threaded into the replan context so the re-decompose adapts by class.
 - `observation.py` — the verified-loop observation surface: a pure JSON-safe export view over the
   frozen types (`step_view` / `run_snapshot`) + plain-text renderers; what a front-end renders.
 
