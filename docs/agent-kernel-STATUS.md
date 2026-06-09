@@ -290,21 +290,33 @@ owner must run the window; reason carefully + hand the visual/timing checks to t
 REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix must GENERALIZE across embodiments
 (arm AND go2 AND future), never an arm-only/banana-only patch. Backlog (rough priority):
 
-- **R2-1 — Go2 sim opens HEADLESS (no window) while the arm opens one.** [DIAGNOSED — fix is a dedicated
-  iteration]. ROOT CAUSE: the arm re-execs the WHOLE CLI under mjpython (`SimStartTool._reexec_under_mjpython_
-  with_sim`, sim_tool.py:159) → in-process `MuJoCoArm` `launch_passive` gets the mjpython main thread. The go2
-  path (`_start_go2`, sim_tool.py:401) launches a SEPARATE subprocess via `scripts/launch_explore.sh`, whose
-  bridge line is `python3 go2_vnav_bridge.py $NO_GUI` (launch_explore.sh:75) — plain `python3`, NOT mjpython.
-  On macOS `MuJoCoGo2.launch_passive` needs mjpython, so the go2 bridge viewer silently runs headless. FIX
-  DIRECTION (generalize the viewer mechanism): run the go2 bridge subprocess under mjpython on macOS when a
-  window is wanted (mirror the arm's mjpython requirement; e.g. pick the interpreter = mjpython on
-  darwin+gui else python3, for the bridge line only — the nav/TARE nodes don't need a viewer). RISK +
-  OWNER-GATED: `MuJoCoGo2` runs a background `_physics_thread` that calls `self._viewer.sync()` off the main
-  thread (mujoco_go2.py ~511); under mjpython that is the SAME cross-thread GLFW hazard the arm segfault fix
-  (118f886) addressed — opening the go2 window may segfault unless the go2 viewer/physics-thread access is
-  ALSO made single-thread-safe. So the dedicated R2-1 iteration must (a) launch the bridge under mjpython AND
-  (b) make the go2 viewer thread-safe, then HAND the window-opens-without-crashing check to the owner (cannot
-  be verified headless). Likely subsumes R2-6 (the go2 launch ERROR bleed).
+- **R2-1 — Go2 sim opens HEADLESS while the arm opens one.** [IN-PROCESS macOS PATH IMPLEMENTED (Stage 1+2),
+  headless-green — OWNER WINDOW CHECK PENDING (2026-06-09)]. OWNER DECISION (2026-06-09): target = in-process
+  `--sim-go2` on macOS (like the arm), NOT the Linux `launch_explore.sh` nav stack. Run modes were first
+  distinguished at a high level (owner ask): mode A arm `--sim`; B go2 in-process `--sim-go2` (+ optional ROS2
+  stack); C go2 + full explore/TARE stack via `launch_explore.sh` (Linux only); D headless — ALL must keep
+  working across mac/win/linux. SHIPPED THIS SESSION (headless-verified, NOT visually confirmed): a
+  **platform-aware run-mode seam** `hardware/sim/viewer_mode.py` (`resolve_viewer_drive_mode` ->
+  `main_thread_pump` for macOS/mjpython | `background_daemon` for Linux/Windows window | `headless`; trigger =
+  `mujoco.viewer._MJPYTHON` present, not bare `sys.platform`), and `MuJoCoGo2` made viewer-thread-safe: the
+  per-iteration physics bodies were extracted (`_physics_step_sinusoidal`/`_physics_step_mpc`, state lifted to
+  `self`), a public main-thread `step()` pump + `_drive_for()` added (`walk()` pumps `step()` on the
+  caller/main thread in pump mode instead of `time.sleep`, so the gait animates + the viewer syncs on the main
+  thread), the background `_physics_thread` is GATED OFF only in `main_thread_pump` mode, and
+  `_resume_physics`/`_pd_interpolate` no longer restart a daemon in pump mode. **Linux/Windows/headless are
+  BYTE-IDENTICAL** (daemon path unchanged) — go2+nav (modes B/C) preserved per owner ask. Half A (mjpython) is
+  ALREADY done for the in-process path (`cli._maybe_reexec_under_mjpython`, `_wants_window` covers `--sim-go2`);
+  the engine `_has_live_viewer` gate already runs go2 skill exec synchronously on the main thread, so `walk()`
+  pumps on main. Tests: `tests/unit/vcli/test_viewer_mode.py` (resolver, canonical) +
+  `tests/unit/test_go2_viewer_pump.py` (daemon gating, pump syncs on caller thread, walk pumps, resume no-daemon).
+  Canonical `tests/vcli tests/unit/vcli` 1050 green. **OWNER WINDOW CHECK STILL NEEDED** (cannot be verified
+  headless): run `vector-cli --sim-go2` on macOS → window opens, NO segfault, the dog stands then animates a
+  walk command in real time (frozen-when-idle is expected arm-parity v1; a background-input pump for live idle
+  rendering is a later follow-up). ROOT CAUSE (for ref): `MuJoCoGo2.connect` always started a daemon
+  `_physics_thread` (mujoco_go2.py ~511) that called `viewer.sync()` off-main = the cross-thread GLFW hazard
+  the arm segfault fix (118f886) addressed; the in-process `--sim-go2` path (cli.py ~521) hit it on macOS.
+  R2-6 is NOT subsumed (see below). DEFERRED: the Linux `launch_explore.sh` bridge-under-mjpython re-exec
+  (mode C is Linux-only, owner runs nav there) + a background-input-thread pump for live idle-window rendering.
 - **R2-2 — Grasp TIMES OUT under the real-time GUI. [FIXED — /loop iter 1].** Was: a completed pick (22.7s
   real-time under the viewer) was falsely marked timeout (foreach-body limit 15s) → bad replan. Fixed with
   skill-declared `typical_duration_sec` (single-source) + a GoalExecutor floor: effective timeout =
@@ -338,6 +350,11 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
 - **R2-6 — stderr / ROS2-proxy ERROR bleed into the rich panels.** `ERROR:...go2_ros2_proxy` / `sim_tool`
   lines interleave with the live boxes. Step-4 quieting covered skills/perception/hardware but ERROR-level
   ROS2-proxy noise still bleeds; fix stderr handling around the go2 launch + quiet the proxy in sim.
+  CLARIFIED (R2-1 workflow): NOT subsumed by the go2-launch rework. The `launch_explore.sh` subprocess stderr
+  is already redirected to `/tmp/vector_vnav.log` (sim_tool.py:428-431) and does NOT reach the panel; the real
+  bleed is IN-PROCESS Python logger calls — `Go2ROS2Proxy` (go2_ros2_proxy.py:177), piper proxy errors
+  (sim_tool.py:490), sim_tool warnings -> root logger -> rich-panel handler. Fix independently: extend
+  `_QUIET_LOGGERS` (cli.py:1205) to cover the ros2 proxy + sim_tool, or add a handler filter.
 - **R2-7 — capability: generalization + longer chains. [PARTIAL — /loop iter 4: grab-everything long chain
   now works end-to-end].** Found + fixed a producer/consumer contract bug that broke the grab-everything long
   chain: a "grab everything" plan decomposes to detect -> foreach(pick ${item.name}), but the robot-world
