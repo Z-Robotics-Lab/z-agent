@@ -313,9 +313,7 @@ class SimStartTool:
         a warning and returns (falls through to headless launch).
         """
         import os as _os
-        import shutil as _shutil
         import sys as _sys
-        from pathlib import Path as _Path
 
         if _os.environ.get("VECTOR_REEXEC") == "1":
             return  # already re-exec'd; do not loop
@@ -486,6 +484,12 @@ class SimStartTool:
                 piper_gripper = PiperGripperROS2Proxy()
                 piper_gripper.connect()
                 logger.info("[sim_tool] Piper proxies connected (arm + gripper)")
+            except ImportError as exc:
+                # ROS2/piper proxy deps unavailable (expected on a macOS/Windows
+                # sim host): run without the piper proxy, NOT an error.
+                logger.debug("[sim_tool] Piper proxy unavailable (no ROS2): %s", exc)
+                piper_arm = None
+                piper_gripper = None
             except Exception as exc:
                 logger.error("[sim_tool] Piper proxy setup failed: %s", exc)
                 piper_arm = None

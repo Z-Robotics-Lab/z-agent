@@ -365,14 +365,19 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   (incl. mixed-hardware safety); 1024 green. (Adversarial review caught + fixed an ANY-vs-ALL safety bug
   before commit.) NOTE: the mjpython prompt-input rendering hang for OTHER (non-skill) prompts is separate
   and owner-window-only.
-- **R2-6 — stderr / ROS2-proxy ERROR bleed into the rich panels.** `ERROR:...go2_ros2_proxy` / `sim_tool`
-  lines interleave with the live boxes. Step-4 quieting covered skills/perception/hardware but ERROR-level
-  ROS2-proxy noise still bleeds; fix stderr handling around the go2 launch + quiet the proxy in sim.
-  CLARIFIED (R2-1 workflow): NOT subsumed by the go2-launch rework. The `launch_explore.sh` subprocess stderr
-  is already redirected to `/tmp/vector_vnav.log` (sim_tool.py:428-431) and does NOT reach the panel; the real
-  bleed is IN-PROCESS Python logger calls — `Go2ROS2Proxy` (go2_ros2_proxy.py:177), piper proxy errors
-  (sim_tool.py:490), sim_tool warnings -> root logger -> rich-panel handler. Fix independently: extend
-  `_QUIET_LOGGERS` (cli.py:1205) to cover the ros2 proxy + sim_tool, or add a handler filter.
+- **R2-6 — ROS2-proxy ERROR bleed into the rich panels. [FIXED 2026-06-09, headless test].** `ERROR:...
+  go2_ros2_proxy` / `sim_tool` lines interleaved with the live boxes. The `launch_explore.sh` subprocess stderr
+  is already redirected to `/tmp/vector_vnav.log` (NOT the bleed); the real bleed was IN-PROCESS logger calls
+  logging an EXPECTED condition at ERROR: on a macOS/Windows sim host `rclpy` is absent, so
+  `Go2ROS2Proxy.connect()` (go2_ros2_proxy.py:177) and the piper proxy setup (sim_tool.py:490) hit
+  `ModuleNotFoundError('rclpy')` and logged `logger.error(...)` — and `_QUIET_LOGGERS` only pins those packages
+  to ERROR, so ERROR-level lines still emit. ROOT FIX: an unavailable ROS2 is NOT an error — both sites now
+  catch `ImportError` separately and `logger.debug(...)` (quiet in the non-verbose REPL, visible under
+  --verbose); real (non-import) failures still log ERROR. Test `tests/unit/vcli/test_ros2_proxy_logging.py`
+  (rclpy-absent connect logs DEBUG, no ERROR). Also removed 2 pre-existing dead imports in sim_tool.py. NOT
+  owner-gated (the ERROR-vs-DEBUG level is headless-tested; the in-window visual is the owner's). NOTE (deeper,
+  separate): `logging.basicConfig` captures the original stderr, so a genuinely-ERROR log during a turn can
+  still bypass the turn's `sys.stderr->devnull` mute — out of scope here (no expected-noise source remains).
 - **R2-7 — capability: generalization + longer chains. [PARTIAL — /loop iter 4: grab-everything long chain
   now works end-to-end].** Found + fixed a producer/consumer contract bug that broke the grab-everything long
   chain: a "grab everything" plan decomposes to detect -> foreach(pick ${item.name}), but the robot-world

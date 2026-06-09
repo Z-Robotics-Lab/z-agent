@@ -173,6 +173,12 @@ class Go2ROS2Proxy:
                 time.sleep(0.1)
 
             logger.info("Go2ROS2Proxy connected")
+        except ImportError as exc:
+            # ROS2/rclpy not installed (expected on a macOS/Windows sim host):
+            # the bridge is simply unavailable, NOT an error — so it must not
+            # bleed an ERROR line into the REPL panels. Visible under --verbose.
+            logger.debug("Go2ROS2Proxy: ROS2 unavailable, running without bridge: %s", exc)
+            self._connected = False
         except Exception as exc:
             logger.error("Failed to connect Go2ROS2Proxy: %s", exc)
             self._connected = False
