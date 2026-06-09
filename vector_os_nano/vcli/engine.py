@@ -551,11 +551,37 @@ class VectorEngine:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("VGG: ToolDispatcher unavailable: %s", exc)
 
+        # W1.4 — world producing-step primitives. A world (e.g. PlaygroundWorld)
+        # may expose ``build_step_primitives(agent)`` returning the per-step PRODUCER
+        # callables (keyed by the strategy name a plan emits, e.g.
+        # ``detect_objects_skill``) whose structured output a downstream ``foreach``
+        # iterates over the Blackboard. Inject them into the executor so the producers
+        # the tabletop/foreach tests exercise are the ones that actually run live (the
+        # executor consults this dict before the importlib primitive fallback, and
+        # dispatches the producer-only strategy name to it — see
+        # GoalExecutor._world_primitive_strategy).
+        # Built defensively: a world without the method, or any failure, leaves it
+        # None so the path stays byte-identical (importlib fallback only). NOTHING
+        # ELSE passes ``primitives`` to this construction, so reuse cannot clobber
+        # another injection.
+        _world_primitives: Any = None
+        if world is not None and hasattr(world, "build_step_primitives"):
+            try:
+                _world_primitives = world.build_step_primitives(agent)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "VGG: world.build_step_primitives failed (%s); "
+                    "falling back to importlib primitive resolution",
+                    exc,
+                )
+                _world_primitives = None
+
         try:
             executor = GoalExecutor(
                 strategy_selector=selector,
                 verifier=verifier,
                 skill_registry=skill_registry,
+                primitives=_world_primitives,
                 build_context=_build_context,
                 stats=stats,
                 visual_verifier_agent=agent,

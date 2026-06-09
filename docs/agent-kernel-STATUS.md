@@ -229,6 +229,28 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   `BackendTextLLM` has no live wiring — the deliverable is the decoupling + mockability. 57 harness + 1074
   canonical green. NEXT: W1.4 playground build_step_primitives wire-into-live (or delete) — last Wave 1 item.
 
+- **Phase E W1.4 (this commit) — playground step-primitives wired live; WAVE 1 COMPLETE.** (Owner: WIRE.)
+  `playground.build_step_primitives(agent)` — the per-step PRODUCER dict the tabletop/foreach tests exercise —
+  was tested-but-dead (the live executor never called it). Now `init_vgg` injects it into the GoalExecutor
+  `primitives=` slot (defensive: a world without the method / any failure -> None -> byte-identical importlib
+  path). A genuine ROUTING gap surfaced beyond a one-line wire: the producer strategy names end in `_skill`, so
+  the live StrategySelector routes them to `skill`/`invalid` (and the `invalid` route DROPS strategy_params) —
+  never to `primitive`, so the slot was never consulted live. Fixed with a pre-selector intercept
+  `GoalExecutor._world_primitive_strategy`: when a sub-goal's explicit `*_skill` strategy is a key in the
+  injected producer dict, dispatch it DIRECTLY as a `primitive` StrategyResult preserving the real
+  strategy_params (so the `${obj.name}` foreach binding survives). Tightly gated (dict primitives only,
+  producer-only `*_skill` keys; PlaygroundWorld's `detect_objects_skill`/`locate_rooms_skill` don't collide
+  with real skill strategy names like `detect_skill`); inert when `_primitives` is None (dev/robot
+  byte-identical); the producer can't self-certify (verify stays sim-oracle deterministic). 3 live-wiring tests
+  prove the WORLD producer runs (not the importlib fallback) + a real detect->foreach(pick,place) drives
+  leaf==produced==6 with each verify flipping on real oracle state. 1081 green. FOLLOW-UPS: the intercept's
+  architectural home is `strategy_selector.py` (mirroring `_capability_names`) — done executor-side because
+  strategy_selector.py was outside this loop's allowed files; could additionally exclude registered-skill names
+  for defense-in-depth. **WAVE 1 (moat hardening) COMPLETE: W1.1 evidence-reward `85d59a2` + W1.2 preflight
+  `7afe2c0` + W1.3 TextLLM adapter `c3103ad` + W1.4 live primitives (this).** NEXT: owner picks Wave 2
+  (operability: W2.1 daemon+run-registry+status/stop/log, W2.2 RUN_ID watchdog orphan sweep, W2.3 ObjectMemory
+  re-query-freshest, W2.4 typed failure_class into replan) — see `docs/agent-kernel-phase-e-plan.md`.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —

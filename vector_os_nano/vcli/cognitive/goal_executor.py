@@ -311,14 +311,28 @@ class GoalExecutor:
         """Execute a single sub_goal and return its StepRecord."""
         step_start = time.monotonic()
 
-        # Select strategy
-        try:
-            result = self._selector.select(sub_goal)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("GoalExecutor: selector.select raised: %s", exc)
-            return self._make_step(sub_goal, result=None, success=False,
-                                   verify_result=False, error=str(exc),
-                                   start=step_start, fallback_used=False)
+        # W1.4 — world producing-step primitive: if the sub-goal's explicit strategy
+        # names a world-injected producer (build_step_primitives), dispatch it
+        # DIRECTLY as a ``primitive`` (preserving the sub-goal's real strategy_params
+        # for the ${...} blackboard binding) instead of letting the StrategySelector
+        # route the ``*_skill`` name to ``skill``/``invalid`` — neither of which would
+        # run the wired producer. Only producer-only ``*_skill`` keys match, so a real
+        # registered skill is never intercepted (see _world_primitive_strategy).
+        _prim_key = self._world_primitive_strategy(sub_goal)
+        if _prim_key is not None:
+            from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
+            result: Any = StrategyResult(
+                "primitive", _prim_key, dict(sub_goal.strategy_params)
+            )
+        else:
+            # Select strategy
+            try:
+                result = self._selector.select(sub_goal)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("GoalExecutor: selector.select raised: %s", exc)
+                return self._make_step(sub_goal, result=None, success=False,
+                                       verify_result=False, error=str(exc),
+                                       start=step_start, fallback_used=False)
 
         strategy_name = self._extract_name(result)
 
@@ -795,6 +809,34 @@ class GoalExecutor:
         error = self._unmatched_strategy_error(name, executor_type)
         logger.warning("GoalExecutor: %s", error)
         return False, error, {}
+
+    def _world_primitive_strategy(self, sub_goal: SubGoal) -> str | None:
+        """Return the injected world-primitive key for *sub_goal*'s strategy, or None.
+
+        W1.4 — a world (e.g. PlaygroundWorld) injects per-step PRODUCER primitives
+        via ``GoalExecutor(primitives=...)``, keyed by the EXACT strategy name a plan
+        emits for the producing step (``detect_objects_skill`` / ``locate_rooms_skill``
+        and, for a foreach body, ``pick_skill`` / ``place_skill`` when the world
+        provides them). The StrategySelector would route such a ``*_skill`` name to
+        ``skill`` (its bare name) or, when the bare name is not a registered skill, to
+        ``invalid`` — and the ``invalid`` route DROPS the sub-goal's real
+        ``strategy_params`` (it carries diagnostics instead), so a ``${obj.name}``
+        binding would be lost. Neither route consults ``self._primitives``, so the
+        wired producer the tabletop/foreach tests exercise would never run live.
+
+        Match the sub-goal's explicit strategy against the injected dict so the
+        producer is dispatched DIRECTLY (preserving ``strategy_params`` for the
+        blackboard ``${...}`` binding). Only a ``dict`` primitives namespace and
+        producer-only ``*_skill`` keys are eligible, so a real registered skill is
+        never shadowed. Returns the matching key, or None (normal selection runs).
+        """
+        prims = self._primitives
+        if not isinstance(prims, dict) or not prims:
+            return None
+        strategy = getattr(sub_goal, "strategy", "")
+        if not isinstance(strategy, str) or not strategy.endswith("_skill"):
+            return None
+        return strategy if strategy in prims else None
 
     def _valid_strategy_set(self) -> list[str] | None:
         """Return the sorted registered skill names, or None if undeterminable."""

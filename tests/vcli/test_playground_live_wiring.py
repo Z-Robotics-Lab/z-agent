@@ -148,6 +148,271 @@ class TestScenarioSelectsPlayground:
 
 
 # ---------------------------------------------------------------------------
+# W1.4 — the LIVE executor runs the WORLD's producing-step primitive.
+#
+# build_step_primitives(agent) returns the per-step PRODUCER the tabletop/foreach
+# tests exercise (keyed by DETECT_STRATEGY). Before W1.4 init_vgg never injected it,
+# so the real StrategySelector routed ``detect_objects_skill`` to ``invalid``
+# (its bare name ``detect_objects`` is not a registered skill) and the producer
+# never ran live. These tests prove the WIRED producer is the one that runs through
+# the engine's real selector → executor path, and that its output drives a real
+# foreach end-to-end (leaf count == produced item count, verify on real oracle).
+# ---------------------------------------------------------------------------
+
+
+class _MutableStubArm:
+    """A deterministic stand-in for the SO-101 arm whose ground truth advances.
+
+    Shares the exact oracle surface the playground predicates read. pick lifts the
+    held object onto the EE; place drops it (resting) into the tray region, so
+    holding_object()/placed_count() flip False->True as the chain runs.
+    """
+
+    _TABLE_Z = 0.02
+    _LIFT_Z = 0.20
+    _TRAY_CENTRE = (0.35, 0.12)  # inside TABLETOP_TRAY's (0.20, 0.0, 0.50, 0.25)
+
+    def __init__(self, object_names: tuple[str, ...]) -> None:
+        self._objects: dict[str, list[float]] = {
+            name: [0.10 + 0.05 * i, -0.10, self._TABLE_Z]
+            for i, name in enumerate(object_names)
+        }
+        self._ee: list[float] = [0.0, 0.30, 0.30]
+        self._connected = True
+
+    def get_object_positions(self) -> dict[str, list[float]]:
+        return {k: list(v) for k, v in self._objects.items()}
+
+    def get_joint_positions(self) -> list[float]:
+        return [0.0, 0.0, 0.0, 0.0, 0.0]
+
+    def fk(self, _joints: Any):
+        return list(self._ee), None
+
+    def lift(self, name: str) -> None:
+        pos = self._objects[name]
+        pos[2] = self._LIFT_Z
+        self._ee = [pos[0], pos[1], pos[2]]
+
+    def drop_in_tray(self, name: str) -> None:
+        self._objects[name] = [self._TRAY_CENTRE[0], self._TRAY_CENTRE[1], self._TABLE_Z]
+        self._ee = [0.0, 0.30, 0.30]
+
+
+class _StubGripper:
+    def __init__(self) -> None:
+        self._holding = False
+
+    def is_holding(self) -> bool:
+        return self._holding
+
+
+def _arm_registry():
+    """A real SkillRegistry carrying the arm skills — so ``detect_objects`` is NOT
+    a registered skill and the selector would route DETECT_STRATEGY to ``invalid``
+    (exactly the live case the producer override has to win over)."""
+    from vector_os_nano.core.skill import SkillRegistry
+    from vector_os_nano.skills.detect import DetectSkill
+    from vector_os_nano.skills.home import HomeSkill
+    from vector_os_nano.skills.pick import PickSkill
+
+    reg = SkillRegistry()
+    for skill in (DetectSkill(), HomeSkill(), PickSkill()):
+        reg.register(skill)
+    return reg
+
+
+class TestLiveExecutorRunsWorldPrimitive:
+    def test_init_vgg_injects_world_step_primitives(self) -> None:
+        """init_vgg wires the world's build_step_primitives into the executor."""
+        from vector_os_nano.playground.world import PlaygroundWorld
+
+        agent = _fake_arm_agent()
+        world = PlaygroundWorld()  # default tabletop (arm)
+        eng = _make_engine()
+        eng.init_vgg(agent=agent, world=world, skill_registry=_arm_registry())
+
+        prims = eng._goal_executor._primitives
+        assert isinstance(prims, dict)
+        # The producer is keyed by the strategy name a plan emits for the producing
+        # step — and it is callable (the real detect producer bound to the agent).
+        assert PlaygroundWorld.DETECT_STRATEGY in prims
+        assert callable(prims[PlaygroundWorld.DETECT_STRATEGY])
+
+    def test_live_selector_routes_detect_strategy_to_world_producer(self) -> None:
+        """Through the REAL StrategySelector, a producing step emitting
+        DETECT_STRATEGY runs the WORLD producer (not the importlib fallback, which
+        would yield nothing / fail invalid). Proof: the produced objects equal the
+        scenario's sim-oracle objects."""
+        from vector_os_nano.playground.world import PlaygroundWorld
+        from vector_os_nano.vcli.cognitive.blackboard import Blackboard
+        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+
+        object_names = PlaygroundWorld().scenario.object_names
+        arm = _MutableStubArm(object_names)
+        agent: Any = SimpleNamespace(_arm=arm, _gripper=_StubGripper())
+
+        world = PlaygroundWorld()
+        eng = _make_engine()
+        eng.init_vgg(agent=agent, world=world, skill_registry=_arm_registry())
+        executor = eng._goal_executor
+        executor.blackboard = Blackboard()  # the harness attaches this per run
+
+        # A single producing step whose strategy is the playground's DETECT_STRATEGY.
+        tree = GoalTree(
+            goal="detect every object",
+            sub_goals=(
+                SubGoal(
+                    name="detect_all",
+                    description="detect every object on the table",
+                    verify="len(detect_objects()) > 0",
+                    strategy=PlaygroundWorld.DETECT_STRATEGY,
+                ),
+            ),
+        )
+        trace = executor.execute(tree)
+
+        assert trace.success is True
+        detect_step = next(s for s in trace.steps if s.sub_goal_name == "detect_all")
+        # The WORLD producer ran: its structured output carries the real sim-oracle
+        # objects. The importlib fallback has no ``detect_objects_skill`` primitive,
+        # so without the wiring this step would fail invalid and yield no objects.
+        produced = detect_step.result_data["output"]
+        assert produced["count"] == len(object_names)
+        assert {o["name"] for o in produced["objects"]} == set(object_names)
+
+    def test_wired_producer_drives_real_foreach_end_to_end(self) -> None:
+        """The wired producer's output drives a REAL foreach: leaf count equals the
+        produced item count and each per-step verify flips on real oracle state."""
+        import json
+
+        from vector_os_nano.playground.world import PlaygroundWorld
+        from vector_os_nano.vcli.cognitive.blackboard import Blackboard
+
+        # A scenario WITH a tray drop-zone so placed_count() verifies per item.
+        from vector_os_nano.playground.catalog import TABLETOP_TRAY
+
+        object_names = TABLETOP_TRAY.object_names
+        n = len(object_names)
+        arm = _MutableStubArm(object_names)
+        gripper = _StubGripper()
+        agent: Any = SimpleNamespace(_arm=arm, _gripper=gripper)
+
+        # The foreach body's pick/place are producer-only ``*_skill`` names too, so
+        # the SAME world-primitive override routes them live (the real selector would
+        # otherwise mark them invalid). They advance the shared oracle so verify flips.
+        def pick(object_label: str | None = None, **_: Any) -> dict[str, Any]:
+            if object_label in arm.get_object_positions():
+                arm.lift(object_label)
+                gripper._holding = True
+            return {"picked": object_label}
+
+        def place(object_label: str | None = None, **_: Any) -> dict[str, Any]:
+            if object_label in arm.get_object_positions():
+                arm.drop_in_tray(object_label)
+                gripper._holding = False
+            return {"placed": object_label}
+
+        class _TrayWorld(PlaygroundWorld):
+            """Augments build_step_primitives with the body pick/place producers so
+            the whole chain routes through the wired-primitive path (no DirectSelector)."""
+
+            def build_step_primitives(self, a: Any) -> dict[str, Any]:
+                prims = dict(super().build_step_primitives(a))
+                prims["pick_skill"] = pick
+                prims["place_skill"] = place
+                return prims
+
+        world = _TrayWorld(TABLETOP_TRAY)
+        eng = _make_engine()
+        eng.init_vgg(agent=agent, world=world, skill_registry=_arm_registry())
+        executor = eng._goal_executor
+        executor.blackboard = Blackboard()
+
+        # Pre-run: nothing placed, nothing held (the oracle starts clean).
+        ns = world.build_verify_namespace(agent)
+        assert ns["placed_count"]() == 0
+        assert ns["holding_object"]() is False
+
+        tree = _grab_everything_tree()
+        trace = executor.execute(tree)
+
+        assert trace.success is True
+        # The detect step's produced list is what the foreach iterates.
+        detect_step = next(s for s in trace.steps if s.sub_goal_name == "detect_all")
+        detected = detect_step.result_data["output"]["objects"]
+        assert {o["name"] for o in detected} == set(object_names)
+
+        names = [s.sub_goal_name for s in trace.steps]
+        pick_steps = [x for x in names if x.endswith(".pick_obj")]
+        place_steps = [x for x in names if x.endswith(".place_obj")]
+        # Leaf count EQUALS the produced item count — driven by the wired producer.
+        assert len(pick_steps) == len(detected) == n
+        assert len(place_steps) == len(detected) == n
+
+        # Every per-step verify passed DETERMINISTICALLY on the real oracle.
+        for s in trace.steps:
+            assert s.success is True, f"step {s.sub_goal_name} failed: {s.error}"
+            assert s.verify_result is True
+            assert s.visual_override is False
+
+        # The oracle advanced: all n objects ended resting in the tray.
+        assert ns["placed_count"]() == n
+        assert ns["holding_object"]() is False
+
+        # Sanity: the captured producer output is JSON-safe structured data.
+        json.dumps(detect_step.result_data["output"])
+
+
+def _grab_everything_tree():
+    """scan -> detect_all(DETECT_STRATEGY) -> foreach(obj): pick -> place."""
+    from vector_os_nano.playground.world import PlaygroundWorld
+    from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
+
+    body = (
+        SubGoal(
+            name="pick_obj",
+            description="pick up the current object",
+            verify="holding_object()",
+            strategy="pick_skill",
+            strategy_params={"object_label": "${obj.name}"},
+        ),
+        SubGoal(
+            name="place_obj",
+            description="place the current object in the tray",
+            verify="placed_count() >= 1",
+            strategy="place_skill",
+            depends_on=("pick_obj",),
+            strategy_params={"object_label": "${obj.name}"},
+        ),
+    )
+    return GoalTree(
+        goal="grab everything",
+        sub_goals=(
+            SubGoal(
+                name="detect_all",
+                description="detect every object on the table",
+                verify="len(detect_objects()) > 0",
+                strategy=PlaygroundWorld.DETECT_STRATEGY,
+            ),
+            SubGoal(
+                name="grab_each",
+                description="pick and place each detected object, one by one",
+                verify="True",
+                strategy="",
+                depends_on=("detect_all",),
+                foreach=ForEachSpec(
+                    source_step="detect_all",
+                    source_path="objects",
+                    var="obj",
+                    body=body,
+                ),
+            ),
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Unknown scenario id fails loud (never a silent fallback).
 # ---------------------------------------------------------------------------
 
