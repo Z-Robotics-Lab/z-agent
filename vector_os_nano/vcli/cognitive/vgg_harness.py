@@ -437,17 +437,9 @@ class VGGHarness:
                 except Exception:
                     pass
 
-            # Record stats
-            if self._executor._stats is not None:
-                try:
-                    self._executor._stats.record(
-                        strategy_name=step.strategy,
-                        sub_goal_name=step.sub_goal_name,
-                        success=step.success,
-                        duration_sec=step.duration_sec,
-                    )
-                except Exception:
-                    pass
+            # Record stats (W1.1: evidence-gated via the executor's single chokepoint,
+            # which owns is_robot — the harness no longer carries the gate).
+            self._executor._record_strategy_stats(step, sub_goal)
 
             if not step.success:
                 failures.append(FailureRecord(

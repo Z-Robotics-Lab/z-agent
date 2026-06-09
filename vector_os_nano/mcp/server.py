@@ -201,6 +201,7 @@ def _build_engine(agent: Agent) -> tuple[Any, Any]:
     from vector_os_nano.vcli.prompt import build_system_prompt  # noqa: PLC0415
     from vector_os_nano.vcli.engine import VectorEngine  # noqa: PLC0415
     from vector_os_nano.vcli.session import create_session  # noqa: PLC0415
+    from vector_os_nano.vcli.worlds import resolve_world  # noqa: PLC0415
 
     # 1. Resolve credentials (Claude OAuth > env > config)
     api_key, provider, model, base_url = resolve_credentials()
@@ -228,7 +229,15 @@ def _build_engine(agent: Agent) -> tuple[Any, Any]:
     engine = VectorEngine(backend=backend, registry=registry, system_prompt=system_prompt)
 
     # 6. VGG cognitive layer
-    engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)
+    # Pass world= so engine._world (and thus the learning-tier is_robot gate) is set
+    # for this LIVE robot-control entry point — without it the executor would treat a
+    # robot motor step as a dev step and the W1.1 reward gate would record a passing
+    # verify="True" motor step as a FAILURE (robot-learning regression).
+    engine.init_vgg(
+        agent=agent,
+        skill_registry=agent._skill_registry,
+        world=resolve_world(agent),
+    )
 
     # 7. Session
     session = create_session(metadata={"source": "mcp", "model": model})

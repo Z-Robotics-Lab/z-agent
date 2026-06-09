@@ -19,6 +19,7 @@ import time
 from collections import deque
 from typing import Any, Callable
 
+from vector_os_nano.vcli.cognitive.trace_store import step_evidence_ok
 from vector_os_nano.vcli.cognitive.types import (
     ExecutionTrace,
     ForEachSpec,
@@ -46,6 +47,7 @@ class GoalExecutor:
         tool_dispatcher: Any = None,
         capability_registry: Any = None,
         blackboard: Any = None,
+        is_robot: bool = False,
     ) -> None:
         """Initialise the executor.
 
@@ -73,6 +75,16 @@ class GoalExecutor:
                              captures each successful step's structured output under
                              the sub-goal name. None disables capture; the executor's
                              behavior is otherwise byte-identical.
+            is_robot: True when the active world is a robot world. The SINGLE source
+                             of truth for the per-step learning-tier reward gate
+                             (W1.1): every bandit record site routes through
+                             ``_record_strategy_stats``, which gates the recorded
+                             ``success`` on ``step_evidence_ok(..., is_robot)``. For a
+                             robot world the gate is unconditionally True, so the reward
+                             collapses to ``step.success`` (robot learning unchanged);
+                             for dev/playground it additionally requires deterministic
+                             evidence. Defaulted False so existing constructions are
+                             byte-identical.
         """
         self._selector = strategy_selector
         self._verifier = verifier
@@ -85,6 +97,29 @@ class GoalExecutor:
         self._tool_dispatcher = tool_dispatcher
         self._capability_registry = capability_registry
         self._blackboard = blackboard
+        self._is_robot = bool(is_robot)
+
+    # ------------------------------------------------------------------
+    # Strategy-stats reward gate (W1.1) — single chokepoint
+    # ------------------------------------------------------------------
+
+    def _record_strategy_stats(self, step: StepRecord, sub_goal: SubGoal) -> None:
+        # W1.1: gate the per-step bandit reward on deterministic evidence. The reward is
+        # step.success AND step_evidence_ok(...): robot world collapses to step.success
+        # (learning unchanged); dev/playground additionally requires real evidence so a
+        # sentinel/visual_override 'success' cannot train the bandit. Single chokepoint
+        # for ALL record sites (execute fallback, foreach, harness).
+        if self._stats is None:
+            return
+        try:
+            self._stats.record(
+                strategy_name=step.strategy,
+                sub_goal_name=step.sub_goal_name,
+                success=step.success and step_evidence_ok(step, sub_goal, self._is_robot),
+                duration_sec=step.duration_sec,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("GoalExecutor: stats.record raised: %s", exc)
 
     # ------------------------------------------------------------------
     # Blackboard accessor (Stage 1b)
@@ -177,17 +212,8 @@ class GoalExecutor:
             step = self._execute_sub_goal(sub_goal)
             steps.append(step)
 
-            # Record to stats if available
-            if self._stats is not None:
-                try:
-                    self._stats.record(
-                        strategy_name=step.strategy,
-                        sub_goal_name=step.sub_goal_name,
-                        success=step.success,
-                        duration_sec=step.duration_sec,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("GoalExecutor: stats.record raised: %s", exc)
+            # Record to stats if available (W1.1: evidence-gated via the chokepoint).
+            self._record_strategy_stats(step, sub_goal)
 
             if on_step is not None:
                 try:
@@ -563,16 +589,10 @@ class GoalExecutor:
                 step = self._execute_sub_goal(child)
                 records.append(step)
 
-                if self._stats is not None:
-                    try:
-                        self._stats.record(
-                            strategy_name=step.strategy,
-                            sub_goal_name=step.sub_goal_name,
-                            success=step.success,
-                            duration_sec=step.duration_sec,
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning("GoalExecutor: stats.record raised: %s", exc)
+                # W1.1: ``child`` (the per-iteration body template) is the predicate
+                # carrier — it holds the verify — so the evidence gate must read it,
+                # NOT the parent foreach sub_goal.
+                self._record_strategy_stats(step, child)
 
                 if on_step is not None:
                     try:

@@ -255,3 +255,28 @@ def evidence_passed(trace: ExecutionTrace, is_robot: bool = False) -> bool:
         and not getattr(s, "visual_override", False)
         for s in checked
     )
+
+
+def step_evidence_ok(step: StepRecord, sub_goal: SubGoal, is_robot: bool = False) -> bool:
+    """True when a SINGLE step's pass is backed by deterministic evidence.
+
+    The per-step analogue of ``evidence_passed`` (it mirrors that gate's
+    per-step inner clause EXACTLY): the step's sub-goal must either be a
+    legitimately-exempt answer-only step OR carry a real predicate verify (not
+    the sentinels ``""`` / ``"True"``), the step's ``verify_result`` must be
+    True, and the pass must NOT be a VLM visual override (not replayable, so not
+    deterministic evidence).
+
+    Robot world (``is_robot=True``): always True — robot async motor skills
+    legitimately use ``verify="True"``, so robot LEARNING is NOT starved by this
+    gate (the caller AND-composes with ``step.success``, so a FAILED robot motor
+    step is still not rewarded). Only dev/playground worlds with real predicates
+    tighten the learning signal.
+    """
+    if is_robot:
+        return True
+    return bool(
+        (_is_answer_only(sub_goal) or (sub_goal.verify or "").strip() not in _NO_EVIDENCE)
+        and step.verify_result
+        and not getattr(step, "visual_override", False)
+    )

@@ -180,6 +180,24 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   flood). 969 green + new calibration tests. THE FULL CHAIN now works headless end-to-end: NL (中/英) ->
   decompose binds target -> detect verify passes -> pick physically grasps -> holding_object() True.
 
+- **Phase E W1.1 (this commit) — learning-tier evidence gate. MOAT.** First commit of **Phase E**
+  (dimos-informed hardening; plan `docs/agent-kernel-phase-e-plan.md`, Wave 1 = moat hardening). Closes the
+  one moat leak the dimos comparison surfaced: the LEARNING tier trained on raw `step.success`, so a VLM
+  `visual_override` or a sentinel `verify="True"` "success" could train the strategy bandit AND compile into
+  a "verified" reusable template. Now the per-step bandit reward and template compilation are gated on the
+  SAME deterministic evidence the engine uses for its per-trace `verified` flag. New
+  `trace_store.step_evidence_ok` (per-step analogue of `evidence_passed`; mirrors its inner clause +
+  `is_robot` leniency). Reward = `step.success AND step_evidence_ok(...)` — robot world collapses to
+  `step.success` (robot learning BYTE-IDENTICAL, not starved); dev/playground additionally require real
+  evidence. SINGLE chokepoint `GoalExecutor._record_strategy_stats` through which all 3 former record sites
+  route (execute fallback, foreach [reads the per-iteration `child`, the verify carrier], harness non-foreach);
+  the harness no longer owns the gate. `engine._maybe_compile_experience` also requires `_evidence_ok(trace)`.
+  Adversarial review caught + this commit closes two gaps the green suite hid: (a) foreach/fallback bandit
+  sites bypassed the gate; (b) `mcp/server.py` called `init_vgg` without `world=` → `is_robot=False` on a live
+  robot entry point → now passes `world=resolve_world(agent)` (also fixes a pre-existing `_evidence_ok`
+  is_robot inconsistency on the MCP path). 1050 green (+ foreach-bypass / robot-collapse / MCP-world
+  regression tests). NEXT: W1.2 fail-loud world-registration preflight validator.
+
 Run the kernel tests: `cd ~/vector-os-nano && .venv-nano/bin/python -m pytest tests/vcli -q`.
 Known pre-existing red: `tests/unit/test_mujoco_*.py` (cross-test MUJOCO_GL pollution; pass in
 isolation). Pre-existing quirk: go2 sim load rewrites `mjcf/go2/scene_room_piper.xml` abs paths —

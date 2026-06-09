@@ -194,3 +194,144 @@ def test_engine_compiles_successful_trace(tmp_path: Path) -> None:
         ExecutionTrace(goal_tree=GoalTree("x", ()), steps=(), success=False, total_duration_sec=0.0)
     )
     assert len(eng._successful_traces) == before
+
+
+# ---------------------------------------------------------------------------
+# W1.1 — evidence gate on the compile path: a no-evidence "success" must NOT
+# compile into a reusable 'verified' template (it would dilute the moat).
+# ---------------------------------------------------------------------------
+
+
+def _visual_override_trace(goal: str = "create config.txt with ready") -> ExecutionTrace:
+    """A 'successful' trace whose pass is a VLM visual override (no deterministic
+    evidence) — same structure as ``_tool_trace`` so the ONLY difference that
+    blocks compilation is the missing evidence, not the shape."""
+    sg = SubGoal(
+        name="create_config",
+        description="write config.txt",
+        verify="path_contains('config.txt', 'ready')",
+        strategy="tool_call",
+        strategy_params=_TOOL_PARAMS,
+    )
+    return ExecutionTrace(
+        goal_tree=GoalTree(goal=goal, sub_goals=(sg,)),
+        steps=(StepRecord("create_config", "tool_call", True, True, 0.1, visual_override=True),),
+        success=True,
+        total_duration_sec=0.1,
+    )
+
+
+def test_visual_override_success_does_not_compile(tmp_path: Path) -> None:
+    from vector_os_nano.vcli.engine import VectorEngine
+    from vector_os_nano.vcli.worlds import DevWorld
+
+    eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
+    eng.init_vgg(agent=None, skill_registry=None, world=DevWorld(), persist_dir=tmp_path)
+
+    # A visual-override "success" must NOT enter _successful_traces or compile.
+    eng._maybe_compile_experience(_visual_override_trace())
+    assert len(eng._successful_traces) == 0
+    assert not (tmp_path / "goal_templates.json").exists()
+
+    # A real-evidence success on the SAME structure still compiles.
+    eng._maybe_compile_experience(_tool_trace())
+    assert len(eng._successful_traces) == 1
+    saved = tmp_path / "goal_templates.json"
+    assert saved.exists()
+    data = json.loads(saved.read_text())
+    assert data[0]["sub_goal_templates"][0]["strategy_params"] == _TOOL_PARAMS
+
+
+# ---------------------------------------------------------------------------
+# W1.1 — MCP/world= regression: init_vgg must propagate world.is_robot() into the
+# GoalExecutor reward gate. A LIVE robot-control entry point (mcp/server.py) that
+# omits world= would build the executor with is_robot=False and then record a
+# passing verify="True" motor step as a FAILURE -> robot-learning regression.
+# ---------------------------------------------------------------------------
+
+
+def test_init_vgg_robot_world_sets_executor_is_robot() -> None:
+    from vector_os_nano.vcli.engine import VectorEngine
+    from vector_os_nano.vcli.worlds import RobotWorld
+
+    eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
+    eng.init_vgg(agent=None, skill_registry=None, world=RobotWorld())
+    assert eng._goal_executor._is_robot is True
+
+
+def test_init_vgg_dev_world_sets_executor_not_robot() -> None:
+    from vector_os_nano.vcli.engine import VectorEngine
+    from vector_os_nano.vcli.worlds import DevWorld
+
+    eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
+    eng.init_vgg(agent=None, skill_registry=None, world=DevWorld())
+    assert eng._goal_executor._is_robot is False
+
+
+def test_init_vgg_no_world_defaults_not_robot() -> None:
+    # The legacy no-world path (pre-fix MCP call) stays is_robot=False.
+    from vector_os_nano.vcli.engine import VectorEngine
+
+    eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
+    eng.init_vgg(agent=None, skill_registry=None)
+    assert eng._goal_executor._is_robot is False
+
+
+def test_mcp_server_builds_engine_with_robot_world() -> None:
+    """mcp/server.py:_build_engine must pass world=resolve_world(agent) so a robot
+    agent yields an is_robot executor. Mirrors the live entry point end-to-end with
+    the network/backend stubbed."""
+    import vector_os_nano.mcp.server as srv
+
+    captured: dict[str, object] = {}
+
+    class _StubEngine:
+        def init_vgg(self, **kwargs):
+            captured["world"] = kwargs.get("world")
+            self._goal_executor = type(
+                "_E", (), {"_is_robot": bool(kwargs["world"].is_robot()) if kwargs.get("world") else False}
+            )()
+
+    class _StubBackend:
+        pass
+
+    class _StubAgent:
+        _skill_registry = object()
+
+    # _build_engine imports everything locally, so monkeypatch via the imported modules.
+    import vector_os_nano.vcli.config as cfg
+    import vector_os_nano.vcli.backends as backends
+    import vector_os_nano.vcli.tools as vtools
+    import vector_os_nano.vcli.tools.skill_wrapper as skw
+    import vector_os_nano.vcli.prompt as prompt
+    import vector_os_nano.vcli.engine as engine_mod
+    import vector_os_nano.vcli.session as session_mod
+    import vector_os_nano.vcli.worlds as worlds_mod
+
+    import pytest as _pytest
+
+    mp = _pytest.MonkeyPatch()
+    try:
+        mp.setattr(cfg, "resolve_credentials", lambda: ("k", "p", "m", None))
+        mp.setattr(backends, "create_backend", lambda **_: _StubBackend())
+
+        class _Reg:
+            def register(self, *a, **k):
+                pass
+
+        mp.setattr(vtools, "CategorizedToolRegistry", lambda: _Reg())
+        mp.setattr(vtools, "discover_categorized_tools", lambda: ([], {}))
+        mp.setattr(skw, "wrap_skills", lambda _a: [])
+        mp.setattr(prompt, "build_system_prompt", lambda agent=None: "sys")
+        mp.setattr(engine_mod, "VectorEngine", lambda **_: _StubEngine())
+        mp.setattr(session_mod, "create_session", lambda metadata=None: object())
+        # A robot agent -> resolve_world returns the robot world.
+        mp.setattr(worlds_mod, "resolve_world", lambda _agent: worlds_mod.RobotWorld())
+
+        engine, _session = srv._build_engine(_StubAgent())
+    finally:
+        mp.undo()
+
+    assert captured["world"] is not None
+    assert captured["world"].is_robot() is True
+    assert engine._goal_executor._is_robot is True

@@ -273,16 +273,23 @@ relative to `vector_os_nano/`.
 - `vgg_harness.py` — the plan-act-verify-replan loop; rebuilds `world_context` each pass.
 - `strategy_selector.py` — chooses an executor type / strategy for a sub-goal, world-scoped.
 - `strategy_stats.py` — measured per-strategy success rates; the bandit driving selection.
+  Its per-step reward is EVIDENCE-GATED (W1.1): the learning tier records `step.success AND
+  step_evidence_ok(...)`, not raw `step.success`, so a VLM visual-override / sentinel `verify="True"`
+  "success" cannot train the bandit. Robot world bypasses the gate (reward collapses to `step.success`).
+  Single chokepoint: `GoalExecutor._record_strategy_stats` (all record sites route through it).
 - `blackboard.py` — per-run observation store; resolves `${step.output.path}` bindings.
 - `vocab_from_registry.py` — `build_decompose_vocab`: single-sources the decompose
   vocabulary from the skill registry.
 - `capabilities/` — the capability seam (`Capability` protocol + `CapabilityRegistry` +
   `LLMChatCapability`); the bridge to a heterogeneous model zoo.
 - `trace_store.py` — save / load / replay of verified runs; the evidence gate and
-  verify-as-eval signal.
+  verify-as-eval signal. `evidence_passed` (per-trace) + `step_evidence_ok` (per-step analogue,
+  W1.1) are the deterministic gate the LEARNING tier (bandit reward + template compilation) is
+  measured against — never raw `step.success`.
 - `template_library.py` — compiled reusable plan templates; backs the no-LLM fast path.
 - `experience_compiler.py` — turns successful verified traces into templates (no
-  fine-tuning).
+  fine-tuning). Compilation is EVIDENCE-GATED (W1.1): `engine._maybe_compile_experience`
+  requires `trace.success AND _evidence_ok(trace)`, so only evidence-backed traces compile.
 - `types.py` — frozen plan structures (`GoalTree`, `SubGoal`, `StepRecord`, `ForEachSpec`);
   `SubGoal.foreach` carries a control-flow loop the executor expands at runtime.
 - `observation.py` — the verified-loop observation surface: a pure JSON-safe export view over the

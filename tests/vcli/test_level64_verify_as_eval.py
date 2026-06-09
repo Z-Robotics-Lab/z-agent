@@ -21,6 +21,7 @@ from vector_os_nano.vcli.cognitive.trace_store import (
     load_trace,
     replay,
     save_trace,
+    step_evidence_ok,
 )
 from vector_os_nano.vcli.cognitive.types import (
     ExecutionTrace,
@@ -242,3 +243,149 @@ def test_eval_main_exit_code(tmp_path: Path, monkeypatch, capsys) -> None:
     mixed_file = tmp_path / "mixed.json"
     mixed_file.write_text('[{"task": "good"}, {"task": "bad"}]')
     assert eval_main([str(mixed_file)]) == 1
+
+
+# ---------------------------------------------------------------------------
+# W1.1 — per-step learning-tier reward gate (step_evidence_ok)
+#
+# step_evidence_ok itself is the predicate (T1/T2/T3 below pin it directly). The
+# COMPOSITION (success=step.success AND step_evidence_ok) and is_robot now live
+# in ONE place: GoalExecutor._record_strategy_stats. The discriminating tests
+# (further down) drive that helper with a stub StrategyStats and assert the
+# captured ``success`` — so a visual-override / sentinel "success" cannot train
+# the strategy bandit, while robot learning stays exactly == step.success.
+# ---------------------------------------------------------------------------
+
+
+def _step_and_goal(
+    *,
+    verify: str = "file_exists('a.txt')",
+    success: bool = True,
+    verify_result: bool = True,
+    visual_override: bool = False,
+    answer_only: bool = False,
+    strategy: str = "tool_call",
+) -> tuple[StepRecord, SubGoal]:
+    sg = SubGoal(
+        name="step1",
+        description="do a thing",
+        verify=verify,
+        strategy=strategy,
+        answer_only=answer_only,
+    )
+    step = StepRecord(
+        sub_goal_name="step1",
+        strategy=strategy,
+        success=success,
+        verify_result=verify_result,
+        duration_sec=0.05,
+        visual_override=visual_override,
+    )
+    return step, sg
+
+
+def test_w1_1_sentinel_verify_blocks_evidence_dev() -> None:
+    # T1: sub_goal.verify is the sentinel 'True' -> no deterministic evidence.
+    step, sg = _step_and_goal(verify="True", success=True, verify_result=True)
+    assert step_evidence_ok(step, sg, False) is False
+
+
+def test_w1_1_visual_override_blocks_evidence_dev() -> None:
+    # T2: a VLM visual override is not deterministic evidence.
+    step, sg = _step_and_goal(
+        verify="file_exists('a.txt')", success=True, verify_result=True, visual_override=True
+    )
+    assert step_evidence_ok(step, sg, False) is False
+
+
+def test_w1_1_real_predicate_has_evidence_dev() -> None:
+    # T3: a real predicate + verify_result True + no visual override -> evidence.
+    step, sg = _step_and_goal(
+        verify="file_exists('a.txt')", success=True, verify_result=True, visual_override=False
+    )
+    assert step_evidence_ok(step, sg, False) is True
+
+
+def test_w1_1_robot_world_bypasses_evidence_gate() -> None:
+    # Robot async motor skills legitimately use verify="True" — gate is bypassed.
+    passing, sg = _step_and_goal(verify="True", success=True, verify_result=True)
+    assert step_evidence_ok(passing, sg, True) is True
+    failed, sg_f = _step_and_goal(verify="True", success=False, verify_result=False)
+    assert step_evidence_ok(failed, sg_f, True) is True  # still bypassed (gate, not reward)
+
+
+# ---------------------------------------------------------------------------
+# W1.1 — the reward gate is CENTRALIZED on GoalExecutor._record_strategy_stats.
+# These tests are the discriminating ones: they capture the recorded ``success``
+# via a stub StrategyStats and prove the gate fires (and that it would NOT have
+# fired under the old plain ``success=step.success`` code).
+# ---------------------------------------------------------------------------
+
+
+class _CapturingStats:
+    """Minimal StrategyStats stub: captures the recorded ``success`` value."""
+
+    def __init__(self) -> None:
+        self.recorded: list[bool] = []
+
+    def record(self, *, strategy_name, sub_goal_name, success, duration_sec) -> None:
+        self.recorded.append(success)
+
+
+def _executor(*, is_robot: bool, stats):
+    from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
+
+    return GoalExecutor(
+        strategy_selector=None,
+        verifier=None,
+        stats=stats,
+        is_robot=is_robot,
+    )
+
+
+def test_w1_1_record_gate_blocks_sentinel_success_dev() -> None:
+    # GAP regression (foreach/fallback bypass): a sentinel verify='True' step that
+    # "succeeded" must record success=False — even though step.success is True.
+    stats = _CapturingStats()
+    step, sg = _step_and_goal(verify="True", success=True, verify_result=True)
+    _executor(is_robot=False, stats=stats)._record_strategy_stats(step, sg)
+    assert stats.recorded == [False]
+    # Discriminating vs the old code, which recorded plain step.success:
+    assert step.success is True
+
+
+def test_w1_1_record_gate_blocks_visual_override_dev() -> None:
+    stats = _CapturingStats()
+    step, sg = _step_and_goal(
+        verify="file_exists('a.txt')", success=True, verify_result=True, visual_override=True
+    )
+    _executor(is_robot=False, stats=stats)._record_strategy_stats(step, sg)
+    assert stats.recorded == [False]
+    assert step.success is True  # would have been True under plain step.success
+
+
+def test_w1_1_record_gate_rewards_real_evidence_dev() -> None:
+    stats = _CapturingStats()
+    step, sg = _step_and_goal(verify="file_exists('a.txt')", success=True, verify_result=True)
+    _executor(is_robot=False, stats=stats)._record_strategy_stats(step, sg)
+    assert stats.recorded == [True]
+
+
+def test_w1_1_record_gate_robot_collapses_to_step_success() -> None:
+    # Robot world: the recorded success is EXACTLY step.success (learning unchanged).
+    # A passing sentinel motor step records True...
+    stats = _CapturingStats()
+    passing, sg = _step_and_goal(verify="True", success=True, verify_result=True)
+    _executor(is_robot=True, stats=stats)._record_strategy_stats(passing, sg)
+    assert stats.recorded == [True]
+    # ...and a FAILED motor step records False (AND step.success is load-bearing).
+    stats2 = _CapturingStats()
+    failed, sg_f = _step_and_goal(verify="True", success=False, verify_result=False)
+    _executor(is_robot=True, stats=stats2)._record_strategy_stats(failed, sg_f)
+    assert stats2.recorded == [False]
+
+
+def test_w1_1_record_gate_noops_without_stats() -> None:
+    # No stats attached -> the chokepoint is a safe no-op.
+    step, sg = _step_and_goal(verify="True", success=True, verify_result=True)
+    _executor(is_robot=False, stats=None)._record_strategy_stats(step, sg)  # no raise

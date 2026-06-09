@@ -562,6 +562,7 @@ class VectorEngine:
                 code_executor=code_executor,
                 tool_dispatcher=tool_dispatcher,
                 capability_registry=capability_registry,
+                is_robot=bool(world.is_robot()) if world is not None else False,
             )
         except ImportError as exc:
             logger.warning("VGG: GoalExecutor not available: %s", exc)
@@ -1068,7 +1069,17 @@ class VectorEngine:
         """
         lib = getattr(self, "_template_library", None)
         comp = getattr(self, "_experience_compiler", None)
-        if lib is None or comp is None or not getattr(trace, "success", False):
+        # W1.1: gate template compilation on the SAME deterministic-evidence notion
+        # the engine uses for its per-trace 'verified' flag. A visual-override or
+        # sentinel verify="True" "success" must NOT compile into a reusable
+        # 'verified' template (it would dilute the moat). Robot world bypasses the
+        # evidence gate (_evidence_ok), so robot traces still compile as today.
+        if (
+            lib is None
+            or comp is None
+            or not getattr(trace, "success", False)
+            or not self._evidence_ok(trace)
+        ):
             return
         try:
             self._successful_traces.append(trace)
