@@ -465,6 +465,18 @@ class PickSkill:
             "[PICK] Pick complete! Grasped at (%.1f, %.1f) cm",
             base_pos[0] * 100, base_pos[1] * 100,
         )
+        # Record the scene object pick actually resolved to (post-resolution:
+        # the bound label, or the nearest-object name when unbound). Lets a later
+        # verify close the loop against what was grabbed (R2-7) and surfaces it
+        # in the observation trace. Language-neutral: a structural label/id.
+        resolved_target = (
+            params.get("object_label")
+            or params.get("object")
+            or params.get("query")
+            or params.get("target")
+            or params.get("object_id")
+            or ""
+        )
         return SkillResult(
             success=True,
             result_data={
@@ -472,6 +484,7 @@ class PickSkill:
                     round(base_pos[0] * 100, 2),
                     round(base_pos[1] * 100, 2),
                 ],
+                "picked_object": resolved_target,
                 "diagnosis": "ok",
             },
         )

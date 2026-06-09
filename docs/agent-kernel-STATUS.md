@@ -475,6 +475,17 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   grabs; a named target MUST bind or the step fails, never silently nearest); (c) strengthen entity-binding
   reliability so a named target is always bound. (a)+(b) together is the principled fix. Do NOT just remove
   unbound->nearest — it breaks "抓个东西".
+  **[2026-06-09: owner picked (a) then (b). (a) SHIPPED]** `holding_object(target=None)` is now TARGET-AWARE
+  (`arm_sim_oracle.make_holding_object`): given a scene name/id it only counts THAT object (case-insensitive
+  structural match, language-neutral — caller passes a resolved scene name, never a raw NL query); `target=None`
+  preserves "holding anything" so every existing caller (place's `not holding_object()`, the playground/robot
+  predicates, ~15 tests) is byte-identical. `pick` now records `result_data["picked_object"]` (the resolved
+  label/id it grabbed) so a verify can close the loop. Test `tests/vcli/test_holding_object_target_aware.py`
+  (held banana verifies holding_object('banana') True / holding_object('apple') False; no-target unchanged).
+  Backward-compatible building block — NO behavior change yet. NEXT (b): decompose disambiguates generic ("any"/
+  "抓个东西" -> nearest OK) vs a NAMED target (must bind or fail, never silent nearest) + wire pick's verify to
+  the resolved target so a named-but-unbound grab of the wrong object fails. (My track: skills/arm_sim_oracle;
+  the verify-wiring must avoid the harness/verifier — Phase E territory.)
 - **R2-8 — orphaned tool message 400 bricks the REPL. [FIXED 2026-06-09, headless-reproduced + green].** Found
   live (deepseek/openai-compat go2 session): after a long session EVERY input 400s `Messages with role 'tool'
   must be a response to a preceding message with 'tool_calls'` and the REPL is dead until restart. ROOT CAUSE:

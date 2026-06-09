@@ -99,15 +99,25 @@ def _ee_position(arm: Any) -> list[float] | None:
         return None
 
 
-def make_holding_object(agent: Any) -> Callable[[], bool]:
-    """Build ``holding_object()`` bound to *agent*.
+def make_holding_object(agent: Any) -> Callable[..., bool]:
+    """Build ``holding_object(target=None)`` bound to *agent*.
 
-    True when the gripper reports holding AND at least one scene object is both
+    True when the gripper reports holding AND a qualifying scene object is both
     lifted above the table-clearance height and within grasp radius of the EE.
+
+    ``target`` (optional) makes the check TARGET-AWARE: when given a scene object
+    name (or id), only that object counts — so a verify can assert "holding the
+    REQUESTED object", not merely "holding SOMETHING" (R2-7: an unbound pick that
+    grabbed the nearest, wrong object must NOT verify True against the named
+    target). The match is structural and language-neutral (case-insensitive
+    exact match on the scene name the oracle owns); the caller passes the
+    resolved scene name, never a raw NL query. ``target=None`` preserves the
+    original "holding anything" semantics (all existing callers unchanged).
+
     Reads only deterministic ground truth; fails safe to ``False``.
     """
 
-    def holding_object() -> bool:
+    def holding_object(target: Any = None) -> bool:
         arm = _get_arm(agent)
         if arm is None:
             return False
@@ -121,12 +131,15 @@ def make_holding_object(agent: Any) -> Callable[[], bool]:
         except Exception as exc:  # noqa: BLE001
             logger.debug("sim-oracle get_object_positions failed: %s", exc)
             return False
-        for pos in objects.values():
+        want = None if target is None else str(target).strip().lower()
+        for name, pos in objects.items():
             try:
                 x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
             except (TypeError, ValueError, IndexError):
                 continue
             if z < _LIFT_MIN_Z:
+                continue
+            if want is not None and str(name).strip().lower() != want:
                 continue
             dist = math.dist((x, y, z), (ee[0], ee[1], ee[2]))
             if dist <= _NEAR_EE_RADIUS:
