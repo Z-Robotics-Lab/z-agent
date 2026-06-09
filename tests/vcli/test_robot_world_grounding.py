@@ -134,6 +134,7 @@ def test_namespace_empty_when_arm_lacks_oracle() -> None:
 
     agent = MagicMock()
     agent._arm = _RealArmStub()
+    agent._base = None  # real-hardware arm, no sim base (else MagicMock leaks a base-like mock)
     assert RobotWorld().build_verify_namespace(agent) == {}
 
 

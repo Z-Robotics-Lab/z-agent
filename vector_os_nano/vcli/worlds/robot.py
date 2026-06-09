@@ -34,38 +34,60 @@ class RobotWorld:
         return None
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
-        # Ground the verifier on the SIM arm's deterministic oracle. The engine
+        # Ground the verifier on the SIM deterministic oracle(s). The engine
         # builds its dev/robot bindings + empty perception stubs first
         # (engine._build_verifier_namespace), then merges THIS on top — so when a
-        # sim arm is present these predicates REPLACE the stubs (detect_objects->[],
-        # describe_scene->"") with real ground-truth lookups, and the planner's
-        # verify allowlist (derived from this namespace) gains the arm predicates.
+        # sim embodiment is present these predicates REPLACE the stubs (e.g.
+        # detect_objects->[], describe_scene->"") with real ground-truth lookups,
+        # and the planner's verify allowlist (derived from this namespace) gains
+        # them. Single-sourced from the kernel-side oracles (ADR-008 C1 / kernel
+        # rule 3); lazily imported here so the module load stays robot-free.
         #
-        # Single-sourced from the kernel-side arm_sim_oracle (ADR-008 C1 / kernel
-        # rule 3); lazily imported here so the module load stays robot-free per the
-        # file's stated intent. object_names=() => all scene objects (the plain
-        # robot world has no Scenario to declare a known-set).
-        arm = getattr(agent, "_arm", None)
-        if arm is None or not hasattr(arm, "get_object_positions"):
-            # Real-hardware / no-arm path: contribute nothing, leaving the engine
-            # namespace byte-identical (Stage 3 VLM grounding is a separate future
-            # concern — not the sim oracle).
-            return {}
-        from vector_os_nano.vcli.worlds.arm_sim_oracle import (
-            make_arm_at_home,
-            make_describe_scene,
-            make_detect_objects,
-            make_holding_object,
-            make_placed_count,
-        )
+        # Compose whatever embodiment(s) the agent actually has, so an arm-only,
+        # a go2-base-only, OR a go2+arm agent each get a GROUNDED verify namespace
+        # (world-agnostic — no embodiment is special-cased). Real hardware / no
+        # sim oracle contributes nothing, leaving the engine namespace byte-
+        # identical. object_names=() => all scene objects (the plain robot world
+        # has no Scenario to declare a known-set).
+        ns: dict[str, Any] = {}
 
-        return {
-            "detect_objects": make_detect_objects(agent, ()),
-            "describe_scene": make_describe_scene(agent, ()),
-            "holding_object": make_holding_object(agent),
-            "arm_at_home": make_arm_at_home(agent),
-            "placed_count": make_placed_count(agent),
-        }
+        arm = getattr(agent, "_arm", None)
+        if arm is not None and hasattr(arm, "get_object_positions"):
+            from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+                make_arm_at_home,
+                make_describe_scene,
+                make_detect_objects,
+                make_holding_object,
+                make_placed_count,
+            )
+            ns.update({
+                "detect_objects": make_detect_objects(agent, ()),
+                "describe_scene": make_describe_scene(agent, ()),
+                "holding_object": make_holding_object(agent),
+                "arm_at_home": make_arm_at_home(agent),
+                "placed_count": make_placed_count(agent),
+            })
+
+        base = getattr(agent, "_base", None)
+        if (
+            base is not None
+            and hasattr(base, "get_position")
+            and hasattr(base, "get_heading")
+        ):
+            # Ground the base predicates the go2 vocab verifies against. The plain
+            # robot world has no Scenario, so ``visited`` (which needs a named-room
+            # set) is left to the playground; ``at_position`` / ``facing`` need
+            # only the live base and replace the engine stubs.
+            from vector_os_nano.vcli.worlds.go2_sim_oracle import (
+                make_at_position,
+                make_facing,
+            )
+            ns.update({
+                "at_position": make_at_position(agent),
+                "facing": make_facing(agent),
+            })
+
+        return ns
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
         # No-op in C.1 — the robot path keeps its skill/primitive routing,

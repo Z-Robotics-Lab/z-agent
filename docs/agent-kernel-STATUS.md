@@ -521,6 +521,18 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   well-formed histories. Tests `tests/unit/vcli/test_session_tool_compaction.py` (reproduced the 400 RED, then
   green): compact-no-orphan, to_messages-drops-orphan, repeated-compaction-valid. NOT owner-gated (fully
   headless). Canonical 1054 green.
+- **go2 base verify GROUNDED in RobotWorld (generalize the arm grounding to the base). [SHIPPED 2026-06-09].**
+  `RobotWorld.build_verify_namespace` only grounded the ARM (`agent._arm`); a go2 BASE got `{}` -> go2 NL->verify
+  fell back to the engine stubs (ungrounded) — the SAME asymmetry the arm fix (Live-hardening V) closed. Fix
+  mirrors it: the go2 base predicate factories are single-sourced into a kernel module
+  `vcli/worlds/go2_sim_oracle.py` (`make_at_position`/`make_facing`/`make_visited`/`make_rooms_producer`;
+  ADR-008 — kernel must not import playground), `playground/verify/base_predicates.py` is now a thin re-export
+  shim, and `build_verify_namespace` COMPOSES arm predicates (if a sim `_arm`) AND base `at_position`/`facing`
+  (if a `_base` with get_position/get_heading) — `visited` left to the playground (needs scenario rooms the
+  plain world lacks). World-agnostic: arm-only / go2-only / go2+arm each grounded; real hardware still `{}`.
+  Tests `tests/vcli/test_go2_base_grounding.py` (+ fixed a MagicMock-leaks-a-base under-spec in
+  `test_robot_world_grounding`). Canonical 1087 green. NEXT (live, owner): go2 NL commands (walk/turn to a pose)
+  now have grounded verify — validate the closed loop end-to-end on real deepseek like the arm.
 
 ## Autonomous /loop prompt (the standing mission for owner-away iterations)
 
