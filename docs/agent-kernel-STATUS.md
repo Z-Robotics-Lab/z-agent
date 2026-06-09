@@ -429,6 +429,19 @@ REMINDER: the end goal is a generalizable PHYSICAL robot agent — every fix mus
   grabs; a named target MUST bind or the step fails, never silently nearest); (c) strengthen entity-binding
   reliability so a named target is always bound. (a)+(b) together is the principled fix. Do NOT just remove
   unbound->nearest — it breaks "抓个东西".
+- **R2-8 — orphaned tool message 400 bricks the REPL. [FIXED 2026-06-09, headless-reproduced + green].** Found
+  live (deepseek/openai-compat go2 session): after a long session EVERY input 400s `Messages with role 'tool'
+  must be a response to a preceding message with 'tool_calls'` and the REPL is dead until restart. ROOT CAUSE:
+  `session.py compact()` sliced `non_meta[-keep_recent:]` at a fixed index ignoring the
+  `assistant(tool_use)->tool_result` pairing, so the kept window could BEGIN with an orphaned `tool_result`
+  (its producing assistant summarized away); `to_messages()`->`convert_messages()` (openai_compat) then emitted
+  a `role:"tool"` with no preceding `tool_calls`; persisted because `_entries` is replaced with `[summary]+recent`.
+  TWO-LAYER FIX: (1) `compact()` snaps the keep boundary back so the recent window never starts on a tool_result;
+  (2) `to_messages()` (the shared chokepoint BOTH backends consume) drops any orphaned tool_result (tracks open
+  tool_use ids) — defends against any other orphan source (e.g. interrupted turns, R2-4). Behavior-preserving for
+  well-formed histories. Tests `tests/unit/vcli/test_session_tool_compaction.py` (reproduced the 400 RED, then
+  green): compact-no-orphan, to_messages-drops-orphan, repeated-compaction-valid. NOT owner-gated (fully
+  headless). Canonical 1054 green.
 
 ## Autonomous /loop prompt (the standing mission for owner-away iterations)
 

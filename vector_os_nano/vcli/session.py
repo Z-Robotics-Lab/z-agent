@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -159,8 +159,16 @@ class Session:
         if before <= keep_recent:
             return before, before
 
-        old_entries = non_meta[:-keep_recent]
-        recent_entries = non_meta[-keep_recent:]
+        # Snap the keep boundary so the recent window never BEGINS on a
+        # tool_result whose producing assistant (tool_use) would be summarized
+        # away -> that orphaned tool message makes the chat APIs 400 ("role
+        # 'tool' must follow 'tool_calls'") and bricks the REPL (R2-8). Move the
+        # cut back to include the producing turn.
+        cut = before - keep_recent
+        while cut > 0 and non_meta[cut].get("type") == "tool_result":
+            cut -= 1
+        old_entries = non_meta[:cut]
+        recent_entries = non_meta[cut:]
 
         # Build summary from old entries
         summary_lines: list[str] = []
@@ -203,21 +211,34 @@ class Session:
     # ------------------------------------------------------------------
 
     def to_messages(self) -> list[dict[str, Any]]:
-        """Convert entries to Anthropic API role/content format."""
+        """Convert entries to Anthropic API role/content format.
+
+        Drops orphaned tool_results — a tool_result with no open preceding
+        assistant tool_use — so a compaction or interruption boundary can never
+        produce an API-invalid sequence (a ``tool_result`` / ``role:"tool"`` with
+        no preceding ``tool_use`` / ``tool_calls``, which 400s and bricks the
+        REPL; R2-8). Both backends consume this list, so the guard protects
+        Anthropic and the OpenAI-compatible path alike.
+        """
         messages: list[dict[str, Any]] = []
+        open_tool_use_ids: set[str] = set()
         for entry in self._entries:
             etype = entry.get("type")
             if etype == "user":
                 messages.append({"role": "user", "content": entry["content"]})
+                open_tool_use_ids = set()  # plain user text closes the tool window
             elif etype == "assistant":
                 content: list[dict[str, Any]] = []
                 # Only include text block if non-empty (Anthropic rejects empty text)
                 if entry.get("text"):
                     content.append({"type": "text", "text": entry["text"]})
-                if entry.get("tool_use"):
-                    content.extend(entry["tool_use"])
+                tool_use = entry.get("tool_use") or []
+                content.extend(tool_use)
                 if content:
                     messages.append({"role": "assistant", "content": content})
+                open_tool_use_ids = {
+                    b["id"] for b in tool_use if isinstance(b, dict) and "id" in b
+                }
             elif etype == "tool_result":
                 tool_result_blocks = [
                     {
@@ -227,8 +248,14 @@ class Session:
                         **({"is_error": r["is_error"]} if "is_error" in r else {}),
                     }
                     for r in entry["results"]
+                    if r.get("tool_use_id") in open_tool_use_ids
                 ]
-                messages.append({"role": "user", "content": tool_result_blocks})
+                if tool_result_blocks:
+                    messages.append({"role": "user", "content": tool_result_blocks})
+                    open_tool_use_ids -= {
+                        b["tool_use_id"] for b in tool_result_blocks
+                    }
+                # else: fully orphaned -> skip (no preceding tool_use)
             # type == "meta" is skipped (internal tracking)
         return messages
 
