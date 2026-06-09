@@ -5,26 +5,22 @@
 <h1 align="center">Vector OS Nano</h1>
 
 <p align="center">
-  <b>Cross-embodiment robot OS: natural language control, industrial-grade navigation, sim-to-real.</b>
+  <b>Cross-embodiment robot OS: natural language controls everything.</b>
   <br>
   <b>No training. No fine-tuning. Just say what you want.</b>
   <br>
-  <b>The agent decomposes any natural-language goal into a verified plan and executes long-chain tasks end-to-end — from "explore the house" to "pick up the mug".</b>
+  <b>The agent decomposes any NL goal into a verified plan and executes long-chain tasks end-to-end.</b>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/MuJoCo-3.6-green" alt="MuJoCo">
-  <img src="https://img.shields.io/badge/ROS2_Jazzy-Navigation-blue?logo=ros&logoColor=white" alt="ROS2">
-  <img src="https://img.shields.io/badge/Unitree_Go2-Quadruped-red" alt="Go2">
-  <img src="https://img.shields.io/badge/Convex_MPC-1kHz_Control-orange" alt="MPC">
   <img src="https://img.shields.io/badge/Claude-LLM_Brain-blueviolet?logo=anthropic&logoColor=white" alt="Claude">
-  <img src="https://img.shields.io/badge/LeRobot-SO--ARM100-black" alt="LeRobot">
-  <img src="https://img.shields.io/badge/Intel_RealSense-D405-0071C5?logo=intel&logoColor=white" alt="RealSense">
+  <img src="https://img.shields.io/badge/ROS2_Jazzy-Navigation-blue?logo=ros&logoColor=white" alt="ROS2">
 </p>
 
 <p align="center">
-  <i>Being developed at <b>CMU Robotics Institute</b>. Nano is the grasping proof-of-value. Full stack coming soon.</i>
+  <i>Being developed at <b>CMU Robotics Institute</b>.</i>
 </p>
 
 ---
@@ -41,51 +37,43 @@
 
 ---
 
-**New session or contributor? Read in order:**
-[`CLAUDE.md`](CLAUDE.md) (rules + governance) ->
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (system design) ->
-[`docs/agent-kernel-STATUS.md`](docs/agent-kernel-STATUS.md) (current state + next steps).
+## Quick Start
+
+**Install** (requires Python 3.10+ and [uv](https://docs.astral.sh/uv/)):
+
+```bash
+git clone https://github.com/VectorRobotics/vector-os-nano.git
+cd vector-os-nano
+uv venv .venv
+source .venv/bin/activate
+uv pip install -e ".[all]"
+```
+
+**Configure API key** — copy the example and add your key:
+
+```bash
+cp .env.example .env
+# then open .env and fill in one provider key:
+#   DEEPSEEK_API_KEY=sk-...      # default (deepseek-v4-flash)
+#   OPENROUTER_API_KEY=sk-or-... # multi-model fallback
+#   ANTHROPIC_API_KEY=sk-ant-... # direct Anthropic
+```
+
+`.env` is git-ignored. One provider key is enough. DeepSeek `deepseek-v4-flash` is the default; OpenRouter is the multi-model fallback.
+
+**Run:**
+
+```bash
+vector-cli                  # interactive AI agent REPL
+vector-cli --sim            # SO-101 arm in MuJoCo (natural language: "wave", "pick up the mug")
+vector-cli --sim-go2        # Go2 quadruped in MuJoCo
+```
 
 ---
 
-## Architecture
-
-Two entry points, one engine:
-
-```
-vector-cli  ──┐
-              ├─> VectorEngine ──> VGG / tool_use ──> skill.execute()
-vector-os-mcp┘         |
-                       ├── VGG cognitive layer (task decomposition + verification + retry)
-                       ├── 19 built-in tools (file ops, bash, ROS2 diag, sim, system) + arm skills as tools when connected
-                       ├── LLM backend (Anthropic / OpenRouter / local)
-                       └── permission system + session + intent router
-```
-
-| Entry Point | Purpose |
-|-------------|---------|
-| `vector-cli` | Interactive REPL for humans. Natural language + slash commands. |
-| `vector-os-mcp` | MCP server for Claude Code. Same engine, machine interface. |
-
-## Quick Start
-
-```bash
-cd vector_os_nano
-python3 -m venv .venv --prompt nano
-source .venv/bin/activate
-pip install -e ".[all]"
-
-vector-cli                     # interactive AI agent
-vector-cli --sim-go2           # Go2 quadruped in MuJoCo
-vector-cli --sim               # SO-101 arm in MuJoCo — drive by natural language
-                               #   e.g. "wave", "go home", "pick up the mug"
-```
-
-LLM config: create `config/user.yaml` with your provider credentials, or type `/login` in vector-cli to authenticate with Claude subscription.
-
 ## Vector CLI
 
-AI-powered terminal where you control robots, edit code, and diagnose issues from one prompt.
+AI-powered terminal: control robots, edit code, and diagnose issues from one prompt. Powered by the VGG (Verified Goal Graph) cognitive layer — complex goals are decomposed into verified sub-plans; simple commands skip LLM and execute in <1 ms.
 
 ```
 vector> explore the house
@@ -96,26 +84,9 @@ vector> the dog hits walls at corners
   file_edit(old="_MAX_SPEED = 0.6", new="_MAX_SPEED = 0.4") ... ok
   skill_reload("walk") ... ok
 
-  Reduced turn speed from 0.6 to 0.4. Want me to re-run explore?
-
 vector> go to the kitchen
-  >> 距目标 5.2m, 已走 4s
-  >> 距目标 2.1m, 已走 8s
   > [1/1] navigate_goal done 11.3s
-
-vector> stop
-  Stopped.
 ```
-
-**19 built-in tools** across 5 categories (arm skills add 10 more tools when an arm agent is connected):
-
-| Category | Tools |
-|----------|-------|
-| code | file_read, file_write, file_edit, bash, glob, grep |
-| robot | world_query, scene_graph_query (+ home, wave, scan, detect, describe, pick, place, gripper_open, gripper_close, handover when arm connected) |
-| diag | ros2_topics, ros2_nodes, ros2_log, nav_state, terrain_status |
-| sim | start_simulation, stop_simulation |
-| system | robot_status, skill_reload, open_foxglove |
 
 **Slash commands:** `/help` `/model` `/tools` `/status` `/login` `/compact` `/clear` `/copy` `/export`
 
@@ -125,88 +96,16 @@ vector> stop
   <i>vector-cli controlling Go2 in MuJoCo: natural language conversation with V (right), live simulation (left).</i>
 </p>
 
-## VGG: Verified Goal Graph
+---
 
-All actionable commands flow through the VGG cognitive layer. LLM decomposes complex tasks into verifiable sub-goal trees. Simple commands get 1-step GoalTrees without LLM call.
+## Arm Simulation (MuJoCo)
 
+Drive the SO-101 arm by natural language — no hardware required:
+
+```bash
+vector-cli --sim
+# "wave", "go home", "pick up the mug"
 ```
-User input
-  |
-  should_use_vgg?
-  |-- Action --> VGG
-  |     |-- Simple (skill match) --> 1-step GoalTree (no LLM, <1ms)
-  |     |-- Complex (multi-step) --> LLM decomposition --> GoalTree
-  |     |
-  |     VGG Harness: 3-layer feedback loop
-  |       Layer 1: step retry (alt strategies)
-  |       Layer 2: continue past failure
-  |       Layer 3: re-plan with failure context
-  |     |
-  |     GoalExecutor --> verify --> trace --> stats
-  |
-  |-- Conversation --> tool_use path (LLM direct)
-```
-
-30 primitives across 4 categories: locomotion (8), navigation (5), perception (6), world (11).
-
-## Go2 Navigation Stack
-
-MuJoCo + CMU Vector Navigation Stack for autonomous indoor navigation.
-
-```
-TARE (frontier exploration)
-  --> FAR V-Graph (global visibility-graph routing)
-    --> localPlanner (terrain-aware obstacle avoidance)
-      --> pathFollower --> Go2 MPC (1kHz control)
-```
-
-Sim-to-real: the nav stack is identical to what runs on real Unitree Go2 with Livox MID360 LiDAR. Switching sim to real requires only changing the bridge node.
-
-<p align="center">
-  <img src="images/go2nav.png" width="700" alt="Go2 navigation in MuJoCo">
-  <br>
-  <i>Go2 autonomous navigation: house environment (top), RViz with LiDAR + terrain analysis + path planning (bottom-left), first-person camera (bottom-right).</i>
-</p>
-
-Navigation parameters tunable via `config/nav.yaml`:
-```yaml
-navigation:
-  ceiling_filter_height: 1.8
-  arrival_radius: 0.8
-  far_probe_timeout: 3.0
-  waypoint_timeout: 30.0
-  stall_timeout: 30.0
-```
-
-## SO-101 Arm
-
-> **Status:** Manipulation is experimental and gated behind `VECTOR_ENABLE_MANIPULATION=1`. The grasp pipeline (scan → detect → top-down pick) is validated in MuJoCo (headless); the real-hardware arm path is a work in progress. Navigation (Go2) is the more mature stack.
-
-```python
-from vector_os_nano import Agent, SO101
-from vector_os_nano.core.skill import SkillContext
-
-arm = SO101(port="/dev/ttyACM0")
-agent = Agent(arm=arm)
-agent.execute_skill("pick", {"object_label": "red cup"})
-```
-
-No hardware? MuJoCo simulation:
-
-```python
-from vector_os_nano import Agent, MuJoCoArm
-
-arm = MuJoCoArm(gui=True)
-arm.connect()
-agent = Agent(arm=arm)
-agent.execute_skill("pick", {"object_label": "banana"})
-```
-
-<p align="center">
-  <img src="images/setup.png" width="700" alt="SO-101 real hardware">
-  <br>
-  <i>Real hardware: SO-101 arm with RealSense D405, VLM object detection, natural language control.</i>
-</p>
 
 <p align="center">
   <img src="images/sim_setup.png" width="700" alt="MuJoCo arm simulation">
@@ -214,43 +113,21 @@ agent.execute_skill("pick", {"object_label": "banana"})
   <i>MuJoCo simulation: SO-101 arm with graspable objects, CLI conversation with V.</i>
 </p>
 
-## SkillFlow -- Declarative Skill Routing
+Manipulation (`scan → detect → top-down pick`) is validated in MuJoCo. Enable with `VECTOR_ENABLE_MANIPULATION=1`.
 
-All routing via `@skill` decorator. No hard-coded if/else chains.
-
-```python
-from vector_os_nano.core.skill import skill, SkillContext
-from vector_os_nano.core.types import SkillResult
-
-@skill(
-    aliases=["grab", "grasp", "抓", "拿"],
-    direct=False,
-    auto_steps=["scan", "detect", "pick"],
-)
-class PickSkill:
-    name = "pick"
-    description = "Pick up an object from the workspace"
-    parameters = {"object_label": {"type": "string"}}
-    preconditions = ["gripper_empty"]
-    postconditions = ["gripper_holding_any"]
-    effects = {"gripper_state": "holding"}
-
-    def execute(self, params, context):
-        return SkillResult(success=True)
-```
+---
 
 ## MCP Server
 
-Claude Code controls the robot via Model Context Protocol:
+Let Claude Code control the robot via [Model Context Protocol](https://modelcontextprotocol.io):
 
 ```bash
-vector-os-mcp --sim --stdio          # MuJoCo sim, stdio transport
-vector-os-mcp --hardware --stdio     # real hardware
-vector-os-mcp --sim                  # SSE on :8100
+vector-os-mcp --sim --stdio      # MuJoCo sim, stdio transport (add to Claude Code MCP config)
+vector-os-mcp --hardware --stdio # real hardware
+vector-os-mcp --sim              # SSE on :8100
 ```
 
-MCP tools: all 22 skills + natural_language + run_goal + diagnostics + debug_perception
-MCP resources: world://state, world://objects, world://robot, camera://overhead, camera://front, camera://side, camera://live
+Exposes all skills as MCP tools plus camera and world-state resources (`world://state`, `world://objects`, `camera://live`, …).
 
 <p align="center">
   <img src="images/mcp_claude.png" width="700" alt="Claude Code controlling robot via MCP">
@@ -258,92 +135,22 @@ MCP resources: world://state, world://objects, world://robot, camera://overhead,
   <i>Claude Code operating the robot via MCP: terminal (top) + live camera RGB + depth (bottom).</i>
 </p>
 
-## Project Structure
-
-```
-vector_os_nano/
-├── vcli/              VectorEngine + VGG cognitive layer + tools
-│   ├── engine.py      Core agent loop (run_turn, VGG decompose/execute)
-│   ├── cognitive/     GoalDecomposer, GoalExecutor, GoalVerifier, VGGHarness,
-│   │                  StrategySelector, ObjectMemory, VisualVerifier, abort
-│   ├── tools/         CategorizedToolRegistry (code/robot/diag/system)
-│   ├── primitives/    30 VGG primitives (locomotion/nav/perception/world)
-│   └── backends/      LLM providers (Anthropic, OpenAI-compat)
-├── mcp/               MCP server (uses VectorEngine, same as CLI)
-├── core/
-│   ├── agent.py       Hardware container (arm, gripper, base, perception)
-│   ├── skill.py       @skill decorator, SkillRegistry, SkillContext
-│   ├── types.py       Shared data types (SkillResult, GoalTree, etc.)
-│   ├── world_model.py World state tracking
-│   └── scene_graph.py Hierarchical spatial memory (rooms/doors/objects)
-├── skills/
-│   ├── go2/           walk, turn, stand, sit, explore, stop, navigate, patrol
-│   └── ...            pick, place, home, scan, detect, gripper, wave, handover
-├── hardware/
-│   ├── so101/         SO-101 arm driver (Feetech serial, Pinocchio IK)
-│   └── sim/           MuJoCo (arm, Go2, perception), ROS2 proxies, Isaac Sim
-├── perception/        RealSense D405 + VLM + EdgeTAM tracker + pointcloud
-└── ros2/              Optional ROS2 nodes (hardware_bridge, agent_node, etc.)
-
-scripts/
-├── go2_vnav_bridge.py  MuJoCo <-> ROS2 bridge
-└── launch_*.sh         Nav stack launch scripts
-
-config/
-├── nav.yaml            Navigation parameters
-├── user.yaml           LLM credentials
-└── room_layout.yaml    Scene geometry
-```
-
-## Hardware (~$420 total)
-
-| Component | Model | Cost |
-|-----------|-------|------|
-| Robot Arm | LeRobot SO-ARM100 (6-DOF, 3D-printed) | ~$150 |
-| Camera | Intel RealSense D405 | ~$270 |
-| GPU | Any NVIDIA with 8+ GB VRAM | (existing) |
-
 <p align="center">
   <img src="images/skillgen.png" width="700" alt="Autonomous skill generation">
   <br>
   <i>Claude Agent autonomously designing, implementing, and executing new robot skills.</i>
 </p>
 
-## Nav Stack Dependencies
+---
 
-Go2 navigation requires the [Vector Navigation Stack](https://github.com/VectorRobotics/vector_navigation_stack):
+## Contributing
 
-```bash
-sudo apt install ros-jazzy-desktop
-cd ~/Desktop
-git clone https://github.com/VectorRobotics/vector_navigation_stack.git
-cd vector_navigation_stack && colcon build
+PRs welcome. By submitting a pull request you agree your contribution is licensed under Apache 2.0 (Section 5). Include the SPDX header on new files:
+
+```python
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
 ```
-
-Without the nav stack, basic Go2 skills (walk, turn, stand, dead-reckoning navigate) still work.
-
-## Semantic Scene Graph — SysNav Bringup
-
-Vector OS Nano's open-vocabulary scene graph (objects + rooms + spatial relations) consumes the output of [**SysNav**](https://github.com/zwandering/SysNav) — a sibling project from the same CMU Robotics Institute lab that publishes the field's standard `ObjectNode` / `RoomNode` topic contract.
-
-**SysNav is run as a separate ROS2 workspace and *not redistributed* in this repo.** Vector OS Nano's [`vector_os_nano/integrations/sysnav_bridge/`](vector_os_nano/integrations/sysnav_bridge/) subscribes to its published topics, converts each `tare_planner/ObjectNode` into a `vector_os_nano.core.world_model.ObjectState`, and seeds the in-process `WorldModel` for skill resolution.
-
-> **Status:** This integration is in progress. The `ObjectNode` adapter and simulated sensors are implemented and unit-tested, but the live bridge is not yet wired into the default CLI/MCP startup, and `RoomNode` ingestion is not implemented. Treat the bringup below as the target contract, not a turnkey pipeline.
-
-```bash
-# 1) SysNav (sibling workspace, follow its README to install)
-cd ~/Desktop
-git clone --recurse-submodules --branch unitree_go2 https://github.com/zwandering/SysNav.git
-cd SysNav && colcon build --symlink-install
-
-# 2) Bringup ordering
-source ~/Desktop/SysNav/install/setup.bash
-./system_real_robot_with_exploration_planner_go2.sh   # SysNav nodes
-# ... in another terminal:
-cd ~/Desktop/vector_os_nano && vector-cli go2sim       # our shell
-```
-
-The SysNav integration design (topic mapping, hardware requirements — Livox Mid-360 + 360-degree camera — and adapter contract) lives in git history: `git log --all -- docs/sysnav_integration.md`. SysNav is licensed under PolyForm-Noncommercial-1.0.0; do not vendor its sources into this Apache 2.0 repository.
 
 ---
 
@@ -351,31 +158,15 @@ The SysNav integration design (topic mapping, hardware requirements — Livox Mi
 
 Copyright 2024-2026 Vector Robotics.
 
-Licensed under the **Apache License, Version 2.0** (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+Licensed under the **Apache License, Version 2.0**; you may not use this file except in compliance with the License. You may obtain a copy at
 
 > http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an **"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND**, either express or implied. See the [LICENSE](LICENSE) file and the [NOTICE](NOTICE) file for the specific language governing permissions and limitations, including attribution and patent-grant terms, and a list of bundled third-party components.
-
-### Contributing
-
-By submitting a pull request, you agree that your contribution is licensed under the same Apache License 2.0 terms (Section 5 of the License). Any code you contribute must include the SPDX header:
-
-```python
-# SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2024-2026 Vector Robotics
-```
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an **"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND**, either express or implied. See the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for the full terms, including attribution and patent-grant terms, and a list of bundled third-party components.
 
 ### Trademarks
 
 "Vector Robotics" and "Vector OS Nano" are trademarks of Vector Robotics. The Apache License does not grant permission to use these names except as required for describing the origin of the Work and reproducing the contents of the NOTICE file.
-
-### Acknowledgments — Sibling Lab Projects
-
-Vector OS Nano builds on prior and concurrent work from the **CMU Robotics Institute** group around Ji Zhang and the CMU-VLN collaboration:
-
-- **[SysNav](https://github.com/zwandering/SysNav)** &mdash; *Multi-Level Systematic Cooperation Enables Real-World, Cross-Embodiment Object Navigation* (Zhu, Li, Liu, Guo, Lin, Cai, Chen, Lv, Wang, Oh, Zhang. arXiv [2603.06914](https://arxiv.org/abs/2603.06914), 2026). Vector OS Nano consumes SysNav's published `ObjectNode` / `RoomNode` ROS2 topics as its semantic scene graph standard. SysNav itself is licensed PolyForm-Noncommercial-1.0.0 and is referenced as a peer ROS2 workspace, not bundled.
-- **[Vector Navigation Stack](https://github.com/VectorRobotics/vector_navigation_stack)** &mdash; FAR/TARE-derived planning + Unity simulator from the same lab.
 
 ---
 

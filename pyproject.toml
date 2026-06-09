@@ -31,6 +31,7 @@ dependencies = [
     "prompt_toolkit>=3.0",   # CLI REPL (hard-imported by vcli/cli.py)
     "httpx>=0.25",
     "pyyaml>=6.0",
+    "python-dotenv>=1.0",    # repo-root .env credential loading (vcli/config.py, every CLI startup)
     "anthropic>=0.40",
     "openai>=1.0",
     # numpy/pyserial are robot/perception-leaning but kept in core for now:
