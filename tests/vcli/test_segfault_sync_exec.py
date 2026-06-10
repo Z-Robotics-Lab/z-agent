@@ -1,15 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""P0 segfault fix — synchronous skill execution when a GUI viewer is live.
+"""P0 segfault fix — synchronous skill execution when a viewer is live on mjpython.
 
-MuJoCo mjData and GLFW are not thread-safe (GLFW must be touched only on the
-main thread on macOS). engine.vgg_execute_async normally runs skills on a
-background "vgg-executor" thread, but the passive viewer is created on the
-caller/main thread. Concurrent mjData/GLFW access from the worker thread vs the
-main-thread render segfaults. The fix: when a viewer is live, run vgg_execute
-SYNCHRONOUSLY on the caller's (viewer-owning) thread; keep the background thread
-only for the headless/dev path (no viewer).
+MuJoCo mjData and GLFW are not thread-safe, and GLFW is main-thread-ONLY under
+mjpython/macOS, where the passive viewer is pumped by the caller/main thread.
+engine.vgg_execute_async normally runs skills on a background "vgg-executor"
+thread; under mjpython that races the main-thread render and segfaults. The
+fix: when a viewer is live AND we run under mjpython, run vgg_execute
+SYNCHRONOUSLY on the caller's (viewer-owning) thread. Everywhere else —
+headless/dev, and Linux/Windows even WITH a live viewer (their viewer+physics
+run on dedicated daemons) — the background thread is kept so the REPL stays
+responsive (Test A2).
 
 Pure kernel logic — no real MuJoCo, no real model. vgg_execute is stubbed.
 """
@@ -27,11 +29,15 @@ def _make_engine() -> VectorEngine:
 
 
 # ---------------------------------------------------------------------------
-# Test A — viewer live => synchronous execution on the caller's thread
+# Test A — viewer live UNDER mjpython => synchronous on the caller's thread
+# (the macOS GLFW-main-thread constraint; only there must skills run inline)
 # ---------------------------------------------------------------------------
 
 
-def test_viewer_live_runs_synchronously() -> None:
+def test_viewer_live_under_mjpython_runs_synchronously(monkeypatch) -> None:
+    import vector_os_nano.hardware.sim.viewer_mode as vm
+    monkeypatch.setattr(vm, "running_under_mjpython", lambda: True)
+
     eng = _make_engine()
     # Arm hardware with a live (truthy) viewer handle.
     eng._vgg_agent = SimpleNamespace(_arm=SimpleNamespace(_viewer=object()))
@@ -56,6 +62,42 @@ def test_viewer_live_runs_synchronously() -> None:
     assert cb_args == [sentinel]
     assert state["thread"] is threading.current_thread()
     assert eng._vgg_thread is None
+
+
+# ---------------------------------------------------------------------------
+# Test A2 — viewer live but NOT mjpython (Linux/Windows) => background thread.
+# On those platforms the viewer + physics run on their own daemons, so the
+# skill thread never touches GLFW/mjData; forcing sync-on-main would only
+# freeze the REPL (laggy Ctrl-C / "stop") with no safety benefit.
+# ---------------------------------------------------------------------------
+
+
+def test_viewer_live_off_mjpython_runs_in_background_thread(monkeypatch) -> None:
+    import vector_os_nano.hardware.sim.viewer_mode as vm
+    monkeypatch.setattr(vm, "running_under_mjpython", lambda: False)
+
+    eng = _make_engine()
+    eng._vgg_agent = SimpleNamespace(_arm=SimpleNamespace(_viewer=object()))
+
+    done = threading.Event()
+    state = {"ran": False, "thread": None}
+
+    def stub_execute(goal_tree: object) -> object:
+        state["ran"] = True
+        state["thread"] = threading.current_thread()
+        return object()
+
+    eng.vgg_execute = stub_execute  # type: ignore[method-assign]
+
+    eng.vgg_execute_async(MagicMock(), on_complete=lambda _t: done.set())
+
+    # Despite a live viewer, on non-mjpython platforms execution is dispatched
+    # to the background "vgg-executor" thread so the REPL stays responsive.
+    assert isinstance(eng._vgg_thread, threading.Thread)
+    eng._vgg_thread.join(timeout=5.0)
+    assert done.wait(timeout=5.0)
+    assert state["ran"] is True
+    assert state["thread"] is not threading.current_thread()
 
 
 # ---------------------------------------------------------------------------

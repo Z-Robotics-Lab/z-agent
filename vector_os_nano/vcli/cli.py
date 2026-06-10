@@ -1863,9 +1863,11 @@ def main(argv: list[str] | None = None) -> None:
                         )
 
                     # Runs on a background thread (CLI stays responsive) EXCEPT
-                    # when a GUI viewer is live — then it executes synchronously
-                    # on this thread (MuJoCo/GLFW is single-thread-only on
-                    # macOS) and the prompt returns once the arm finishes.
+                    # when a GUI viewer is live UNDER MJPYTHON (macOS) — only
+                    # there GLFW is main-thread-only, so it executes
+                    # synchronously on this thread and the prompt returns once
+                    # the arm finishes. Linux/Windows keep the background
+                    # thread even with a viewer (REPL stays responsive).
                     engine.vgg_execute_async(goal_tree, on_complete=_on_vgg_complete)
                     continue  # next input (immediately when headless)
 
