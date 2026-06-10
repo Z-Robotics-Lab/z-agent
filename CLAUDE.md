@@ -29,6 +29,7 @@ The repo has a BOUNDED, fixed set of authoritative docs. A new session reads onl
 ### Other allowed docs (bounded)
 - Tier 2 reference (stable subsystem docs): `docs/cli-tool-system.md`, `docs/skill-protocol.md`, `docs/sim-dev-guide.md`. Update only when that subsystem changes.
 - Tier 3 decision records: `docs/architecture-decisions/ADR-*.md` — append-only; immutable once accepted.
+- Tier 3b hidden-bug casebook: `docs/tricky-bugs.md` — append-only record of IMPLICIT bugs (symptom pointed away from the cause). Short dot-point entries only; routine bugs stay in git history.
 - Tier 4 plans: the CURRENT phase plan, plus any pending future-phase plan that still has open decisions. Delete a plan once its phase fully ships.
 - No working-tree archive. Superseded docs are DELETED, not moved to an `archive/` folder — git history is the archive (`git log --all -- <path>` recovers anything).
 
@@ -43,7 +44,7 @@ The repo has a BOUNDED, fixed set of authoritative docs. A new session reads onl
 
 ## Build / test
 
-Venv `.venv-nano`. Run `.venv-nano/bin/python -m pytest tests/vcli tests/unit/vcli -q`. Pre-existing reds in `tests/unit/test_mujoco_*` (cross-test MUJOCO_GL pollution) are expected — do not treat them as regressions.
+Venv `.venv` (uv-managed; legacy `.venv-nano` is gone — launch scripts fall back automatically). Run `.venv/bin/python -m pytest tests/vcli tests/unit/vcli -q`. Pre-existing environmental reds — do not treat as regressions: `tests/unit/test_mujoco_*` (cross-test MUJOCO_GL pollution), `tests/unit/vcli/test_config_deepseek_provider.py` (3 reds when a real repo-root `.env` provides creds), `tests/vcli/test_level71_robot_control.py::test_sim_tool_lifecycle_dev_to_arm_to_dev` (fails on clean HEAD too). NOTE: the suite's sim tests open real GL windows on a live display — expect brief MuJoCo windows when running it on a desktop.
 
 ## Pointers
 
@@ -53,3 +54,4 @@ Venv `.venv-nano`. Run `.venv-nano/bin/python -m pytest tests/vcli tests/unit/vc
 - [docs/skill-protocol.md](docs/skill-protocol.md) — `@skill` decorator, SkillFlow routing, arm skills.
 - [docs/sim-dev-guide.md](docs/sim-dev-guide.md) — MuJoCo sim testing patterns (Go2, arm).
 - [docs/architecture-decisions/](docs/architecture-decisions/) — ADRs (append-only, immutable once accepted).
+- [docs/tricky-bugs.md](docs/tricky-bugs.md) — hidden-bug casebook (append-only; read before deep debugging).

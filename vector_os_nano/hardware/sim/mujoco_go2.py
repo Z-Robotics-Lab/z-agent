@@ -28,12 +28,57 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+# TEMP DIAGNOSTIC (off unless VECTOR_MPC_LOG set): count/log swallowed MPC solver
+# failures so the explore "float" can be checked for silently-failing QP solves
+# (the _physics_step_mpc except: pass would otherwise hide them → stale torque →
+# float). Remove after debugging.
+_MPC_DIAG: dict[str, int] = {"qp_ok": 0, "qp_fail": 0, "tau_fail": 0}
+
+# TEMP DIAGNOSTIC (off unless VECTOR_PHYS_LOG set): every ~2s log sim-time/wall
+# rate + count of live "mujoco_go2_physics" daemons — directly detects duplicate
+# stepping (rate ~2x / daemons>1) or a stalled daemon (rate<<1). Remove after debug.
+_PHYS_DIAG: dict[str, float] = {"last_wall": 0.0, "last_sim": 0.0}
+
+
+def _phys_diag(sim_time: float) -> None:
+    _p = os.environ.get("VECTOR_PHYS_LOG", "")
+    if not _p:
+        return
+    now = time.perf_counter()
+    lw = _PHYS_DIAG["last_wall"]
+    if lw and (now - lw) < 2.0:
+        return
+    rate = ((sim_time - _PHYS_DIAG["last_sim"]) / (now - lw)) if lw else 0.0
+    _PHYS_DIAG["last_wall"] = now
+    _PHYS_DIAG["last_sim"] = sim_time
+    n = sum(1 for t in threading.enumerate() if t.name == "mujoco_go2_physics")
+    try:
+        with open(_p, "a") as _f:
+            _f.write(f"{now:.3f}\tsim_time={sim_time:.3f}\tsim/wall={rate:.2f}x\tphysics_daemons={n}\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _mpc_diag(kind: str, exc: BaseException | None = None) -> None:
+    _MPC_DIAG[kind] = _MPC_DIAG.get(kind, 0) + 1
+    _p = os.environ.get("VECTOR_MPC_LOG", "")
+    if _p:
+        try:
+            with open(_p, "a") as _f:
+                _f.write(
+                    f"{time.time():.4f}\t{kind}\t"
+                    f"{type(exc).__name__ if exc else ''}\t{str(exc)[:140] if exc else ''}\n"
+                )
+        except Exception:  # noqa: BLE001
+            pass
 
 logger = logging.getLogger(__name__)
 
@@ -707,6 +752,7 @@ class MuJoCoGo2:
         while self._running:
             loop_start = time.perf_counter()
             self._physics_step_sinusoidal()
+            _phys_diag(float(self._mj.data.time))
             elapsed = time.perf_counter() - loop_start
             sleep_time = _SIM_DT - elapsed
             if sleep_time > 0:
@@ -768,6 +814,7 @@ class MuJoCoGo2:
         while self._running:
             loop_start = time.perf_counter()
             self._physics_step_mpc()
+            _phys_diag(float(self._mj.data.time))
             elapsed = time.perf_counter() - loop_start
             sleep_time = _SIM_DT - elapsed
             if sleep_time > 0:
@@ -809,9 +856,10 @@ class MuJoCoGo2:
                         n = self._traj.N
                         w_opt = sol["x"].full().flatten()
                         self._mpc_U_opt = w_opt[12 * n:].reshape((12, n), order="F")
-                    except Exception:
+                        _mpc_diag("qp_ok")
+                    except Exception as _exc:  # noqa: BLE001
                         # QP solver failed — hold current torque (PD fallback)
-                        pass
+                        _mpc_diag("qp_fail", _exc)
 
                 if self._mpc_U_opt is not None:
                     try:
@@ -825,8 +873,8 @@ class MuJoCoGo2:
                             tau[i * 3:(i + 1) * 3] = leg_out.tau
                         tau = np.clip(tau, -_MPC_TAU_LIMITS, _MPC_TAU_LIMITS)
                         self._tau_hold = tau.copy()
-                    except Exception:
-                        pass
+                    except Exception as _exc:  # noqa: BLE001
+                        _mpc_diag("tau_fail", _exc)
             else:
                 # Idle: PD hold standing posture
                 q_cur = np.array(self._mj.data.qpos[7:19], dtype=np.float64)
@@ -900,8 +948,23 @@ class MuJoCoGo2:
         or turn() in progress. The token holder (same thread) passes.
         """
         self._require_connection()
-        if (time.time() < self._skill_ctrl_until
-                and threading.get_ident() != self._skill_ctrl_tid):
+        _gated = (time.time() < self._skill_ctrl_until
+                  and threading.get_ident() != self._skill_ctrl_tid)
+        # TEMP DIAGNOSTIC (off unless VECTOR_CMDVEL_LOG is set): record the full
+        # command stream — source thread + values + skill-gate state — so the
+        # explore "weird gait" can be checked for bursty/duplicate/conflicting
+        # set_velocity traffic from the bridge/nav stack. Remove after debugging.
+        _dbg = os.environ.get("VECTOR_CMDVEL_LOG", "")
+        if _dbg:
+            try:
+                with open(_dbg, "a") as _f:
+                    _f.write(
+                        f"{time.time():.4f}\t{threading.current_thread().name}\t"
+                        f"vx={vx:+.3f}\tvy={vy:+.3f}\tvyaw={vyaw:+.3f}\tgated={int(_gated)}\n"
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+        if _gated:
             return
         with self._cmd_lock:
             self._cmd_vel = (
@@ -940,6 +1003,19 @@ class MuJoCoGo2:
         if self._mj.model.nu >= 19:
             data.ctrl[12:19] = _PIPER_STOW_CTRL
         mj.mj_forward(self._mj.model, data)
+
+    def get_sim_time(self) -> float:
+        """Return the MuJoCo simulation clock (seconds).
+
+        The physics daemon advances this as it steps; it runs at whatever
+        fraction of wall-clock the machine sustains (often <1x). Consumed by
+        the ROS2 bridge's path follower to integrate its velocity ramps
+        against sim-dt (wall-tick ramps slew too fast in gait time when
+        sim/wall<1 and destabilize it); also usable as a ``/clock`` source if
+        the nav stack ever moves to use_sim_time=true.
+        """
+        self._require_connection()
+        return float(self._mj.data.time)
 
     def get_position(self) -> list[float]:
         """Return base position [x, y, z] in world frame."""

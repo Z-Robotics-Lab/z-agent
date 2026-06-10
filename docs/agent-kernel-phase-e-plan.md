@@ -7,7 +7,6 @@
 - Branch: `feat/verified-agent-kernel` (HEAD `25ef2ba`; canonical `tests/vcli tests/unit/vcli`
   baseline 863 passed / 4 skipped)
 - Related: [ARCHITECTURE.md](ARCHITECTURE.md), [agent-kernel-STATUS.md](agent-kernel-STATUS.md),
-  [agent-kernel-stage5-plan.md](agent-kernel-stage5-plan.md),
   [agent-kernel-phase-c-plan.md](agent-kernel-phase-c-plan.md),
   [architecture-decisions/ADR-006-agent-kernel-world-plugin.md](architecture-decisions/ADR-006-agent-kernel-world-plugin.md),
   [architecture-decisions/ADR-007-closed-loop-controller.md](architecture-decisions/ADR-007-closed-loop-controller.md)

@@ -26,7 +26,9 @@ done
 export VECTOR_VLM_URL="${VECTOR_VLM_URL:-http://localhost:11434/v1}"
 export VECTOR_VLM_MODEL="${VECTOR_VLM_MODEL:-gemma4:e4b}"
 
-VENV_SP="$REPO_DIR/.venv-nano/lib/python3.12/site-packages"
+# Repo venv site-packages (uv-managed .venv; falls back to legacy .venv-nano)
+VENV_SP="$REPO_DIR/.venv/lib/python3.12/site-packages"
+[ -d "$VENV_SP" ] || VENV_SP="$REPO_DIR/.venv-nano/lib/python3.12/site-packages"
 CMEEL_SP="$VENV_SP/cmeel.prefix/lib/python3.12/site-packages"
 CONVEX_SRC="/home/yusen/Desktop/go2-convex-mpc/src"
 export PYTHONPATH="$VENV_SP:$CMEEL_SP:$CONVEX_SRC:$REPO_DIR:$PYTHONPATH"

@@ -1285,16 +1285,20 @@ class VectorEngine:
 
         Threading: by default this runs on a background daemon thread so the
         CLI stays responsive. BUT when a GUI MuJoCo viewer is live
-        (``_has_live_viewer()``), it runs SYNCHRONOUSLY on the caller's thread
-        instead — MuJoCo mjData/GLFW are not thread-safe (GLFW is main-thread-
-        only on macOS), so the viewer-owning thread must be the only one that
-        touches the sim. In that case the caller blocks until execution
+        (``_has_live_viewer()``) AND we are running under mjpython (macOS),
+        it runs SYNCHRONOUSLY on the caller's thread instead — there GLFW is
+        main-thread-only and the caller's thread owns the viewer, so it must
+        be the only thread touching the sim; the caller blocks until execution
         finishes (acceptable: the user is watching the arm move, not typing).
+        On Linux/Windows the viewer+physics run on their own daemon threads,
+        so even with a live viewer execution stays on the background thread
+        (the REPL keeps accepting input, e.g. "stop").
 
         Args:
             goal_tree: The goal tree to execute.
             on_complete: Called when execution finishes (on the background
-                thread, or inline on the caller's thread when a viewer is live).
+                thread, or inline on the caller's thread in the
+                viewer-live-under-mjpython case).
         """
         import threading
 
@@ -1311,14 +1315,20 @@ class VectorEngine:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("VGG async execution failed: %s", exc)
 
-        # WHY: MuJoCo mjData and GLFW are not thread-safe (GLFW must be touched
-        # only on the main thread on macOS). When a GUI viewer is live, the
-        # caller's thread owns it; running skills on a background thread would
-        # access mjData/GLFW concurrently with the main-thread render and
-        # segfault. So when a viewer is live, execute synchronously on the
-        # caller's (viewer-owning) thread. The background thread stays ONLY for
-        # the headless/dev path (no viewer), where the CLI must stay responsive.
-        if self._has_live_viewer():
+        # WHY: GLFW is main-thread-ONLY on macOS/mjpython, where the viewer is
+        # driven by the caller's (main) thread pump — there a background skill
+        # thread touching mjData/GLFW concurrently with the main-thread render
+        # would segfault, so skills MUST run synchronously on the viewer-owning
+        # thread. On Linux/Windows the viewer runs in MuJoCo's own background
+        # render thread and physics+viewer.sync() run on the mujoco_*_physics
+        # daemon (viewer_mode.BACKGROUND_DAEMON); the skill thread never touches
+        # the viewer, so forcing sync-on-main there only freezes the REPL during
+        # a motion (laggy Ctrl-C / "stop") with no safety benefit. Gate the
+        # synchronous path on mjpython, mirroring viewer_mode's platform seam.
+        from vector_os_nano.hardware.sim.viewer_mode import (  # noqa: PLC0415
+            running_under_mjpython,
+        )
+        if self._has_live_viewer() and running_under_mjpython():
             self._vgg_thread = None
             _run()
             return
@@ -1330,12 +1340,14 @@ class VectorEngine:
     def _has_live_viewer(self) -> bool:
         """True when a connected sim has an OPEN GUI viewer.
 
-        MuJoCo data and GLFW are not thread-safe (GLFW must be touched only on
-        the main thread on macOS). When a viewer is live, skill execution must
-        run on the viewer-owning thread, never a background thread, or
-        concurrent mjData/GLFW access segfaults. World-agnostic: duck-types the
-        connected agent's arm/base hardware for a live viewer handle (no world
-        import, no embodiment-specific branch — kernel rule 7).
+        Used (together with ``running_under_mjpython()``) to gate synchronous
+        skill execution: ONLY under mjpython/macOS is GLFW main-thread-only and
+        the caller's thread the viewer owner — there a background skill thread
+        racing the render segfaults. On other platforms a live viewer runs on
+        its own daemon threads and this signal alone forces nothing.
+        World-agnostic: duck-types the connected agent's arm/base hardware for
+        a live viewer handle (no world import, no embodiment-specific branch —
+        kernel rule 7).
         """
         agent = getattr(self, "_vgg_agent", None)
         if agent is None:

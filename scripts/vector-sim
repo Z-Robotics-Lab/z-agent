@@ -13,10 +13,12 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-venv_python="$here/.venv-nano/bin/python"
+# uv-managed .venv preferred; legacy .venv-nano fallback
+venv_python="$here/.venv/bin/python"
+[[ -x "$venv_python" ]] || venv_python="$here/.venv-nano/bin/python"
 
 if [[ ! -x "$venv_python" ]]; then
-  echo "error: venv not found at $here/.venv-nano — run 'uv venv .venv-nano && uv pip install -e .' first." >&2
+  echo "error: venv not found at $here/.venv — run 'uv venv && uv pip install -e .' first." >&2
   exit 1
 fi
 

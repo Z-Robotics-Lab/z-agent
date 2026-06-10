@@ -72,6 +72,11 @@ from tf2_ros import TransformBroadcaster
 import numpy as np
 
 from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+from vector_os_nano.hardware.sim.sim_clock import sim_tick_dt
+
+# Path-follower nominal tick. Single source: the _follow_path timer period AND
+# the per-tick ramp constants inside it are calibrated against this.
+_PF_DT = 1.0 / 20.0
 
 # ---------------------------------------------------------------------------
 # Nav config loader (lazy, module-level cache)
@@ -267,7 +272,7 @@ class Go2VNavBridge(Node):
         # Python path follower — primary. C++ pathFollower sends zeros between
         # TARE waypoints (pathSize<=1), so Python follower is needed to keep
         # the dog moving on stale paths until TARE replans.
-        self.create_timer(1.0 / 20.0, self._follow_path)
+        self.create_timer(_PF_DT, self._follow_path)
         # Camera rendering (5 Hz)
         self.create_timer(1.0 / 5.0, self._publish_camera)
         self._cmd_count = 0
@@ -291,10 +296,18 @@ class Go2VNavBridge(Node):
             PointStamped, "/reset_waypoint", 5
         )
 
-        # Wall escape state — two-phase: pure reverse then strafe+turn
-        self._wall_contact_time: float = 0.0    # seconds spent pinned (front_d<0.25 AND slow)
-        self._wall_escape_until: float = 0.0    # timestamp when escape maneuver ends
-        self._wall_escape_phase2: float = 0.0   # timestamp when phase 2 (strafe) starts
+        # Wall escape state — two-phase: pure reverse then strafe+turn.
+        # All in SIM time (like the ramps): the maneuver must travel the same
+        # plant distance at any sim/wall ratio, and freeze if the sim pauses.
+        self._wall_contact_time: float = 0.0     # sim-seconds pinned (front_d<0.30 AND slow)
+        self._wall_escape_elapsed: float = 0.0   # sim-seconds since escape trigger
+        self._wall_escape_total: float = 0.0     # escape duration (sim-s); elapsed>=total => inactive
+        self._wall_escape_phase2_at: float = 0.0 # sim-s offset where phase 2 (strafe) starts
+
+        # Sim-clock sample from the previous _follow_path tick (None until the
+        # first tick). All follower ramps integrate against sim-dt, not wall
+        # ticks — see _sim_tick_dt.
+        self._pf_last_sim_t: float | None = None
 
         # Scene graph visualization (1 Hz MarkerArray)
         self._scene_graph = None  # set externally by agent
@@ -1035,15 +1048,48 @@ class Go2VNavBridge(Node):
 
         return (front_min, left_min, right_min, back_min)
 
+    def _sim_tick_dt(self) -> float:
+        """Sim-time elapsed since the previous follower tick (seconds).
+
+        The physics daemon often runs below wall speed (compute-bound: ~0.65x
+        measured with GUI + RViz), while this follower ticks on a WALL-clock
+        20 Hz timer. Velocity ramps integrated per wall tick then slew ~1/0.65x
+        faster in the gait's own (sim) time than they were tuned for and
+        destabilize the MPC gait ("飘/瘸腿"). Every ramp/accumulator in
+        _follow_path therefore integrates against THIS dt. Falls back to the
+        nominal tick when no sim clock is readable (real hardware, error), so
+        the pre-fix behavior is the degraded mode, never an exception.
+        """
+        now_sim: float | None = None
+        get_t = getattr(self._go2, "get_sim_time", None)
+        if get_t is not None:
+            try:
+                now_sim = float(get_t())
+            except Exception:
+                now_sim = None
+        last = self._pf_last_sim_t
+        self._pf_last_sim_t = now_sim
+        return sim_tick_dt(now_sim, last, _PF_DT)
+
     def _follow_path(self) -> None:
-        """Omnidirectional quadruped path follower (20 Hz).
+        """Omnidirectional quadruped path follower (20 Hz wall timer).
 
         Go2 can walk forward, backward, and sideways. This follower:
         1. ALWAYS prefers forward motion (vx > 0)
         2. Uses lateral velocity (vy) to track path when direction error is large
         3. Reverses ONLY when target is directly behind AND very close (dead end)
         4. Applies reactive wall avoidance overlay from cached pointcloud
+
+        All ramps/accumulators integrate against sim-dt (see _sim_tick_dt):
+        per-tick constants below are calibrated for a nominal _PF_DT tick and
+        scaled by `tick` = actual sim-ticks' worth of time elapsed.
         """
+        # Sample the sim clock BEFORE any early return so it stays fresh
+        # across teleop/skill-gated ticks (no stale-dt jump on resume).
+        dt_sim = self._sim_tick_dt()
+        tick = dt_sim / _PF_DT   # nominal-ticks' worth of sim time elapsed
+        decay = 0.9 ** tick      # per-tick 0.9 decel-to-stop decay, dt-corrected
+
         if time.time() < self._teleop_until:
             return
         # Skill-level override: walk/turn/etc. acquires exclusive control via
@@ -1058,7 +1104,8 @@ class Go2VNavBridge(Node):
         # Lidar is mounted -20° tilt on head (0.3m forward) — rear coverage
         # is sparser, so back_d uses a conservative clearance threshold.
         now = time.time()
-        if now < self._wall_escape_until:
+        if self._wall_escape_elapsed < self._wall_escape_total:
+            self._wall_escape_elapsed += dt_sim  # sim-time maneuver progress
             front_d, left_d, right_d, back_d = self._scan_surroundings()
             # Lidar rear coverage is sparse due to -20° tilt — treat back_d
             # as less reliable. Use conservative threshold (0.40m) vs front (0.30m).
@@ -1066,7 +1113,7 @@ class Go2VNavBridge(Node):
             left_clear = left_d > 0.25
             right_clear = right_d > 0.25
 
-            if now < self._wall_escape_phase2:
+            if self._wall_escape_elapsed < self._wall_escape_phase2_at:
                 # Phase 1: try to reverse — but only if back is clear
                 if back_clear:
                     tgt_vx, tgt_vy, tgt_yaw = -0.35, 0.0, 0.0
@@ -1089,14 +1136,14 @@ class Go2VNavBridge(Node):
                     tgt_yaw = 0.4 if left_d > right_d else -0.4
                 tgt_vx = -0.10 if back_clear else 0.0
 
-            # Moderate ramp — responsive but not violent
-            _A = 0.04
+            # Moderate ramp — responsive but not violent (per-tick, dt-scaled)
+            _A = 0.04 * tick
             if self._pf_speed < tgt_vx: self._pf_speed = min(tgt_vx, self._pf_speed + _A)
             else: self._pf_speed = max(tgt_vx, self._pf_speed - _A)
-            if self._pf_lat < tgt_vy: self._pf_lat = min(tgt_vy, self._pf_lat + 0.03)
-            else: self._pf_lat = max(tgt_vy, self._pf_lat - 0.03)
-            if self._pf_yawrate < tgt_yaw: self._pf_yawrate = min(tgt_yaw, self._pf_yawrate + 0.06)
-            else: self._pf_yawrate = max(tgt_yaw, self._pf_yawrate - 0.06)
+            if self._pf_lat < tgt_vy: self._pf_lat = min(tgt_vy, self._pf_lat + 0.03 * tick)
+            else: self._pf_lat = max(tgt_vy, self._pf_lat - 0.03 * tick)
+            if self._pf_yawrate < tgt_yaw: self._pf_yawrate = min(tgt_yaw, self._pf_yawrate + 0.06 * tick)
+            else: self._pf_yawrate = max(tgt_yaw, self._pf_yawrate - 0.06 * tick)
             self._go2.set_velocity(self._pf_speed, self._pf_lat, self._pf_yawrate)
             self._last_cmd_time = now
             return
@@ -1105,7 +1152,7 @@ class Go2VNavBridge(Node):
         front_d_check = self._check_front_obstacle()
         cur_speed = self._pf_speed if hasattr(self, '_pf_speed') else 0.0
         if front_d_check < 0.30 and cur_speed < 0.15:
-            self._wall_contact_time += 1.0 / 20.0  # 20 Hz tick
+            self._wall_contact_time += dt_sim  # sim-seconds pinned (was wall tick)
         else:
             self._wall_contact_time = 0.0
 
@@ -1116,18 +1163,19 @@ class Go2VNavBridge(Node):
                 f"R={right_d:.2f} B={back_d:.2f}"
             )
             all_tight = front_d < 0.35 and left_d < 0.30 and right_d < 0.30
+            self._wall_escape_elapsed = 0.0
             if all_tight and back_d > 0.40:
                 # Boxed in with only rear open — sustained reverse
-                self._wall_escape_phase2 = now + 3.0
-                self._wall_escape_until = now + 3.0
+                self._wall_escape_phase2_at = 3.0
+                self._wall_escape_total = 3.0
             elif back_d > 0.40:
                 # Front blocked, back clear — reverse then strafe
-                self._wall_escape_phase2 = now + 0.8
-                self._wall_escape_until = now + 2.5
+                self._wall_escape_phase2_at = 0.8
+                self._wall_escape_total = 2.5
             else:
                 # Front AND back blocked — turn in place to find opening
-                self._wall_escape_phase2 = now  # skip reverse, go straight to strafe/turn
-                self._wall_escape_until = now + 2.0
+                self._wall_escape_phase2_at = 0.0  # skip reverse, straight to strafe/turn
+                self._wall_escape_total = 2.0
             self._wall_contact_time = 0.0
             self._current_path = []
             self._stuck_count = 0
@@ -1153,14 +1201,14 @@ class Go2VNavBridge(Node):
         _LOOK_AHEAD = 0.8              # m lookahead
         _STOP_DIS = 0.2                # m — stop within this
         _SLOW_DWN_DIS = 1.0            # m — start decelerating
-        _ACCEL = 0.03                  # m/s per step @ 20Hz (0→0.8 takes 1.3s)
+        _ACCEL = 0.03                  # m/s per nominal tick (sim-dt-scaled below)
         _PATH_TIMEOUT = 8.0            # seconds before path considered stale
 
         # Stop immediately if exploration is done
         if self._exploration_finished:
-            self._pf_speed *= 0.9
-            self._pf_lat *= 0.9
-            self._pf_yawrate *= 0.9
+            self._pf_speed *= decay
+            self._pf_lat *= decay
+            self._pf_yawrate *= decay
             if abs(self._pf_speed) < 0.01: self._pf_speed = 0.0
             if abs(self._pf_lat) < 0.01: self._pf_lat = 0.0
             if abs(self._pf_yawrate) < 0.01: self._pf_yawrate = 0.0
@@ -1173,9 +1221,9 @@ class Go2VNavBridge(Node):
         if not has_path:
             if not self._nav_enabled:
                 # Decel to stop (smoothed)
-                self._pf_speed *= 0.9
-                self._pf_lat *= 0.9
-                self._pf_yawrate *= 0.9
+                self._pf_speed *= decay
+                self._pf_lat *= decay
+                self._pf_yawrate *= decay
                 if abs(self._pf_speed) < 0.01: self._pf_speed = 0.0
                 if abs(self._pf_lat) < 0.01: self._pf_lat = 0.0
                 if abs(self._pf_yawrate) < 0.01: self._pf_yawrate = 0.0
@@ -1187,12 +1235,12 @@ class Go2VNavBridge(Node):
                     tgt_vx, tgt_yaw = 0.0, 0.3    # stop, turn to find new path
                 else:
                     tgt_vx, tgt_yaw = 0.05, 0.0   # gentle creep (was 0.15 — too aggressive)
-                _A = 0.03
+                _A = 0.03 * tick
                 if self._pf_speed < tgt_vx: self._pf_speed = min(tgt_vx, self._pf_speed + _A)
                 else: self._pf_speed = max(tgt_vx, self._pf_speed - _A)
-                if self._pf_yawrate < tgt_yaw: self._pf_yawrate = min(tgt_yaw, self._pf_yawrate + 0.03)
-                else: self._pf_yawrate = max(tgt_yaw, self._pf_yawrate - 0.03)
-                self._pf_lat *= 0.9  # decay lateral
+                if self._pf_yawrate < tgt_yaw: self._pf_yawrate = min(tgt_yaw, self._pf_yawrate + 0.03 * tick)
+                else: self._pf_yawrate = max(tgt_yaw, self._pf_yawrate - 0.03 * tick)
+                self._pf_lat *= decay  # decay lateral
             self._go2.set_velocity(self._pf_speed, self._pf_lat, self._pf_yawrate)
             self._last_cmd_time = time.time()
             self._pf_point_id = 0
@@ -1357,15 +1405,19 @@ class Go2VNavBridge(Node):
                 vy = 0.0
 
         # --- Smooth acceleration (prevents MPC gait destabilization) ---
-        _ACCEL_LAT = 0.01    # m/s per tick lateral (0→0.15 takes 0.75s)
-        _ACCEL_YAW_TRACK = 0.04   # rad/s per tick in tracking (gentle)
-        _ACCEL_YAW_TURN = 0.08    # rad/s per tick in turn mode (faster)
+        # Per-nominal-tick rates, integrated against sim time via `tick` so
+        # the profile the gait sees matches the tuned design at any sim/wall
+        # ratio (the un-scaled ramp at 0.65x sim speed was the "飘/瘸腿" bug).
+        _ACCEL_FWD = _ACCEL * tick       # m/s this tick forward
+        _ACCEL_LAT = 0.01 * tick    # m/s per tick lateral (0→0.15 takes 0.75s sim)
+        _ACCEL_YAW_TRACK = 0.04 * tick   # rad/s per tick in tracking (gentle)
+        _ACCEL_YAW_TURN = 0.08 * tick    # rad/s per tick in turn mode (faster)
 
         # Forward/reverse
         if self._pf_speed < vx:
-            self._pf_speed = min(vx, self._pf_speed + _ACCEL)
+            self._pf_speed = min(vx, self._pf_speed + _ACCEL_FWD)
         elif self._pf_speed > vx:
-            self._pf_speed = max(vx, self._pf_speed - _ACCEL * 2)  # decel 2x faster
+            self._pf_speed = max(vx, self._pf_speed - _ACCEL_FWD * 2)  # decel 2x faster
 
         # Lateral
         target_lat = float(np.clip(vy, -_MAX_LAT, _MAX_LAT))
@@ -1499,18 +1551,19 @@ class Go2VNavBridge(Node):
                 all_tight = front_d < 0.35 and left_d < 0.30 and right_d < 0.30
                 # Conservative rear threshold — lidar rear coverage sparse at -20° tilt
                 back_clear = back_d > 0.40
+                self._wall_escape_elapsed = 0.0
                 if all_tight and back_clear:
                     # Boxed in — sustained reverse
-                    self._wall_escape_phase2 = now + 4.0
-                    self._wall_escape_until = now + 4.0
+                    self._wall_escape_phase2_at = 4.0
+                    self._wall_escape_total = 4.0
                 elif back_clear:
                     # Front blocked, back clear — reverse then strafe
-                    self._wall_escape_phase2 = now + 0.8
-                    self._wall_escape_until = now + _escape_dur
+                    self._wall_escape_phase2_at = 0.8
+                    self._wall_escape_total = _escape_dur
                 else:
                     # Front AND back blocked — turn in place
-                    self._wall_escape_phase2 = now
-                    self._wall_escape_until = now + _escape_dur
+                    self._wall_escape_phase2_at = 0.0
+                    self._wall_escape_total = _escape_dur
                 self._current_path = []
                 self._stuck_count = 0
                 self._stuck_wall_clock = 0.0
@@ -1526,8 +1579,9 @@ class Go2VNavBridge(Node):
                         for p in recent
                     ):
                         self.get_logger().warn("Stuck loop — extended escape 4s")
-                        self._wall_escape_phase2 = now + 2.0
-                        self._wall_escape_until = now + 4.0
+                        self._wall_escape_elapsed = 0.0
+                        self._wall_escape_phase2_at = 2.0
+                        self._wall_escape_total = 4.0
                         self._stuck_history.clear()
 
         self._stuck_pos = cur
