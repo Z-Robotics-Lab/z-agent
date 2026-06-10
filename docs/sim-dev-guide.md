@@ -177,28 +177,20 @@ a scan → detect → pick chain automatically rather than a bare grasp.
 ### Headless vs Window on macOS
 
 MuJoCo's passive viewer requires the Cocoa main thread, which only `mjpython`
-provides. Two operating modes:
+provides. Since Stage 0 the window is the DEFAULT and `--headless` is the opt-out:
+`vector-cli --sim` (or NL "start the arm sim") detects when a window is wanted and
+re-execs the whole REPL under mjpython automatically (`locate_mjpython()` derives it
+from `sys.executable`'s venv bin — see `vcli/tools/sim_tool.py`).
 
 | Mode | Command | Viewer | Use-case |
 |------|---------|--------|----------|
-| Headless | `vector-cli` + say "start the arm sim" | none | tests, remote, CI |
-| Window | `scripts/vector-sim` | MuJoCo viewer window | interactive dev |
+| Headless | `vector-cli --sim --headless` | none | tests, remote, CI |
+| Window | `vector-cli --sim` (or `scripts/vector-sim`) | MuJoCo viewer window | interactive dev |
 
-`scripts/vector-sim` is a thin bash wrapper that re-execs under `.venv-nano/bin/mjpython`:
-
-```bash
-exec "$mjpy" -m vector_os_nano.vcli.cli --sim --gui "$@"
-```
-
-You can also invoke it directly:
-
-```bash
-mjpython -m vector_os_nano.vcli.cli --sim --gui
-```
-
-**Phase D** will fold the `--gui` path into `vector-cli --sim` by detecting macOS
-and re-execing under mjpython automatically, so the two modes collapse to a single
-entry point.
+`scripts/vector-sim` is a thin backward-compat alias: it resolves the repo venv
+interpreter (`.venv/bin/python`, legacy `.venv-nano` fallback) and execs
+`python -m vector_os_nano.vcli.cli --sim "$@"` — the CLI itself then handles the
+mjpython re-exec.
 
 ### Test Suite
 
