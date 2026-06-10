@@ -7,6 +7,24 @@ when resuming; the detailed plans are linked at the bottom.
 - Last updated: 2026-06-09.
 - Scope guard: this is **vector-os-nano only** — not the UniLab go2arm-grasp work.
 
+## NEXT SESSION — Go2 explore gait instability ("飘/瘸腿", step size too big/small)
+
+**Status: TARGETED FIX APPLIED (2026-06-09, this commit) — OWNER EXPLORE RE-TEST PENDING.**
+
+**Root cause (confirmed by data):** the MuJoCo physics daemon runs at **~0.65× real-time** (compute-bound: `sim/wall≈0.65x`, measured via `VECTOR_PHYS_LOG`), but the bridge's `_follow_path` velocity controller + the whole nav stack run on **wall-clock** (`use_sim_time=false` everywhere, no `/clock`). So the commanded velocity *profile* races the gait's slower sim-time progression → unstable/limping gait. The smoking gun: `scripts/go2_vnav_bridge.py:_follow_path` ramped velocity by **fixed increments per 20 Hz WALL tick** → at 0.65× the ramp accelerated ~1.5× too fast in sim-time → step size over/undershoot.
+
+**THE FIX (this commit):** every ramp/accumulator in `_follow_path` now integrates against **actual sim-dt**: new pure helper `vector_os_nano/hardware/sim/sim_clock.py:sim_tick_dt` (8 unit tests) + `Go2VNavBridge._sim_tick_dt()` sampling `MuJoCoGo2.get_sim_time()` each tick (BEFORE the early returns, so the clock stays fresh across teleop/skill-gated ticks). `tick = dt_sim/_PF_DT` scales the main accel ramps (`_ACCEL`/lat/yaw, track+turn), the no-path creep ramp, the wall-escape ramps; `0.9**tick` replaces the per-tick 0.9 decel decays; `_wall_contact_time += dt_sim`. The **wall-escape state machine is sim-time too** (adversarial-review finding: don't mix time bases): `_wall_escape_elapsed/_total/_phase2_at` (sim-seconds) replace the `time.time()` deadlines at all 5 trigger sites (2 in `_follow_path`, 3 in `_stuck_detector`), so the maneuver travels the same plant distance at any sim/wall ratio and freezes if the sim pauses. Contract: sim/wall==1 → byte-identical to old behavior; no sim clock (real hardware) → nominal-tick fallback (= old behavior); paused sim → dt 0 (ramps freeze); stall → dt clamped to 4 nominal ticks. Verified: bridge headless smoke (boots, stands, 200 Hz odom, 18 s, no traceback); full suite green (see below). **Owner gate: run explore live and check the gait; escalate to full B (`/clock` + `use_sim_time=true` on every nav node, all-or-nothing TF) ONLY if still unstable.** Deliberately still wall-clock (consistent on both sides): `_path_time` staleness, stuck 8 s window, 5 s safety check — TARE/planner produce paths in wall time.
+
+**Ruled OUT (do NOT re-investigate):** duplicate/multi-source cmd transmission (cmd log = single MainThread @19Hz, smooth, 0% gated); duplicate physics daemon (`physics_daemons=1`); mujoco version (3.1.6 vs 3.9 identical); **pinocchio version (3.9 vs 4.0 dynamics byte-identical)**; code regression (gait + bridge byte-identical to 5.18 `c15c9f0`); swallowed QP failures (2645/2645 solve OK); QP solver tolerance/polish (worse); velocity smoothing (no help). It is a **timing/clock** problem, not MPC math, not message duplication, not the environment.
+
+**Venv reconcile (this commit):** the uv rebuild left only `.venv` (`.venv-nano` deleted) — `launch_explore.sh` was silently running the bridge on SYSTEM python3 (mujoco 3.6) because its PYTHONPATH pointed at the dead `.venv-nano`. All launch/test scripts (`launch_explore/vnav/bridge/slam/nav2.sh`, `test_*.sh`), `scripts/vector-sim`, and `verify_pick_top_down.py` now prefer `.venv` with a `.venv-nano` fallback; CLAUDE.md build line updated. The explore stack now runs the same mujoco 3.9 / numpy 2.4.6 / pinocchio 4.0 stack the MPC fix was verified on. The two `go2_vnav_bridge.py` copies (`~/vector-os-nano` vs `~/Desktop/vector_os_nano`) were re-synced last session; THIS repo's copy now carries the sim-dt fix and is the one vector-cli launches (`sim_tool.py` derives the repo from the installed package).
+
+**Diagnostics left in place (gated, off by default; remove when the gait is confirmed):** `VECTOR_CMDVEL_LOG` (set_velocity stream), `VECTOR_MPC_LOG` (`_mpc_diag` QP fail counts), `VECTOR_PHYS_LOG` (`_phys_diag` sim/wall rate + daemon count) — all in `hardware/sim/mujoco_go2.py`.
+
+**Also landed (kept from the diagnosis session):** convex_mpc numpy2 fixes (`~/Desktop/go2-convex-mpc/src/convex_mpc/{gait,go2_robot_data}.py` — MPC runs again; still NOT pinned in `pyproject.toml`, TODO vendor/path-pin); engine sync-gate made platform-aware (Linux REPL no longer blocks during explore — laggy "stop" fixed; docstrings updated per review); `MuJoCoGo2.get_sim_time()`. Review residual (nit, deferred): `viewer_mode.running_under_mjpython` probes the private `mujoco.viewer._MJPYTHON` and fails closed to the unsafe branch on macOS if a future MuJoCo renames it — consider a canary test.
+
+**Canonical suite reality (2026-06-09):** 1116 passed / 4 pre-existing environmental reds (3× `test_config_deepseek_provider` — fail only when the repo-root `.env` provides real creds; 1× `test_level71_robot_control::test_sim_tool_lifecycle_dev_to_arm_to_dev` — fails on clean HEAD too). The suite's arm-sim tests open REAL MuJoCo windows on a live display and the interpreter can segfault at exit (GLX teardown, after results print) — pre-existing pollution class, now noted in CLAUDE.md.
+
 ## North star (restated 2026-06-05)
 
 **Vector OS Nano = natural language controls everything**, via a built-in agent that
@@ -122,6 +140,31 @@ Also committed + pushed (`aebd61e` arm + Stage 0, `cdbfada` Stages 1-2); 628 tes
   (`tests/vcli/test_segfault_sync_exec.py`); 946 green. `vgg_execute_async` is the ONLY
   background sim access (the tool_use/ReAct path already runs sync on the main thread).
   HUMAN VISUAL CHECK still needed: "抓香蕉" in a real `--sim` terminal must no longer crash.
+
+- **Go2 gait + Linux REPL responsiveness (2026-06-09, uncommitted working tree).** Two
+  independent fixes after live Go2 "走路很奇怪" report on Linux:
+  (1) **MPC now walks again** — root cause was NOT a code regression (the daemon gait path
+  is byte-identical to `master`/5.18; verified by an 8-agent diff + headless A/B at both
+  commits giving identical trajectories). It was a **dependency mismatch**: the external
+  `convex_mpc` pkg (`~/Desktop/go2-convex-mpc`) was written for numpy<2; the freshly rebuilt
+  `.venv` has numpy 2.x, which hard-errors on `(N,1)`→scalar-slot assignments. `mujoco_go2`'s
+  broad `except: pass` (the QP-fallback) SWALLOWED those errors every control tick → MPC
+  produced no torque → "stands but won't walk". Fixed at the source in convex_mpc (shape-only,
+  no math change): `go2_robot_data.compute_com_x_vec` returns `(12,)` not `(12,1)`; `gait.compute_current_mask`
+  returns `(4,)`. Verified headless (room scene, MPC backend): forward 0.3 m/s → +0.48 m upright,
+  turn 0.5 rad/s → upright. NOTE: convex_mpc is NOT pinned in `pyproject.toml` → a `.venv` rebuild
+  loses this again (TODO: vendor/path-pin it). Minor residual: a brief recoverable stumble at
+  aggressive 0.8 m/s (pinocchio-4/mujoco-3.9 numerics vs the original conda dev stack); clean at
+  the ~0.3 m/s the walk/explore skills use.
+  (2) **Live-hardening IV made platform-aware** — the `_has_live_viewer()` sync gate fired on
+  EVERY platform, so on Linux+GUI it ran the whole skill/explore pipeline synchronously on the
+  REPL thread (laggy Ctrl-C / repeated "stop"). But the GLFW-main-thread hazard is macOS/mjpython
+  ONLY (Linux drives physics+`viewer.sync()` on the `mujoco_*_physics` daemon + MuJoCo's own render
+  thread). Gated the sync path on `viewer_mode.running_under_mjpython()`, mirroring the physics seam:
+  macOS/mjpython → sync-on-main (unchanged); Linux/Windows → background `vgg-executor` daemon (= 5.18
+  responsive behavior). `test_segfault_sync_exec.py` updated (Test A → mjpython-gated; new Test A2 →
+  Linux keeps the background thread). 11 gate+viewer_mode tests + 577 vcli unit green (3 pre-existing
+  `.env`-pollution reds only).
 
 - **Live-hardening V (this commit) — P0/P1 grounding: RobotWorld now has real verify predicates.**
   The plain robot arm world (`RobotWorld`, used by the normal `--sim` grasp path) returned `{}` for
