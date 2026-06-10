@@ -126,7 +126,9 @@ _CHILD_TEMPLATE = textwrap.dedent("""
 def _run_one(obj_id: str, repo: Path, verbose: bool) -> tuple[bool, str]:
     """Run a single pick in a fresh subprocess. Returns (ok, summary)."""
     child_script = _CHILD_TEMPLATE.format(obj_id=obj_id)
-    venv_py = repo / ".venv-nano" / "bin" / "python"
+    venv_py = repo / ".venv" / "bin" / "python"
+    if not venv_py.exists():
+        venv_py = repo / ".venv-nano" / "bin" / "python"
     py = str(venv_py) if venv_py.exists() else sys.executable
 
     proc = subprocess.run(
