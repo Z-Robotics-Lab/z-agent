@@ -31,9 +31,20 @@ run trustworthily on the industrial floor.
 that proves cross-system deployability and exercises the orchestration logic without a
 body attached.
 
-**North star, in one line:** NL in → decompose → plan → execute long-chain → verify each
-step → re-plan → evidence-gated done. The single-skill slice ships today; the long-chain
-closed loop is being completed (see Section 7).
+**North star, in one line:** NL in → plan → route each step to the right model/skill →
+execute long-chain → verify each step → recover on failure → evidence-gated done.
+
+**Current concrete form (sim-first).** In a high-quality simulator an agent is commanded in NL
+to **switch embodiment** (`go2`, `go2 + arm`, `g1`, …) and to **route each task to the right
+specialized model / skill pack**, then close the loop (execute → verify → recover):
+explore → nav-stack **TARE** · navigate-to-point → **planner (FAR, …)** · VLN → **SysNav** ·
+manipulation → **VLA** or the classical **VLM + point-cloud localization + IK**. The OS picks,
+sequences, verifies, and recovers; it does not re-implement nav/manip.
+
+> Direction reframed by the CEO 2026-06-18: re-assert THIS orchestration vision (it drifted
+> into a bespoke planner + in-MuJoCo VLN build over 12 campaigns). `feat/playground-vln` is
+> abandoned; `master` is the base. The canonical goal statement lives in `CLAUDE.md` → North
+> Star. Sections 2–8 below describe the prior implementation and will be reconciled in the redesign.
 
 ---
 

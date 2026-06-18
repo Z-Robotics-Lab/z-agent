@@ -1,6 +1,35 @@
 # Vector OS Nano — Project Constitution
 
-An agent-orchestration OS for robots: natural language controls everything through a built-in agent that decomposes -> plans -> executes -> verifies -> replans. The engine is `VectorEngine` plus the VGG (Verified Goal Graph) cognitive layer, fronted by two entry points (vector-cli REPL, vector-os-mcp) over one shared engine. North star: a grounded CLOSED-loop controller, not an open-loop compiler. Robots are the end; the dev/macOS path is a hardware-free means.
+## North Star — read this first (the goal every session serves)
+
+Vector OS is an **agent-orchestration runtime built around models**, for physical AI. The four
+things models do *unreliably* on their own are exactly the OS's job: **(1) plan the task,
+(2) route each instruction to the right model AND skill, (3) verify every step of execution,
+(4) recover automatically on failure.** It orchestrates **general large models, specialized
+small models, classical skills, and atomic actions** into one deployable whole that is
+**cross-hardware, cross-model, cross-system** — always the best tool for each job. The agent's
+value is in *choosing right, sequencing right, verifying right, and recovering when wrong* —
+NOT in re-implementing navigation or manipulation itself.
+
+Further, Vector OS is a **programmable platform**: developers build physical AI the way they
+write code (*code physical AI*) — any model, any skill, any robot, **plug and play**.
+
+**Current focus — sim.** In a high-quality simulator, an agent is commanded in natural language to:
+- **switch embodiment** — `go2`, `go2 + arm`, `g1`, … on demand;
+- **route each task to the right specialized model / skill pack**, then close the loop
+  (execute → verify → recover):
+  - explore → nav stack **TARE**
+  - navigate to a point → **planner (FAR, …)**
+  - VLN (semantic navigation) → **SysNav**
+  - manipulation → **VLA**, or the classical route **VLM + point-cloud localization + IK**
+
+Robots are the end; sim is the current means of building and proving it. Verification only ever
+gets stricter, never looser — every step must *prove* it happened, never merely claim it.
+
+> This re-asserts the project's original orchestration north star (ARCHITECTURE.md §1) after 12
+> campaigns drifted into a bespoke planner + in-MuJoCo VLN build. The `feat/playground-vln`
+> branch is **abandoned**; `master` is the base. The Rules / Doc-Governance below predate this
+> reframe and will be reconciled in the redesign — where they conflict, this North Star wins.
 
 This file STACKS on top of the global `~/.claude/CLAUDE.md` — do not repeat global preferences here.
 
