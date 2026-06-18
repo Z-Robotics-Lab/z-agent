@@ -35,10 +35,21 @@ goal:    see CLAUDE.md → North Star (agent-orchestration runtime for physical 
   isaac/gazebo/pybullet backends, 32 `VECTOR_*` flags, 10 files >800 lines. Mechanism = strangler-fig
   (harness-first, extract the clean core, strangle module-by-module), NOT a from-scratch rewrite.
 
-## Next
-1. Scope the redesign spec from the North Star (CEO-gated: spec approval).
-2. First honest milestone candidate: bare `vector-cli` NL command on the **real SO-101 arm**, verified
-   against Feetech joint encoders (survives removing the sim oracle), driven through `cli.main`.
+## Honest-verify smoking gun (code-verified 2026-06-18, red-team wsmkv96jg)
+The evidence gate **short-circuits `if is_robot: return True`** (`trace_store.py:243-244`, `276-277`);
+`cli.py:1825` + `engine.py:1801` call it with `is_robot=world.is_robot()`, and the robot world returns
+`True` (`robot.py:25`). So **every robot step's verification is auto-passed** — the real reason the old
+"verify is the moat" was theatrical on robots (not just sim-anchored, literally `return True`). The real
+foolability axis is "does a deterministic predicate read an oracle the ACTOR cannot author," NOT sim-vs-real.
+Also: SO-101 NOT connected (`/dev/ttyACM*` empty). M0 must DELETE `is_robot` from the gate first, re-key on
+actor-unauthored-snapshot, and use an independent-observer sim grader (red-teamed against no-op/staged snapshots).
+
+## Next (M0 honest foundation — see ~/.vector-nano-loop/campaign.md, hardened by R0 red-team)
+1. **R1 = delete the `is_robot` short-circuit** (3 sites: cli.py:1825, engine.py:1801, eval_runner.py:94),
+   re-key verification on actor-unauthored evidence, add the known-bad `arm-off-home → 'ran'/fail` regression,
+   record the sim red/green baseline. Pure software, headless-verifiable, no gate.
+2. R2 = independent-observer sim grader (red-team IT first) + PTY `cli.main` acceptance harness + CI gate.
+   Real SO-101 arm is gated on `ls /dev/ttyACM*` (absent now) and is NOT the gold win.
 3. Pending old-direction gates — recommend: do NOT merge `feat/playground-vln` (cherry-pick only the
    rule-5 GT-leak fix + rule-11 bare-cli fix if needed); DEFER DQ-16 (SysNav venv) / DQ-15 (FAR colcon)
    until a milestone needs them.
