@@ -558,7 +558,12 @@ class MuJoCoGo2:
             except Exception as exc:
                 if self._backend_pref == "mpc":
                     raise RuntimeError(f"MPC backend requested but failed: {exc}") from exc
-                logger.info("MuJoCoGo2: convex_mpc not available, using sinusoidal gait")
+                # LOUD (was info → silent): the dog walks far worse on the fallback,
+                # so surface WHY + the fix instead of hiding it (tricky-bugs Case 0).
+                logger.warning(
+                    "MuJoCoGo2: convex-MPC gait unavailable (%s) — falling back to "
+                    "the sinusoidal gait. Install the Go2 MPC deps for the real gait: "
+                    "`uv pip install -e .[go2]` (casadi + pin).", exc)
 
         backend_name = "mpc" if self._use_mpc else "sinusoidal"
         logger.info(
@@ -715,6 +720,12 @@ class MuJoCoGo2:
         slices the leg portion out of qpos/qvel. Only the reverse is an
         unrecoverable mismatch.
         """
+        # EAGER dep check (tricky-bugs Case 0: "Go2 won't walk — casadi missing"):
+        # casadi is imported LAZILY by convex_mpc.centroidal_mpc on the FIRST solve,
+        # so without this line a missing casadi sets _use_mpc=True at connect and the
+        # QP then fails EVERY tick silently (qp_fail, no torque, no walk). Importing
+        # it here makes a missing casadi raise at connect → loud fallback below.
+        import casadi  # noqa: F401,PLC0415
         from convex_mpc.go2_robot_data import PinGo2Model  # noqa: PLC0415
         from convex_mpc.gait import Gait                   # noqa: PLC0415
         from convex_mpc.com_trajectory import ComTraj       # noqa: PLC0415
