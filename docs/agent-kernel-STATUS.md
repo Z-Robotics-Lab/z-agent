@@ -45,16 +45,19 @@ Also: SO-101 NOT connected (`/dev/ttyACM*` empty). M0 must DELETE `is_robot` fro
 actor-unauthored-snapshot, and use an independent-observer sim grader (red-teamed against no-op/staged snapshots).
 
 ## Next (M0 honest foundation — see ~/.vector-nano-loop/campaign.md, hardened by R0 red-team)
-- **R1 core SHIPPED (`a738055`, branch feat/orchestrator-redesign):** `vcli/cognitive/evidence_classifier.classify_verify_expr`
-  — a pure AST guard, GROUNDED for a bare predicate-oracle call or a state-oracle-vs-constant, RAN for sentinels /
-  no-oracle / tautologies (oracle-vs-itself, bare state oracle). 18 passed + 1 strict-xfail (the len-shape gap → R2).
-  Honest scope: structural only; goal authenticity deferred to R2. Unused until wired (suite stays green).
-- **R1 WIRING (next, per next-prompt.md):** `classify_step_evidence` single-sources BOTH gates; DELETE the
-  `is_robot` short-circuits (trace_store.py:243-244 + 276-277); thread oracle_names from the live namespace; re-key
-  robot decompose examples onto real predicates (≥1 robot task GROUNDED); flip the 3 intentional tests
-  (test_level64_verify_as_eval.py:157/309/374); fail-closed arm-off-home regression; chunked-suite baseline.
-- **R2 =** independent-observer sim grader (red-team IT first) + PTY `cli.main` acceptance harness + CI gate.
-  Real SO-101 arm gated on `ls /dev/ttyACM*` (absent now), NOT the gold win.
+- **R1 SHIPPED + pushed (`ae2d0ea` on origin/feat/orchestrator-redesign):** the dishonest `if is_robot: return True`
+  evidence-gate bypass is DELETED. `classify_step_evidence` + `verify_oracle_names(agent, engine)` (single-sourced from
+  the live verifier namespace, fail-closed) now drive BOTH gates through one AST oracle-vs-tautology classifier
+  (`evidence_classifier.classify_verify_expr`): GROUNDED only for a bare predicate-oracle call or a state-oracle-vs-
+  constant; RAN for sentinels / no-oracle / tautologies. Robot decompose examples re-keyed onto real predicates;
+  fail-closed arm-off-home regression added. **Suite 1134 passed (only the 3 documented deepseek `.env` reds),
+  orchestrator-verified green by re-run.** Honest scope LEFT OPEN for R2: the guard is STRUCTURAL — it does NOT verify
+  the verify-constant is the real task goal, nor catch shape-trivial state compares (the strict-xfail).
+- **R2 (next) = M0② authenticity moat + acceptance harness:** an INDEPENDENT-OBSERVER sim grader (verify snapshot from
+  an authority the actor cannot author — MuJoCo step callback / observer owning MjData; stamped step-count+model-hash;
+  reject no-op qpos==start and staged qpos==goal; **red-team it FIRST**) + a PTY `cli.main` acceptance harness (drive
+  bare vector-cli, assert the verify VERDICT) + a CI gate forbidding "done" without a cli.main path. NEW design →
+  start with a mandatory opus DESIGN workflow. Real SO-101 arm gated on `ls /dev/ttyACM*` (absent now), NOT the gold win.
 3. Pending old-direction gates — recommend: do NOT merge `feat/playground-vln` (cherry-pick only the
    rule-5 GT-leak fix + rule-11 bare-cli fix if needed); DEFER DQ-16 (SysNav venv) / DQ-15 (FAR colcon)
    until a milestone needs them.
