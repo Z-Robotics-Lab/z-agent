@@ -26,6 +26,18 @@ write code (*code physical AI*) — any model, any skill, any robot, **plug and 
 Robots are the end; sim is the current means of building and proving it. Verification only ever
 gets stricter, never looser — every step must *prove* it happened, never merely claim it.
 
+**Acceptance interface — how the owner tests (NON-NEGOTIABLE).** The owner (Yusen) verifies EVERYTHING
+by opening a terminal, typing **`vector-cli`**, and giving **natural-language** commands — and nothing
+else. NEVER assume he will run pytest, python, a launch script, `-p`/`--sim`/`--sim-go2`/`--native-loop`
+flags, or any complex shell. So EVERY capability MUST be reachable and demonstrable through the bare
+`vector-cli` REPL by natural language alone: he launches/switches the sim and embodiment by NL
+("启动 go2 仿真" / "切换到机械臂" / "switch to go2 with arm"), commands the task by NL, and the honest
+verdict surfaces in that same conversation. Engineers' pytest/PTY harnesses (`-p --json`, the sim
+acceptance tests) are for INTERNAL verification only — they are NOT the product and NOT how acceptance
+is judged. **Corollary:** a capability that only works behind a flag or the `-p` path, and that bare
+`vector-cli` + NL cannot reach, is NOT done. (This is precisely why the native orchestration producer
+must become the REPL's DEFAULT path — the cutover — rather than living behind `--native-loop`.)
+
 > This re-asserts the project's original orchestration north star (ARCHITECTURE.md §1) after 12
 > campaigns drifted into a bespoke planner + in-MuJoCo VLN build. The `feat/playground-vln`
 > branch is **abandoned**; `master` is the base. The Rules / Doc-Governance below predate this
