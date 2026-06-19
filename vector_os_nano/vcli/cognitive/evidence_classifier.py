@@ -21,13 +21,21 @@ choice of string. Two oracle kinds:
   inside a comparison against a CONSTANT (``placed_count() == 2``,
   ``'table' in describe_scene()``).
 
+The GROUNDED test requires the oracle's RESULT to GATE the verdict — every
+truth-bearing leaf of the boolean expr must be an oracle term (``_is_grounded_node``,
+recursive). A constant/non-oracle operand that could short-circuit the verdict True
+(``at_position(99,99) or True``, ``... or 1``) classifies RAN (2026-06-19 review hole).
+
 SCOPE (honest — do not overclaim): this is a STRUCTURAL guard only. It does NOT
 verify that the constant is the TASK's real goal (an author could still write
 ``at_position(<current coords>)``), nor catch shape-trivial state compares
-(``len(get_position()) == 3``). Goal AUTHENTICITY is DEFERRED to R2's
-independent-observer grader, which owns a snapshot the actor cannot author. R1 only
-rejects the obvious tautologies (no oracle; oracle-vs-itself; bare state oracle) so
-the moat is not a NEW false-green dressed up as verification.
+(``len(get_position()) == 3``), nor — for NON-robot predicates — that the actor
+CAUSED the state (a dev ``file_exists('/etc/passwd')`` with no write classifies
+GROUNDED). Goal AUTHENTICITY / actor-causation for state+dev predicates is DEFERRED
+to the actor-causation layer, which today grades only ROBOT predicates (base/arm/
+gripper). R1 rejects the obvious tautologies (no oracle; oracle-vs-itself; bare state
+oracle; truthy-constant short-circuit) so the moat is not a NEW false-green dressed
+up as verification.
 """
 from __future__ import annotations
 
@@ -118,6 +126,47 @@ def _state_oracle_vs_constant(tree: ast.AST, oracle_names: frozenset[str]) -> bo
     return False
 
 
+def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
+    """True iff *node*'s truth value is GATED by world-oracle results — i.e. NO
+    constant or non-oracle operand can short-circuit it to True.
+
+    Closes the short-circuit moat hole (2026-06-19 review): the old test merely
+    checked that a predicate oracle was CALLED somewhere in the AST, so
+    ``at_position(99,99) or True`` classified GROUNDED (and short-circuits to True
+    regardless of real position). This walks the boolean structure and requires
+    EVERY truth-bearing leaf to be an oracle term, recursively:
+
+    - ``and`` / ``or``: every operand must itself be grounded (a constant/non-oracle
+      operand could make ``or`` True, or is dead weight in ``and``) — reject either.
+    - ``not X``: grounded iff ``X`` is grounded.
+    - a Compare: an oracle anchored against a CONSTANT (state-oracle-vs-constant or a
+      predicate-oracle-vs-constant), never oracle-vs-oracle (proves no goal) and
+      never constant-only.
+    - a bare Call: grounded ONLY for a PREDICATE oracle (goal-conditioned bool); a
+      bare STATE oracle is not evidence.
+    - anything else (a bare Constant, a non-oracle Name/Call, a Subscript, …):
+      NOT grounded.
+
+    This only ever makes the gate STRICTER (rule 5): every expr it now rejects was a
+    way to satisfy the verdict without the oracle's result determining it.
+    """
+    if isinstance(node, ast.BoolOp):
+        return bool(node.values) and all(
+            _is_grounded_node(v, oracle_names) for v in node.values
+        )
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return _is_grounded_node(node.operand, oracle_names)
+    if isinstance(node, ast.Compare):
+        operands = [node.left, *node.comparators]
+        has_oracle = any(_contains_oracle(o, oracle_names) for o in operands)
+        has_const = any(_contains_constant(o) for o in operands)
+        oracle_only = all(_contains_oracle(o, oracle_names) for o in operands)
+        return has_oracle and has_const and not oracle_only
+    if isinstance(node, ast.Call):
+        return isinstance(node.func, ast.Name) and node.func.id in _PREDICATE_ORACLES
+    return False
+
+
 def classify_verify_expr(expr: str, oracle_names: frozenset[str]) -> Verdict:
     """Classify a verify expression as GROUNDED or RAN.
 
@@ -143,8 +192,10 @@ def classify_verify_expr(expr: str, oracle_names: frozenset[str]) -> Verdict:
         return "RAN"
     if _is_self_tautology(tree):
         return "RAN"
-    if _calls_predicate_oracle(calls):
-        return "GROUNDED"
-    if _state_oracle_vs_constant(tree, oracle_names):
+    # GROUNDED only if the expr's truth is GATED by oracle results — no constant /
+    # non-oracle operand can short-circuit it (closes the ``... or True`` hole). This
+    # subsumes the old "bare predicate-oracle call" and "state-oracle-vs-constant"
+    # rules while rejecting a truthy-constant escape.
+    if _is_grounded_node(tree.body, oracle_names):
         return "GROUNDED"
     return "RAN"
