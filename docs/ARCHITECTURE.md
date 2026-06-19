@@ -46,6 +46,22 @@ sequences, verifies, and recovers; it does not re-implement nav/manip.
 > abandoned; `master` is the base. The canonical goal statement lives in `CLAUDE.md` → North
 > Star. Sections 2–8 below describe the prior implementation and will be reconciled in the redesign.
 
+> **Redesign status (2026-06-19, branch `feat/orchestrator-redesign`).** The orchestration vision
+> is now realized by a frontier-model **native tool-use producer** — `vcli/native_loop.py`
+> `run_turn_native`: the MODEL drives a ReAct loop (the world's skills + the engine registry's code
+> tools as native tools, plus a synthetic `verify`/`finish`), and the loop assembles an
+> `ExecutionTrace` the **honest verify spine** — `trace_store` + `actor_causation` +
+> `evidence_classifier` + `verdict` (the "moat") — grades BYTE-UNCHANGED. It has subsumed the
+> planner's job, all real-verified on the live `cli.main` PTY, for **go2** (walk / turn→facing /
+> multi-step), **arm** (pick→holding_object, gripper-weld causation), and **dev** (file_write→
+> path_contains), plus **cross-language** grasp. The legacy VGG cognitive layer (§2–8) is being
+> **strangled, not rewritten**: native-attempt-then-fallback routing is in (flag-gated, default
+> OFF); the **CUTOVER** (native as the default turn path + staged reversible deletion of the
+> fast-path → REPL → `should_use_vgg` → decomposer/executor) is a **CEO gate PENDING owner approval**.
+> The verify moat is the durable invariant — it only ever gets STRICTER (a 2026-06-19 milestone
+> review closed a truthy-constant short-circuit hole; goal-authenticity for non-robot/state
+> predicates remains the next hardening target). See `agent-kernel-STATUS.md` for live state.
+
 ---
 
 ## 2. Kernel vs World plugin
