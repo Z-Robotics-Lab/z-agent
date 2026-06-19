@@ -121,25 +121,27 @@ def sim_cleanup():
 @pytest.mark.capability
 @pytest.mark.live_llm
 def test_live_arm_pick_routes_and_grounds_holding(sim_cleanup) -> None:
-    """REAL model, NL "pick up the banana" -> autonomous pick->verify(holding_object) -> GROUNDED.
+    """REAL model, CHINESE NL "把香蕉抓起来拿在手里" -> autonomous pick->verify(holding_object('banana')) -> GROUNDED.
 
     The SO-101 arm boots with a banana on the table and NOT holding anything; the
     model alone must decide to ``pick`` it and prove it with a ``holding_object``
     predicate. The honest spine grades the assembled trace via the gripper-weld
     causation channel — a real grasp (weld 0->1) is the only way to earn GROUNDED.
 
-    NOTE — the instruction is ENGLISH on purpose. ``holding_object(target)`` matches
-    the scene's INTERNAL ENGLISH label ("banana"), so an English instruction lets the
-    model verify the STRICT, object-specific predicate ``holding_object('banana')`` and
-    have it match. A Chinese instruction makes the model emit ``holding_object('香蕉')``
-    which the English-label oracle correctly reports False even on a real grasp — the
-    moat working honestly, NOT a defect. We do NOT weaken the prompt to verify a grasp
-    with a bare no-arg ``holding_object()`` (that would make any-object satisfy a
-    specific-object goal — looser, banned by rule 5). Cross-language object-specific
-    grasp verification needs the oracle to accept localized aliases — a recorded,
-    deferred i18n task (see STATUS), NOT something this test papers over.
+    STEP 7 — the cross-language gap is now CLOSED (not deferred). ``holding_object(target)``
+    matches the scene's CANONICAL English name ("banana") with a STRICT case-insensitive
+    EXACT match — a wrong name (e.g. ``holding_object('apple')``) still returns False even
+    on a real grasp, and the oracle was NOT loosened. What closes the gap is the VOCAB the
+    native loop now hands the model: ``_native_system_prompt`` lists the world's graspable
+    object names (single-sourced from the arm's ``get_object_positions()`` keys, the SAME
+    ground truth the oracle matches), so a model commanded in CHINESE translates 香蕉->banana
+    and emits the CANONICAL ``holding_object('banana')`` itself. We do NOT weaken the prompt
+    to a bare no-arg ``holding_object()`` (that would make any-object satisfy a specific-object
+    goal — looser, banned by rule 5); the model verifies the STRICT object-specific predicate
+    from a Chinese command. (If a real model still emitted the Chinese name despite the vocab,
+    the documented fallback is a strict, single-sourced oracle-side alias map — see STATUS.)
     """
-    prompt = "pick up the banana and hold it in the gripper"
+    prompt = "把香蕉抓起来拿在手里"
     r = run_cli_turn(
         prompt,
         sim=True,
@@ -166,6 +168,18 @@ def test_live_arm_pick_routes_and_grounds_holding(sim_cleanup) -> None:
         f"the model must route a pick step verified by holding_object(...); got "
         f"per_step={[(s['strategy'], s['verify']) for s in per_step]} for {prompt!r}. "
         f"verdict={r.verdict}"
+    )
+
+    # (1b) STEP 7 CROSS-LANGUAGE — from a CHINESE command the model must emit the
+    # CANONICAL scene name (banana), not the Chinese word (香蕉). This is the whole
+    # point of the step-7 vocab expose: the strict oracle matches only "banana", so
+    # a Chinese command verifies the object-specific predicate ONLY because the model
+    # translated 香蕉->banana using the object vocab the native loop handed it.
+    canonical = [s for s in pick_steps if "banana" in str(s["verify"]).lower()]
+    assert canonical, (
+        f"from a CHINESE command the model must verify with the CANONICAL scene name "
+        f"holding_object('banana'); got verify exprs="
+        f"{[s['verify'] for s in pick_steps]} for {prompt!r}. verdict={r.verdict}"
     )
 
     # (2) HONEST GROUNDING — a real grasp (weld 0->1) earned a GROUNDED pick step.

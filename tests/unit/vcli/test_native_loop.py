@@ -323,3 +323,111 @@ def test_empty_script_yields_unverified_empty_trace() -> None:
     report = VerdictReport.from_trace(trace, oracle_names)
     assert len(trace.steps) == 0
     assert report.verified is False
+
+
+# ---------------------------------------------------------------------------
+# STEP 7 — cross-language grasp vocab: the native loop hands the MODEL the
+# world's CANONICAL object names so a non-English command verifies the STRICT
+# object-specific predicate, while the oracle stays untouched-strict.
+# ---------------------------------------------------------------------------
+
+
+class _FakeArmWithObjects:
+    """Duck-typed arm exposing get_object_positions (the single-source vocab)."""
+
+    def __init__(self, objects):
+        self._objects = objects
+
+    def get_object_positions(self):
+        return self._objects
+
+
+def _arm_agent(objects):
+    return SimpleNamespace(_arm=_FakeArmWithObjects(objects))
+
+
+def test_scene_object_names_single_sources_canonical_names() -> None:
+    """``_scene_object_names`` returns the arm's object-position keys, sorted.
+
+    This is the SAME ground truth ``holding_object`` matches against, so the names
+    the model is taught are exactly the names the oracle accepts (no split source).
+    """
+    from vector_os_nano.vcli.native_loop import _scene_object_names
+
+    agent = _arm_agent({"banana": [0.1, 0.1, 0.06], "mug": [0.2, 0.0, 0.06]})
+    assert _scene_object_names(agent) == ("banana", "mug")
+
+
+def test_scene_object_names_fail_safe_empty() -> None:
+    """No agent / no arm / no getter / raising getter -> EMPTY (pre-step-7 prompt)."""
+    from vector_os_nano.vcli.native_loop import _scene_object_names
+
+    assert _scene_object_names(None) == ()
+    assert _scene_object_names(SimpleNamespace(_arm=None)) == ()
+    assert _scene_object_names(SimpleNamespace(_arm=SimpleNamespace())) == ()
+
+    class _Raises:
+        def get_object_positions(self):
+            raise RuntimeError("boom")
+
+    assert _scene_object_names(SimpleNamespace(_arm=_Raises())) == ()
+
+
+def test_system_prompt_lists_object_vocab_when_present() -> None:
+    """The prompt teaches the canonical names + the translate-to-scene-name rule."""
+    from vector_os_nano.vcli.native_loop import _native_system_prompt
+
+    blocks = _native_system_prompt(None, frozenset({"holding_object"}), ("banana", "mug"))
+    text = blocks[0]["text"]
+    assert "graspable objects are: banana, mug" in text
+    # The rule that closes the cross-language gap: translate the user's wording to
+    # the canonical scene name (the model does 香蕉->banana itself).
+    assert "translating the user's wording" in text
+    assert "holding_object('banana')" in text
+
+
+def test_system_prompt_omits_object_vocab_when_empty() -> None:
+    """An EMPTY object set yields the EXACT pre-step-7 prompt (no object list)."""
+    from vector_os_nano.vcli.native_loop import _native_system_prompt
+
+    with_names = _native_system_prompt(None, frozenset({"holding_object"}), ("banana",))
+    without = _native_system_prompt(None, frozenset({"holding_object"}), ())
+    assert "graspable objects are" not in without[0]["text"]
+    # Default arg also omits it (back-compat with any caller passing only 2 args).
+    default = _native_system_prompt(None, frozenset({"holding_object"}))
+    assert default[0]["text"] == without[0]["text"]
+    assert with_names[0]["text"] != without[0]["text"]
+
+
+def test_oracle_stays_strict_wrong_canonical_name_is_false() -> None:
+    """STEP 7 moat guard: the fix did NOT loosen the oracle's exact match.
+
+    While genuinely holding the banana, a WRONG canonical name (apple / mug) still
+    returns False — verifying that the vocab-expose approach left ``make_holding_object``
+    strictly canonical (case-insensitive EXACT on the scene name, no fuzzy/loose match).
+    """
+    from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+
+    class _Arm:
+        _connected = True
+
+        def get_object_positions(self):
+            # banana lifted at the EE; mug resting far away.
+            return {"banana": [0.0, 0.0, 0.26], "mug": [0.5, 0.5, 0.0]}
+
+        def get_joint_positions(self):
+            return [0.0]
+
+        def fk(self, _joints):
+            return ([0.0, 0.0, 0.26], None)
+
+    class _Gripper:
+        def is_holding(self):
+            return True
+
+    agent = SimpleNamespace(_arm=_Arm(), _gripper=_Gripper())
+    holding_object = make_holding_object(agent)
+    assert holding_object("banana") is True  # the real, canonical match
+    assert holding_object("apple") is False  # wrong name -> NOT loosened
+    assert holding_object("mug") is False    # present but resting, not held
+    assert holding_object("香蕉") is False    # localized name is NOT a canonical key

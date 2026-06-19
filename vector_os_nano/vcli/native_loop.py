@@ -84,6 +84,47 @@ def _at_position_tol() -> float:
         return 0.5
 
 
+def _scene_object_names(agent: Any) -> tuple[str, ...]:
+    """Return the world's graspable object NAMES, the canonical names the oracle matches.
+
+    Single-sourced from the SAME ground truth the ``holding_object`` oracle reads:
+    the connected arm's ``get_object_positions()`` keys ARE the scene's canonical
+    object names (the MuJoCo body names, e.g. "banana"). Reaching the arm via the
+    duck-typed ``getattr(agent, "_arm", None)`` accessor (the oracle's own accessor)
+    keeps this WORLD-AGNOSTIC — native asks whatever world is connected for its
+    object vocab; no embodiment is hardcoded.
+
+    Why this closes the cross-language gap: ``holding_object(target)`` matches
+    ``target`` case-insensitively-EXACT against these keys. A model commanded in a
+    NON-English language (e.g. "把香蕉抓起来") cannot guess the canonical English
+    scene name on its own. Listing these names in the verify vocab lets the MODEL
+    translate the user's wording to the matching scene name (LLMs do 香蕉->banana
+    trivially) while the oracle stays untouched-strict.
+
+    Fail-safe / defensive: a None agent, no arm, no ``get_object_positions``, or any
+    read failure -> an EMPTY tuple. The prompt then simply omits the object list,
+    which is the exact pre-step-7 behaviour. Sorted for a stable, deterministic prompt.
+    """
+    if agent is None:
+        return ()
+    arm = getattr(agent, "_arm", None)
+    if arm is None:
+        return ()
+    getter = getattr(arm, "get_object_positions", None)
+    if not callable(getter):
+        return ()
+    try:
+        objects = getter()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("native_loop: get_object_positions failed: %s", exc)
+        return ()
+    try:
+        return tuple(sorted(str(name) for name in objects))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("native_loop: object-name extraction failed: %s", exc)
+        return ()
+
+
 # ---------------------------------------------------------------------------
 # Synthetic tool schemas (the verify/finish/motor tool-set the model is offered)
 # ---------------------------------------------------------------------------
@@ -358,7 +399,7 @@ def run_turn_native(
         # No backend wired -> no native turns -> empty trace (verdict fails closed).
         return runner.build_trace(user_message)
 
-    system_prompt = _native_system_prompt(engine, oracle_names)
+    system_prompt = _native_system_prompt(engine, oracle_names, _scene_object_names(agent))
     _append_user(session, user_message)
 
     turns = 0
@@ -510,15 +551,39 @@ def _native_tool_schemas(
     return schemas
 
 
-def _native_system_prompt(engine: Any, oracle_names: frozenset[str]) -> list[dict[str, Any]]:
+def _native_system_prompt(
+    engine: Any,
+    oracle_names: frozenset[str],
+    object_names: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
     """A minimal native system prompt, single-sourcing the verify vocab.
 
     Anthropic 'system' is a list of text blocks; the verify-vocab (oracle names +
     at_position tol) is taken from the SAME source ``verify_oracle_names`` reads, so
     the model's verify expr is grounded in the live namespace (review fix 6).
+
+    ``object_names`` (step 7) is the connected world's graspable object vocab — the
+    canonical scene names the ``holding_object`` oracle matches against, single-
+    sourced from the world via ``_scene_object_names``. When non-empty, the prompt
+    lists them so a model commanded in ANY language passes the CANONICAL scene name
+    to ``holding_object('<name>')`` (it translates the user's wording, e.g.
+    香蕉->banana) and the strictly-canonical oracle still matches. An EMPTY tuple
+    (no world objects exposed) omits the list — the exact pre-step-7 prompt.
     """
     names = ", ".join(sorted(oracle_names)) if oracle_names else "(none)"
     tol = _at_position_tol()
+    # Step 7: when the world exposes graspable object names, teach them so the model
+    # verifies with the CANONICAL scene name regardless of the command's language.
+    if object_names:
+        object_vocab = (
+            f"The scene's graspable objects are: {', '.join(object_names)}. "
+            "Always pass one of these EXACT scene names (English) as the QUOTED argument "
+            "to holding_object, translating the user's wording (in any language) to the "
+            "matching scene name — e.g. a request to grasp 香蕉 / the banana is verified "
+            "with holding_object('banana'). "
+        )
+    else:
+        object_vocab = ""
     text = (
         "You control a robot through tools. For each goal: call the MOTION skill "
         "that achieves it (e.g. walk), then IMMEDIATELY call verify(expr) with a "
@@ -534,7 +599,8 @@ def _native_system_prompt(engine: Any, oracle_names: frozenset[str]) -> list[dic
         "gripper oracle: call holding_object('<name>') with the object's scene name as a "
         "QUOTED string, e.g. holding_object('banana'), to prove you grasped THAT specific "
         "object (a bare word without quotes is not a valid argument). "
-        f"at_position(x, y, tol={tol}) is True when the robot is within tol metres of "
+        + object_vocab
+        + f"at_position(x, y, tol={tol}) is True when the robot is within tol metres of "
         f"(x, y). To reach a target coordinate, walk toward it (a forward walk "
         "advances along the robot's heading) and verify with at_position(x, y) for "
         "that target. The legged gait UNDER-SHOOTS the commanded distance "
