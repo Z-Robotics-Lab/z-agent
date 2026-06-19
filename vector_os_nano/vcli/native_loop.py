@@ -306,16 +306,33 @@ class NativeStepRunner:
         )
 
     def _grade(self, expr: str) -> "actor_causation.ActorCaused":
-        """Grade actor-causation for the just-verified step (R2b semantics).
+        """Grade actor-causation for the just-verified step (R2b + step-9 semantics).
 
-        Mirrors ``GoalExecutor._grade_actor_causation``: NOT_GRADED unless the
-        verify names a graded robot predicate live in the oracle set; otherwise a
-        fresh post-capture vs the step's entry baseline -> CAUSED / UNCAUSED.
-        Fail-safe to NOT_GRADED on any error (never raises). A robot-predicate step
-        whose baseline is None (no skill ran) grades UNCAUSED (grade fail-closes).
+        ROBOT predicate (base/arm/gripper, graded live in the oracle set): a fresh
+        post-capture vs the step's entry baseline -> CAUSED / UNCAUSED (mirrors
+        ``GoalExecutor._grade_actor_causation``). A robot-predicate step whose
+        baseline is None (no skill ran) grades UNCAUSED (grade fail-closes).
+
+        NON-ROBOT predicate (dev / state oracle — ``file_exists`` / ``path_contains``
+        / a ``get_position()`` compare): actor-causation has no displacement metric,
+        so step-9 ties grounding to whether the ACTOR ACTED this step. If NO action
+        skill was dispatched (``self._chain`` empty), the verify reads pre-existing /
+        ambient state the actor did not cause -> UNCAUSED (the spine R2b downgrade in
+        ``classify_step_evidence`` then flips an otherwise-GROUNDED predicate to RAN),
+        closing the verify-only dev/state NO-OP hole (2026-06-19 review). If ≥1 action
+        skill ran -> NOT_GRADED (legacy-equivalent; the action plausibly produced the
+        state — e.g. file_write -> path_contains stays GROUNDED). Goal AUTHENTICITY of
+        the verify (does the constant match the task goal; an action + a trivial-but-
+        true compare like ``len(get_position())==3``) remains the deepest residual,
+        deferred — it needs the real task goal, not a structural check.
+
+        Fail-safe to NOT_GRADED on any unexpected error (never raises).
         """
         try:
             if not actor_causation.is_robot_predicate(expr, self._oracle_names):
+                # No action dispatched this step -> the actor caused nothing.
+                if not self._chain:
+                    return actor_causation.ActorCaused.UNCAUSED
                 return actor_causation.ActorCaused.NOT_GRADED
             post = actor_causation.capture(self._agent)
             return actor_causation.grade(self._baseline, post, expr, self._oracle_names)
