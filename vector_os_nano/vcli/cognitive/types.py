@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+
 # --------------------------------------------------------------------------
 # Failure taxonomy (W2.4) — a small CLOSED set of lowercase, world-agnostic
 # class strings, plus "" for success / no-failure. This is a DETERMINISTIC
@@ -191,6 +193,17 @@ class StepRecord:
     # defaulted "" so every existing positional/keyword constructor is
     # byte-unaffected (rule 6).
     failure_class: str = ""
+    # R2b — TRI-STATE actor-causation grade (NOT bool|None). Whether the ACTOR
+    # caused this step's GROUNDED state change: CAUSED (commanded motion via the
+    # instrumented ctrl path AND the pose changed), UNCAUSED (a satisfied-at-baseline
+    # NO-OP or a teleport — no commanded motion), or NOT_GRADED (the executor never
+    # evaluated causation for this step — a non-robot-predicate step or a legacy/
+    # hand-built trace). ``classify_step_evidence`` downgrades a GROUNDED robot step
+    # to RAN ONLY when this is ``UNCAUSED``; ``NOT_GRADED`` (the default) classifies
+    # EXACTLY as before R2b, so every existing constructor and legacy trace is
+    # byte-unaffected (rule 6). Stored as the ENUM (serialized via its ``.value``).
+    # Additive + LAST + defaulted ``NOT_GRADED`` (frozen-safe).
+    actor_caused: "ActorCaused" = field(default_factory=lambda: ActorCaused.NOT_GRADED)
 
 
 @dataclass(frozen=True)

@@ -538,7 +538,14 @@ def _init_agent(args: argparse.Namespace) -> Any:
         import os
 
         console.print(f"[dim]  Starting Go2 MuJoCo simulation...[/dim]")
-        base = MuJoCoGo2(gui=True, room=True, backend="auto")
+        # Honor --headless: open the GLFW viewer window only when NOT headless. A
+        # headless run (e.g. the R2a PTY acceptance harness, or CI) drives the REAL
+        # MuJoCo physics with no on-screen window — the viewer's glXSwapBuffers
+        # crashes (GLXBadDrawable) when launched from a PTY-spawned subprocess, and
+        # it is never needed for a non-interactive turn. Interactive desktop use
+        # (no --headless) is byte-identical: gui=True as before.
+        _go2_gui = not getattr(args, "headless", False)
+        base = MuJoCoGo2(gui=_go2_gui, room=True, backend="auto")
         base.connect()
         base.stand()
 
@@ -1611,7 +1618,24 @@ def main(argv: list[str] | None = None) -> None:
         if getattr(args, "json", False):
             global console
             console = Console(stderr=True)
-        sys.exit(run_one_turn(args))
+        _code = run_one_turn(args)
+        # The verdict line is already flushed to stdout and the exit code is
+        # decided. A live sim (--sim/--sim-go2) leaves a MuJoCo physics daemon
+        # thread + ROS2 stack running whose interpreter-teardown can SIGABRT/segv
+        # AFTER the verdict — corrupting the process exit code so it no longer
+        # matches the (already-correct) verdict. For a single-use non-interactive
+        # turn there is nothing to gracefully shut down, so exit HARD with the
+        # decided code (after flushing) to keep the harness invariant
+        # ``verified == (exit_code == 0)`` honest. Interactive / non-sim turns are
+        # unaffected (no daemon to crash). os._exit skips atexit/GC by design.
+        if getattr(args, "sim", False) or getattr(args, "sim_go2", False):
+            try:
+                sys.stdout.flush()
+                sys.stderr.flush()
+            except Exception:  # noqa: BLE001
+                pass
+            os._exit(_code)
+        sys.exit(_code)
 
     # Resolve API key + provider from CLI flags > env vars > config file
     from vector_os_nano.vcli.config import resolve_credentials

@@ -458,6 +458,19 @@ class MuJoCoGo2:
         self._skill_ctrl_until: float = 0.0
         self._skill_ctrl_tid: int = 0
 
+        # R2b actor-causation instrumentation. Bumped in set_velocity ONLY for
+        # writes that pass the skill-exclusive ``_gated`` guard (an UNGATED command —
+        # i.e. one issued by a walk()/turn() skill on the token thread, or by any
+        # caller when no skill holds the token). ``_cmd_writes`` is the count;
+        # ``_cmd_motion`` is the cumulative |vx|+|vy|+|vyaw| MAGNITUDE — the signal
+        # the grader keys on, so a terminal set_velocity(0,0,0) stop (a write, zero
+        # magnitude) never satisfies causation. A GATED write (the bridge/nav
+        # cmd_vel path, rejected before reaching the actuators) is NOT counted, so
+        # the live navigate route reads as zero commanded motion (scoped OUT — see
+        # actor_causation docstring). Read via ``cmd_motion()`` (snapshot value).
+        self._cmd_writes: int = 0
+        self._cmd_motion: float = 0.0
+
     # ------------------------------------------------------------------
     # Capability properties (BaseProtocol)
     # ------------------------------------------------------------------
@@ -978,11 +991,28 @@ class MuJoCoGo2:
         if _gated:
             return
         with self._cmd_lock:
-            self._cmd_vel = (
-                float(np.clip(vx, -_VX_MAX, _VX_MAX)),
-                float(np.clip(vy, -_VY_MAX, _VY_MAX)),
-                float(np.clip(vyaw, -_VYAW_MAX, _VYAW_MAX)),
-            )
+            cvx = float(np.clip(vx, -_VX_MAX, _VX_MAX))
+            cvy = float(np.clip(vy, -_VY_MAX, _VY_MAX))
+            cvyaw = float(np.clip(vyaw, -_VYAW_MAX, _VYAW_MAX))
+            self._cmd_vel = (cvx, cvy, cvyaw)
+            # R2b: count this UNGATED command and accumulate its magnitude. A
+            # stop (0,0,0) adds a write but zero magnitude, so it never satisfies
+            # the grader's MOTION_EPS threshold (which keys on _cmd_motion).
+            self._cmd_writes += 1
+            self._cmd_motion += abs(cvx) + abs(cvy) + abs(cvyaw)
+
+    def cmd_motion(self) -> float:
+        """Cumulative UNGATED commanded-velocity magnitude (R2b actor-causation).
+
+        The sum of ``|vx|+|vy|+|vyaw|`` over every ``set_velocity`` call that passed
+        the skill-exclusive gate (a real motor command — a walk()/turn() skill's
+        own writes, or any write when no skill holds the token). The grader takes a
+        baseline snapshot before a step and a post snapshot after, treating a
+        delta >= ``MOTION_EPS`` as "the actor commanded motion". A terminal
+        ``set_velocity(0,0,0)`` adds nothing to this sum, so a step that only
+        stopped never reads as commanded motion. Monotonically non-decreasing.
+        """
+        return float(self._cmd_motion)
 
     # ------------------------------------------------------------------
     # State queries

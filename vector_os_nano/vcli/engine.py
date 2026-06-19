@@ -588,6 +588,11 @@ class VectorEngine:
                 code_executor=code_executor,
                 tool_dispatcher=tool_dispatcher,
                 capability_registry=capability_registry,
+                # R2b — the connected robot agent supplies the actor-causation
+                # baseline/post snapshots (commanded-motion counters + pose). The
+                # SAME agent the verify namespace + SkillContext are built from, so
+                # the graded actor is the one whose set_velocity/move_joints runs.
+                agent=agent,
             )
         except ImportError as exc:
             logger.warning("VGG: GoalExecutor not available: %s", exc)

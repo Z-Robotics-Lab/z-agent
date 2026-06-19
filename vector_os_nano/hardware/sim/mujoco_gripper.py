@@ -79,6 +79,41 @@ class MuJoCoGripper:
         """Return True if an object is currently welded to the gripper."""
         return self._held_object is not None
 
+    def weld_is_active(self) -> dict[str, bool]:
+        """Return ``{welded-body-name -> data.eq_active[i] != 0}`` (R2b).
+
+        Reads the REAL constraint state off ``data.eq_active`` (the live physics
+        truth a grasp toggles 0->1), keyed by the welded BODY name resolved via
+        ``model.eq_obj2id -> mj_id2name`` — the SAME per-weld resolution
+        ``_try_grasp`` uses (gripper.py:128-129). Target-aware: the actor-causation
+        grader compares this body-keyed map across a step and treats a body that
+        went 0->1 as a fresh grasp BY THE ACTOR, so a wrong-object weld toggled
+        for the wrong target does not satisfy ``holding_object(target)``.
+
+        Fail-safe: any error (disconnected, no model) yields ``{}`` — an empty map
+        is ungradable (grades NOT_GRADED / UNCAUSED), never a spurious CAUSED.
+        """
+        if not getattr(self._arm, "_connected", False):
+            return {}
+        try:
+            import mujoco  # noqa: PLC0415
+
+            model = self._arm._model
+            data = self._arm._data
+            out: dict[str, bool] = {}
+            for i in range(model.neq):
+                if model.eq_type[i] != mujoco.mjtEq.mjEQ_WELD:
+                    continue
+                body2_id = int(model.eq_obj2id[i])
+                body2_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body2_id)
+                if body2_name is None:
+                    continue
+                out[str(body2_name)] = bool(int(data.eq_active[i]) != 0)
+            return out
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("MuJoCoGripper: weld_is_active read failed: %s", exc)
+            return {}
+
     def get_position(self) -> float:
         """Return normalised gripper position (1.0=open, 0.0=closed)."""
         return 1.0 if self._is_open else 0.0

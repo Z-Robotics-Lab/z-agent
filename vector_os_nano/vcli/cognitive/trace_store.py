@@ -25,6 +25,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal
 
+from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused, from_name
 from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
 from vector_os_nano.vcli.cognitive.types import (
     ExecutionTrace,
@@ -44,8 +45,9 @@ _NO_EVIDENCE: frozenset[str] = frozenset({"", "True"})
 _DEFAULT_TRACES_DIR = Path.home() / ".vector" / "traces"
 
 # Bump when the on-disk shape changes; load_trace tolerates older/unknown keys.
-# v2 adds StepRecord.visual_override; v3 adds SubGoal.answer_only (S5.2).
-_SCHEMA_VERSION = 3
+# v2 adds StepRecord.visual_override; v3 adds SubGoal.answer_only (S5.2);
+# v4 adds StepRecord.actor_caused (R2b actor-causation grade).
+_SCHEMA_VERSION = 4
 
 # The ONLY side-effect-free dispatch route (``GoalExecutor._execute_answer`` does
 # no I/O and no model call). The evidence-gate exemption for a no-robot-evidence
@@ -107,6 +109,16 @@ def verify_oracle_names(agent: Any, engine: Any = None) -> frozenset[str]:
 # ---------------------------------------------------------------------------
 
 
+def _actor_uncaused(step: StepRecord) -> bool:
+    """True iff the executor graded this step's actor-causation as UNCAUSED (R2b).
+
+    Reads ``step.actor_caused`` defensively (``getattr``) so a legacy StepRecord
+    built before the field existed reads as ``NOT_GRADED`` -> not uncaused -> no
+    downgrade. Only the explicit ``UNCAUSED`` value downgrades a GROUNDED step.
+    """
+    return getattr(step, "actor_caused", ActorCaused.NOT_GRADED) == ActorCaused.UNCAUSED
+
+
 def classify_step_evidence(
     step: StepRecord, sub_goal: SubGoal, oracle_names: frozenset[str]
 ) -> StepEvidence:
@@ -130,6 +142,16 @@ def classify_step_evidence(
     - RAN — the step succeeded but its verify carries no real, non-tautological
       world evidence (a sentinel ``""``/``"True"``, an absent oracle, or a
       tautology), or it succeeded with a visual override.
+
+    R2b ACTOR-CAUSATION downgrade (single-sourced HERE so it flows to BOTH gates
+    and the VECTOR_VERDICT report): a step that would otherwise classify GROUNDED is
+    DOWNGRADED to RAN when ``step.actor_caused == ActorCaused.UNCAUSED`` — i.e. the
+    R1 predicate is GROUNDED but the executor graded that the ACTOR did NOT cause the
+    state change (a satisfied-at-baseline NO-OP, or a teleport with no commanded
+    motion). The downgrade fires ONLY on the explicit ``UNCAUSED`` value; the default
+    ``NOT_GRADED`` (legacy / hand-built / non-robot-predicate steps the executor never
+    graded) classifies EXACTLY as before R2b — zero regression. ``CAUSED`` is a no-op
+    here (the step keeps its GROUNDED classification).
     """
     if not step.success:
         return "FAILED"
@@ -141,6 +163,9 @@ def classify_step_evidence(
         and step.verify_result
         and not visual_override
     )
+    if grounded and _actor_uncaused(step):
+        # R2b: GROUNDED predicate but the actor did not cause it -> downgrade to RAN.
+        return "RAN"
     return "GROUNDED" if grounded else "RAN"
 
 
@@ -180,6 +205,10 @@ def _trace_to_dict(trace: ExecutionTrace) -> dict[str, Any]:
                 "error": s.error,
                 "fallback_used": s.fallback_used,
                 "visual_override": getattr(s, "visual_override", False),
+                # R2b: serialize the actor-causation grade as its enum ``.value``.
+                "actor_caused": getattr(
+                    s, "actor_caused", ActorCaused.NOT_GRADED
+                ).value,
             }
             for s in trace.steps
         ],
@@ -219,6 +248,9 @@ def _dict_to_trace(data: dict[str, Any]) -> ExecutionTrace:
             error=str(s.get("error", "")),
             fallback_used=bool(s.get("fallback_used", False)),
             visual_override=bool(s.get("visual_override", False)),
+            # R2b: deserialize the actor-causation grade; absent/unknown (older
+            # traces) maps to NOT_GRADED -> legacy-equivalent (no downgrade).
+            actor_caused=from_name(s.get("actor_caused")),
         )
         for s in data.get("steps", []) or []
     )

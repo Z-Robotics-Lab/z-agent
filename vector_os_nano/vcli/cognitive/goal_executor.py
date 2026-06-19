@@ -48,6 +48,7 @@ class GoalExecutor:
         tool_dispatcher: Any = None,
         capability_registry: Any = None,
         blackboard: Any = None,
+        agent: Any = None,
     ) -> None:
         """Initialise the executor.
 
@@ -75,6 +76,12 @@ class GoalExecutor:
                              captures each successful step's structured output under
                              the sub-goal name. None disables capture; the executor's
                              behavior is otherwise byte-identical.
+            agent: Optional connected robot agent (R2b) — the source of the
+                             actor-causation baseline/post snapshots. Duck-typed for
+                             ``_base`` / ``_arm`` / ``_gripper`` by
+                             ``actor_causation.capture``. None disables causation
+                             grading (every step stays ``NOT_GRADED`` = legacy), so
+                             non-robot worlds and tests are byte-unaffected.
 
         Note (R1): the former ``is_robot`` parameter is GONE. The per-step reward
         gate (``_record_strategy_stats``) no longer branches on the world; it
@@ -93,6 +100,9 @@ class GoalExecutor:
         self._tool_dispatcher = tool_dispatcher
         self._capability_registry = capability_registry
         self._blackboard = blackboard
+        # R2b — the connected robot agent whose commanded-motion counters + pose the
+        # actor-causation grader snapshots. None disables grading (legacy behavior).
+        self._agent = agent
 
     # ------------------------------------------------------------------
     # Strategy-stats reward gate (W1.1) — single chokepoint
@@ -325,6 +335,12 @@ class GoalExecutor:
         """Execute a single sub_goal and return its StepRecord."""
         step_start = time.monotonic()
 
+        # R2b — capture the actor-causation baseline BEFORE any strategy runs, so a
+        # later ``set_velocity`` / ``move_joints`` advances the counter we compare
+        # against. Frozen snapshot (no live handle) — immune to the daemon advancing
+        # the robot afterward. None agent => no baseline => steps stay NOT_GRADED.
+        actor_baseline = self._capture_actor_baseline()
+
         # W1.4 — world producing-step primitive: if the sub-goal's explicit strategy
         # names a world-injected producer (build_step_primitives), dispatch it
         # DIRECTLY as a ``primitive`` (preserving the sub-goal's real strategy_params
@@ -422,6 +438,12 @@ class GoalExecutor:
         # Verify — yields (bool, raw value) from the same sandbox.
         verify_result, verify_value = self._verify_and_value(sub_goal.verify)
 
+        # R2b — grade actor-causation ONCE, here, right after the verify read. The
+        # grade is computed for every GROUNDED-capable path below from this single
+        # call (NOT_GRADED for a non-robot-predicate step). It captures a fresh
+        # POST snapshot now and compares it against the baseline taken at entry.
+        actor_caused = self._grade_actor_causation(actor_baseline, sub_goal.verify)
+
         if verify_result:
             # Success path
             result_data = {"output": exec_output, "verify_value": verify_value}
@@ -435,6 +457,7 @@ class GoalExecutor:
                 error="",
                 fallback_used=False,
                 result_data=result_data,
+                actor_caused=actor_caused,
             )
 
         # --- Phase 3: Visual verification fallback ---
@@ -491,6 +514,12 @@ class GoalExecutor:
 
             # Re-verify after fallback
             verify_result_after, verify_value_after = self._verify_and_value(sub_goal.verify)
+            # R2b — re-grade against the SAME entry baseline now that the fallback
+            # ran (it may have commanded the motion the primary did not), so a
+            # fallback that actually walked the robot grades CAUSED.
+            actor_caused_after = self._grade_actor_causation(
+                actor_baseline, sub_goal.verify
+            )
             # Prefer the fallback's output; fall back to the primary attempt's.
             fb_result_data = {
                 "output": fallback_output or exec_output,
@@ -510,6 +539,7 @@ class GoalExecutor:
                 # W2.4: executed without error but verify is still False after the
                 # fallback -> a verify-miss. "" on the success branch.
                 failure_class="" if verify_result_after else "verify_fail",
+                actor_caused=actor_caused_after,
             )
 
         # No fallback, verification failed
@@ -722,6 +752,64 @@ class GoalExecutor:
     # ------------------------------------------------------------------
     # Observation capture (Stage 1a)
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Actor-causation grading (R2b)
+    # ------------------------------------------------------------------
+
+    def _capture_actor_baseline(self) -> Any:
+        """Capture the actor-causation baseline for the upcoming step (R2b).
+
+        Returns an ``ActorBaseline`` snapshot of the agent's commanded-motion
+        counters + pose, or ``None`` when no agent is wired (grading disabled) or
+        capture raises — in which case the step stays ``NOT_GRADED`` (legacy).
+        """
+        if self._agent is None:
+            return None
+        try:
+            from vector_os_nano.vcli.cognitive.actor_causation import capture
+            return capture(self._agent)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("GoalExecutor: actor-causation capture raised: %s", exc)
+            return None
+
+    def _grade_actor_causation(self, baseline: Any, verify: str) -> Any:
+        """Grade actor-causation for the just-executed step (R2b).
+
+        Returns an ``ActorCaused`` value:
+          * ``NOT_GRADED`` when grading is disabled (no agent / no baseline) OR the
+            verify names no graded robot predicate present in the live oracle set —
+            so a non-robot-predicate step classifies EXACTLY as before R2b.
+          * otherwise ``CAUSED`` / ``UNCAUSED`` from ``actor_causation.grade``,
+            comparing a fresh POST snapshot against *baseline*.
+
+        Only an ``UNCAUSED`` value downgrades a GROUNDED step (see
+        ``trace_store.classify_step_evidence``); NOT_GRADED / CAUSED do not. So a
+        legacy/dev step is never spuriously downgraded. Fail-safe: any error grades
+        ``NOT_GRADED`` (legacy-equivalent — the moat never gets falsely stricter on
+        a grading bug, only the R1 predicate gate applies). NEVER raises.
+        """
+        from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+
+        if self._agent is None or baseline is None:
+            return ActorCaused.NOT_GRADED
+        try:
+            from vector_os_nano.vcli.cognitive.actor_causation import (
+                capture,
+                grade,
+                is_robot_predicate,
+            )
+
+            oracle_names = self._verify_oracle_names()
+            # Only GRADE a step whose verify names a graded robot predicate that is
+            # live in the oracle set; anything else stays NOT_GRADED (legacy).
+            if not is_robot_predicate(verify, oracle_names):
+                return ActorCaused.NOT_GRADED
+            post = capture(self._agent)
+            return grade(baseline, post, verify, oracle_names)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("GoalExecutor: actor-causation grade raised: %s", exc)
+            return ActorCaused.NOT_GRADED
 
     def _verify_and_value(self, expression: str) -> tuple[bool, Any]:
         """Return ``(verify_bool, verify_value)`` for *expression*.
