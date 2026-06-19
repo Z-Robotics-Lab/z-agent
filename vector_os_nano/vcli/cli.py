@@ -380,6 +380,144 @@ def _native_trace_acted(trace: Any) -> bool:
     return any((getattr(s, "strategy", "") or "").strip() for s in steps)
 
 
+def _repl_native_enabled() -> bool:
+    """REPL CUTOVER (2026-06-19, owner-approved): native is the DEFAULT REPL turn path.
+
+    The interactive ``vector-cli`` REPL attempts the frontier-model NATIVE TOOL-USE
+    producer first (then falls back to the legacy planner) so the owner's ONLY
+    acceptance interface — bare ``vector-cli`` + natural language — exercises the
+    redesign (CLAUDE.md North Star -> "Acceptance interface"). Default ON.
+    ``VECTOR_REPL_NATIVE`` in {0, false, off, no} forces the pure-legacy REPL
+    (byte-identical to the pre-cutover turn path) — a reversible escape hatch.
+    """
+    return os.environ.get("VECTOR_REPL_NATIVE", "").strip().lower() not in (
+        "0",
+        "false",
+        "off",
+        "no",
+    )
+
+
+def _intent_actionable(engine: Any, user_input: str) -> bool:
+    """OPTIMIZATION HINT (NOT a correctness fork — rule 1; mirrors cli.py routing).
+
+    The native producer costs an LLM round-trip; attempting it on PURE CHAT or
+    sim-management turns ("启动 go2 仿真", "switch to arm") would waste one before the
+    no-action fallback. ``classify_intent`` is the SAME observable hint the REPL
+    already uses to pick the render shape — here it only decides whether to ATTEMPT
+    native, never the verdict. An action-shaped turn (``use_vgg``) attempts native;
+    everything else goes straight to the unchanged tool_use path (where SimStartTool
+    + embodiment-switch live). On any classify error -> attempt native (fail OPEN to
+    the redesign, never silently skip it; a no-op then falls back to legacy anyway).
+    """
+    try:
+        return bool(engine.classify_intent(user_input).use_vgg)
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _repl_attempt_native(
+    engine: Any,
+    user_input: str,
+    session: Any,
+    app_state: dict[str, Any],
+    console: Any,
+) -> bool:
+    """Attempt the native tool-use producer for ONE REPL turn (the cutover path).
+
+    Returns True iff the native producer DISPATCHED an action skill (it OWNS the
+    turn): the honest verdict — single-sourced from the SAME gate the ``-p`` path
+    uses (``VerdictReport.from_trace``; the loop NEVER computes ``verified``) — is
+    rendered into the REPL conversation and a CLEAN one-line summary is appended to
+    the REAL session for follow-up context. Returns False iff native took NO action
+    (could not route the goal) -> the caller falls THROUGH to the unchanged legacy
+    routing (no half-action, no double side-effect).
+
+    Runs SYNCHRONOUSLY, like the existing tool_use path: the legged/arm sim animates
+    in its own window, so a blocking turn reads as "do it, then tell me if it
+    worked" and the verdict prints in order before the next prompt. A SCRATCH session
+    isolates the native ReAct scaffolding (verify/finish tool calls + tool_results)
+    from the persistent REPL session (step-5 finding b: persistent-session
+    pollution); the world/embodiment state lives on ``engine._vgg_agent``, not in
+    session text, so the scratch session loses no routing context — and an embodiment
+    switch done on a prior (legacy) turn is already reflected on the engine.
+    """
+    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
+    from vector_os_nano.vcli.verdict import VerdictReport
+
+    agent = getattr(engine, "_vgg_agent", None)
+    scratch = create_session(metadata={"native_scratch": True})
+
+    # Suppress ROS2/subprocess stderr noise during the turn (the REPL does the same
+    # around its legacy turn); restore unconditionally.
+    _saved_stderr = sys.stderr
+    trace: Any = None
+    try:
+        try:
+            sys.stderr = open(os.devnull, "w")
+        except OSError:
+            pass
+        with console.status(f"[{TEAL}]native[/] working…", spinner="dots"):
+            try:
+                trace = engine.run_turn_native(
+                    user_input, agent=agent, session=scratch, app_state=app_state
+                )
+            except Exception:  # noqa: BLE001 — native errored -> treat as no-action
+                trace = None
+    finally:
+        if sys.stderr is not _saved_stderr:
+            try:
+                sys.stderr.close()
+            except Exception:  # noqa: BLE001
+                pass
+        sys.stderr = _saved_stderr
+
+    if trace is None or not _native_trace_acted(trace):
+        return False  # native could not route -> caller falls back to legacy
+
+    sub_goals = list(getattr(trace.goal_tree, "sub_goals", ()) or ())
+    steps = list(getattr(trace, "steps", ()) or ())
+    console.print()
+    for i, s in enumerate(steps):
+        verify_expr = sub_goals[i].verify if i < len(sub_goals) else ""
+        chain = (getattr(s, "strategy", "") or "").strip() or "(no action)"
+        ok = bool(getattr(s, "verify_result", False))
+        actor = getattr(getattr(s, "actor_caused", None), "value", "?")
+        mark = "[green]✓[/]" if ok else "[yellow]·[/]"
+        console.print(
+            f"  [{TEAL}]▸[/] {chain} → verify {verify_expr} {mark} [dim](actor={actor})[/]"
+        )
+
+    verified = False
+    try:
+        oracle_names = verify_oracle_names(agent, engine)
+        report = VerdictReport.from_trace(trace, oracle_names)
+        verified = bool(report.verified)
+        color = "green" if verified else "yellow"
+        console.print(
+            f"  [{TEAL}]verdict[/] {report.evidence} "
+            f"[{color}]verified={report.verified}[/] "
+            f"[dim]({report.n_grounded}/{report.n_steps} grounded)[/]"
+        )
+    except Exception as exc:  # noqa: BLE001 — fail closed (display only)
+        console.print(f"  [yellow]verdict unavailable:[/] {exc}")
+
+    # Append a CLEAN summary to the REAL session (not the native scaffolding) so a
+    # follow-up turn has context, mirroring the legacy VGG path's session record.
+    try:
+        summary = "\n".join(
+            f"  {(sg.verify or '?')}: {'PASS' if st.verify_result else 'FAIL'}"
+            for sg, st in zip(sub_goals, steps)
+        )
+        session.append_user(user_input)
+        session.append_assistant(
+            f"[native executed]\nGoal: {user_input}\nVerified: {verified}\n{summary}"
+        )
+    except Exception:  # noqa: BLE001 — session record is best-effort
+        pass
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Input classification
 # ---------------------------------------------------------------------------
@@ -2073,6 +2211,26 @@ def main(argv: list[str] | None = None) -> None:
             if engine is None:
                 console.print(f"[yellow]No API key. Use /login to authenticate first.[/]")
                 continue
+
+            # CUTOVER (2026-06-19, owner-approved): native-attempt-then-fallback is the
+            # REPL's DEFAULT turn path, so bare `vector-cli` + natural language runs the
+            # redesign's NATIVE TOOL-USE producer (CLAUDE.md North Star "Acceptance
+            # interface"). For an action-shaped turn, ATTEMPT native first; if it
+            # DISPATCHED an action it OWNS the turn (its honest verdict is rendered).
+            # If it took NO action (could not route — e.g. "启动 go2 仿真", embodiment
+            # switch, chat) FALL THROUGH to the UNCHANGED legacy routing below, so sim
+            # launch + NL embodiment switch keep working via the untouched tool_use
+            # path. VECTOR_REPL_NATIVE=0 forces the pure-legacy REPL (reversible).
+            # native OWNS navigation too (CEO architecture call 2026-06-19: the
+            # model-driven producer is the correct design; the hardcoded legacy planner
+            # is being strangled, not retreated to). Obstacle-AVOIDANCE for native nav
+            # (route through the nav-stack instead of the open-loop walk) and LATENCY
+            # are tracked native improvements (see docs/ARCHITECTURE.md), NOT reasons to
+            # fall back to legacy.
+            if _repl_native_enabled() and _intent_actionable(engine, user_input):
+                if _repl_attempt_native(engine, user_input, session, app_state, console):
+                    continue
+                # native took NO action -> fall through to legacy routing (unchanged).
 
             try:
                 # Single in-place progress region for the whole turn. A reasoning

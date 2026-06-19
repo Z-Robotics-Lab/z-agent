@@ -296,3 +296,158 @@ def run_cli_turn(
         f"(must agree). verdict={verdict}"
     )
     return CliTurnResult(verdict=verdict, exit_code=exit_code, raw_output=output)
+
+
+# ---------------------------------------------------------------------------
+# REPL session driver — drive the INTERACTIVE REPL (not -p) by NL, capture output.
+# ---------------------------------------------------------------------------
+#
+# The REPL CUTOVER acceptance instrument: the interactive ``vector-cli`` REPL is the
+# owner's ONLY test interface (bare ``vector-cli`` + natural language). Unlike the
+# ``-p`` path it emits a HUMAN-readable verdict line ("verdict GROUNDED verified=True
+# (1/1 grounded)"), not the ``VECTOR_VERDICT`` JSON sentinel — so this driver returns
+# the full transcript and the caller asserts on the rendered text. Same STDLIB-only
+# pty/subprocess machinery; a background reader thread accumulates output while the
+# main thread sends NL lines at paced delays.
+
+
+@dataclass(frozen=True)
+class ReplSessionResult:
+    """The transcript + exit code of one interactive REPL session driven by NL."""
+
+    transcript: str
+    exit_code: int
+
+
+def run_repl_session(
+    lines: list[tuple[float, str]],
+    *,
+    sim: bool = False,
+    sim_go2: bool = False,
+    tool_script: dict[str, Any] | None = None,
+    native: bool = True,
+    live: bool = False,
+    boot_sec: float = 30.0,
+    settle_sec: float = 5.0,
+    extra_env: dict[str, str] | None = None,
+    extra_args: list[str] | None = None,
+) -> ReplSessionResult:
+    """Drive the REAL interactive ``cli.main`` REPL under a PTY; capture the transcript.
+
+    Args:
+        lines:     ordered ``(delay_before_send_sec, text)`` NL turns; the delay is the
+                   wait AFTER the previous line (e.g. give a walk turn time to run)
+                   BEFORE sending this one.
+        sim/sim_go2: pre-boot a sim via the launch flag (heavy — caller serializes).
+        tool_script: a canned native tool-use script injected via VECTOR_FAKE_LLM_TOOLS
+                   (deterministic, network-free); None = the real LLM drives native.
+        native:    REPL native-first default (True = VECTOR_REPL_NATIVE unset/ON;
+                   False = VECTOR_REPL_NATIVE=0 forces the legacy REPL).
+        live:      real LLM provider (do NOT inject the placeholder key; the child's
+                   resolve_credentials loads the repo-root .env).
+        boot_sec:  wait after launch before the first line (sim boot headroom).
+        settle_sec: wait after the final line before reading EOF / killing.
+
+    Returns the full transcript (for the caller to assert on the rendered verdict) and
+    the child exit code. ``--headless`` is added for ``sim``/``sim_go2`` so no GL window
+    opens during an automated drive.
+    """
+    argv = [
+        sys.executable, "-m", "vector_os_nano.vcli.cli", "--no-permission",
+    ]
+    if sim:
+        argv.append("--sim")
+    if sim_go2:
+        argv.append("--sim-go2")
+    if (sim or sim_go2) and (not extra_args or "--headless" not in extra_args):
+        argv.append("--headless")
+    if extra_args:
+        argv += list(extra_args)
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(_REPO_ROOT), env.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    env.setdefault("TERM", "xterm-256color")
+    # The REPL turn path is decided by THIS session's env only — strip the -p seams.
+    env.pop("VECTOR_NATIVE_LOOP", None)
+    env.pop("VECTOR_NATIVE_FIRST", None)
+    if native:
+        env.pop("VECTOR_REPL_NATIVE", None)  # default ON
+    else:
+        env["VECTOR_REPL_NATIVE"] = "0"
+    if not live:
+        env.setdefault("ANTHROPIC_API_KEY", "test-key-not-used")
+    home_dir = tempfile.mkdtemp(prefix="vector_pty_repl_home_")
+    env["HOME"] = home_dir
+    script_path = None
+    if tool_script is not None:
+        script_path = _write_tool_script(tool_script)
+        env["VECTOR_FAKE_LLM_TOOLS"] = script_path
+    if extra_env:
+        env.update(extra_env)
+
+    import threading
+
+    master_fd, slave_fd = pty.openpty()
+    chunks: list[bytes] = []
+    stop = threading.Event()
+
+    def _reader() -> None:
+        while not stop.is_set():
+            try:
+                r, _, _ = select.select([master_fd], [], [], 0.3)
+            except OSError:
+                break
+            if master_fd in r:
+                try:
+                    data = os.read(master_fd, 4096)
+                except OSError:
+                    break
+                if not data:
+                    break
+                chunks.append(data)
+
+    proc = subprocess.Popen(
+        argv, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+        cwd=str(_REPO_ROOT), env=env, close_fds=True,
+    )
+    os.close(slave_fd)
+    reader = threading.Thread(target=_reader, daemon=True)
+    reader.start()
+
+    import time as _time
+
+    try:
+        _time.sleep(boot_sec)
+        for delay, text in lines:
+            if delay:
+                _time.sleep(delay)
+            os.write(master_fd, (text + "\n").encode("utf-8"))
+        _time.sleep(settle_sec)
+    finally:
+        stop.set()
+        try:
+            proc.wait(timeout=15.0)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                pass
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+        if script_path is not None:
+            try:
+                os.unlink(script_path)
+            except OSError:
+                pass
+        import shutil
+
+        shutil.rmtree(home_dir, ignore_errors=True)
+
+    exit_code = proc.returncode if proc.returncode is not None else 1
+    transcript = b"".join(chunks).decode("utf-8", errors="replace")
+    return ReplSessionResult(transcript=transcript, exit_code=exit_code)

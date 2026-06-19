@@ -57,3 +57,7 @@ docs/pick_top_down_spec.md
 # agent loop / session working state (not repo content)
 scratch/
 .hermes/
+
+# sim smoke-test / nav output dumps (build artifacts — not repo content)
+artifacts/
+assets/

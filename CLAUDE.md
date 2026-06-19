@@ -69,7 +69,7 @@ The repo has a BOUNDED, fixed set of authoritative docs. A new session reads onl
 
 ### Other allowed docs (bounded)
 - Tier 2 reference (stable subsystem docs): `docs/cli-tool-system.md`, `docs/skill-protocol.md`, `docs/sim-dev-guide.md`. Update only when that subsystem changes.
-- Tier 3 decision records: `docs/architecture-decisions/ADR-*.md` — append-only; immutable once accepted.
+- Tier 3 decision record: `docs/DECISIONS.md` — ONE consolidated file, dot-point entries (D3, D4, …). Append a new dated entry; never rewrite an accepted one (record a correction as a new line). Full original ADR prose is in git history.
 - Tier 3b hidden-bug casebook: `docs/tricky-bugs.md` — append-only record of IMPLICIT bugs (symptom pointed away from the cause). Short dot-point entries only; routine bugs stay in git history.
 - Tier 4 plans: the CURRENT phase plan, plus any pending future-phase plan that still has open decisions. Delete a plan once its phase fully ships.
 - No working-tree archive. Superseded docs are DELETED, not moved to an `archive/` folder — git history is the archive (`git log --all -- <path>` recovers anything).
@@ -77,7 +77,7 @@ The repo has a BOUNDED, fixed set of authoritative docs. A new session reads onl
 ### MANDATORY before every work commit
 1. Update `docs/agent-kernel-STATUS.md` to reflect the new state and next step. ALWAYS.
 2. If the change touched structure / contracts / data-flow / invariants: update `docs/ARCHITECTURE.md` in the SAME commit (it may never lag the code). Update the rules in `CLAUDE.md` if an invariant changed.
-3. Delete every temporary/scratch/analysis/plan doc you created during the work that is NOT one of the allowed docs above. The repo's doc set must equal {canonical + reference + ADRs + active/pending phase plans}. Nothing else gets committed; no working-tree `archive/`.
+3. Delete every temporary/scratch/analysis/plan doc you created during the work that is NOT one of the allowed docs above. The repo's doc set must equal {canonical + reference + `docs/DECISIONS.md` + active/pending phase plans}. Nothing else gets committed; no working-tree `archive/`.
 4. Scan the whole `docs/` set for STALE docs — any doc whose content is superseded, outdated, or no longer matches the code (not just ones you created this session). Delete each stale doc (git history keeps it). Finding nothing stale is the normal, expected outcome — but the scan is mandatory every time.
 
 ### Read order for a new session
@@ -94,5 +94,5 @@ Venv `.venv` (uv-managed; legacy `.venv-nano` is gone — launch scripts fall ba
 - [docs/cli-tool-system.md](docs/cli-tool-system.md) — VectorEngine, tool registry, IntentRouter, permissions, sessions.
 - [docs/skill-protocol.md](docs/skill-protocol.md) — `@skill` decorator, SkillFlow routing, arm skills.
 - [docs/sim-dev-guide.md](docs/sim-dev-guide.md) — MuJoCo sim testing patterns (Go2, arm).
-- [docs/architecture-decisions/](docs/architecture-decisions/) — ADRs (append-only, immutable once accepted).
+- [docs/DECISIONS.md](docs/DECISIONS.md) — consolidated architecture decisions (dot-points; append-only entries).
 - [docs/tricky-bugs.md](docs/tricky-bugs.md) — hidden-bug casebook (append-only; read before deep debugging).

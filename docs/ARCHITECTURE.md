@@ -4,10 +4,8 @@
 - Scope: the orchestration layer — VectorEngine + the VGG cognitive layer + the CLI/MCP
   entry points. The OS *around* the models, in service of robots.
 - For live "where are we / what's next", see [agent-kernel-STATUS.md](agent-kernel-STATUS.md).
-- For the kernel/world decision, see
-  [architecture-decisions/ADR-006-agent-kernel-world-plugin.md](architecture-decisions/ADR-006-agent-kernel-world-plugin.md);
-  the closed-loop reframe is recorded in
-  [ADR-007](architecture-decisions/ADR-007-closed-loop-controller.md).
+- For the decision history (kernel/world seam D6, closed-loop reframe D7, native-producer ruling D9, …)
+  see the consolidated [DECISIONS.md](DECISIONS.md).
 
 ---
 
@@ -54,10 +52,30 @@ sequences, verifies, and recovers; it does not re-implement nav/manip.
 > `evidence_classifier` + `verdict` (the "moat") — grades BYTE-UNCHANGED. It has subsumed the
 > planner's job, all real-verified on the live `cli.main` PTY, for **go2** (walk / turn→facing /
 > multi-step), **arm** (pick→holding_object, gripper-weld causation), and **dev** (file_write→
-> path_contains), plus **cross-language** grasp. The legacy VGG cognitive layer (§2–8) is being
-> **strangled, not rewritten**: native-attempt-then-fallback routing is in (flag-gated, default
-> OFF); the **CUTOVER** (native as the default turn path + staged reversible deletion of the
-> fast-path → REPL → `should_use_vgg` → decomposer/executor) is a **CEO gate PENDING owner approval**.
+> path_contains), plus **cross-language** grasp.
+>
+> **CEO architecture ruling (2026-06-19, owner): the native producer IS the correct design; the
+> legacy hardcoded planner (`should_use_vgg` → `vgg_decompose` → direct skill execution) is WRONG
+> and is being strangled.** Going forward the system uses the native producer and is OPTIMIZED
+> iteratively — we do NOT retreat to the legacy planner for any capability. See
+> [DECISIONS.md → D9](DECISIONS.md).
+>
+> **CUTOVER status: DONE in the REPL (owner-approved).** Bare `vector-cli` + natural language now
+> runs the native producer by default (`cli.run_turn_unified` attempts native-first, falls back to
+> legacy only on a zero-action turn; `VECTOR_REPL_NATIVE=0` forces pure-legacy). The legacy VGG
+> layer (§2–8) stays only as the **strangler-fig fallback** for shapes native does not yet route,
+> pending staged reversible deletion. Merge-to-master remains a separate CEO gate.
+>
+> **Known native limitations being OPTIMIZED (per the ruling — improvements, not retreats):**
+> (1) **Navigation avoidance** — native locomotion currently uses the open-loop `walk_forward`
+> (no lidar / no local planner → no obstacle avoidance; `走到坐标 (x,y)` walks straight at the
+> target). NEXT: route native "go to a place/coordinate" through the nav-stack avoidance route
+> (`publish_goal` → FAR + local planner + lidar) instead of `walk`; its cmd_vel motion grades
+> `UNCAUSED` → an honest `RAN` verdict until actor-causation extends to cmd_vel. (2) **Latency** —
+> native makes several LLM round-trips per task and currently runs SYNCHRONOUSLY (blocks the REPL),
+> versus the legacy VGG path's async/responsive execution; optimize via async execution + fewer
+> round-trips.
+>
 > The verify moat is the durable invariant — it only ever gets STRICTER (a 2026-06-19 milestone
 > review closed a truthy-constant short-circuit hole; goal-authenticity for non-robot/state
 > predicates remains the next hardening target). See `agent-kernel-STATUS.md` for live state.
@@ -111,7 +129,7 @@ built as **separate, parallel tracks** that meet only at the contract. This is h
 **playground** is developed: its own track (eventually its own repo) registering preset
 scenes, embodiments, and tasks as worlds, while the agentic kernel evolves behind the same
 versioned contract — neither track reaching across except through the four registrations
-and the observation surface. (Decision: ADR-008.)
+and the observation surface. (Decision: D8.)
 
 ---
 
@@ -154,7 +172,7 @@ Two entry points — the `vector-cli` REPL and the `vector-os-mcp` server — sh
 engine. Robots are the end; the dev path is the hardware-free means. The seam is also the
 **track boundary**: the agentic kernel (this whole block) and the **playground** (a separate,
 parallel-developed world track) are built independently and integrate only across it
-(Section 5; ADR-008).
+(Section 5; D8).
 
 ---
 
@@ -268,7 +286,7 @@ These are the contracts the kernel guarantees. Anything that violates them is a 
   kernel exposing each run's `GoalTree`, per-step `StepRecord` (`success` / `verify_result` /
   `result_data`), and replan `validation_notes` as structured, inspectable data a front-end
   can render. Neither track reaches across the seam by any other path. This contract is what
-  lets the agentic kernel and the playground be built as separate, parallel tracks (ADR-008).
+  lets the agentic kernel and the playground be built as separate, parallel tracks (D8).
   Status: world selection now goes through `WorldRegistry` (`resolve_world` / `resolve_world_named`)
   and the engine MERGES the active world's `build_verify_namespace` additively — so a world (e.g.
   the playground) OWNS its predicates. The deterministic ARM sim-oracle predicates are now
@@ -331,7 +349,7 @@ relative to `vector_os_nano/`.
 - `registry.py` — `WorldRegistry`: world/scenario resolution (agent-driven `resolve_world` +
   named `resolve_world_named`); worlds self-register via lazy factories (the seam-as-contract entry).
 
-**Playground track** (`playground/` — a separate, parallel-developed world track; ADR-008)
+**Playground track** (`playground/` — a separate, parallel-developed world track; D8)
 - `world.py` / `scenario.py` / `catalog.py` — embodiment-aware `PlaygroundWorld` + frozen `Scenario`
   + the preset catalog (arm: `tabletop`, `tabletop_tray`; quadruped: `go2_room`); registers into the
   kernel `WorldRegistry` via a lazy hook.
@@ -357,7 +375,7 @@ The work is staged from open-loop to closed-loop. **Live status (which stage, wh
 committed) lives in [agent-kernel-STATUS.md](agent-kernel-STATUS.md)** — this section gives
 the durable shape only.
 
-**Two parallel tracks (ADR-008).** Work proceeds on two tracks that meet only at the seam
+**Two parallel tracks (D8).** Work proceeds on two tracks that meet only at the seam
 contract (Section 5): the **kernel track** (the closed-loop stages below — grounding,
 control-flow IR, unify paths — the agentic moat, behind the contract) and the **playground
 track** (a separate, parallel-developed catalog of preset scenes, embodiments, and tasks
