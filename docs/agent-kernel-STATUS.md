@@ -4,8 +4,8 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 → North Star; durable design is [ARCHITECTURE.md](ARCHITECTURE.md); hidden-bug lessons are
 [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-18
-phase:   **R2a SHIPPED (PTY cli.main acceptance harness + machine verdict + CI gate) — closes the #1 false-green failure.**
+updated: 2026-06-19
+phase:   **M0 COMPLETE — the honest-verification foundation is shipped: R1 (honest evidence gate, ae2d0ea) + R2a (PTY cli.main machine verdict + CI gate, eada1bf) + R2b (actor-causation grading, bda1047). The verify moat is now honest + product-anchored + actor-caused, proven on the real go2 sim. NEXT = M1.**
 goal:    see CLAUDE.md → North Star (agent-orchestration runtime for physical AI: plan · route to
          the right model/skill · verify each step · recover; sim-first, NL-commanded embodiment
          switch + capability routing TARE/FAR/SysNav/VLA).
