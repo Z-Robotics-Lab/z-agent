@@ -20,7 +20,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 import re
 
@@ -296,6 +297,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-permission", action="store_true", help="Allow all tools without prompts")
     parser.add_argument("--verbose", action="store_true", help="Debug logging")
     parser.add_argument("--system-prompt", default=None, help="Path to custom system prompt file")
+    parser.add_argument(
+        "-p", "--print",
+        dest="print_prompt",
+        default=None,
+        metavar="TEXT",
+        help=(
+            "Run ONE turn for TEXT non-interactively and exit (no REPL). With "
+            "--json, also emit one machine-checkable VECTOR_VERDICT line on stdout."
+        ),
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Emit exactly one verdict line 'VECTOR_VERDICT {<json>}' on stdout for "
+            "the -p turn (Rich/banner routed to stderr). Exit 0=verified / "
+            "2=ran-not-verified / 1=error|no-trace."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -1258,6 +1278,323 @@ def _ensure_sigint_under_mjpython() -> None:
         pass  # not the main thread / no SIGINT on this platform — leave as-is
 
 
+def create_backend_with_fake_seam(
+    *, provider: str, api_key: str, model: str, base_url: str | None
+) -> Any:
+    """Create the LLM backend, with a TEST-ONLY deterministic injection seam.
+
+    By default this is byte-identical to ``create_backend`` — the production path
+    is unchanged. The ONLY override is gated on the env var
+    ``VECTOR_FAKE_LLM=<json-path>``: when set, the network LLM is replaced by a
+    ``FakeBackend`` that returns a canned decompose-plan response read from that
+    JSON file (see ``tests/harness/fake_backend.py``). This replaces ONLY the
+    network call — the REAL decomposer / validator / skill / GoalVerifier /
+    evidence-gate / verdict all still run, so a canned plan whose step verifies
+    ``"True"`` STILL classifies RAN and the verdict is honest. The seam never
+    bypasses any verify / permission layer.
+
+    Absent the env var, ``create_backend`` is called unchanged.
+    """
+    fake_path = os.environ.get("VECTOR_FAKE_LLM")
+    if fake_path:
+        # TEST-ONLY import (lazy, gated on the env var) — production never reaches
+        # this branch, so it never imports the test harness. The repo root is on
+        # sys.path when cli is run as a module from the project dir.
+        from tests.harness.fake_backend import FakeBackend
+
+        return FakeBackend.from_json_file(fake_path)
+    return create_backend(provider=provider, api_key=api_key, model=model, base_url=base_url)
+
+
+@dataclass
+class TurnContext:
+    """Everything cli.main's REPL (and a non-interactive turn) needs to run.
+
+    Built ONCE by ``_build_turn_context`` from the shared setup that used to live
+    inline in ``main()`` (credentials -> agent -> world -> registry -> session ->
+    system prompt -> engine -> init_vgg). The REPL unpacks it into the SAME local
+    names it used before (byte-identical loop); ``run_one_turn`` reuses it verbatim.
+    """
+
+    args: Any
+    api_key: str
+    provider: str
+    model: str
+    base_url: str | None
+    agent: Any
+    world: Any
+    registry: Any
+    permissions: Any
+    session: Any
+    system_prompt: Any
+    robot_ctx_provider: Any
+    intent_router: Any
+    hooks: Any
+    engine: "VectorEngine | None"
+    app_state: dict[str, Any]
+
+
+def _build_turn_context(
+    args: Any,
+    *,
+    on_vgg_step: "Callable[[Any], None] | None" = None,
+    on_vgg_step_view: "Callable[[dict[str, Any]], None] | None" = None,
+    tool_permission_resolver: "Callable[[str, dict[str, Any]], str] | None" = None,
+) -> TurnContext:
+    """Shared setup for BOTH the REPL and a non-interactive ``-p`` turn.
+
+    Identical to the block that used to live inline in ``main()`` (cli.py setup
+    1271-1486). The display callbacks are injected so the REPL can pass its live
+    step renderers while a headless turn passes None (no-op). The LLM backend is
+    built through ``create_backend_with_fake_seam`` so a ``VECTOR_FAKE_LLM`` test
+    run drives the REAL cli.main with a deterministic plan.
+    """
+    # Resolve API key + provider from CLI flags > env vars > config file
+    from vector_os_nano.vcli.config import resolve_credentials
+    api_key, provider, model, base_url = resolve_credentials(
+        cli_api_key=args.api_key,
+        cli_base_url=args.base_url,
+        cli_model=args.model,
+    )
+
+    no_key = not api_key
+    if no_key:
+        # Each console.print is parsed independently — markup tags must balance
+        # within a single call (rich does not span tags across print calls).
+        console.print("[yellow]No API key configured.[/]")
+        console.print("[dim]  /login claude     auto-detect Claude Code subscription[/dim]")
+        console.print("[dim]  /login anthropic  enter Anthropic API key[/dim]")
+        console.print("[dim]  /login openrouter enter OpenRouter key[/dim]\n")
+
+    # Agent (optional hardware) + active world. An explicit --scenario selects a
+    # playground world (its verify predicates win); otherwise a connected agent
+    # selects the robot world, else the default cross-platform "dev" world. The
+    # resolved world flows into init_vgg(world=...) below, which sets engine._world
+    # BEFORE the verifier namespace is built, so the merge picks up its predicates.
+    agent = _init_agent(args)
+    world = _resolve_active_world(args, agent)
+
+    # Tools (categorized registry for scalable tool management)
+    registry: CategorizedToolRegistry = CategorizedToolRegistry()
+    tools_list, cat_map = discover_categorized_tools()
+    for t in tools_list:
+        cat = "default"
+        for c, names in cat_map.items():
+            if t.name in names:
+                cat = c
+                break
+        registry.register(t, category=cat)
+    if agent is not None:
+        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+        for skill_tool in wrap_skills(agent):
+            registry.register(skill_tool, category="robot")
+    else:
+        # Dev world: hide robot/diag/system tools. The 'sim' category (start/stop
+        # _simulation) stays enabled so the user can spin up a sim conversationally
+        # ("start the arm sim").
+        for _c in ("robot", "diag", "system"):
+            registry.disable_category(_c)
+
+    # Permissions
+    permissions = PermissionContext(no_permission=args.no_permission)
+
+    # Session
+    session: Session
+    if args.resume is not None:
+        if args.resume == "latest":
+            loaded = get_latest_session()
+            if loaded is None:
+                console.print("[dim]No previous session, starting new.[/dim]")
+                session = create_session(metadata={"model": model})
+            else:
+                session = loaded
+                console.print(f"[dim]Resumed: {session.session_id}[/dim]")
+        else:
+            session = load_session(args.resume)
+            console.print(f"[dim]Resumed: {session.session_id}[/dim]")
+    else:
+        session = create_session(metadata={"model": model})
+
+    # System prompt (with live robot context)
+    robot_ctx_provider = None
+    try:
+        from vector_os_nano.vcli.robot_context import RobotContextProvider
+        base = getattr(agent, "_base", None) if agent else None
+        sg = getattr(agent, "_spatial_memory", None) if agent else None
+        arm = getattr(agent, "_arm", None) if agent else None
+        robot_ctx_provider = RobotContextProvider(base=base, scene_graph=sg, arm=arm)
+    except ImportError:
+        pass
+    system_prompt = build_system_prompt(
+        agent=agent, cwd=Path.cwd(), robot_context=robot_ctx_provider, world=world
+    )
+
+    # Wrap in DynamicSystemPrompt so robot state refreshes each turn
+    try:
+        from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
+        system_prompt = DynamicSystemPrompt(system_prompt, robot_ctx_provider)
+    except ImportError:
+        pass
+
+    # Intent router + hooks
+    intent_router = None
+    hooks = None
+    try:
+        from vector_os_nano.vcli.intent_router import IntentRouter
+        intent_router = IntentRouter()
+    except ImportError:
+        pass
+    try:
+        from vector_os_nano.vcli.hooks import ToolHookRegistry
+        hooks = ToolHookRegistry()
+    except ImportError:
+        pass
+
+    # Explore event streaming — wired via _setup_explore_events on first explore
+    _setup_explore_events(console)
+
+    # Backend + engine (deferred if no API key — /login can set it up). The
+    # backend is built through the fake-LLM seam (production-identical unless
+    # VECTOR_FAKE_LLM is set) at the SINGLE create_backend site.
+    engine: VectorEngine | None = None
+    if api_key:
+        backend = create_backend_with_fake_seam(
+            provider=provider, api_key=api_key, model=model, base_url=base_url
+        )
+        engine = VectorEngine(
+            backend=backend, registry=registry, system_prompt=system_prompt,
+            permissions=permissions, intent_router=intent_router, hooks=hooks,
+        )
+
+    # Mutable app state
+    _spatial_memory = getattr(agent, "_spatial_memory", None) if agent else None
+    _skill_registry = getattr(agent, "_skill_registry", None) if agent else None
+    # An explicit --scenario selected a playground world; its name doubles as the
+    # active scenario id (banner + mid-session /scenario read/write this).
+    _active_scenario = getattr(args, "scenario", None) or None
+    app_state: dict[str, Any] = {
+        "agent": agent,
+        "registry": registry,
+        "engine": engine,
+        "model": model,
+        "provider": provider,
+        "api_key": api_key,
+        "base_url": base_url,
+        "scene_graph": _spatial_memory,
+        "skill_registry": _skill_registry,
+        "robot_ctx_provider": robot_ctx_provider,
+        "world": world,
+        "scenario": _active_scenario,
+    }
+    app_state["tool_permission_resolver"] = tool_permission_resolver or (
+        lambda n, p: ask_permission(n, p)
+    )
+
+    # VGG cognitive layer (optional) — init through the SAME path as the REPL so
+    # the verifier namespace / oracle set is identical whether interactive or not.
+    if engine is not None:
+        try:
+            engine.init_vgg(
+                agent=agent,
+                skill_registry=_skill_registry,
+                on_vgg_step=on_vgg_step,
+                on_vgg_step_view=on_vgg_step_view,
+                world=world,
+                tool_permission_resolver=app_state["tool_permission_resolver"],
+                persist_dir=(Path.home() / ".vector") if not world.is_robot() else None,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    return TurnContext(
+        args=args,
+        api_key=api_key,
+        provider=provider,
+        model=model,
+        base_url=base_url,
+        agent=agent,
+        world=world,
+        registry=registry,
+        permissions=permissions,
+        session=session,
+        system_prompt=system_prompt,
+        robot_ctx_provider=robot_ctx_provider,
+        intent_router=intent_router,
+        hooks=hooks,
+        engine=engine,
+        app_state=app_state,
+    )
+
+
+def run_one_turn(args: Any) -> int:
+    """Run ONE turn for ``args.print_prompt`` non-interactively and return an exit code.
+
+    This is the machine-checkable acceptance entrypoint (R2a). It reuses the SAME
+    shared setup the REPL uses (``_build_turn_context``), runs the turn
+    SYNCHRONOUSLY via ``engine.vgg_execute`` (NEVER ``vgg_execute_async`` — an
+    in-flight async trace would emit a verdict on incomplete evidence), then builds
+    a frozen ``VerdictReport`` from the EXISTING
+    ``evidence_passed(trace, verify_oracle_names(agent, engine))`` (never a second
+    opinion). Under ``--json`` it emits exactly one stdout line
+    ``VECTOR_VERDICT {<json>}`` (sentinel) with all Rich/banner output already
+    routed to stderr by ``main``.
+
+    Exit codes: 0 = verified, 2 = ran (not verified), 1 = error / no trace.
+    """
+    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
+    from vector_os_nano.vcli.verdict import VerdictReport
+
+    prompt = args.print_prompt
+    emit_json = bool(getattr(args, "json", False))
+
+    def _emit(report: "VerdictReport") -> int:
+        if emit_json:
+            # The ONE machine line on real stdout (Rich/banner are on stderr).
+            print(report.to_sentinel_line(), flush=True)
+        else:
+            console.print(
+                f"[{TEAL}]verdict[/] {report.evidence} "
+                f"verified={report.verified} ({report.n_grounded}/{report.n_steps} grounded)"
+            )
+        return report.exit_code()
+
+    try:
+        ctx = _build_turn_context(args)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Setup error:[/] {exc}")
+        return _emit(VerdictReport.no_trace(goal=prompt or "", error=str(exc)))
+
+    engine = ctx.engine
+    if engine is None:
+        console.print("[yellow]No API key. Use /login to authenticate first.[/]")
+        return _emit(VerdictReport.no_trace(goal=prompt or "", error="no engine (no API key)"))
+
+    # Decompose + execute SYNCHRONOUSLY. A non-VGG (chat / tool_use) route yields
+    # no GoalTree -> no deterministic trace -> NO_TRACE (fail closed, exit 1).
+    try:
+        goal_tree = engine.vgg_decompose(prompt)
+    except Exception as exc:  # noqa: BLE001
+        return _emit(VerdictReport.no_trace(goal=prompt or "", error=f"decompose failed: {exc}"))
+
+    if goal_tree is None:
+        return _emit(VerdictReport.no_trace(goal=prompt or "", error="not a VGG turn (no trace)"))
+
+    try:
+        trace = engine.vgg_execute(goal_tree)  # SYNC — never vgg_execute_async
+    except Exception as exc:  # noqa: BLE001
+        return _emit(VerdictReport.no_trace(goal=goal_tree.goal, error=f"execute failed: {exc}"))
+
+    # Build the verdict from the EXISTING gate, single-sourced from the SAME
+    # namespace GoalVerifier uses. Fail CLOSED on any error reading the gate.
+    try:
+        oracle_names = verify_oracle_names(getattr(engine, "_vgg_agent", None), engine)
+        report = VerdictReport.from_trace(trace, oracle_names)
+    except Exception as exc:  # noqa: BLE001
+        report = VerdictReport.no_trace(goal=goal_tree.goal, error=f"verdict failed: {exc}")
+
+    return _emit(report)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
@@ -1266,6 +1603,15 @@ def main(argv: list[str] | None = None) -> None:
 
     _setup_logging(args.verbose)
     _ensure_sigint_under_mjpython()
+
+    # Non-interactive -p/--print: run ONE turn and exit with the verdict code.
+    # Under --json route ALL Rich/banner output to stderr so stdout carries ONLY
+    # the single VECTOR_VERDICT sentinel line.
+    if getattr(args, "print_prompt", None) is not None:
+        if getattr(args, "json", False):
+            global console
+            console = Console(stderr=True)
+        sys.exit(run_one_turn(args))
 
     # Resolve API key + provider from CLI flags > env vars > config file
     from vector_os_nano.vcli.config import resolve_credentials
@@ -1371,10 +1717,15 @@ def main(argv: list[str] | None = None) -> None:
     # Explore event streaming — wired via _setup_explore_events on first explore
     _setup_explore_events(console)
 
-    # Backend + engine (deferred if no API key — /login can set it up)
+    # Backend + engine (deferred if no API key — /login can set it up). Built
+    # through the SINGLE fake-LLM seam (production-identical unless VECTOR_FAKE_LLM
+    # is set) so the REPL and the non-interactive -p path share one create_backend
+    # site (the seam is byte-identical to create_backend in production).
     engine: VectorEngine | None = None
     if api_key:
-        backend = create_backend(provider=provider, api_key=api_key, model=model, base_url=base_url)
+        backend = create_backend_with_fake_seam(
+            provider=provider, api_key=api_key, model=model, base_url=base_url
+        )
         engine = VectorEngine(
             backend=backend, registry=registry, system_prompt=system_prompt,
             permissions=permissions, intent_router=intent_router, hooks=hooks,

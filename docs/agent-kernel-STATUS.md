@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [tricky-bugs.md](tricky-bugs.md).
 
 updated: 2026-06-18
-phase:   **DIRECTION REFRAMED BY CEO — redesign being scoped.**
+phase:   **R2a SHIPPED (PTY cli.main acceptance harness + machine verdict + CI gate) — closes the #1 false-green failure.**
 goal:    see CLAUDE.md → North Star (agent-orchestration runtime for physical AI: plan · route to
          the right model/skill · verify each step · recover; sim-first, NL-commanded embodiment
          switch + capability routing TARE/FAR/SysNav/VLA).
@@ -53,11 +53,29 @@ actor-unauthored-snapshot, and use an independent-observer sim grader (red-teame
   fail-closed arm-off-home regression added. **Suite 1134 passed (only the 3 documented deepseek `.env` reds),
   orchestrator-verified green by re-run.** Honest scope LEFT OPEN for R2: the guard is STRUCTURAL — it does NOT verify
   the verify-constant is the real task goal, nor catch shape-trivial state compares (the strict-xfail).
-- **R2 (next) = M0② authenticity moat + acceptance harness:** an INDEPENDENT-OBSERVER sim grader (verify snapshot from
-  an authority the actor cannot author — MuJoCo step callback / observer owning MjData; stamped step-count+model-hash;
-  reject no-op qpos==start and staged qpos==goal; **red-team it FIRST**) + a PTY `cli.main` acceptance harness (drive
-  bare vector-cli, assert the verify VERDICT) + a CI gate forbidding "done" without a cli.main path. NEW design →
-  start with a mandatory opus DESIGN workflow. Real SO-101 arm gated on `ls /dev/ttyACM*` (absent now), NOT the gold win.
+- **R2a SHIPPED = the acceptance INSTRUMENT (built FIRST, per design review wf w39j9p7sj).** The honest verdict
+  the engine already computes (`evidence_passed(trace, verify_oracle_names(agent, engine))`) now ESCAPES `cli.main`
+  as a machine signal:
+  - **PART A** — `cli.py` gains `-p/--print TEXT` (one non-REPL turn) + `--json` (emit one `VECTOR_VERDICT {<json>}`
+    stdout line; Rich/banner → stderr). `run_one_turn` runs the turn SYNCHRONOUSLY via `engine.vgg_execute` (never
+    `vgg_execute_async`), then builds a frozen `VerdictReport` (`vcli/verdict.py`) ONLY from the EXISTING
+    `classify_step_evidence`/`evidence_passed` — never re-derived (contract test
+    `test_verdict_report.py::test_verdict_matches_evidence_passed_*`). Exit 0=verified / 2=ran-not-verified /
+    1=error|no-trace; harness asserts `verified == (exit==0)`. Shared setup factored into `_build_turn_context`
+    (REPL inline copy kept byte-identical; REPL smoke test pins it).
+  - **PART B** — `VECTOR_FAKE_LLM=<json>` env seam at the SINGLE `create_backend` site (`create_backend_with_fake_seam`)
+    → `tests/harness/fake_backend.py::FakeBackend` returns a canned decompose-plan; replaces ONLY the network LLM
+    (real decomposer/validator/skill/GoalVerifier/evidence-gate/verdict still run). A canned `verify='True'` step
+    STILL classifies RAN → verified False. Absent env → real `create_backend` unchanged.
+  - **PART C** — `tests/harness/pty_cli.py::run_cli_turn` spawns the real entrypoint under a STDLIB `pty` (no pexpect),
+    scans for `VECTOR_VERDICT`, asserts the verdict. Cases pinned: no-op staged 'done'→False/exit2,
+    GROUNDED dev-world `file_write`+`path_contains`→True/exit0, two-prompt distinct goals (no stale reuse),
+    phantom-oracle fail-closed. CI gate: `cli_main`+`capability` markers registered; `tests/conftest.py`
+    `pytest_collection_modifyitems` FAILS any `capability` test lacking `@cli_main`; guard asserts `-m cli_main` ≥1.
+- **R2b (next) = ACTOR-CAUSATION grading** (revised + honestly reframed by the design review — the "actor-independent
+  observer" headline is FALSE for go2 base since SimObserver reads the actor's own MjData; state-level independence
+  needs a SECOND shadow MjData = OUT OF SCOPE). Build it THROUGH the R2a PTY harness (prove a teleport/no-op step
+  flips `VECTOR_VERDICT.verified` false on the REAL sim). Real SO-101 arm gated on `ls /dev/ttyACM*` (absent now).
 3. Pending old-direction gates — recommend: do NOT merge `feat/playground-vln` (cherry-pick only the
    rule-5 GT-leak fix + rule-11 bare-cli fix if needed); DEFER DQ-16 (SysNav venv) / DQ-15 (FAR colcon)
    until a milestone needs them.

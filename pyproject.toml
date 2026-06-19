@@ -137,4 +137,6 @@ markers = [
     "ros2: requires rclpy installed and a live DDS context",
     "integration: hits a real backend (e.g. headless MuJoCo); deselect with -m 'not integration'",
     "live_llm: hits a real LLM backend; skipped unless VECTOR_LIVE_LLM=1; deselect with -m 'not live_llm'",
+    "cli_main: exercises the REAL cli.main entrypoint (PTY/-p/--json verdict); CI acceptance gate, select with -m cli_main",
+    "capability: a claimed product capability; MUST also carry @pytest.mark.cli_main so it is verified through the real product, never a bypass script",
 ]

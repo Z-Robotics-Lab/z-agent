@@ -1,0 +1,196 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
+"""verdict — the machine-checkable acceptance signal for a single cli.main turn.
+
+This is the acceptance INSTRUMENT for the orchestration redesign. The honest
+verdict the engine already computes for a VGG run
+(``evidence_passed(trace, verify_oracle_names(agent, engine))``) previously NEVER
+escaped cli.main as a machine signal — the REPL only ``console.print``ed Rich
+prose. ``VerdictReport`` turns that exact same computation into a frozen,
+JSON-serializable record so a non-interactive ``-p/--json`` turn can emit ONE
+stdout line a harness asserts against.
+
+Honesty by construction (CLAUDE.md rule 5 — verify is the moat):
+``VerdictReport.from_trace`` re-uses the EXISTING ``classify_step_evidence`` /
+``evidence_passed`` from ``trace_store`` for EVERY field — it NEVER re-derives a
+verdict with its own logic. The contract test pins this:
+
+    VerdictReport.from_trace(trace, oracle_names).verified
+        == evidence_passed(trace, oracle_names)
+
+so the machine signal can only ever AGREE with the gate the engine itself uses.
+An empty oracle set, a sentinel ``""``/``"True"`` verify, an absent oracle, a
+tautology, or a VLM visual override all classify RAN (not GROUNDED), so the
+signal fails CLOSED — the moat only ever gets stricter.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+from vector_os_nano.vcli.cognitive.trace_store import (
+    classify_step_evidence,
+    evidence_passed,
+)
+
+# Fixed stdout sentinel a harness scans for. NEVER changed lightly — it is the
+# machine contract between cli.main and the PTY harness / CI gate.
+VERDICT_SENTINEL = "VECTOR_VERDICT"
+
+# The top-level evidence verdict for a whole turn.
+#   GROUNDED — verified: success backed by deterministic, oracle-consuming evidence.
+#   RAN      — the turn ran (some/all steps succeeded) but carries NO grounded evidence.
+#   FAILED   — the trace did not succeed (>=1 step failed / aborted).
+#   NO_TRACE — no VGG trace was produced (e.g. a chat-only / tool_use turn, or error).
+EVIDENCE_GROUNDED = "GROUNDED"
+EVIDENCE_RAN = "RAN"
+EVIDENCE_FAILED = "FAILED"
+EVIDENCE_NO_TRACE = "NO_TRACE"
+
+# Exit codes the harness asserts against (verified == (exit == 0)).
+EXIT_VERIFIED = 0
+EXIT_ERROR = 1
+EXIT_RAN_NOT_VERIFIED = 2
+
+
+@dataclass(frozen=True)
+class StepVerdict:
+    """Per-step evidence row — a pure projection of one StepRecord+SubGoal."""
+
+    name: str
+    strategy: str
+    success: bool
+    verify: str
+    verify_result: bool
+    evidence: str  # GROUNDED | RAN | FAILED (from classify_step_evidence)
+
+
+@dataclass(frozen=True)
+class VerdictReport:
+    """A frozen, JSON-serializable verdict for ONE executed turn.
+
+    Built ONLY from ``trace_store.evidence_passed`` /
+    ``trace_store.classify_step_evidence`` — never re-derived (see module docstring
+    + the contract test ``test_verdict_matches_evidence_passed``).
+    """
+
+    verified: bool
+    success: bool
+    evidence: str  # GROUNDED | RAN | FAILED | NO_TRACE
+    goal: str
+    n_steps: int
+    n_grounded: int
+    oracle_names: tuple[str, ...]
+    per_step: tuple[StepVerdict, ...] = ()
+    error: str = ""
+
+    # ------------------------------------------------------------------
+    # Construction — the ONLY supported way to build a verdict from a run.
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_trace(
+        cls, trace: Any, oracle_names: frozenset[str]
+    ) -> "VerdictReport":
+        """Build a verdict from an ExecutionTrace using the EXISTING gate.
+
+        ``verified`` is delegated VERBATIM to ``evidence_passed`` (no second
+        opinion). Per-step ``evidence`` is delegated to ``classify_step_evidence``.
+        ``n_grounded`` counts the steps the classifier calls GROUNDED. The
+        top-level ``evidence`` summarizes: GROUNDED iff verified, else FAILED if
+        the trace did not succeed, else RAN.
+        """
+        sg_by_name = {sg.name: sg for sg in trace.goal_tree.sub_goals}
+        verified = bool(evidence_passed(trace, oracle_names))
+
+        per_step: list[StepVerdict] = []
+        n_grounded = 0
+        for s in trace.steps:
+            sg = sg_by_name.get(s.sub_goal_name)
+            if sg is None:
+                # A step with no matching sub-goal cannot be classified by the
+                # gate — record it as RAN-shaped metadata only (it never counts
+                # toward GROUNDED, mirroring evidence_passed which ignores it).
+                ev = EVIDENCE_RAN if s.success else EVIDENCE_FAILED
+                verify_str = ""
+            else:
+                ev = classify_step_evidence(s, sg, oracle_names)
+                verify_str = sg.verify
+            if ev == EVIDENCE_GROUNDED:
+                n_grounded += 1
+            per_step.append(
+                StepVerdict(
+                    name=s.sub_goal_name,
+                    strategy=s.strategy,
+                    success=bool(s.success),
+                    verify=verify_str,
+                    verify_result=bool(s.verify_result),
+                    evidence=ev,
+                )
+            )
+
+        if verified:
+            top_evidence = EVIDENCE_GROUNDED
+        elif not trace.success:
+            top_evidence = EVIDENCE_FAILED
+        else:
+            top_evidence = EVIDENCE_RAN
+
+        return cls(
+            verified=verified,
+            success=bool(trace.success),
+            evidence=top_evidence,
+            goal=trace.goal_tree.goal,
+            n_steps=len(trace.steps),
+            n_grounded=n_grounded,
+            oracle_names=tuple(sorted(oracle_names)),
+            per_step=tuple(per_step),
+        )
+
+    @classmethod
+    def no_trace(cls, goal: str = "", error: str = "") -> "VerdictReport":
+        """A fail-closed verdict for a turn that produced NO VGG trace.
+
+        A chat-only / tool_use turn (or an error before any trace) has no
+        deterministic per-step evidence to grade, so it can NEVER be verified.
+        """
+        return cls(
+            verified=False,
+            success=False,
+            evidence=EVIDENCE_NO_TRACE,
+            goal=goal,
+            n_steps=0,
+            n_grounded=0,
+            oracle_names=(),
+            per_step=(),
+            error=error,
+        )
+
+    # ------------------------------------------------------------------
+    # Serialization + exit-code contract.
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        """A plain JSON-safe dict (frozen dataclasses -> dicts, tuples -> lists)."""
+        d = asdict(self)
+        d["oracle_names"] = list(self.oracle_names)
+        d["per_step"] = [asdict(s) for s in self.per_step]
+        return d
+
+    def to_sentinel_line(self) -> str:
+        """The single stdout line a harness scans for: ``VECTOR_VERDICT {<json>}``."""
+        return f"{VERDICT_SENTINEL} {json.dumps(self.to_dict(), ensure_ascii=False)}"
+
+    def exit_code(self) -> int:
+        """0 = verified, 2 = ran-not-verified, 1 = error / no trace.
+
+        ``verified == (exit_code() == 0)`` is the harness's invariant; this method
+        is the single source of that mapping.
+        """
+        if self.verified:
+            return EXIT_VERIFIED
+        if self.evidence == EVIDENCE_NO_TRACE:
+            return EXIT_ERROR
+        return EXIT_RAN_NOT_VERIFIED
