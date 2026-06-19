@@ -64,6 +64,15 @@ FINISH_TOOL = "finish"
 # forever. Mirrors the engine's _max_turns spirit; the loop also stops on finish.
 _MAX_NATIVE_TURNS = 24
 
+# The registry category whose tools are the kernel's domain-general ACTION surface
+# (file_read/file_write/file_edit/bash/glob/grep — see tools.__init__._TOOL_CATEGORIES
+# and worlds.dev.DEV_TOOL_ALLOWLIST, which is this category). The native loop offers
+# these as motor tools alongside the world's skills, so the dev world (no robot agent,
+# hence no wrapped skills) can still ACT — and the robot world gains the same code
+# tools. World-agnostic BY CONSTRUCTION: native asks the ENGINE'S registry for its
+# registered action tools; there is NO "if dev" branch.
+_CODE_TOOL_CATEGORY = "code"
+
 # at_position tolerance (metres) — single-sourced for the system-prompt vocab from
 # the go2 oracle so the model's verify expr and the verifier agree. Read live with
 # a safe fallback so this module never hard-depends on the oracle's private const.
@@ -335,9 +344,10 @@ def run_turn_native(
     verifier = _build_verifier(engine, agent)
     oracle_names = verify_oracle_names(agent, engine)
 
-    # The narrow motor tool-set: the world's skills wrapped as tools. The synthetic
-    # verify/finish tools are handled in-loop, never dispatched as skills.
-    motor_tools = _build_motor_tools(agent)
+    # The motor tool-set: the world's skills + the engine registry's code tools
+    # (file_write/bash/...), wrapped as tools. The synthetic verify/finish tools are
+    # handled in-loop, never dispatched as skills.
+    motor_tools = _build_motor_tools(agent, engine)
     tool_schemas = _native_tool_schemas(motor_tools, oracle_names)
 
     ctx = _build_tool_context(agent, session, app_state, engine)
@@ -411,26 +421,74 @@ def _build_verifier(engine: Any, agent: Any) -> Any:
     return GoalVerifier(ns)
 
 
-def _build_motor_tools(agent: Any) -> dict[str, Any]:
-    """Wrap the world's skills as tools, keyed by name.
+def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
+    """Assemble the loop's ACTION surface: the world's skills + the engine's code tools.
 
-    Review fix 6 (routing = a tested contract): the go2-walk capability exposes the
-    skills the world registers (``walk`` etc.). ``navigate`` is intentionally NOT
-    surfaced as a step strategy here — its cmd_vel is GATED OUT of the
-    actor-causation counter, so offering it would false-FAIL an honest move. We drop
-    it from the motor tool-set by construction. The acceptance pins per-step
-    strategy == 'walk' (never 'navigate').
+    Two sources, both world-agnostic by construction:
+
+    1. ``wrap_skills(agent)`` — the world's robot skills (``walk`` etc.). ``navigate``
+       is intentionally NOT surfaced as a step strategy: its cmd_vel is GATED OUT of
+       the actor-causation counter, so offering it would false-FAIL an honest move. We
+       drop it by construction (the acceptance pins per-step strategy == 'walk', never
+       'navigate'). When ``agent`` is None (the dev world), this source is empty.
+    2. The engine registry's ``code``-category tools (file_read/file_write/file_edit/
+       bash/glob/grep) — the kernel's domain-general action surface, the SAME tools the
+       legacy dev path dispatches via ``DEV_TOOL_ALLOWLIST`` + ``ToolDispatcher``. These
+       are real ``Tool`` objects whose ``.execute(params, ctx)`` is the interface
+       ``dispatch_skill`` already calls, so they slot in directly. This is what lets the
+       dev world (no agent -> no skills) ACT, and adds the code tools to the robot world
+       too. Native asks the ENGINE for its registered action tools — there is NO
+       embodiment/"if dev" branch in this module (rule 7).
+
+    The synthetic ``verify``/``finish`` names are loop-owned and never collide with a
+    registry tool; a code tool can never shadow them. A wrapped skill that happens to
+    share a code-tool name (none do today) would take precedence — skills are layered
+    AFTER the code tools so the world's own skill wins if a clash ever arises.
     """
-    if agent is None:
+    tools: dict[str, Any] = {}
+    # Source 2: the engine registry's code tools (present in every world).
+    for name, code_tool in _code_tools_from_registry(engine).items():
+        tools[name] = code_tool
+    # Source 1: the world's skills (robot worlds only; dev world has no agent).
+    if agent is not None:
+        try:
+            for skill_tool in wrap_skills(agent):
+                if skill_tool.name == "navigate":
+                    continue  # gated-out of actor-causation -> never a native step strategy
+                tools[skill_tool.name] = skill_tool
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("native_loop: wrap_skills failed: %s", exc)
+    return tools
+
+
+def _code_tools_from_registry(engine: Any) -> dict[str, Any]:
+    """Return the engine registry's ``code``-category Tool objects, keyed by name.
+
+    Pulls the live, instantiated tools out of the engine's ``CategorizedToolRegistry``
+    so the native loop offers the EXACT action surface the kernel registered (no
+    duplicate construction, no hand-authored allowlist here — single-sourced from the
+    registry, rule 3). Defensive: a registry without the categorized API, a missing
+    ``code`` category, or any lookup failure yields an empty set (the dev world then
+    falls back to offering only verify/finish, the pre-fix behaviour). Disabled
+    categories are still surfaced here on purpose — ``code`` is never disabled in any
+    world, and the loop's tool-set is independent of the chat-path category gating.
+    """
+    registry = getattr(engine, "_registry", None)
+    if registry is None:
         return {}
+    list_categories = getattr(registry, "list_categories", None)
+    get = getattr(registry, "get", None)
+    if list_categories is None or get is None:
+        return {}  # a plain ToolRegistry (no categories) -> no code tools to surface
     tools: dict[str, Any] = {}
     try:
-        for tool in wrap_skills(agent):
-            if tool.name == "navigate":
-                continue  # gated-out of actor-causation -> never a native step strategy
-            tools[tool.name] = tool
+        names = list_categories().get(_CODE_TOOL_CATEGORY, [])
+        for name in names:
+            code_tool = get(name)
+            if code_tool is not None:
+                tools[name] = code_tool
     except Exception as exc:  # noqa: BLE001
-        logger.debug("native_loop: wrap_skills failed: %s", exc)
+        logger.debug("native_loop: code-tool discovery failed: %s", exc)
     return tools
 
 

@@ -1,43 +1,41 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""M1 STEP 3 (C) — native producer in the DEV world: a real, documented leak finding.
+"""M1 STEP 6 (C) — native producer in the DEV world: the action leak is now CLOSED.
 
 Steps 1-2 + 3A-B proved the native producer covers the go2 ACTION surface (walk,
 turn -> at_position, facing). The legacy planner's other job is being WORLD-AGNOSTIC:
 the same loop must ACT in the dev world too (write a file, run a tool) and prove it
-with a dev verify predicate. This module probes that — and surfaces a REAL FINDING the
-M1-step-3 prompt explicitly asked to report if it exists: through the REAL
-``cli.main --native-loop`` PTY, the native loop CANNOT act in the dev world yet,
-because it offers NO dev action tools. We document the leak precisely AND prove the
-gap is the cli.main wiring, not the native PRODUCER.
+with a dev verify predicate. Step 3 documented a REAL FINDING — through the REAL
+``cli.main --native-loop`` PTY the native loop offered NO dev action tools, so a dev
+``file_write`` was an "Unknown tool" -> RAN / exit 2. STEP 6 CLOSES that leak; this
+module now PINS the fix.
 
-THE LEAK (verified empirically, not asserted on paper):
+THE LEAK (was) AND THE FIX (now):
 
-    ``native_loop._build_motor_tools(agent)`` builds the loop's action surface from
-    ``wrap_skills(agent)`` — i.e. ``agent._skill_registry``. In the dev world,
-    ``cli._init_agent`` returns ``None`` (no ``--sim``/``--sim-go2``), so there is no
-    agent and no skill registry: the loop offers ONLY ``verify`` + ``finish`` and
-    ZERO action tools. The dev world's ONLY action mechanism is the LEGACY planner's
-    ``tool_call`` strategy, which dispatches kernel tools (``file_write`` / ``bash``
-    via ``DEV_TOOL_ALLOWLIST`` + ``ToolDispatcher``). The native loop never wires that
-    kernel "code" toolset. So a dev write-then-verify script through
-    ``cli.main --native-loop`` dispatches ``file_write`` -> "Unknown tool", writes
-    NOTHING, and ``path_contains`` fails -> RAN / exit 2.
+    ``native_loop._build_motor_tools(agent)`` USED to build the loop's action surface
+    from ``wrap_skills(agent)`` ONLY. In the dev world ``cli._init_agent`` returns
+    ``None`` (no ``--sim``/``--sim-go2``), so there was no agent and no skill registry:
+    the loop offered ONLY ``verify`` + ``finish`` and ZERO action tools. STEP 6 extends
+    ``_build_motor_tools(agent, engine)`` to ALSO surface the engine registry's
+    ``code``-category tools (file_read/file_write/file_edit/bash/glob/grep — the SAME
+    set the legacy dev path dispatches via ``DEV_TOOL_ALLOWLIST`` + ``ToolDispatcher``).
+    These are real ``Tool`` objects whose ``.execute(params, ctx)`` is the interface
+    ``dispatch_skill`` already calls. World-agnostic BY CONSTRUCTION: native asks the
+    ENGINE'S registry for its registered action tools — no "if dev" branch in the spine.
+    So a dev write-then-verify script through ``cli.main --native-loop`` now dispatches
+    ``file_write`` for real, writes the file, and ``path_contains`` reads True ->
+    GROUNDED / verified True / exit 0.
 
-This is a PLANNER-ONLY mechanism native does not yet cover: the dev-world ACTION
-path. It is NOT a spine/grading defect (the verify spine, the dev predicates, and the
-GROUNDED classification all work — ``path_contains`` is a PREDICATE oracle and grades
-GROUNDED on a True read). It is purely that the native loop's action surface is
-``wrap_skills(agent)`` and the dev world hands it no agent.
+This was never a spine/grading defect (the verify spine, the dev predicates, and the
+GROUNDED classification all worked — ``path_contains`` is a PREDICATE oracle and grades
+GROUNDED on a True read). It was purely the missing dev ACTION surface; the fix wires
+the kernel "code" toolset native already had access to via the engine.
 
-THE PRODUCER IS WORLD-AGNOSTIC (the second test proves the gap is wiring, not native):
-when a dev action IS wrapped as a skill onto an agent (the SAME registration pattern
-the trichotomy teleport case uses), ``run_turn_native`` dispatches it, the file is
-written, and ``verify(path_contains(...))`` grades GROUNDED / verified True / exit 0
-through the UNTOUCHED spine. So the native PRODUCER already works outside go2; closing
-the leak is a wiring change (surface the dev "code" toolset as native action tools),
-deferred to the orchestrator — it is NOT a deletion blocker hidden in the producer.
+THE PRODUCER IS WORLD-AGNOSTIC (the second test, unchanged, still proves it): when a
+dev action is wrapped as a skill onto an agent, ``run_turn_native`` dispatches it, the
+file is written, and ``verify(path_contains(...))`` grades GROUNDED / verified True /
+exit 0 through the UNTOUCHED spine.
 
 This file needs NO live key and NO sim (it is a dev PTY + an in-process run). Reproduce::
 
@@ -54,20 +52,24 @@ from tests.harness.pty_cli import run_cli_turn
 
 
 # ---------------------------------------------------------------------------
-# (C.1) THE LEAK — through the REAL cli.main --native-loop PTY, dev world
+# (C.1) THE FIX — through the REAL cli.main --native-loop PTY, the dev world ACTS
 # ---------------------------------------------------------------------------
 
 
-def test_native_devworld_via_cli_main_offers_no_action_tools_so_write_leaks() -> None:
-    """A dev write-then-verify script through cli.main --native-loop -> RAN / exit 2.
+def test_native_devworld_via_cli_main_covers_dev_action_via_native(tmp_path) -> None:
+    """A dev write-then-verify script through cli.main --native-loop -> GROUNDED / exit 0.
 
-    The documented leak: the native loop in the dev world (no agent) offers no
-    action tools, so ``file_write`` is an Unknown tool, the file is never written,
-    and ``path_contains`` fails -> RAN. The verify SPINE is honest throughout (it
-    correctly reports the file was not created); the gap is the missing dev ACTION
-    surface, captured here so the orchestrator sees exactly what native does NOT yet
-    cover before any legacy deletion.
+    STEP 6 closed the leak: ``_build_motor_tools`` now ALSO surfaces the engine
+    registry's ``code``-category tools, so the native loop in the dev world (no agent)
+    offers ``file_write`` for real. The script writes ``out.txt`` then verifies with
+    ``path_contains`` — the file IS written, the predicate reads True, the spine grades
+    GROUNDED, the verdict is verified True / exit 0. The producing strategy is now
+    ``file_write`` (the action chain was recorded), proving the dev ACTION surface is
+    wired through the REAL product, not just the in-process producer.
     """
+    # Run in a fresh tmp cwd so out.txt is a brand-new file (FileWriteTool refuses to
+    # overwrite an unread existing file) and the assertion-on-disk is unambiguous.
+    out_path = tmp_path / "out.txt"
     r = run_cli_turn(
         "create out.txt containing the word ready",
         tool_script={
@@ -85,27 +87,32 @@ def test_native_devworld_via_cli_main_offers_no_action_tools_so_write_leaks() ->
         },
         extra_args=["--native-loop"],
         timeout_sec=90.0,
+        cwd=tmp_path,
     )
-    print(f"\n[devworld leak] cli.main --native-loop -> {r.verdict}")
-    # The honest spine reports the write never happened: not verified, RAN, exit 2.
-    assert r.verified is False, f"dev write must NOT verify (no action tool); {r.verdict}"
-    assert r.evidence == "RAN", f"got evidence={r.evidence}; {r.verdict}"
-    assert r.exit_code == 2, f"ran-not-verified must exit 2; got {r.exit_code}"
+    print(f"\n[devworld coverage] cli.main --native-loop -> {r.verdict}")
+    # The dev action ran through the native loop: verified, GROUNDED, exit 0.
+    assert r.verified is True, f"dev write must verify (code tool now wired); {r.verdict}"
+    assert r.evidence == "GROUNDED", f"got evidence={r.evidence}; {r.verdict}"
+    assert r.exit_code == 0, f"a grounded dev step must exit 0; got {r.exit_code}"
     per_step = r.verdict.get("per_step") or []
-    assert per_step, f"expected one verify-only step; got {per_step}"
+    assert per_step, f"expected one write->verify step; got {per_step}"
     step = per_step[0]
-    # The TELL of the leak: the producing strategy is EMPTY (file_write was an Unknown
-    # tool, so no action chain was recorded) and the verify failed (file not written).
-    assert step["strategy"] == "", (
-        f"native dev loop has no action tool -> empty strategy; got "
-        f"{step['strategy']!r}. If this is non-empty, the leak is CLOSED."
+    # The TELL of the fix: the producing strategy is now ``file_write`` (the action
+    # chain WAS recorded) and the verify passed (file written).
+    assert step["strategy"] == "file_write", (
+        f"native dev loop now surfaces the code tools -> strategy 'file_write'; got "
+        f"{step['strategy']!r}. If this is empty, the leak has re-opened."
     )
     assert step["verify"].startswith("path_contains"), f"got verify={step['verify']!r}"
-    assert step["verify_result"] is False, (
-        "file_write is not a native tool, so the file was never written and "
-        "path_contains must be False"
+    assert step["verify_result"] is True, (
+        "file_write is now a native tool, so the file was written and "
+        "path_contains must be True"
     )
-    assert step["evidence"] == "RAN"
+    assert step["evidence"] == "GROUNDED"
+    # The file was ACTUALLY written to disk (the action had a real side effect).
+    assert out_path.read_text(encoding="utf-8") == "ready\n", (
+        f"out.txt must exist with the written content; cwd={tmp_path}"
+    )
 
 
 # ---------------------------------------------------------------------------
