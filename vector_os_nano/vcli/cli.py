@@ -327,6 +327,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "VECTOR_NATIVE_LOOP=1."
         ),
     )
+    parser.add_argument(
+        "--native-first",
+        action="store_true",
+        default=None,
+        help=(
+            "STEP 5 native-attempt-then-fallback (default OFF): in the -p turn, ATTEMPT "
+            "the native tool-use producer first; if it took NO action (could not route "
+            "the goal) FALL BACK to the legacy decompose plan. A SEPARATE additive mode "
+            "from --native-loop. Also enableable via VECTOR_NATIVE_FIRST=1."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -340,6 +351,33 @@ def _native_loop_enabled(args: Any) -> bool:
     if getattr(args, "native_loop", None):
         return True
     return os.environ.get("VECTOR_NATIVE_LOOP", "").strip() in ("1", "true", "True")
+
+
+def _native_first_enabled(args: Any) -> bool:
+    """True iff STEP 5 native-attempt-then-fallback is selected (flag OR env, default OFF).
+
+    A SEPARATE, additive mode from ``_native_loop_enabled``: ``--native-first`` on the
+    CLI OR ``VECTOR_NATIVE_FIRST=1`` in the env. Default OFF — every existing path is
+    byte-identical when neither this nor ``--native-loop`` is set. This reader does NOT
+    consult the native-loop flag/env, so the two modes stay independent.
+    """
+    if getattr(args, "native_first", None):
+        return True
+    return os.environ.get("VECTOR_NATIVE_FIRST", "").strip() in ("1", "true", "True")
+
+
+def _native_trace_acted(trace: Any) -> bool:
+    """True iff the native trace DISPATCHED at least one action skill.
+
+    A native step's ``.strategy`` is the producing skill name and is the EMPTY string
+    when no skill was dispatched (a verify-only step, or a dev world whose
+    ``_build_motor_tools`` returns ``{}`` so nothing can be called). A trace with zero
+    acted steps means the native producer could not route the goal -> the caller falls
+    back to the legacy plan. Pure + defensive: a ``None`` trace, a trace with no
+    ``steps``, or steps missing ``.strategy`` all yield False (empty-safe).
+    """
+    steps = getattr(trace, "steps", None) or ()
+    return any((getattr(s, "strategy", "") or "").strip() for s in steps)
 
 
 # ---------------------------------------------------------------------------
@@ -1605,6 +1643,31 @@ def run_one_turn(args: Any) -> int:
     if engine is None:
         console.print("[yellow]No API key. Use /login to authenticate first.[/]")
         return _emit(VerdictReport.no_trace(goal=prompt or "", error="no engine (no API key)"))
+
+    # STEP 5 native-attempt-then-fallback (flag-gated, default OFF): ATTEMPT the
+    # native producer first; if it DISPATCHED an action skill (routed the goal) emit
+    # its verdict — otherwise it took NO action (zero skills dispatched -> no
+    # half-action side-effects) and we FALL THROUGH to the EXISTING legacy
+    # decompose+execute+verdict block below. This is a SEPARATE, additive mode from
+    # --native-loop; when neither flag is set this whole block is skipped and every
+    # existing path is byte-identical. The legacy fallback's vgg_decompose(prompt)
+    # uses the RAW prompt, independent of any session text the native attempt may have
+    # appended, so the fallback decompose is uncorrupted.
+    if _native_first_enabled(args):
+        try:
+            trace = engine.run_turn_native(
+                prompt, agent=getattr(engine, "_vgg_agent", None), session=ctx.session
+            )
+        except Exception:  # noqa: BLE001
+            trace = None
+        if trace is not None and _native_trace_acted(trace):
+            try:
+                oracle_names = verify_oracle_names(getattr(engine, "_vgg_agent", None), engine)
+                report = VerdictReport.from_trace(trace, oracle_names)
+            except Exception as exc:  # noqa: BLE001
+                report = VerdictReport.no_trace(goal=prompt or "", error=f"verdict failed: {exc}")
+            return _emit(report)
+        # Native took NO action -> fall through to the legacy block (no return here).
 
     # M1 strangler-fig (flag-gated, default OFF): the frontier-model NATIVE
     # TOOL-USE producer assembles the trace instead of the legacy decompose plan.

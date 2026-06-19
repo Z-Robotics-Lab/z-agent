@@ -195,8 +195,16 @@ def run_cli_turn(
     # VECTOR_NATIVE_LOOP=1 set would silently route legacy decompose-plan children
     # through the native loop and false-fail them.
     env.pop("VECTOR_NATIVE_LOOP", None)
+    # Likewise strip any inherited VECTOR_NATIVE_FIRST (STEP 5 native-first mode) so
+    # an ambient global never silently routes a legacy/native-loop child through the
+    # native-attempt-then-fallback path. A native-first test opts in explicitly via
+    # ``--native-first`` in ``extra_args`` (set below).
+    env.pop("VECTOR_NATIVE_FIRST", None)
+    _native_first = bool(extra_args) and "--native-first" in extra_args
     if extra_args and "--native-loop" in extra_args:
         env["VECTOR_NATIVE_LOOP"] = "1"
+    if _native_first:
+        env["VECTOR_NATIVE_FIRST"] = "1"
     # A deterministic API key so create_backend* runs (the fake seam ignores it).
     # In a LIVE run we must NOT inject this placeholder — it would shadow the real
     # provider creds in resolve_credentials' priority order and the child would talk
@@ -229,10 +237,15 @@ def run_cli_turn(
         env.update(extra_env)
     if tool_script is not None:
         # A native tool-script IS an opt-in to the native path: ensure the real
-        # written path wins over any placeholder in extra_env, and select the
-        # native loop (whether or not the caller also passed --native-loop).
+        # written path wins over any placeholder in extra_env. Select the always-on
+        # native loop UNLESS the caller asked for STEP 5 native-first — in which case
+        # native-first (already set above) is the producer-selection seam and we must
+        # NOT force VECTOR_NATIVE_LOOP (which would shadow the native-first routing
+        # decision with the unconditional native bypass). Scripted callers that don't
+        # pass --native-first are byte-identical (they still get VECTOR_NATIVE_LOOP=1).
         env["VECTOR_FAKE_LLM_TOOLS"] = script_path
-        env["VECTOR_NATIVE_LOOP"] = "1"
+        if not _native_first:
+            env["VECTOR_NATIVE_LOOP"] = "1"
 
     master_fd, slave_fd = pty.openpty()
     try:
