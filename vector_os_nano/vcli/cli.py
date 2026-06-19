@@ -316,7 +316,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "2=ran-not-verified / 1=error|no-trace."
         ),
     )
+    parser.add_argument(
+        "--native-loop",
+        action="store_true",
+        default=None,
+        help=(
+            "Campaign #13 M1 (default OFF): run the -p turn through the frontier-model "
+            "NATIVE TOOL-USE producer (engine.run_turn_native) instead of the legacy "
+            "decompose plan. The verdict block is unchanged. Also enableable via "
+            "VECTOR_NATIVE_LOOP=1."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _native_loop_enabled(args: Any) -> bool:
+    """True iff the M1 native tool-use path is selected (flag OR env, default OFF).
+
+    Single source for the strangler-fig flag: ``--native-loop`` on the CLI OR
+    ``VECTOR_NATIVE_LOOP=1`` in the env. Default OFF — every existing path is
+    byte-identical when neither is set.
+    """
+    if getattr(args, "native_loop", None):
+        return True
+    return os.environ.get("VECTOR_NATIVE_LOOP", "").strip() in ("1", "true", "True")
 
 
 # ---------------------------------------------------------------------------
@@ -1302,6 +1325,13 @@ def create_backend_with_fake_seam(
 
     Absent the env var, ``create_backend`` is called unchanged.
     """
+    # M1 native-loop seam: a SCRIPT of native tool_use turns (not a decompose plan).
+    # Gated on its own env var so the legacy plan seam stays byte-identical.
+    tools_path = os.environ.get("VECTOR_FAKE_LLM_TOOLS")
+    if tools_path:
+        from tests.harness.fake_backend import FakeToolScriptBackend
+
+        return FakeToolScriptBackend.from_json_file(tools_path)
     fake_path = os.environ.get("VECTOR_FAKE_LLM")
     if fake_path:
         # TEST-ONLY import (lazy, gated on the env var) — production never reaches
@@ -1575,6 +1605,24 @@ def run_one_turn(args: Any) -> int:
     if engine is None:
         console.print("[yellow]No API key. Use /login to authenticate first.[/]")
         return _emit(VerdictReport.no_trace(goal=prompt or "", error="no engine (no API key)"))
+
+    # M1 strangler-fig (flag-gated, default OFF): the frontier-model NATIVE
+    # TOOL-USE producer assembles the trace instead of the legacy decompose plan.
+    # The verdict block below is UNCHANGED — the native producer hands the SAME
+    # ExecutionTrace shape to the SAME VerdictReport.from_trace gate.
+    if _native_loop_enabled(args):
+        try:
+            trace = engine.run_turn_native(
+                prompt, agent=getattr(engine, "_vgg_agent", None), session=ctx.session
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _emit(VerdictReport.no_trace(goal=prompt or "", error=f"native loop failed: {exc}"))
+        try:
+            oracle_names = verify_oracle_names(getattr(engine, "_vgg_agent", None), engine)
+            report = VerdictReport.from_trace(trace, oracle_names)
+        except Exception as exc:  # noqa: BLE001
+            report = VerdictReport.no_trace(goal=prompt or "", error=f"verdict failed: {exc}")
+        return _emit(report)
 
     # Decompose + execute SYNCHRONOUSLY. A non-VGG (chat / tool_use) route yields
     # no GoalTree -> no deterministic trace -> NO_TRACE (fail closed, exit 1).

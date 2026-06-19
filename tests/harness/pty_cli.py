@@ -74,6 +74,19 @@ def _write_fake_plan(fake_plan: dict[str, Any]) -> str:
     return path
 
 
+def _write_tool_script(tool_script: dict[str, Any]) -> str:
+    """Write a canned NATIVE tool-use script to a temp file; return its path.
+
+    The M1 native-loop seam (VECTOR_FAKE_LLM_TOOLS) — a ``{"turns": [...]}`` JSON
+    object the child's ``FakeToolScriptBackend`` replays as ordered native tool_use
+    turns. Parallel to ``_write_fake_plan`` but for the strangler-fig native path.
+    """
+    fd, path = tempfile.mkstemp(prefix="vector_tool_script_", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(tool_script, fh, ensure_ascii=False)
+    return path
+
+
 def _drain(master_fd: int, timeout_sec: float) -> str:
     """Read all bytes from the PTY master until EOF or timeout."""
     chunks: list[bytes] = []
@@ -125,6 +138,7 @@ def run_cli_turn(
     prompt: str,
     *,
     fake_plan: dict[str, Any] | None = None,
+    tool_script: dict[str, Any] | None = None,
     scenario: str | None = None,
     sim: bool = False,
     sim_go2: bool = False,
@@ -166,6 +180,16 @@ def run_cli_turn(
     env["PYTHONPATH"] = os.pathsep.join(
         [str(_REPO_ROOT), env.get("PYTHONPATH", "")]
     ).rstrip(os.pathsep)
+    # Test ISOLATION (M1): each PTY child's turn path is decided by ITS OWN args,
+    # never by an ambient global env. Strip any inherited VECTOR_NATIVE_LOOP so a
+    # legacy `fake_plan` test always runs the legacy path; a native test opts in
+    # explicitly via ``tool_script`` (which re-sets it below) or ``--native-loop``
+    # in ``extra_args``. Without this strip, running the whole suite with
+    # VECTOR_NATIVE_LOOP=1 set would silently route legacy decompose-plan children
+    # through the native loop and false-fail them.
+    env.pop("VECTOR_NATIVE_LOOP", None)
+    if extra_args and "--native-loop" in extra_args:
+        env["VECTOR_NATIVE_LOOP"] = "1"
     # A deterministic API key so create_backend* runs (the fake seam ignores it).
     env.setdefault("ANTHROPIC_API_KEY", "test-key-not-used")
     # Isolate HOME so the dev world's persistent template/experience tier
@@ -180,8 +204,22 @@ def run_cli_turn(
         env["VECTOR_FAKE_LLM"] = plan_path
     else:
         plan_path = None
+    # M1 native-loop seam: a native tool-use SCRIPT (parallel to fake_plan). When
+    # given, point VECTOR_FAKE_LLM_TOOLS at the written script (overriding any
+    # placeholder a caller passed via extra_env).
+    if tool_script is not None:
+        script_path = _write_tool_script(tool_script)
+        env["VECTOR_FAKE_LLM_TOOLS"] = script_path
+    else:
+        script_path = None
     if extra_env:
         env.update(extra_env)
+    if tool_script is not None:
+        # A native tool-script IS an opt-in to the native path: ensure the real
+        # written path wins over any placeholder in extra_env, and select the
+        # native loop (whether or not the caller also passed --native-loop).
+        env["VECTOR_FAKE_LLM_TOOLS"] = script_path
+        env["VECTOR_NATIVE_LOOP"] = "1"
 
     master_fd, slave_fd = pty.openpty()
     try:
@@ -210,6 +248,11 @@ def run_cli_turn(
         if plan_path is not None:
             try:
                 os.unlink(plan_path)
+            except OSError:
+                pass
+        if script_path is not None:
+            try:
+                os.unlink(script_path)
             except OSError:
                 pass
         import shutil

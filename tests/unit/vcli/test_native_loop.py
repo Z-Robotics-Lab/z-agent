@@ -1,0 +1,325 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
+"""M1 unit tests — native tool-use producer (run_turn_native + NativeStepRunner).
+
+Deterministic, no MuJoCo, no network: a ``FakeToolScriptBackend`` replays a SCRIPT
+of native tool_use turns through the REAL ``run_turn_native``, against a duck-typed
+fake agent (a base exposing the actor-causation surface + a registered walk skill).
+
+Pinned here (the RED-0 tripwire + the review fixes):
+- (RED-0) the tool-script backend drives run_turn_native to the EXPECTED ordered
+  tool calls (walk -> verify -> finish), and the legacy single-plan FakeBackend
+  constructor is byte-identical (unchanged).
+- (fix 2 granularity) N bare walks then ONE verify -> exactly ONE StepRecord whose
+  strategy is the last walk; intermediate walks are NOT each a checked sub-goal.
+- (fix 3 timing + spine parity) an HONEST walk -> CAUSED -> GROUNDED -> verified;
+  a verify-only NO-OP (predicate true at baseline, no walk) -> UNCAUSED -> RAN ->
+  NOT verified; verified == evidence_passed (the spine, not a re-derivation).
+- (replan-via-model) a False verify is followed by ANOTHER model-issued walk +
+  verify — the runner holds NO replan/iteration state; the trace has both pairs.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from tests.harness.fake_backend import (
+    FakeBackend,
+    FakeToolScriptBackend,
+    tool_turn,
+)
+from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+from vector_os_nano.vcli.cognitive.trace_store import (
+    evidence_passed,
+    verify_oracle_names,
+)
+from vector_os_nano.vcli.session import Session
+from vector_os_nano.vcli.verdict import VerdictReport
+
+
+# ---------------------------------------------------------------------------
+# Fakes — a base on the actor-causation surface + a registered walk skill
+# ---------------------------------------------------------------------------
+
+
+class _FakeBase:
+    """Go2-base stand-in: instrumented commanded-motion counter + pose.
+
+    ``walk`` advances the commanded-motion counter AND displaces the pose (an
+    honest, actor-caused move). ``cmd_motion`` / ``get_position`` / ``get_heading``
+    are the SAME accessors actor_causation.capture reads.
+    """
+
+    # mark as a sim adapter so SkillWrapperTool auto-allows the motor skill.
+    __module__ = "vector_os_nano.hardware.sim.fake"
+
+    def __init__(self, x: float, y: float) -> None:
+        self._x, self._y, self._yaw = float(x), float(y), 0.0
+        self._cmd_motion = 0.0
+        self._connected = True
+
+    def get_position(self) -> list[float]:
+        return [self._x, self._y, 0.0]
+
+    def get_heading(self) -> float:
+        return self._yaw
+
+    def cmd_motion(self) -> float:
+        return self._cmd_motion
+
+    def walk(self, vx: float, vy: float, vyaw: float, duration: float) -> bool:
+        # Command magnitude + a real displacement -> CAUSED.
+        self._cmd_motion += abs(vx) + abs(vy) + abs(vyaw)
+        self._x += vx * duration
+        self._y += vy * duration
+        return True
+
+
+class _FakeWalkSkill:
+    """Minimal Skill-protocol walk: drives base.walk, no auto_steps."""
+
+    name = "walk"
+    description = "Walk the quadruped forward by a given distance (moves the base)."
+    parameters = {
+        "distance": {"type": "number", "required": False, "default": 1.0},
+        "speed": {"type": "number", "required": False, "default": 0.3},
+    }
+    preconditions = ["base"]
+    effects = {"is_moving": False}
+
+    def execute(self, params, context):
+        from vector_os_nano.core.types import SkillResult
+
+        base = context.base
+        if base is None:
+            return SkillResult(success=False, error_message="no base", diagnosis_code="no_base")
+        distance = float(params.get("distance", 1.0))
+        speed = float(params.get("speed", 0.3))
+        duration = distance / speed if speed > 0 else 0.0
+        base.walk(speed, 0.0, 0.0, duration)
+        return SkillResult(success=True, result_data={"distance": distance})
+
+
+def _make_agent(x: float = 0.0, y: float = 0.0):
+    """A duck-typed agent: a fake base + a real SkillRegistry with the walk skill."""
+    from vector_os_nano.core.skill import SkillRegistry
+
+    base = _FakeBase(x, y)
+    reg = SkillRegistry()
+    reg.register(_FakeWalkSkill())
+    agent = SimpleNamespace(
+        _base=base,
+        _arm=None,
+        _gripper=None,
+        _spatial_memory=None,
+        _skill_registry=reg,
+    )
+
+    def _build_context():
+        return SimpleNamespace(base=base, arm=None, gripper=None, services=None)
+
+    def _sync_robot_state():
+        return None
+
+    agent._build_context = _build_context
+    agent._sync_robot_state = _sync_robot_state
+    return agent, base
+
+
+def _make_engine(agent, backend):
+    """A REAL VectorEngine wired for VGG over the fake agent + a scripted backend."""
+    from vector_os_nano.vcli.engine import VectorEngine
+    from vector_os_nano.vcli.permissions import PermissionContext
+    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+    from vector_os_nano.vcli.worlds.robot import RobotWorld
+
+    eng = VectorEngine(
+        backend=backend,
+        registry=CategorizedToolRegistry(),
+        permissions=PermissionContext(),
+    )
+    eng._world = RobotWorld()
+    eng.init_vgg(agent=agent, skill_registry=agent._skill_registry, world=RobotWorld())
+    eng._vgg_agent = agent
+    eng._backend = backend
+    return eng
+
+
+def _session() -> Session:
+    return Session(
+        session_id="native-test",
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+        path=Path("/tmp/native_test_session.jsonl"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# RED-0 — the tool-script backend + run_turn_native ordered drive
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_fake_backend_constructor_unchanged() -> None:
+    """The single-plan FakeBackend constructor is byte-identical (legacy seam)."""
+    fb = FakeBackend({"goal": "g", "sub_goals": []})
+    resp = fb.call(messages=[], tools=[], system=[], max_tokens=10)
+    assert resp.stop_reason == "end_turn"
+    assert resp.tool_calls == []
+    assert "sub_goals" in resp.text
+
+
+def test_tool_script_replays_ordered_turns() -> None:
+    """from_tool_script replays the SEQUENCE; run_turn_native dispatches in order."""
+    calls: list[str] = []
+
+    class _Recorder(FakeToolScriptBackend):
+        def call(self, **kw):  # type: ignore[override]
+            # record the order the loop drives the model
+            r = super().call(**kw)
+            calls.append(",".join(tc.name for tc in r.tool_calls) or "end")
+            return r
+
+    backend = _Recorder.from_tool_script(
+        [
+            tool_turn(("walk", {"distance": 2.0, "speed": 0.3})),
+            tool_turn(("verify", {"expr": "at_position(0.0, 0.0, 5.0)"})),
+            tool_turn(end=True),
+        ]
+    )
+    agent, _base = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("walk somewhere then verify", session=_session())
+
+    # Ordered drive: walk turn, then verify turn, then terminal end_turn.
+    assert calls == ["walk", "verify", "end"]
+    # Exactly ONE recorded (action-chain -> verify) step.
+    assert len(trace.steps) == 1
+    assert trace.steps[0].strategy == "walk"
+
+
+# ---------------------------------------------------------------------------
+# fix 2 — ONE StepRecord per (action-chain -> verify) pair, not per walk
+# ---------------------------------------------------------------------------
+
+
+def test_three_walks_then_one_verify_is_one_step() -> None:
+    """3 bare walks then 1 verify -> a single GROUNDED step (intermediate walks
+    are NOT each a checked sub-goal; no sentinel-verify of intermediates)."""
+    backend = FakeToolScriptBackend.from_tool_script(
+        [
+            tool_turn(("walk", {"distance": 1.0, "speed": 0.3})),
+            tool_turn(("walk", {"distance": 1.0, "speed": 0.3})),
+            tool_turn(("walk", {"distance": 1.0, "speed": 0.3})),
+            tool_turn(("verify", {"expr": "at_position(3.0, 0.0, 1.0)"})),
+            tool_turn(("finish", {})),
+        ]
+    )
+    agent, base = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("walk 3m then verify", session=_session())
+
+    assert len(trace.steps) == 1, "3 walks + 1 verify must be ONE checked step"
+    step = trace.steps[0]
+    assert step.verify_result is True
+    assert step.actor_caused is ActorCaused.CAUSED
+    # The honest-spine verdict: GROUNDED + verified.
+    oracle_names = verify_oracle_names(agent, eng)
+    report = VerdictReport.from_trace(trace, oracle_names)
+    assert report.verified is True
+    assert report.evidence == "GROUNDED"
+    assert report.verified == evidence_passed(trace, oracle_names)
+
+
+# ---------------------------------------------------------------------------
+# fix 3 + spine parity — HONEST CAUSED vs NO-OP UNCAUSED through the producer
+# ---------------------------------------------------------------------------
+
+
+def test_honest_walk_is_caused_and_verified() -> None:
+    backend = FakeToolScriptBackend.from_tool_script(
+        [
+            tool_turn(("walk", {"distance": 2.0, "speed": 0.3})),
+            tool_turn(("verify", {"expr": "at_position(2.0, 0.0, 1.0)"})),
+            tool_turn(("finish", {})),
+        ]
+    )
+    agent, base = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("go to (2,0)", session=_session())
+    oracle_names = verify_oracle_names(agent, eng)
+    report = VerdictReport.from_trace(trace, oracle_names)
+
+    assert trace.steps[0].actor_caused is ActorCaused.CAUSED
+    assert report.verified is True and report.evidence == "GROUNDED"
+    assert report.verified == evidence_passed(trace, oracle_names)
+    assert base.get_position()[0] > 1.5  # actually moved
+
+
+def test_noop_verify_only_is_uncaused_and_not_verified() -> None:
+    """verify-only (no walk), predicate true at baseline -> UNCAUSED -> RAN."""
+    backend = FakeToolScriptBackend.from_tool_script(
+        [
+            tool_turn(("verify", {"expr": "at_position(0.0, 0.0, 1.0)"})),
+            tool_turn(("finish", {})),
+        ]
+    )
+    agent, base = _make_agent(0.0, 0.0)  # already at (0,0) -> predicate true
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("claim you're at (0,0)", session=_session())
+    oracle_names = verify_oracle_names(agent, eng)
+    report = VerdictReport.from_trace(trace, oracle_names)
+
+    step = trace.steps[0]
+    assert step.verify_result is True, "predicate is true at baseline"
+    assert step.actor_caused is ActorCaused.UNCAUSED, "no commanded motion"
+    assert report.verified is False and report.evidence == "RAN"
+    assert report.exit_code() == 2
+    assert report.verified == evidence_passed(trace, oracle_names)
+
+
+# ---------------------------------------------------------------------------
+# replan-via-MODEL — the runner holds NO replan state; the model re-issues
+# ---------------------------------------------------------------------------
+
+
+def test_replan_is_model_driven_not_runner_state() -> None:
+    """A False verify is followed by ANOTHER model walk+verify. Both pairs are
+    recorded; the runner computed no 'retry' state. The final trace verifies only
+    when EVERY checked step is GROUNDED, so a False first step keeps it unverified."""
+    backend = FakeToolScriptBackend.from_tool_script(
+        [
+            tool_turn(("walk", {"distance": 0.3, "speed": 0.3})),  # lands short
+            tool_turn(("verify", {"expr": "at_position(3.0, 0.0, 0.5)"})),  # FAIL
+            tool_turn(("walk", {"distance": 3.0, "speed": 0.3})),  # the model retries
+            tool_turn(("verify", {"expr": "at_position(3.0, 0.0, 0.5)"})),  # PASS
+            tool_turn(("finish", {})),
+        ]
+    )
+    agent, base = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("go to (3,0), retry if short", session=_session())
+
+    # TWO (action-chain -> verify) pairs recorded — the MODEL re-issued, the runner
+    # did not loop internally.
+    assert len(trace.steps) == 2
+    assert trace.steps[0].verify_result is False  # the short attempt
+    assert trace.steps[1].verify_result is True   # the corrected attempt
+    oracle_names = verify_oracle_names(agent, eng)
+    report = VerdictReport.from_trace(trace, oracle_names)
+    # A trace with ANY non-GROUNDED checked step is NOT verified (all-must-pass).
+    assert report.verified is False
+
+
+def test_empty_script_yields_unverified_empty_trace() -> None:
+    """No verify ever called -> empty trace -> fail closed (not verified)."""
+    backend = FakeToolScriptBackend.from_tool_script([tool_turn(end=True)])
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("do nothing", session=_session())
+    oracle_names = verify_oracle_names(agent, eng)
+    report = VerdictReport.from_trace(trace, oracle_names)
+    assert len(trace.steps) == 0
+    assert report.verified is False

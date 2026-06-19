@@ -1623,6 +1623,38 @@ class VectorEngine:
         )
 
     # ------------------------------------------------------------------
+    # Campaign #13 M1 — native tool-use turn producer (strangler-fig, flag-gated)
+    # ------------------------------------------------------------------
+
+    def run_turn_native(
+        self,
+        user_message: str,
+        agent: Any = None,
+        session: Session | None = None,
+        app_state: dict[str, Any] | None = None,
+    ) -> "ExecutionTrace":
+        """THIN delegate to ``native_loop.run_turn_native`` (M1, flag-gated OFF).
+
+        The frontier-model NATIVE TOOL-USE producer: the MODEL drives a ReAct loop
+        (skills-as-tools + a synthetic ``verify``/``finish``) and the loop assembles
+        an ``ExecutionTrace`` the EXISTING verify spine consumes unchanged. This
+        engine method is intentionally a one-liner so the 2000-line file is not
+        bloated — all the producer logic lives in ``vcli/native_loop.py`` (which
+        imports ONLY the spine, enforced by an import-firewall test). The caller
+        (``cli.run_one_turn`` behind ``--native-loop``) feeds the returned trace to
+        ``VerdictReport.from_trace`` — this never computes ``verified``.
+        """
+        from vector_os_nano.vcli.native_loop import run_turn_native as _run
+
+        return _run(
+            self,
+            user_message,
+            agent=agent if agent is not None else getattr(self, "_vgg_agent", None),
+            session=session,
+            app_state=app_state,
+        )
+
+    # ------------------------------------------------------------------
     # Stage 5 (S5.3) — unified closed-loop controller (DARK-LAUNCHED)
     # ------------------------------------------------------------------
 
