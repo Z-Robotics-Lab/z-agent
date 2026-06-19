@@ -42,6 +42,14 @@ from vector_os_nano.vcli.cognitive.types import (
 from vector_os_nano.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
 from vector_os_nano.vcli.worlds.dev import DEV_VOCAB
 
+# Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
+ORACLES = frozenset({
+    "at_position", "facing", "visited", "holding_object", "arm_at_home",
+    "file_exists", "path_contains", "get_position", "get_heading",
+    "describe_scene", "detect_objects", "placed_count", "nearest_room",
+    "objects_in_room", "find_object", "room_coverage",
+})
+
 
 # ---------------------------------------------------------------------------
 # Mock LLM backend (no network)
@@ -187,14 +195,14 @@ def _unverified_action_trace() -> ExecutionTrace:
 
 def test_answer_only_step_passes_evidence_gate() -> None:
     # A legitimate answer-only step is evidence-backed-by-design in the dev world.
-    assert evidence_passed(_answer_trace(), is_robot=False) is True
+    assert evidence_passed(_answer_trace(), ORACLES) is True
 
 
 def test_unverified_action_step_still_fails_gate_moat() -> None:
     # THE MOAT: an action step with a sentinel verify is NOT counted as verified,
     # even though it has the exact same verify string ("True") as the answer step.
     # The gate distinguishes them ONLY by the explicit answer_only marker.
-    assert evidence_passed(_unverified_action_trace(), is_robot=False) is False
+    assert evidence_passed(_unverified_action_trace(), ORACLES) is False
 
 
 def test_answer_and_action_mixed_trace_fails_on_unverified_action() -> None:
@@ -211,7 +219,7 @@ def test_answer_and_action_mixed_trace_fails_on_unverified_action() -> None:
         success=True,
         total_duration_sec=0.02,
     )
-    assert evidence_passed(trace, is_robot=False) is False
+    assert evidence_passed(trace, ORACLES) is False
 
 
 def test_replay_skips_answer_only_no_false_evidence() -> None:
@@ -226,7 +234,7 @@ def test_answer_only_round_trips_through_trace_store(tmp_path: Path) -> None:
     reloaded = load_trace(path)
     assert reloaded.goal_tree.sub_goals[0].answer_only is True
     # The gate decision survives the round-trip.
-    assert evidence_passed(reloaded, is_robot=False) is True
+    assert evidence_passed(reloaded, ORACLES) is True
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +335,7 @@ def test_llm_answer_only_on_action_step_still_fails_gate_moat() -> None:
     # side-effecting executor (strategy != "answer") is NOT exempted just because
     # the LLM set answer_only=True — the exemption is tied to the zero-I/O
     # "answer" route. So a laundered action step still fails the evidence gate.
-    assert evidence_passed(_laundered_action_trace(), is_robot=False) is False
+    assert evidence_passed(_laundered_action_trace(), ORACLES) is False
 
 
 def test_llm_answer_only_on_action_step_not_skipped_by_replay() -> None:

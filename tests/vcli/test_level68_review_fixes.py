@@ -29,6 +29,14 @@ from vector_os_nano.vcli.cognitive.experience_compiler import ExperienceCompiler
 from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
 from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
 from vector_os_nano.vcli.cognitive.trace_store import evidence_passed, load_trace, save_trace
+
+# Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
+ORACLES = frozenset({
+    "at_position", "facing", "visited", "holding_object", "arm_at_home",
+    "file_exists", "path_contains", "get_position", "get_heading",
+    "describe_scene", "detect_objects", "placed_count", "nearest_room",
+    "objects_in_room", "find_object", "room_coverage",
+})
 from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, StepRecord, SubGoal
 from vector_os_nano.vcli.permissions import PermissionContext
 from vector_os_nano.vcli.tools.base import CategorizedToolRegistry, ToolContext
@@ -124,9 +132,9 @@ def _trace_with_override(visual_override: bool) -> ExecutionTrace:
 
 
 def test_visual_override_is_not_evidence() -> None:
-    assert evidence_passed(_trace_with_override(visual_override=True), is_robot=False) is False
+    assert evidence_passed(_trace_with_override(visual_override=True), ORACLES) is False
     # a real deterministic pass on the same shape IS evidence
-    assert evidence_passed(_trace_with_override(visual_override=False), is_robot=False) is True
+    assert evidence_passed(_trace_with_override(visual_override=False), ORACLES) is True
 
 
 def test_visual_override_round_trips(tmp_path: Path) -> None:

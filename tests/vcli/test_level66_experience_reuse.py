@@ -243,44 +243,62 @@ def test_visual_override_success_does_not_compile(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# W1.1 — MCP/world= regression: init_vgg must propagate world.is_robot() into the
-# GoalExecutor reward gate. A LIVE robot-control entry point (mcp/server.py) that
-# omits world= would build the executor with is_robot=False and then record a
-# passing verify="True" motor step as a FAILURE -> robot-learning regression.
+# R1 (was W1.1) — MCP/world= regression: init_vgg must SINGLE-SOURCE the live
+# verify namespace into the GoalExecutor reward gate. The old is_robot flag (and
+# its world bypass) is GONE: the executor's reward gate is now evidence-honest via
+# ``_verify_oracle_names()``, which reads the SAME namespace GoalVerifier uses
+# (engine._build_verifier_namespace, with the active world merged on top). A LIVE
+# robot-control entry point (mcp/server.py) that omits world= would build the
+# executor over a namespace without the robot oracles -> robot steps could never
+# reach GROUNDED. So init_vgg must wire the world into the namespace.
 # ---------------------------------------------------------------------------
 
 
-def test_init_vgg_robot_world_sets_executor_is_robot() -> None:
+def test_init_vgg_robot_world_wires_live_namespace_into_executor() -> None:
+    # R1: the executor's reward-gate oracle names are SINGLE-SOURCED from the SAME
+    # namespace the engine's GoalVerifier uses (no second hand-authored copy, no
+    # is_robot flag). With agent=None the RobotWorld adds no embodiment oracles, so
+    # the meaningful invariant is the single-source identity, asserted here.
     from vector_os_nano.vcli.engine import VectorEngine
     from vector_os_nano.vcli.worlds import RobotWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=RobotWorld())
-    assert eng._goal_executor._is_robot is True
+    assert not hasattr(eng._goal_executor, "_is_robot")  # the bypass flag is GONE
+    assert (
+        eng._goal_executor._verify_oracle_names()
+        == frozenset(eng._build_verifier_namespace(None).keys())
+    )
 
 
-def test_init_vgg_dev_world_sets_executor_not_robot() -> None:
+def test_init_vgg_dev_world_wires_live_namespace_into_executor() -> None:
     from vector_os_nano.vcli.engine import VectorEngine
     from vector_os_nano.vcli.worlds import DevWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld())
-    assert eng._goal_executor._is_robot is False
+    names = eng._goal_executor._verify_oracle_names()
+    # The dev predicates anchor the gate; the SAME namespace single-sources it.
+    assert "file_exists" in names
+    assert names == frozenset(eng._build_verifier_namespace(None).keys())
 
 
-def test_init_vgg_no_world_defaults_not_robot() -> None:
-    # The legacy no-world path (pre-fix MCP call) stays is_robot=False.
+def test_init_vgg_no_world_still_single_sources_namespace() -> None:
+    # The legacy no-world path still builds the executor over the live namespace
+    # (dev predicates), never over an empty/hand-authored allowlist.
     from vector_os_nano.vcli.engine import VectorEngine
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None)
-    assert eng._goal_executor._is_robot is False
+    names = eng._goal_executor._verify_oracle_names()
+    assert "file_exists" in names
+    assert not hasattr(eng._goal_executor, "_is_robot")
 
 
 def test_mcp_server_builds_engine_with_robot_world() -> None:
     """mcp/server.py:_build_engine must pass world=resolve_world(agent) so a robot
-    agent yields an is_robot executor. Mirrors the live entry point end-to-end with
-    the network/backend stubbed."""
+    agent's verify namespace (the sim oracles) is wired into the executor reward
+    gate. Mirrors the live entry point end-to-end with the network/backend stubbed."""
     import vector_os_nano.mcp.server as srv
 
     captured: dict[str, object] = {}
@@ -288,9 +306,6 @@ def test_mcp_server_builds_engine_with_robot_world() -> None:
     class _StubEngine:
         def init_vgg(self, **kwargs):
             captured["world"] = kwargs.get("world")
-            self._goal_executor = type(
-                "_E", (), {"_is_robot": bool(kwargs["world"].is_robot()) if kwargs.get("world") else False}
-            )()
 
     class _StubBackend:
         pass
@@ -333,5 +348,6 @@ def test_mcp_server_builds_engine_with_robot_world() -> None:
         mp.undo()
 
     assert captured["world"] is not None
+    # The robot world is wired into init_vgg -> its sim oracles reach the executor's
+    # reward-gate namespace (single source). The is_robot bypass flag is gone (R1).
     assert captured["world"].is_robot() is True
-    assert engine._goal_executor._is_robot is True

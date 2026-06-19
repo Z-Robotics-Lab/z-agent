@@ -284,6 +284,37 @@ def _pick_verify_fn(verify_signatures: dict[str, str]) -> str | None:
     return sorted(verify_signatures.keys())[0]
 
 
+# Goal-conditioned bool predicates whose BARE call is real evidence (mirrors the
+# classifier's _PREDICATE_ORACLES). A fallback verify built from one of these is
+# GROUNDED, not a dishonest "True" sentinel that the evidence gate now rejects.
+_FALLBACK_PREDICATE_PREFERENCE: tuple[str, ...] = (
+    "arm_at_home",
+    "at_position",
+    "facing",
+)
+
+
+def _pick_fallback_verify(verify_signatures: dict[str, str]) -> str:
+    """Pick an HONEST fallback verify from the live verify signatures.
+
+    The single-step fallback tree (used when LLM decomposition fails) must still
+    carry a real predicate, NOT the ``"True"`` sentinel the R1 evidence gate now
+    rejects. Prefers a no-arg goal-conditioned predicate the world actually
+    exposes (``arm_at_home()`` etc. — GROUNDED on a bare call); falls back to
+    ``world_stats() is not None`` (state-oracle-vs-constant, GROUNDED) when the
+    world exposes ``world_stats``; else to the neutral class default. Never emits
+    ``"True"``. Single-sourced from the verify signatures (rule 3).
+    """
+    for name in _FALLBACK_PREDICATE_PREFERENCE:
+        if name in verify_signatures:
+            return f"{name}()"
+    if "world_stats" in verify_signatures:
+        return "world_stats() is not None"
+    # No oracle to anchor on — leave the neutral default so the decomposer's own
+    # class fallback applies (still not "True").
+    return "world_stats() is not None"
+
+
 def _first_sentence(text: Any) -> str:
     """Return a short, JSON-safe first clause of *text* for the example."""
     s = str(text).strip().replace('"', "'").replace("\n", " ")
@@ -340,5 +371,5 @@ def build_decompose_vocab(
         strategies=frozenset(strategy_names),
         strategy_params_help=strategy_params_help,
         examples=_build_examples(schemas, verify_signatures),
-        fallback_verify="True",
+        fallback_verify=_pick_fallback_verify(verify_signatures),
     )

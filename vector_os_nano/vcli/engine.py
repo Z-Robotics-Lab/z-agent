@@ -588,7 +588,6 @@ class VectorEngine:
                 code_executor=code_executor,
                 tool_dispatcher=tool_dispatcher,
                 capability_registry=capability_registry,
-                is_robot=bool(world.is_robot()) if world is not None else False,
             )
         except ImportError as exc:
             logger.warning("VGG: GoalExecutor not available: %s", exc)
@@ -1788,17 +1787,22 @@ class VectorEngine:
         )
 
     def _evidence_ok(self, trace: "ExecutionTrace") -> bool:
-        """Run the evidence gate for *trace* under the active world (fail-safe).
+        """Run the evidence gate for *trace* (fail-safe, honest).
 
-        Mirrors the CLI's gate call: a robot world bypasses (async motor skills use
-        ``verify="True"``); the dev world is strict. Any failure reading the gate
+        The gate is now world-agnostic: a step backs the outcome only when its
+        verify actually consumes a live verify-namespace oracle (the robot bypass
+        is gone). ``oracle_names`` is single-sourced via ``verify_oracle_names``
+        from the SAME namespace ``GoalVerifier`` uses. Any failure reading the gate
         is treated as "not verified" so the moat never silently passes.
         """
         try:
-            from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
-            world = getattr(self, "_world", None)
-            is_robot = bool(world.is_robot()) if world is not None else False
-            return bool(evidence_passed(trace, is_robot=is_robot))
+            from vector_os_nano.vcli.cognitive.trace_store import (
+                evidence_passed,
+                verify_oracle_names,
+            )
+            agent = getattr(self, "_vgg_agent", None)
+            oracle_names = verify_oracle_names(agent, self)
+            return bool(evidence_passed(trace, oracle_names))
         except Exception as exc:  # noqa: BLE001
             logger.debug("unified: evidence gate read failed: %s", exc)
             return False

@@ -19,6 +19,14 @@ from pathlib import Path
 from typing import Any
 
 from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+# Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
+ORACLES = frozenset({
+    "at_position", "facing", "visited", "holding_object", "arm_at_home",
+    "file_exists", "path_contains", "get_position", "get_heading",
+    "describe_scene", "detect_objects", "placed_count", "nearest_room",
+    "objects_in_room", "find_object", "room_coverage",
+})
 from vector_os_nano.vcli.engine import VectorEngine
 from vector_os_nano.vcli.permissions import PermissionContext
 from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
@@ -90,7 +98,7 @@ def test_dev_e2e_tool_call_writes_and_is_evidenced(tmp_path: Path, monkeypatch) 
     # Verified + evidence-backed.
     assert trace.success is True
     assert trace.steps[0].verify_result is True
-    assert evidence_passed(trace, is_robot=False) is True
+    assert evidence_passed(trace, ORACLES) is True
 
 
 def test_dev_e2e_denied_permission_fails_without_evidence(tmp_path: Path, monkeypatch) -> None:
@@ -104,7 +112,7 @@ def test_dev_e2e_denied_permission_fails_without_evidence(tmp_path: Path, monkey
 
     assert not (tmp_path / "blocked.txt").exists()
     assert trace.success is False
-    assert evidence_passed(trace, is_robot=False) is False
+    assert evidence_passed(trace, ORACLES) is False
 
 
 def test_dev_e2e_off_allowlist_tool_is_blocked(tmp_path: Path, monkeypatch) -> None:

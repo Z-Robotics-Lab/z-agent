@@ -50,10 +50,13 @@ from vector_os_nano.vcli.cognitive.strategy_stats import StrategyRecord, Strateg
 from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
 from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
 from vector_os_nano.vcli.cognitive.trace_store import (
+    classify_step_evidence,
     evidence_passed,
     load_trace,
     replay,
     save_trace,
+    step_evidence_ok,
+    verify_oracle_names,
 )
 from vector_os_nano.vcli.cognitive.vgg_harness import VGGHarness, HarnessConfig, FailureRecord
 from vector_os_nano.vcli.cognitive.object_memory import ObjectMemory, TrackedObject
@@ -92,6 +95,9 @@ __all__ = [
     "load_trace",
     "replay",
     "evidence_passed",
+    "step_evidence_ok",
+    "classify_step_evidence",
+    "verify_oracle_names",
     "step_view",
     "run_snapshot",
     "goal_tree_view",

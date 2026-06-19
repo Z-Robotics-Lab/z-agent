@@ -10,25 +10,32 @@ Turns a run's ``ExecutionTrace`` into a replayable, self-grading eval signal:
 - ``replay`` re-evaluates each sub-goal's *deterministic* verify predicate with
   a fresh ``GoalVerifier``. Visual overrides are NOT reproduced — only
   deterministic evidence counts, which is the point of replay.
-- ``evidence_passed`` gates a "verified done": in the dev world a step backs the
-  outcome with evidence only when its verify is a real predicate (not the
-  sentinels ``""`` / ``"True"``) AND that predicate verified. Robot worlds bypass
-  the gate so async motor skills that legitimately use ``verify="True"`` do not
-  regress.
+- ``evidence_passed`` gates a "verified done" in EVERY world (dev and robot
+  alike — the old ``if is_robot: return True`` bypass is gone): a step backs the
+  outcome with evidence only when its verify actually consumes a world oracle
+  (single-sourced via ``classify_step_evidence`` -> ``classify_verify_expr``).
+  A sentinel ``""`` / ``"True"`` verify, an absent oracle, or a tautology
+  classify RAN and do NOT pass the gate.
 """
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
 from vector_os_nano.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
+
+logger = logging.getLogger(__name__)
+
+StepEvidence = Literal["GROUNDED", "RAN", "FAILED"]
 
 # Verify strings that carry no deterministic evidence (empty, or the trivial
 # fallback the decomposer/robot motor steps use).
@@ -60,6 +67,81 @@ def _is_answer_only(sub_goal: SubGoal) -> bool:
     this gate and the decomposer agree; this check is the belt to that suspenders.
     """
     return bool(getattr(sub_goal, "answer_only", False)) and sub_goal.strategy == _ANSWER_STRATEGY
+
+
+# ---------------------------------------------------------------------------
+# Oracle names — single-sourced from the LIVE verify namespace
+# ---------------------------------------------------------------------------
+
+
+def verify_oracle_names(agent: Any, engine: Any = None) -> frozenset[str]:
+    """The callable names in the LIVE verify namespace GoalVerifier uses.
+
+    Single source (rule 3): the names are the keys of the SAME dict
+    ``engine._build_verifier_namespace(agent)`` builds for ``GoalVerifier`` (which
+    already merges ``World.build_verify_namespace(agent)`` on top — so a connected
+    sim arm's ``arm_at_home`` / ``holding_object`` overlay is visible here, and the
+    engine's empty perception stubs at engine.py:906 are correctly shadowed). NEVER
+    a hand-authored second allowlist.
+
+    *engine* is required to build the namespace; when it is None (or namespace
+    construction raises) this FAILS CLOSED to ``frozenset()`` — with no oracle
+    names every predicate classifies RAN, never a spurious GROUNDED. This keeps the
+    moat strict (rule 5): an absent namespace can only make verification stricter.
+    """
+    if engine is None:
+        return frozenset()
+    builder = getattr(engine, "_build_verifier_namespace", None)
+    if builder is None:
+        return frozenset()
+    try:
+        ns = builder(agent)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("verify_oracle_names: namespace build failed: %s", exc)
+        return frozenset()
+    return frozenset(ns.keys())
+
+
+# ---------------------------------------------------------------------------
+# Per-step evidence classification (single source for BOTH gates — rule 3)
+# ---------------------------------------------------------------------------
+
+
+def classify_step_evidence(
+    step: StepRecord, sub_goal: SubGoal, oracle_names: frozenset[str]
+) -> StepEvidence:
+    """Classify a single executed step's evidence: GROUNDED / RAN / FAILED.
+
+    The ONE source of truth for both the done-gate (``evidence_passed``) and the
+    per-step reward gate (``step_evidence_ok``) — rule 3 (no split-brain). It
+    replaces the old ``if is_robot: return True`` short-circuit with the honest
+    classifier: a robot step that merely RAN (``verify="True"``) is no longer
+    auto-passed; only a step whose verify actually consumes a world oracle in a
+    non-tautological way reaches GROUNDED.
+
+    - FAILED — the step did not succeed (``not step.success``).
+    - GROUNDED — the step succeeded AND either:
+        * it is a legitimately-exempt answer-only step (zero-I/O ``answer``
+          strategy) whose ``verify_result`` is True and not a visual override; OR
+        * ``classify_verify_expr(sub_goal.verify, oracle_names) == "GROUNDED"``
+          AND ``step.verify_result`` AND not a visual override.
+      A VLM visual override is not deterministic (not replayable) evidence, so it
+      can never reach GROUNDED — keeping this gate in agreement with ``replay``.
+    - RAN — the step succeeded but its verify carries no real, non-tautological
+      world evidence (a sentinel ``""``/``"True"``, an absent oracle, or a
+      tautology), or it succeeded with a visual override.
+    """
+    if not step.success:
+        return "FAILED"
+    visual_override = bool(getattr(step, "visual_override", False))
+    if _is_answer_only(sub_goal):
+        return "GROUNDED" if (step.verify_result and not visual_override) else "RAN"
+    grounded = (
+        classify_verify_expr(sub_goal.verify, oracle_names) == "GROUNDED"
+        and step.verify_result
+        and not visual_override
+    )
+    return "GROUNDED" if grounded else "RAN"
 
 
 # ---------------------------------------------------------------------------
@@ -212,71 +294,55 @@ def replay(trace: ExecutionTrace, verifier: Any) -> bool:
     return checked > 0
 
 
-def evidence_passed(trace: ExecutionTrace, is_robot: bool = False) -> bool:
+def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool:
     """True when the trace's success is backed by deterministic evidence.
 
-    Dev world (strict): every executed step must map to a sub-goal whose verify
-    is a real predicate (not ``""`` / ``"True"``), whose ``verify_result`` is
-    True, and whose pass was NOT a VLM visual override (a visual override is not
-    deterministic evidence and cannot be replayed — this keeps ``evidence_passed``
-    and ``replay`` in agreement). Robot world: always True — do not regress async
-    motor skills that use ``verify="True"`` because no symbolic post-condition
-    exists.
+    Single-sourced through ``classify_step_evidence`` (rule 3) and applied to BOTH
+    dev and robot worlds (the dishonest ``if is_robot: return True`` bypass is
+    GONE): every executed step that maps to a sub-goal must classify GROUNDED, and
+    there must be at least one such checked step (an empty trace fails). A step
+    classifies GROUNDED only when its verify actually consumes a world oracle in
+    *oracle_names* in a non-tautological way (or it is a legitimately-exempt
+    answer-only step); a sentinel ``""`` / ``"True"`` verify (the robot motor
+    default), an absent oracle, a tautology, or a VLM visual override classify RAN
+    and so do NOT pass the gate.
 
-    Stage 5 (S5.2): a step whose sub-goal is explicitly ``answer_only`` is a
-    pure-conversation step that carries no robot evidence BY DESIGN. It is exempt
-    from the real-predicate requirement (it would otherwise be indistinguishable
-    from an unverified action) but must still have ``verify_result`` True and not
-    be a visual override.
+    *oracle_names* MUST be the live verify-namespace callable names from
+    ``verify_oracle_names(agent, engine)`` — single-sourced from the SAME namespace
+    ``GoalVerifier`` uses; never a hand-authored copy. An empty set fails closed
+    (everything classifies RAN), so the moat only ever gets stricter (rule 5).
 
-    MOAT (rule 5): the exemption is keyed on ``answer_only`` AND tied to the
-    side-effect-free ``answer`` strategy (see ``_is_answer_only``). The
-    ``answer_only`` flag is fully LLM-controlled, so on its own it is no safer than
-    the verify string; binding it to the only executor that performs zero I/O
-    (``GoalExecutor._execute_answer``) means an LLM that sets ``answer_only: true``
-    on a side-effecting strategy (``tool_call`` / a skill) does NOT launder that
-    action past the gate — it still requires a real deterministic predicate. An
-    action step with a sentinel ``""`` / ``"True"`` verify is therefore still NOT
-    counted as verified. A trace with no non-answer step still requires at least
-    one answer_only step to have passed (an empty trace fails).
+    Stage 5 (S5.2): a step whose sub-goal is explicitly ``answer_only`` (and routed
+    through the zero-I/O ``answer`` strategy) is a pure-conversation step that
+    carries no robot evidence BY DESIGN; ``classify_step_evidence`` exempts it from
+    the real-predicate requirement but still requires ``verify_result`` True and no
+    visual override. The exemption is keyed on the side-effect-free ``answer``
+    strategy, NOT the LLM-controlled ``answer_only`` flag alone, so an LLM cannot
+    launder a side-effecting step past the gate.
     """
-    if is_robot:
-        return True
     sg_by_name = {sg.name: sg for sg in trace.goal_tree.sub_goals}
     checked = [s for s in trace.steps if s.sub_goal_name in sg_by_name]
     if not checked:
         return False
     return all(
-        (
-            _is_answer_only(sg_by_name[s.sub_goal_name])
-            or (sg_by_name[s.sub_goal_name].verify or "").strip() not in _NO_EVIDENCE
-        )
-        and s.verify_result
-        and not getattr(s, "visual_override", False)
+        classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names) == "GROUNDED"
         for s in checked
     )
 
 
-def step_evidence_ok(step: StepRecord, sub_goal: SubGoal, is_robot: bool = False) -> bool:
+def step_evidence_ok(
+    step: StepRecord, sub_goal: SubGoal, oracle_names: frozenset[str]
+) -> bool:
     """True when a SINGLE step's pass is backed by deterministic evidence.
 
-    The per-step analogue of ``evidence_passed`` (it mirrors that gate's
-    per-step inner clause EXACTLY): the step's sub-goal must either be a
-    legitimately-exempt answer-only step OR carry a real predicate verify (not
-    the sentinels ``""`` / ``"True"``), the step's ``verify_result`` must be
-    True, and the pass must NOT be a VLM visual override (not replayable, so not
-    deterministic evidence).
+    The per-step analogue of ``evidence_passed``, single-sourced through the SAME
+    ``classify_step_evidence`` (rule 3): True iff this step classifies GROUNDED.
+    The robot bypass is GONE — a robot motor step with ``verify="True"`` now
+    classifies RAN, not GROUNDED, so it no longer trains the bandit on unverified
+    "success". Reward parity with the done-gate is intentional (W1.1 → R1):
+    learning is rewarded only for steps that actually proved their post-condition.
 
-    Robot world (``is_robot=True``): always True — robot async motor skills
-    legitimately use ``verify="True"``, so robot LEARNING is NOT starved by this
-    gate (the caller AND-composes with ``step.success``, so a FAILED robot motor
-    step is still not rewarded). Only dev/playground worlds with real predicates
-    tighten the learning signal.
+    *oracle_names* MUST come from ``verify_oracle_names(agent, engine)`` (live
+    namespace, single source). An empty set fails closed (classifies RAN).
     """
-    if is_robot:
-        return True
-    return bool(
-        (_is_answer_only(sub_goal) or (sub_goal.verify or "").strip() not in _NO_EVIDENCE)
-        and step.verify_result
-        and not getattr(step, "visual_override", False)
-    )
+    return classify_step_evidence(step, sub_goal, oracle_names) == "GROUNDED"

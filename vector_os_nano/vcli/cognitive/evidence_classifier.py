@@ -43,7 +43,18 @@ _NO_EVIDENCE: frozenset[str] = frozenset({"", "True"})
 # A NEW semantic axis (R1): bool-returning, author-supplies-the-goal predicates.
 # R2 should derive this from oracle return-type metadata rather than a kernel list.
 _PREDICATE_ORACLES: frozenset[str] = frozenset(
-    {"at_position", "facing", "visited", "holding_object", "arm_at_home", "file_exists"}
+    {
+        "at_position",
+        "facing",
+        "visited",
+        "holding_object",
+        "arm_at_home",
+        "file_exists",
+        # path_contains(path, substr) is a goal-conditioned bool (the author
+        # supplies the substring goal; True only if the file actually contains
+        # it) — same category as file_exists, so a bare call is GROUNDED.
+        "path_contains",
+    }
 )
 
 

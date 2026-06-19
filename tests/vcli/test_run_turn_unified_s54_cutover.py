@@ -29,6 +29,14 @@ from typing import Any
 
 from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
 from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+# Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
+ORACLES = frozenset({
+    "at_position", "facing", "visited", "holding_object", "arm_at_home",
+    "file_exists", "path_contains", "get_position", "get_heading",
+    "describe_scene", "detect_objects", "placed_count", "nearest_room",
+    "objects_in_room", "find_object", "room_coverage",
+})
 from vector_os_nano.vcli.engine import UnifiedTurnResult, VectorEngine
 from vector_os_nano.vcli.intent_router import IntentRouter
 from vector_os_nano.vcli.permissions import PermissionContext
@@ -183,7 +191,7 @@ def test_command_routes_to_verified_plan(tmp_path: Path, monkeypatch) -> None:
     assert (tmp_path / "note.txt").read_text() == "note\n"
     assert result.trace is not None and result.trace.success is True
     assert result.verified is True
-    assert evidence_passed(result.trace, is_robot=False) is True
+    assert evidence_passed(result.trace, ORACLES) is True
 
 
 # ===========================================================================

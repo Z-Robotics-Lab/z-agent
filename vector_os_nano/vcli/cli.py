@@ -1818,13 +1818,22 @@ def main(argv: list[str] | None = None) -> None:
                         n_ok = sum(1 for s in trace.steps if s.success)
                         dur = trace.total_duration_sec
                         # Evidence gate: a successful run only counts as *verified*
-                        # when its steps are backed by deterministic predicates
-                        # (dev world). Robot worlds bypass the gate.
+                        # when its steps actually consume a live verify-namespace
+                        # oracle (world-agnostic now — the robot bypass is gone).
+                        # oracle_names single-sourced from the SAME namespace
+                        # GoalVerifier uses. Fail CLOSED (not verified) on any error
+                        # so the moat never silently passes.
                         try:
-                            from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
-                            _evidence = evidence_passed(trace, is_robot=bool(world.is_robot()))
+                            from vector_os_nano.vcli.cognitive.trace_store import (
+                                evidence_passed,
+                                verify_oracle_names,
+                            )
+                            _oracle_names = verify_oracle_names(
+                                getattr(engine, "_vgg_agent", None), engine
+                            )
+                            _evidence = evidence_passed(trace, _oracle_names)
                         except Exception:  # noqa: BLE001
-                            _evidence = True
+                            _evidence = False
                         if trace.success and _evidence:
                             console.print(f"  [{TEAL}]>[/] [green]all {n_steps} steps done[/] [dim]{dur:.1f}s[/]")
                         elif trace.success:

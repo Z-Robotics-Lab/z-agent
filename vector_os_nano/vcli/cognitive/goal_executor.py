@@ -48,7 +48,6 @@ class GoalExecutor:
         tool_dispatcher: Any = None,
         capability_registry: Any = None,
         blackboard: Any = None,
-        is_robot: bool = False,
     ) -> None:
         """Initialise the executor.
 
@@ -76,16 +75,12 @@ class GoalExecutor:
                              captures each successful step's structured output under
                              the sub-goal name. None disables capture; the executor's
                              behavior is otherwise byte-identical.
-            is_robot: True when the active world is a robot world. The SINGLE source
-                             of truth for the per-step learning-tier reward gate
-                             (W1.1): every bandit record site routes through
-                             ``_record_strategy_stats``, which gates the recorded
-                             ``success`` on ``step_evidence_ok(..., is_robot)``. For a
-                             robot world the gate is unconditionally True, so the reward
-                             collapses to ``step.success`` (robot learning unchanged);
-                             for dev/playground it additionally requires deterministic
-                             evidence. Defaulted False so existing constructions are
-                             byte-identical.
+
+        Note (R1): the former ``is_robot`` parameter is GONE. The per-step reward
+        gate (``_record_strategy_stats``) no longer branches on the world; it
+        classifies evidence honestly via ``step_evidence_ok`` over the live verify
+        namespace (single source), so a robot motor step with ``verify="True"`` is
+        no longer auto-rewarded — reward parity with the done-gate.
         """
         self._selector = strategy_selector
         self._verifier = verifier
@@ -98,25 +93,43 @@ class GoalExecutor:
         self._tool_dispatcher = tool_dispatcher
         self._capability_registry = capability_registry
         self._blackboard = blackboard
-        self._is_robot = bool(is_robot)
 
     # ------------------------------------------------------------------
     # Strategy-stats reward gate (W1.1) — single chokepoint
     # ------------------------------------------------------------------
 
+    def _verify_oracle_names(self) -> frozenset[str]:
+        """Live verify-namespace callable names (single source, rule 3).
+
+        Reads the SAME namespace the executor's ``GoalVerifier`` uses — its
+        ``_namespace`` was built by ``engine._build_verifier_namespace`` with the
+        active world's ``build_verify_namespace`` already merged on top, so a
+        connected sim arm's ``arm_at_home`` / ``holding_object`` overlay is visible
+        here. Never a hand-authored copy. An absent/empty namespace yields the
+        empty set, which fails the evidence gate closed (everything classifies RAN).
+        """
+        ns = getattr(self._verifier, "_namespace", None)
+        if isinstance(ns, dict):
+            return frozenset(ns.keys())
+        return frozenset()
+
     def _record_strategy_stats(self, step: StepRecord, sub_goal: SubGoal) -> None:
-        # W1.1: gate the per-step bandit reward on deterministic evidence. The reward is
-        # step.success AND step_evidence_ok(...): robot world collapses to step.success
-        # (learning unchanged); dev/playground additionally requires real evidence so a
-        # sentinel/visual_override 'success' cannot train the bandit. Single chokepoint
-        # for ALL record sites (execute fallback, foreach, harness).
+        # W1.1 -> R1: gate the per-step bandit reward on deterministic evidence. The
+        # reward is step.success AND step_evidence_ok(...). The robot bypass is GONE
+        # (R1 parity with the done-gate, evidence_passed): a robot motor step with
+        # verify="True" now classifies RAN, not GROUNDED, so an unverified "success"
+        # no longer trains the bandit. Reward and done both demand GROUNDED — the
+        # learning signal is honest about what was actually proven. Single chokepoint
+        # for ALL record sites (execute fallback, foreach, harness). oracle_names is
+        # single-sourced from the live verifier namespace (see _verify_oracle_names).
         if self._stats is None:
             return
         try:
             self._stats.record(
                 strategy_name=step.strategy,
                 sub_goal_name=step.sub_goal_name,
-                success=step.success and step_evidence_ok(step, sub_goal, self._is_robot),
+                success=step.success
+                and step_evidence_ok(step, sub_goal, self._verify_oracle_names()),
                 duration_sec=step.duration_sec,
             )
         except Exception as exc:  # noqa: BLE001

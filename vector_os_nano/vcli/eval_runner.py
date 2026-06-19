@@ -76,6 +76,22 @@ class EvalRunner:
         self._run_task = run_task
         self._verifier = verifier
 
+    def _oracle_names(self) -> frozenset[str]:
+        """Live dev verify-namespace callable names (single source, rule 3).
+
+        The eval runner is dev-world by construction (module docstring): its oracle
+        names are the keys of the SAME dev verify namespace the injected
+        ``GoalVerifier`` wraps. When a verifier is present we read ITS namespace
+        (never a second copy); otherwise we read ``dev_verify_namespace()``
+        directly — never an empty set, which would falsely fail every dev case.
+        """
+        ns = getattr(self._verifier, "_namespace", None)
+        if isinstance(ns, dict) and ns:
+            return frozenset(ns.keys())
+        from vector_os_nano.vcli.worlds.dev import dev_verify_namespace
+
+        return frozenset(dev_verify_namespace().keys())
+
     def run_case(self, case: dict[str, Any]) -> EvalCaseResult:
         task = str(case.get("task", "")).strip()
         expect = case.get("expect")
@@ -91,7 +107,7 @@ class EvalRunner:
             return EvalCaseResult(task=task, passed=False, detail="no trace (decompose declined)")
         if not getattr(trace, "success", False):
             return EvalCaseResult(task=task, passed=False, detail="execution failed")
-        if not evidence_passed(trace, is_robot=False):
+        if not evidence_passed(trace, self._oracle_names()):
             return EvalCaseResult(task=task, passed=False, detail="no verifiable evidence")
         if expect:
             if self._verifier is None:

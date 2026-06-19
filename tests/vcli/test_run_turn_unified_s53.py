@@ -40,6 +40,14 @@ from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
 from vector_os_nano.vcli.tools.file_tools import FileWriteTool
 from vector_os_nano.vcli.worlds import DevWorld
 
+# Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
+ORACLES = frozenset({
+    "at_position", "facing", "visited", "holding_object", "arm_at_home",
+    "file_exists", "path_contains", "get_position", "get_heading",
+    "describe_scene", "detect_objects", "placed_count", "nearest_room",
+    "objects_in_room", "find_object", "room_coverage",
+})
+
 
 # ---------------------------------------------------------------------------
 # Mock backends (no network)
@@ -155,7 +163,7 @@ def test_chat_greeting_answer_parity(tmp_path: Path) -> None:
     assert answer_sg.strategy == "answer"
     # MOAT: the answer-only step is evidence-backed BY DESIGN (dev world strict).
     assert result.verified is True
-    assert evidence_passed(result.trace, is_robot=False) is True
+    assert evidence_passed(result.trace, ORACLES) is True
     # The backend was called exactly once (chat answer); answer_plan is deterministic.
     assert backend.calls == 1
     # The snapshot is the JSON-safe export view and round-trips.
@@ -317,7 +325,7 @@ def test_single_tool_plan_parity(tmp_path: Path, monkeypatch) -> None:
     assert result.trace.success is True
     assert result.trace.steps[0].verify_result is True
     assert result.verified is True
-    assert evidence_passed(result.trace, is_robot=False) is True
+    assert evidence_passed(result.trace, ORACLES) is True
 
 
 # ===========================================================================
@@ -346,7 +354,7 @@ def test_denied_permission_parity(tmp_path: Path, monkeypatch) -> None:
     assert result.trace is not None
     assert result.trace.success is False
     assert result.verified is False
-    assert evidence_passed(result.trace, is_robot=False) is False
+    assert evidence_passed(result.trace, ORACLES) is False
 
 
 # ===========================================================================
@@ -573,4 +581,4 @@ def test_unified_action_no_predicate_still_fails_gate(tmp_path: Path, monkeypatc
     assert result.trace.success is True
     # ...but it is NOT verified — no deterministic predicate backs it (the moat).
     assert result.verified is False
-    assert evidence_passed(result.trace, is_robot=False) is False
+    assert evidence_passed(result.trace, ORACLES) is False

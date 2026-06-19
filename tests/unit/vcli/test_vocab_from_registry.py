@@ -133,9 +133,14 @@ def test_custom_planner_intro_passthrough() -> None:
     assert vocab.planner_intro == "CUSTOM INTRO"
 
 
-def test_fallback_verify_is_true_literal() -> None:
+def test_fallback_verify_is_honest_predicate_not_true_sentinel() -> None:
+    # R1: the single-step fallback verify must carry REAL evidence, not the "True"
+    # sentinel the honest evidence gate now rejects. _pick_fallback_verify prefers a
+    # no-arg goal-conditioned predicate the world exposes; _VERIFY_SIGS has
+    # arm_at_home, so the fallback is the GROUNDED-on-a-bare-call arm_at_home().
     vocab = build_decompose_vocab(_ARM_SCHEMAS, _VERIFY_SIGS, has_base=False)
-    assert vocab.fallback_verify == "True"
+    assert vocab.fallback_verify == "arm_at_home()"
+    assert vocab.fallback_verify != "True"
 
 
 def test_empty_schemas_no_strategies_no_example() -> None:
@@ -156,4 +161,5 @@ def test_as_kwargs_roundtrips() -> None:
     kw = vocab.as_kwargs()
     assert kw["strategies"] == _EXPECTED_SKILL_STRATEGIES
     assert kw["verify_functions"] == frozenset(_VERIFY_SIGS.keys())
-    assert kw["fallback_verify"] == "True"
+    # R1: honest fallback verify (a real predicate), never the "True" sentinel.
+    assert kw["fallback_verify"] == "arm_at_home()"

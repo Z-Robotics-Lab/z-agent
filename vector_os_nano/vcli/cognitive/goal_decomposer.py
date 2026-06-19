@@ -253,7 +253,7 @@ Response:
     {
       "name": "walk_forward_2m",
       "description": "向前走2米",
-      "verify": "True",
+      "verify": "at_position(2.0, 0.0)",
       "strategy": "walk_forward",
       "timeout_sec": 30,
       "depends_on": [],
@@ -263,7 +263,7 @@ Response:
     {
       "name": "turn_right_90",
       "description": "右转90度",
-      "verify": "True",
+      "verify": "facing(-1.57)",
       "strategy": "turn",
       "timeout_sec": 15,
       "depends_on": ["walk_forward_2m"],

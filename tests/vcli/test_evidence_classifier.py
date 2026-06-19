@@ -19,6 +19,7 @@ ORACLES = frozenset(
         "holding_object",
         "arm_at_home",
         "file_exists",
+        "path_contains",
         # state oracles (raw values) — GROUNDED only vs a constant
         "get_position",
         "get_heading",
@@ -38,6 +39,7 @@ GROUNDED = [
     "holding_object('apple')",
     "facing(-1.57)",
     "visited('kitchen')",
+    "path_contains('note.txt', 'note')",  # goal-conditioned bool — bare call OK
     "not holding_object()",  # the existing place verify
     "'table' in describe_scene()",
     "placed_count() == 2",

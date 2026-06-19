@@ -45,11 +45,16 @@ Also: SO-101 NOT connected (`/dev/ttyACM*` empty). M0 must DELETE `is_robot` fro
 actor-unauthored-snapshot, and use an independent-observer sim grader (red-teamed against no-op/staged snapshots).
 
 ## Next (M0 honest foundation — see ~/.vector-nano-loop/campaign.md, hardened by R0 red-team)
-1. **R1 = delete the `is_robot` short-circuit** (3 sites: cli.py:1825, engine.py:1801, eval_runner.py:94),
-   re-key verification on actor-unauthored evidence, add the known-bad `arm-off-home → 'ran'/fail` regression,
-   record the sim red/green baseline. Pure software, headless-verifiable, no gate.
-2. R2 = independent-observer sim grader (red-team IT first) + PTY `cli.main` acceptance harness + CI gate.
-   Real SO-101 arm is gated on `ls /dev/ttyACM*` (absent now) and is NOT the gold win.
+- **R1 core SHIPPED (`a738055`, branch feat/orchestrator-redesign):** `vcli/cognitive/evidence_classifier.classify_verify_expr`
+  — a pure AST guard, GROUNDED for a bare predicate-oracle call or a state-oracle-vs-constant, RAN for sentinels /
+  no-oracle / tautologies (oracle-vs-itself, bare state oracle). 18 passed + 1 strict-xfail (the len-shape gap → R2).
+  Honest scope: structural only; goal authenticity deferred to R2. Unused until wired (suite stays green).
+- **R1 WIRING (next, per next-prompt.md):** `classify_step_evidence` single-sources BOTH gates; DELETE the
+  `is_robot` short-circuits (trace_store.py:243-244 + 276-277); thread oracle_names from the live namespace; re-key
+  robot decompose examples onto real predicates (≥1 robot task GROUNDED); flip the 3 intentional tests
+  (test_level64_verify_as_eval.py:157/309/374); fail-closed arm-off-home regression; chunked-suite baseline.
+- **R2 =** independent-observer sim grader (red-team IT first) + PTY `cli.main` acceptance harness + CI gate.
+  Real SO-101 arm gated on `ls /dev/ttyACM*` (absent now), NOT the gold win.
 3. Pending old-direction gates — recommend: do NOT merge `feat/playground-vln` (cherry-pick only the
    rule-5 GT-leak fix + rule-11 bare-cli fix if needed); DEFER DQ-16 (SysNav venv) / DQ-15 (FAR colcon)
    until a milestone needs them.

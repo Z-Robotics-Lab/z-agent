@@ -44,8 +44,13 @@ def _build(objects: list[dict[str, Any]]) -> tuple[GoalExecutor, StrategyStats]:
         state["picked"].append(object_label)
         return {"picked": object_label}
 
+    # R1: the per-step reward gate now requires deterministic evidence — a bare
+    # call to a recognised PREDICATE oracle. ``holding_object`` is such an oracle
+    # (goal-conditioned bool), so the foreach body's verify grounds honestly and
+    # the gate rewards each verified child. (A bespoke ``picked()`` would classify
+    # RAN under the honest gate and never count as a success.)
     namespace = {
-        "picked": lambda label: label in state["picked"],
+        "holding_object": lambda label: label in state["picked"],
         "detected": lambda: len(objects) > 0,
     }
     # In-memory only StrategyStats (persist_path=None -> no file I/O).
@@ -84,7 +89,7 @@ def _foreach_tree() -> GoalTree:
                         SubGoal(
                             name="grasp_one",
                             description="pick up the current object",
-                            verify="picked('${obj.name}')",
+                            verify="holding_object('${obj.name}')",
                             strategy="pick",
                             strategy_params={"object_label": "${obj.name}"},
                         ),
