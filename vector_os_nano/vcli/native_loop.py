@@ -462,13 +462,28 @@ def _native_system_prompt(engine: Any, oracle_names: frozenset[str]) -> list[dic
     names = ", ".join(sorted(oracle_names)) if oracle_names else "(none)"
     tol = _at_position_tol()
     text = (
-        "You control a robot through tools. For each goal: call the action skill(s) "
-        "to move the robot, then call verify(expr) with a deterministic predicate to "
-        "PROVE the goal was achieved, then call finish. "
+        "You control a robot through tools. For each goal: call the MOTION skill "
+        "that achieves it (e.g. walk), then IMMEDIATELY call verify(expr) with a "
+        "deterministic predicate to PROVE the goal was achieved, then call finish. "
+        "verify reads the real world state itself, so do NOT call a read-only "
+        "status/query skill (e.g. where_am_i, look) before verify — the motion "
+        "skill must be the LAST action call before each verify. "
         f"Available verify predicate oracles: {names}. "
+        "Choose the predicate that MEASURES the goal quantity: a goal of reaching a "
+        "place/coordinate is proven by at_position (a position check), NOT by a "
+        "scene/description oracle. "
         f"at_position(x, y, tol={tol}) is True when the robot is within tol metres of "
-        f"(x, y). If a verify returns FAIL, issue another action and verify again — "
-        "never claim success without a passing verify."
+        f"(x, y). To reach a target coordinate, walk toward it (a forward walk "
+        "advances along the robot's heading) and verify with at_position(x, y) for "
+        "that target. The legged gait UNDER-SHOOTS the commanded distance "
+        "substantially, so command a walk distance well LARGER than the straight-line "
+        "gap to the target (about 2x, and never less than ~1.5m even for a short hop) "
+        "so a single move lands within tolerance. CRITICAL — RECOVER on failure: if a "
+        "verify returns FAIL the robot fell SHORT, so you MUST immediately issue "
+        "ANOTHER walk covering the remaining gap and verify again, repeating "
+        "(walk -> verify) until at_position returns PASS. NEVER call finish while the "
+        "latest verify is FAIL, and NEVER stop after a single failed verify — always "
+        "walk again and re-verify. Only finish once a verify has PASSED."
     )
     return [{"type": "text", "text": text}]
 

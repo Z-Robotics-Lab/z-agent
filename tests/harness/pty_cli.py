@@ -142,6 +142,7 @@ def run_cli_turn(
     scenario: str | None = None,
     sim: bool = False,
     sim_go2: bool = False,
+    live: bool = False,
     extra_env: dict[str, str] | None = None,
     extra_args: list[str] | None = None,
     timeout_sec: float = _DEFAULT_TIMEOUT_SEC,
@@ -155,6 +156,12 @@ def run_cli_turn(
                     ``VECTOR_FAKE_LLM`` seam (deterministic, no live LLM).
         scenario:   optional ``--scenario <id>`` (playground world).
         sim/sim_go2: pass ``--sim`` / ``--sim-go2`` (heavy — caller serializes).
+        live:       run against the REAL LLM provider (no fake seam). When True the
+                    harness does NOT inject the placeholder ``ANTHROPIC_API_KEY`` —
+                    the child inherits the real env and ``resolve_credentials``
+                    loads the repo-root ``.env`` from ``cwd`` (the live provider key
+                    reaches the child). Scripted callers leave this False so a fake
+                    key keeps deterministic runs network-free.
         extra_env / extra_args: escape hatches for additional env / CLI flags.
         timeout_sec: max wait for the child to finish.
         cwd:        working dir for the child (defaults to repo root).
@@ -191,7 +198,13 @@ def run_cli_turn(
     if extra_args and "--native-loop" in extra_args:
         env["VECTOR_NATIVE_LOOP"] = "1"
     # A deterministic API key so create_backend* runs (the fake seam ignores it).
-    env.setdefault("ANTHROPIC_API_KEY", "test-key-not-used")
+    # In a LIVE run we must NOT inject this placeholder — it would shadow the real
+    # provider creds in resolve_credentials' priority order and the child would talk
+    # to a dead Anthropic key instead of the repo-root .env provider. So leave the
+    # inherited env untouched (the real key reaches the child) and let
+    # resolve_credentials load the repo-root .env from cwd (==_REPO_ROOT below).
+    if not live:
+        env.setdefault("ANTHROPIC_API_KEY", "test-key-not-used")
     # Isolate HOME so the dev world's persistent template/experience tier
     # (~/.vector/goal_templates.json) is per-run — a compiled template from a
     # prior turn must NEVER short-circuit a later decompose and reuse a stale
