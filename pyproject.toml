@@ -61,6 +61,7 @@ sim = [
 perception = [
     "torch>=2.2",
     "transformers>=4.40",
+    "timm>=1.0",          # EdgeTAM vision backbone (TimmWrapper) — transitive, was undeclared
     "pillow>=10",
     "huggingface_hub>=0.23",
     "scipy>=1.11",

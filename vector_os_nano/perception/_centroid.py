@@ -15,6 +15,40 @@ import numpy as np
 from vector_os_nano.core.types import Pose3D
 
 
+def select_nearest_cluster(
+    points: np.ndarray,
+    *,
+    band_m: float = 0.15,
+    min_count: int = 8,
+) -> np.ndarray:
+    """Keep only the NEAREST coherent depth cluster (foreground gating).
+
+    A mask can leak onto background that shares the target's appearance — a
+    loose VLM bbox, EdgeTAM edge-bleed, or a color prior catching a same-colored
+    object behind (observed: a red can in front + a red stool in the doorway →
+    a bimodal depth distribution whose trimmed-mean centroid lands BETWEEN them,
+    far from either). IQR rejection does not help a genuinely bimodal cloud.
+
+    This selects the nearest contiguous depth band (within ``band_m``) that holds
+    at least ``max(min_count, 8% of points)`` points — the closest real surface —
+    and discards everything beyond it. For a clean unimodal mask the whole object
+    falls in one band, so this is a no-op. Pure / order-preserving on the kept set.
+    """
+    n = len(points)
+    if n < min_count:
+        return points
+    z = points[:, 2]
+    zs = np.sort(z)
+    need = max(min_count, int(0.08 * n))
+    for i in range(n):
+        hi = zs[i] + band_m
+        cnt = int(np.searchsorted(zs, hi, side="right")) - i
+        if cnt >= need:
+            keep = (z >= zs[i]) & (z <= hi)
+            return points[keep]
+    return points
+
+
 def remove_depth_outliers(points: np.ndarray) -> np.ndarray:
     """Remove depth outliers using IQR on the Z axis.
 

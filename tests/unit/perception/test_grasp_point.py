@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 
 from vector_os_nano.core.types import Pose3D
+from vector_os_nano.perception._centroid import select_nearest_cluster
 from vector_os_nano.perception.depth_projection import camera_to_world, mujoco_intrinsics
 from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
 
@@ -113,3 +114,55 @@ def test_all_zero_depth_returns_none():
     color = np.zeros((_H, _W, 3), dtype=np.uint8)
     _, _, mask = _scene()
     assert grasp_point_from_rgbd(depth, color, mask, _INTR, _CAM_XPOS, _CAM_XMAT) is None
+
+
+# --- foreground gating (select_nearest_cluster) -----------------------------
+
+def test_select_nearest_cluster_picks_front_of_bimodal():
+    near = np.random.default_rng(0).normal([0, 0, 1.0], [0.02, 0.02, 0.02], (60, 3))
+    far = np.random.default_rng(1).normal([0.3, 0, 3.0], [0.02, 0.02, 0.02], (60, 3))
+    kept = select_nearest_cluster(np.vstack([near, far]))
+    assert len(kept) >= 50
+    assert kept[:, 2].max() < 1.5  # only the ~1 m cluster survives, not the 3 m one
+
+
+def test_select_nearest_cluster_unimodal_is_noop():
+    pts = np.random.default_rng(2).normal([0, 0, 1.0], [0.02, 0.02, 0.02], (60, 3))
+    kept = select_nearest_cluster(pts)
+    assert len(kept) == len(pts)
+
+
+def test_select_nearest_cluster_too_few_unchanged():
+    pts = np.array([[0, 0, 1.0], [0, 0, 3.0]], dtype=np.float64)
+    assert len(select_nearest_cluster(pts)) == 2
+
+
+def _bimodal_scene():
+    """Mask covers a NEAR patch (1 m) and a FAR patch (3 m) — a leaky mask."""
+    depth = np.zeros((_H, _W), dtype=np.float32)
+    color = np.zeros((_H, _W, 3), dtype=np.uint8)
+    mask = np.zeros((_H, _W), dtype=np.uint8)
+    for v in range(30, 38):           # near patch, lower image
+        for u in range(28, 36):
+            depth[v, u] = 1.0; mask[v, u] = 1
+    for v in range(8, 16):            # far patch (background leak), upper image
+        for u in range(28, 36):
+            depth[v, u] = 3.0; mask[v, u] = 1
+    return depth, color, mask
+
+
+def test_grasp_point_foreground_gating_picks_front_object():
+    depth, color, mask = _bimodal_scene()
+    p_fg = grasp_point_from_rgbd(depth, color, mask, _INTR, _CAM_XPOS, _CAM_XMAT)
+    # identity cam: world z = -depth, so the front (1 m) object -> z ~ -1.0.
+    assert p_fg is not None
+    assert p_fg.z == pytest.approx(-1.0, abs=0.15)  # the near object, NOT the midpoint
+
+
+def test_grasp_point_without_gating_is_pulled_to_midpoint():
+    depth, color, mask = _bimodal_scene()
+    p_raw = grasp_point_from_rgbd(depth, color, mask, _INTR, _CAM_XPOS, _CAM_XMAT,
+                                  foreground_only=False)
+    # Without gating the bimodal cloud's centroid sits between 1 m and 3 m.
+    assert p_raw is not None
+    assert p_raw.z < -1.5  # demonstrably worse — proves the gating is load-bearing

@@ -26,7 +26,11 @@ from typing import Any
 import numpy as np
 
 from vector_os_nano.core.types import Pose3D
-from vector_os_nano.perception._centroid import remove_depth_outliers, robust_centroid
+from vector_os_nano.perception._centroid import (
+    remove_depth_outliers,
+    robust_centroid,
+    select_nearest_cluster,
+)
 from vector_os_nano.perception.depth_projection import camera_to_world
 from vector_os_nano.perception.pointcloud import rgbd_to_pointcloud_fast
 
@@ -43,6 +47,7 @@ def grasp_point_from_rgbd(
     *,
     depth_scale: float = 1.0,
     depth_trunc: float = 10.0,
+    foreground_only: bool = True,
 ) -> Pose3D | None:
     """Compute the world-frame grasp point for a masked object, or None.
 
@@ -75,6 +80,12 @@ def grasp_point_from_rgbd(
     )
     if len(points) < _MIN_POINTS:
         return None
+
+    # Foreground gating: keep only the nearest coherent depth cluster so a mask
+    # that leaks onto same-appearance background (loose bbox / edge-bleed / a
+    # same-colored object behind) localizes the FRONT object, not a midpoint.
+    if foreground_only:
+        points = select_nearest_cluster(points)
 
     points = remove_depth_outliers(points)
     if len(points) < _MIN_POINTS:

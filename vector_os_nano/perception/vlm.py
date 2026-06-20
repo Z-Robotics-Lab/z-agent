@@ -104,6 +104,15 @@ class VLMDetector:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info("Loading Moondream locally from %s on %s", model_id, device)
 
+        # Compat shim: transformers >=5 reads ``self.all_tied_weights_keys``
+        # during from_pretrained, which moondream2's older remote modelling code
+        # (HfMoondream) does not define -> AttributeError. Provide a benign
+        # empty-dict default on the base class (empty == "no tied weights",
+        # correct for inference). Guarded + idempotent; only patches when absent.
+        import transformers as _tf
+        if not hasattr(_tf.PreTrainedModel, "all_tied_weights_keys"):
+            _tf.PreTrainedModel.all_tied_weights_keys = {}  # type: ignore[attr-defined]
+
         # Load model and move to device. Don't force dtype — let the model
         # use its native format (bf16 on Blackwell/RTX 50xx, fp32 on CPU).
         self._client = AutoModelForCausalLM.from_pretrained(
