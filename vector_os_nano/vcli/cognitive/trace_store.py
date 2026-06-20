@@ -396,9 +396,9 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     if "at_position" not in oracle_names:
         return True
     from vector_os_nano.vcli.cognitive.coord_goal import (
-        at_position_const,
         at_position_const_matches,
         goal_has_coordinate_intent,
+        has_necessary_at_position,
         parse_goal_coord,
     )
 
@@ -417,7 +417,7 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     if goal_has_coordinate_intent(goal_text):
         return any(
             classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
-            and at_position_const(sg_by_name[s.sub_goal_name].verify) is not None
+            and has_necessary_at_position(sg_by_name[s.sub_goal_name].verify)
             for s in checked
         )
     return True

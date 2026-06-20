@@ -245,3 +245,47 @@ def test_wrong_predicate_type_coord_goal_flips_to_ran(sim_cleanup) -> None:
         f"rejects the turn. got per-step evidence={step['evidence']}"
     )
     assert step["verify_result"] is True
+
+
+# (F) STEP-16 BOOLEAN-NECESSITY (4th moat review): a real CAUSED walk to the WRONG place +
+# an OR-decoy verify whose goal-matching at_position(11,3) is NOT necessary — a second,
+# always-true at_position disjunct (huge tol) carries the truth, so the verify is True with
+# the robot anywhere while the (11,3) constant is an inert decoy. The decoy uses only
+# at_position (not facing), so the BASE channel grades CAUSED off the real forward walk;
+# ONLY the necessity gate (matching at_position must be an AND-conjunct) can stop it.
+_OR_DECOY_FALSE_GREEN = {
+    "turns": [
+        {"tool_calls": [{"name": "walk", "input": {"direction": "forward", "distance": 0.4, "speed": 0.3}}]},
+        {"tool_calls": [{"name": "verify", "input": {"expr": "at_position(11.0, 3.0) or at_position(0.0, 0.0, 1000000.0)"}}]},
+        {"tool_calls": [{"name": "finish", "input": {}}], "stop_reason": "end_turn"},
+    ]
+}
+
+
+@pytest.mark.sim
+@pytest.mark.cli_main
+@pytest.mark.capability
+def test_or_decoy_non_necessary_at_position_flips_to_ran(sim_cleanup) -> None:
+    """(F, STEP-16) a coordinate goal '走到坐标 (11,3)' verified with
+    `at_position(11,3) or at_position(0,0,1000000)` after a real CAUSED forward walk ->
+    RAN / verified False / exit 2. The OR EVALUATES True (the huge-tol decoy disjunct is
+    always true) and the walk is CAUSED on the planar channel, so R1+R2b both pass and
+    the goal-matching constant (11,3) is PRESENT — only the necessity gate (the matching
+    at_position must be an AND-conjunct that gates the verdict) rejects it."""
+    r = run_cli_turn(
+        "走到坐标 (11.0,3.0)",
+        sim_go2=True,
+        timeout_sec=_SIM_TIMEOUT_SEC,
+        extra_args=["--headless", "--native-loop"],
+        tool_script=_OR_DECOY_FALSE_GREEN,
+    )
+    assert r.verified is False, f"OR-decoy (non-necessary at_position) must NOT verify; got {r.verdict}"
+    assert r.exit_code == 2, f"got {r.exit_code}"
+    assert r.evidence == "RAN", f"got evidence={r.evidence}"
+    step = r.verdict["per_step"][0]
+    assert step["evidence"] == "RAN"
+    # The OR genuinely evaluates True (always-true decoy disjunct) and the walk is a real
+    # CAUSED walk — only the necessity gate (matching at_position is not a gating conjunct)
+    # downgrades it, at the per-step level (coord_goal_mismatch) as well as the turn gate.
+    assert step["verify_result"] is True
+    assert step["strategy"] == "walk"

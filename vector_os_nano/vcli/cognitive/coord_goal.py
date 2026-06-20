@@ -89,23 +89,62 @@ def _const_number(node: ast.AST) -> float | None:
     return None
 
 
+def _is_at_position_call(node: ast.AST) -> bool:
+    """True iff *node* is an ``at_position(...)`` Call (by name)."""
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "at_position"
+    )
+
+
+def _at_position_call_xy(node: ast.Call) -> tuple[float, float] | None:
+    """The literal (x, y) of ONE ``at_position(...)`` Call node, or None.
+
+    Single-sourced extraction (positional or ``x=``/``y=`` kwarg form) with the STEP-15
+    tolerance-bound: a 3rd positional / ``tol=`` literal above ``_MAX_ARRIVAL_TOL_M`` (or
+    a non-literal coord / tol) makes the predicate vacuous -> None (fail CLOSED).
+    """
+    x = y = None
+    if len(node.args) >= 2:
+        x = _const_number(node.args[0])
+        y = _const_number(node.args[1])
+    else:
+        kw = {k.arg: k.value for k in node.keywords if k.arg in ("x", "y")}
+        if "x" in kw and "y" in kw:
+            x = _const_number(kw["x"])
+            y = _const_number(kw["y"])
+    if x is None or y is None:
+        return None
+    tol_node: ast.AST | None = None
+    if len(node.args) >= 3:
+        tol_node = node.args[2]
+    else:
+        for k in node.keywords:
+            if k.arg == "tol":
+                tol_node = k.value
+                break
+    if tol_node is not None:
+        tol_val = _const_number(tol_node)
+        if tol_val is None or tol_val > _MAX_ARRIVAL_TOL_M:
+            return None
+    return (x, y)
+
+
 def at_position_const(expr: str | None) -> tuple[float, float] | None:
-    """The literal (x, y) of an ``at_position(x, y[, tol])`` verify, or None.
+    """The literal (x, y) of the FIRST ``at_position(x, y[, tol])`` in *expr*, or None.
 
     None (fail OPEN) for any non-``at_position`` predicate, or an ``at_position`` whose
-    coordinate args are not numeric literals (a state-derived target).
+    coordinate args are not numeric literals (a state-derived target). Hardened
+    (STEP-15) against the KWARG (``at_position(x=11, y=3)``) and TOL-INFLATION
+    (``at_position(11, 3, 99)`` / ``tol=99``) evasions — see ``_at_position_call_xy``.
 
-    Hardened (STEP-15) against two model-authored evasions that kept a goal-matching
-    constant while making the predicate vacuous:
-      * KWARG form ``at_position(x=11, y=3)`` — the ``x=``/``y=`` keywords are read when
-        the positional args are absent (a shipped false-green: it used to extract None
-        -> fail open -> a wrong-coord kwarg verify passed the per-step gate).
-      * TOL-INFLATION ``at_position(11, 3, 99)`` / ``tol=99`` — an explicit tolerance
-        LITERAL above ``_MAX_ARRIVAL_TOL_M`` makes the predicate "within 99 m of (11,3)",
-        i.e. true almost anywhere; not an honest "reached (x,y)" assertion, so it returns
-        None (fail CLOSED for every downstream coordinate check:
-        ``coord_goal_mismatch`` and ``at_position_const_matches``). A non-literal
-        (state-derived) tol is likewise rejected.
+    NOTE (STEP-16): this returns the FIRST at_position constant regardless of boolean
+    position, so it does NOT prove the constant is NECESSARY for the verify's truth
+    (an ``or``/``not``/arithmetic decoy can carry a goal-matching constant while the
+    verify is True elsewhere). The coordinate gates use ``at_position_is_necessary`` /
+    ``has_necessary_at_position`` (necessary-conjunct) for the honest assertion; this
+    helper stays the single-constant accessor for ``coord_goal_mismatch``.
     """
     if not expr:
         return None
@@ -114,58 +153,98 @@ def at_position_const(expr: str | None) -> tuple[float, float] | None:
     except SyntaxError:
         return None
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "at_position"
-        ):
-            # Coordinate from positional (x, y) or, failing that, x=/y= keywords.
-            x = y = None
-            if len(node.args) >= 2:
-                x = _const_number(node.args[0])
-                y = _const_number(node.args[1])
-            else:
-                kw = {k.arg: k.value for k in node.keywords if k.arg in ("x", "y")}
-                if "x" in kw and "y" in kw:
-                    x = _const_number(kw["x"])
-                    y = _const_number(kw["y"])
-            if x is None or y is None:
-                return None
-            # Tolerance-bound: a 3rd positional arg or a ``tol=`` kwarg with an inflated
-            # literal makes the predicate vacuous -> reject (fail closed).
-            tol_node: ast.AST | None = None
-            if len(node.args) >= 3:
-                tol_node = node.args[2]
-            else:
-                for k in node.keywords:
-                    if k.arg == "tol":
-                        tol_node = k.value
-                        break
-            if tol_node is not None:
-                tol_val = _const_number(tol_node)
-                if tol_val is None or tol_val > _MAX_ARRIVAL_TOL_M:
-                    return None
-            return (x, y)
+        if _is_at_position_call(node):
+            return _at_position_call_xy(node)
     return None
+
+
+def _necessary_at_position_consts(node: ast.AST) -> list[tuple[float, float]]:
+    """The (x, y) consts of every ``at_position`` call that is a NECESSARY CONJUNCT of
+    *node* — reachable from the root through ``BoolOp(And)`` nodes ONLY.
+
+    Such a call's falsity forces the WHOLE verify False (an ``and``-chain is True only if
+    every conjunct is True), so it genuinely GATES the verdict on reaching the
+    coordinate. An ``at_position`` buried under an ``or`` (a satisfiable sibling makes it
+    non-necessary), a ``not`` (true when NOT there), an arithmetic ``BinOp`` /
+    ``Compare`` threshold (``at_position(g)+at_position(w)>=1``), or an ``IfExp`` is NOT a
+    necessary conjunct and is excluded. STEP-16: this is the line between a constant that
+    is PRESENT and one that is NECESSARY — closing the boolean-necessity false-green
+    family (4th moat review). Purely structural; STRICTER-only.
+    """
+    if _is_at_position_call(node):
+        xy = _at_position_call_xy(node)
+        return [xy] if xy is not None else []
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+        out: list[tuple[float, float]] = []
+        for v in node.values:
+            out.extend(_necessary_at_position_consts(v))
+        return out
+    return []
+
+
+def _necessary_consts(expr: str | None) -> list[tuple[float, float]]:
+    """Parse *expr* and return its necessary-conjunct at_position consts ([] on error)."""
+    if not expr:
+        return []
+    try:
+        tree = ast.parse(expr.strip(), mode="eval")
+    except SyntaxError:
+        return []
+    return _necessary_at_position_consts(tree.body)
+
+
+def _expr_has_at_position(expr: str | None) -> bool:
+    """True iff *expr* names ``at_position(...)`` anywhere (literal or not)."""
+    if not expr:
+        return False
+    try:
+        tree = ast.parse(expr.strip(), mode="eval")
+    except SyntaxError:
+        return False
+    return any(_is_at_position_call(n) for n in ast.walk(tree))
+
+
+def at_position_is_necessary(
+    expr: str | None, goal_xy: tuple[float, float], tol: float | None = None
+) -> bool:
+    """True iff *expr* has a NECESSARY ``at_position`` conjunct within *tol* of *goal_xy*.
+
+    The matching ``at_position`` must GATE the verify (a top-level or nested ``and``
+    conjunct), so the verify cannot evaluate True with the robot away from the commanded
+    coordinate. Fail-CLOSED (False) on syntax error / no necessary match. STEP-16: this
+    replaces the mere-PRESENCE check (``at_position_const`` is not None) that an
+    ``or``/``not``/arithmetic decoy could satisfy with a goal-matching-but-inert constant.
+    """
+    t = _at_position_tol() if tol is None else float(tol)
+    return any(math.dist(goal_xy, xy) <= t for xy in _necessary_consts(expr))
+
+
+def has_necessary_at_position(expr: str | None) -> bool:
+    """True iff *expr* has ANY necessary (``and``-conjunct) literal ``at_position`` —
+    regardless of which coordinate.
+
+    Used by the turn gate's PARSE-EVASION branch (paren-less / multi-coordinate goals
+    whose single target ``parse_goal_coord`` cannot pin): it requires an HONEST gating
+    ``at_position`` rather than a mere presence, so the boolean-necessity decoys are
+    rejected there too (the wrong-VALUE multi-coord case is the separate parse-asymmetry
+    residual, tracked for a later round).
+    """
+    return bool(_necessary_consts(expr))
 
 
 def at_position_const_matches(
     expr: str | None, goal_xy: tuple[float, float], tol: float | None = None
 ) -> bool:
-    """True iff *expr* is a (bounded-tol) literal ``at_position`` whose constant is
-    within *tol* of *goal_xy* (default = the at_position oracle tolerance).
+    """True iff *expr* NECESSARILY asserts the commanded coordinate: a NECESSARY
+    ``at_position`` conjunct within *tol* of *goal_xy* (default = the oracle tolerance).
 
     The POSITIVE dual of ``coord_goal_mismatch`` used by the turn-level coordinate gate
-    (``evidence_passed``): it confirms a verify actually ASSERTS the commanded
-    coordinate. Fail-CLOSED (returns False) for any non-``at_position`` / non-literal /
-    tol-inflated verify (``at_position_const`` is None), so a turn that never honestly
-    asserts the coordinate cannot satisfy the requirement.
+    (``evidence_passed``): it confirms a verify actually GATES on reaching the commanded
+    coordinate. STEP-16: necessity (not mere presence) — a turn whose only at_position is
+    a non-necessary decoy (``... or visited(elsewhere)``) no longer satisfies the gate.
+    Fail-CLOSED for any non-``at_position`` / non-literal / tol-inflated / decoy verify.
     """
-    const_xy = at_position_const(expr)
-    if const_xy is None:
-        return False
-    t = _at_position_tol() if tol is None else float(tol)
-    return math.dist(goal_xy, const_xy) <= t
+    return at_position_is_necessary(expr, goal_xy, tol)
 
 
 # A looser coordinate-INTENT detector (paren OR paren-less ``x,y``): a numeric pair
@@ -195,15 +274,23 @@ def goal_has_coordinate_intent(goal_text: str | None) -> bool:
 def coord_goal_mismatch(
     goal_text: str | None, expr: str | None, tol: float | None = None
 ) -> bool:
-    """True iff BOTH a coordinate goal and an ``at_position`` constant parse AND they
-    differ by more than *tol* (default = the at_position oracle tolerance).
+    """True iff *expr* contains an ``at_position`` for a coordinate goal but does NOT
+    NECESSARILY assert the commanded coordinate within *tol* (default = the oracle tol).
 
-    FAIL-OPEN (returns False) whenever either side is not a parseable coordinate, so a
-    non-coordinate turn is never rejected.
+    FAIL-OPEN (returns False) when there is no coordinate goal, or the verify carries no
+    ``at_position`` at all (a non-``at_position`` verify is handled by the turn-level
+    gate, not here). Otherwise it is a mismatch UNLESS the verify has a NECESSARY
+    at_position conjunct within tol of the goal — so it rejects both the WRONG-CONSTANT
+    case (``at_position(<own landing>)``, STEP-13) AND the STEP-16 boolean-necessity
+    decoys (``at_position(goal) or <always-true>``, ``not at_position(goal)``,
+    ``at_position(goal)+at_position(wrong)>=1``) whose matching constant is PRESENT but
+    not NECESSARY. Stricter-only (rule 5).
     """
     goal_xy = parse_goal_coord(goal_text)
-    const_xy = at_position_const(expr)
-    if goal_xy is None or const_xy is None:
+    if goal_xy is None:
         return False
-    t = _at_position_tol() if tol is None else float(tol)
-    return math.dist(goal_xy, const_xy) > t
+    # Only police a verify that actually names at_position; a non-at_position verify
+    # (facing / state compare) fails open here and is handled by the turn-level gate.
+    if not _expr_has_at_position(expr):
+        return False
+    return not at_position_is_necessary(expr, goal_xy, tol)

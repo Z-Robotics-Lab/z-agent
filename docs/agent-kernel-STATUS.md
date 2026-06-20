@@ -5,24 +5,26 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · STEP 15 — wrong-predicate-type closed (D15), real-verified, committed
+updated: 2026-06-20 · STEP 16 — boolean-necessity closed (D16), real-verified, LANDED crashed-round WIP
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
 phase:   M0 honest-foundation — moat hardening (loop-until-dry on the short-circuit/goal-authenticity family).
 owns:    vcli/cognitive/** (trace_store, evidence_classifier, actor_causation, coord_goal, verdict) + tests.
-doing:   STEP 15 SHIPPED (D15) — `evidence_passed` gains a TURN-LEVEL coordinate gate: a go2 coordinate
-         goal must be VERIFIED by ≥1 GROUNDED bounded-tol literal `at_position` matching the commanded
-         coord; closes the wrong-predicate-type hole (coord goal verified only with `facing()` /
-         `len(get_position())==3`). Bonus: `at_position_const` now reads the kwarg form and rejects an
-         inflated arrival tol (>2 m). Stricter-only (rule 5), intra-package, NO CEO gate, world-blind
-         (dev/arm/answer untouched). Real-verified on go2 sim via cli.main PTY (facing-only-under-coord
-         → facing step GROUNDED yet TURN verified False / RAN / exit 2). 53 coord_goal + 708 unit/vcli +
-         601 non-sim vcli green (the 3 deepseek + 1 level71 reds are documented pre-existing env reds).
+doing:   STEP 16 SHIPPED (D16) — 4th adversarial moat review found + closed the BOOLEAN-NECESSITY family:
+         the coord gates checked an `at_position(goal)` constant was PRESENT, not NECESSARY, so a CAUSED
+         walk to the WRONG place + a verify burying the matching const under `or`/`not`/arithmetic graded
+         verified=True. Fix: `_necessary_at_position_consts` (descend `BoolOp(And)` ONLY) →
+         `at_position_is_necessary`/`has_necessary_at_position` replace the presence checks in
+         `at_position_const_matches`, `coord_goal_mismatch`, `evidence_passed`. Stricter-only (rule 5),
+         intra-package, NO CEO gate, world-blind. Real-verified on go2 sim via cli.main PTY (OR-decoy
+         `at_position(11,3) or at_position(0,0,1e6)` → RAN/verified False/exit 2, 360s). 78 coord_goal +
+         1335 non-sim vcli/unit green (only 3 documented pre-existing deepseek env reds). NOTE: this fix
+         was written by a prior round that CRASHED before committing; RE-VERIFIED from scratch + LANDED.
 blocked: none.
-next:    STEP 16 = 4th adversarial moat review (loop-until-dry): verify STEP-13/14/15 spine changes
-         are clean + hunt new bypasses (around the new turn-gate + wrong-predicate-type defaults) and
-         JUDGE whether the family is finally dry. If dry → M0-complete executive summary to Yusen
-         (with the pending CEO gates) . Alt non-gated: D9 #2 latency (native sync→async, spine byte-unchanged).
+next:    STEP 17 = 5th adversarial moat review (loop-until-dry): the 4th (STEP 16) found a hole, so the
+         family is STILL NOT dry — hunt new bypasses (esp. around necessity gate + multi-coord parse-
+         asymmetry residual + object/room goal authenticity) and JUDGE dry. If dry → M0-complete executive
+         summary to Yusen (with pending CEO gates). Alt non-gated: D9 #2 latency (native sync→async).
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).

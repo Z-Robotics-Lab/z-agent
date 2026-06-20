@@ -147,6 +147,24 @@ def test_spine_non_coordinate_fails_open_stays_grounded(verify, goal) -> None:
         ("facing(0.5, 0.5)", (11.0, 3.0), False),         # non-at_position
         ("len(get_position()) == 3", (11.0, 3.0), False),
         ("", (11.0, 3.0), False),
+        # STEP-16 BOOLEAN-NECESSITY: the matching at_position must be a NECESSARY
+        # conjunct, not merely PRESENT. A disjunction / negation / arithmetic burial
+        # lets the verify be True while the robot is NOT at the coord -> not honest.
+        ("at_position(11, 3) or visited(99, 99)", (11.0, 3.0), False),
+        ("at_position(11, 3) or facing(0, 0)", (11.0, 3.0), False),
+        ("at_position(11, 3) or arm_at_home()", (11.0, 3.0), False),
+        ("visited(99, 99) or at_position(11, 3)", (11.0, 3.0), False),  # decoy first
+        ("at_position(11, 3) or at_position(99, 99)", (11.0, 3.0), False),
+        ("not at_position(11, 3) or visited(99, 99)", (11.0, 3.0), False),
+        ("(at_position(11, 3) or visited(0, 0)) and facing(1, 0)", (11.0, 3.0), False),
+        ("at_position(11, 3) == False or facing(9, 9)", (11.0, 3.0), False),
+        ("at_position(11, 3) + at_position(99, 99) >= 1", (11.0, 3.0), False),
+        ("at_position(11, 3) * 1 + visited(99, 99) >= 1", (11.0, 3.0), False),
+        # HONEST conjunctions: the matching at_position IS necessary -> stay True.
+        ("at_position(11, 3) and facing(1, 0)", (11.0, 3.0), True),
+        ("at_position(11, 3) and at_position(99, 99)", (11.0, 3.0), True),
+        ("at_position(11, 3) and visited('kitchen')", (11.0, 3.0), True),
+        ("at_position(11, 3) and (visited(0, 0) or facing(1, 0))", (11.0, 3.0), True),
     ],
 )
 def test_at_position_const_matches(expr, goal_xy, expected) -> None:
@@ -289,3 +307,53 @@ def test_turn_gate_dummy_at_position_must_be_grounded() -> None:
     assert evidence_passed(
         _trace("走到坐标 (11,3)", [("at_position(11,3)", "walk", True, ActorCaused.UNCAUSED)]), _GO2
     ) is False
+
+
+# ---------------------------------------------------------------------------
+# STEP-16 — BOOLEAN-NECESSITY (4th moat review, loop-until-dry). The coordinate
+# goal-authenticity layer used to check that the matching at_position constant was
+# PRESENT (first ast.walk hit), not that it was NECESSARY for the verify's truth. A
+# real CAUSED walk to the WRONG place + an OR/NOT/arithmetic decoy carrying a
+# goal-matching at_position constant graded verified=True while the robot stood
+# elsewhere. The fix makes the matching at_position a NECESSARY conjunct; these pin
+# the whole family RAN end-to-end through evidence_passed, honest conjunctions GREEN.
+# Stricter-only (rule 5).
+# ---------------------------------------------------------------------------
+
+_NECESSITY_FALSE_GREENS = [
+    "at_position(11,3) or visited(99,99)",
+    "at_position(11,3) or facing(0,0) or visited(99,99)",
+    "at_position(11,3) or arm_at_home()",
+    "visited(99,99) or at_position(11,3)",
+    "at_position(11,3) or at_position(99,99)",
+    "not at_position(11,3) or visited(99,99)",
+    "(at_position(11,3) or visited(0,0)) and facing(1,0)",
+    "at_position(11,3) == False or facing(9,9)",
+    "at_position(11,3) + at_position(99,99) >= 1",
+    "at_position(11,3) * 1 + visited(99,99) >= 1",
+]
+
+
+@pytest.mark.parametrize("verify", _NECESSITY_FALSE_GREENS)
+def test_turn_gate_blocks_boolean_necessity_decoys(verify) -> None:
+    """Every boolean-necessity decoy (a CAUSED walk + a verify whose goal-matching
+    at_position is not NECESSARY) must grade the turn NOT verified (RAN)."""
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    assert evidence_passed(_trace("走到坐标 (11,3)", [(verify, "walk", True, _CA())]), _GO2) is False
+
+
+def test_turn_gate_keeps_honest_necessary_conjunctions() -> None:
+    """A matching at_position under a (possibly nested) conjunction is NECESSARY -> the
+    turn stays verified. The fix only rejects disjunction/negation/arithmetic burial."""
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    for verify in (
+        "at_position(11,3)",
+        "at_position(11,3) and facing(1,0)",
+        "at_position(11,3) and at_position(99,99)",
+        "at_position(11,3) and visited('kitchen')",
+        "at_position(11,3) and (visited(0,0) or facing(1,0))",
+        "at_position(x=11, y=3)",
+    ):
+        assert evidence_passed(_trace("走到坐标 (11,3)", [(verify, "walk", True, _CA())]), _GO2) is True, verify
