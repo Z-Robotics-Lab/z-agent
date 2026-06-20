@@ -5,26 +5,28 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · STEP 16 — boolean-necessity closed (D16), real-verified, LANDED crashed-round WIP
+updated: 2026-06-20 · GRASP R1 — perception-driven Go2+Piper grasp core LANDED (D17); geometry real-verified
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
-phase:   M0 honest-foundation — moat hardening (loop-until-dry on the short-circuit/goal-authenticity family).
-owns:    vcli/cognitive/** (trace_store, evidence_classifier, actor_causation, coord_goal, verdict) + tests.
-doing:   STEP 16 SHIPPED (D16) — 4th adversarial moat review found + closed the BOOLEAN-NECESSITY family:
-         the coord gates checked an `at_position(goal)` constant was PRESENT, not NECESSARY, so a CAUSED
-         walk to the WRONG place + a verify burying the matching const under `or`/`not`/arithmetic graded
-         verified=True. Fix: `_necessary_at_position_consts` (descend `BoolOp(And)` ONLY) →
-         `at_position_is_necessary`/`has_necessary_at_position` replace the presence checks in
-         `at_position_const_matches`, `coord_goal_mismatch`, `evidence_passed`. Stricter-only (rule 5),
-         intra-package, NO CEO gate, world-blind. Real-verified on go2 sim via cli.main PTY (OR-decoy
-         `at_position(11,3) or at_position(0,0,1e6)` → RAN/verified False/exit 2, 360s). 78 coord_goal +
-         1335 non-sim vcli/unit green (only 3 documented pre-existing deepseek env reds). NOTE: this fix
-         was written by a prior round that CRASHED before committing; RE-VERIFIED from scratch + LANDED.
-blocked: none.
-next:    STEP 17 = 5th adversarial moat review (loop-until-dry): the 4th (STEP 16) found a hole, so the
-         family is STILL NOT dry — hunt new bypasses (esp. around necessity gate + multi-coord parse-
-         asymmetry residual + object/room goal authenticity) and JUDGE dry. If dry → M0-complete executive
-         summary to Yusen (with pending CEO gates). Alt non-gated: D9 #2 latency (native sync→async).
+         CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
+phase:   M1 manipulation — perception-driven grasp (the North-Star "VLM + point-cloud + IK" route).
+owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
+         sim_tool _start_go2 manip-wiring + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
+doing:   GRASP R1 SHIPPED (D17, commits 19ef11d/b554ab6) — the honest perception→3D-grasp-point core:
+         grasp_point_from_rgbd (pure: real depth+mask → camera pointcloud → trimmed centroid → cam→world
+         flip; FAILS LOUD, never GT-fallback) + Go2GraspPerception (real d435 RGB-D + lazy VLM/EdgeTAM) +
+         PerceptionGraspSkill (detect→segment→point→delegate PickTopDown motion via target_xyz) + sim_tool
+         wiring (registered LAST under VECTOR_ENABLE_MANIPULATION). 18 unit tests; spine BYTE-UNCHANGED.
+         REAL-SIM: d435 renders the 3 pickables cleanly; geometry proven — green/blue grasp points 3.9/4.1cm
+         from GT on REAL depth. (red 180cm = color-prior caught background stool → proves EdgeTAM needed.)
+blocked: full VLM bare-cli acceptance ENV-blocked (decision queue, NOT code): timm missing (EdgeTAM dep);
+         GPU ~15.2/16GB held by another loop (jepa-ctrl) → moondream3 OOM, serialize; moondream2↔transformers
+         5.11 incompat. Run the full acceptance once GPU free + timm installed.
+next:    GRASP R2 = (a) full bare-cli "抓前面的东西" once GPU free + timm in: precise EdgeTAM mask → grasp
+         point → IK → motion end-to-end; (b) GROUNDED grading-binding — PiperROS2Proxy lacks
+         get_object_positions, PiperGripperROS2Proxy lacks weld_is_active, go2_piper.xml has no weld →
+         holding_object grades RAN today; add weld + bridge proxy oracle methods (touches Piper proxy
+         interface → CEO notification). Alt non-gated: D9 #2 native latency (sync→async).
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
