@@ -106,3 +106,49 @@ def test_on_progress_streams_steps():
     blob = " | ".join(msgs)
     assert "write_file" in blob          # the action streamed
     assert "verify" in blob              # the verify streamed
+
+
+# --- D23: verify-compliance — force a model-authored verify before finish ---
+
+_WRITE = ("write_file", {"file_path": "out.txt", "content": "ready\n"})
+_VERIFY = ("verify", {"expr": "path_contains('out.txt', 'ready')"})
+_FINISH = ("finish", {})
+
+
+def test_verify_skip_is_nudged_then_recorded():
+    """Model runs the action then STOPS without verifying -> the runner nudges, and
+    once the model verifies, the step is recorded. Without the nudge the turn would
+    break at the empty end_turn and the trace would be empty (steps=0)."""
+    from tests.harness.fake_backend import tool_turn
+
+    msgs: list[str] = []
+    _calls, trace = _run(
+        [tool_turn(_WRITE), tool_turn(end=True), tool_turn(_VERIFY)],
+        on_progress=msgs.append,
+    )
+    assert any("re-prompt" in m.lower() or "verify before" in m.lower() for m in msgs), \
+        f"expected a verify nudge; got {msgs}"
+    assert len(trace.steps) == 1  # the nudge let the model verify -> one graded step
+
+
+def test_stubborn_no_verify_terminates_bounded_and_honest():
+    """A model that NEVER verifies (only an action, then narration) still terminates
+    (bounded nudges, not max_turns) with an EMPTY trace — honest, never a false green."""
+    from tests.harness.fake_backend import tool_turn
+
+    calls, trace = _run([tool_turn(_WRITE)])  # then script exhausts -> end_turn forever
+    assert len(trace.steps) == 0          # no verify ever -> nothing graded (honest)
+    assert calls <= 6                     # bounded by _MAX_VERIFY_NUDGES, NOT max_turns=24
+
+
+def test_compliant_finish_after_verify_not_nudged():
+    """Action+verify then finish: finish is accepted with no nudge (one graded step)."""
+    from tests.harness.fake_backend import tool_turn
+
+    msgs: list[str] = []
+    _calls, trace = _run(
+        [tool_turn(_WRITE, _VERIFY), tool_turn(_FINISH)],
+        on_progress=msgs.append,
+    )
+    assert len(trace.steps) == 1
+    assert not any("re-prompt" in m.lower() or "verify required" in m.lower() for m in msgs)

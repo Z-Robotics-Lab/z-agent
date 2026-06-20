@@ -64,6 +64,12 @@ FINISH_TOOL = "finish"
 # forever. Mirrors the engine's _max_turns spirit; the loop also stops on finish.
 _MAX_NATIVE_TURNS = 24
 
+# How many times the runner re-prompts a model that tries to finish/stop with an
+# action it never verified (D23). Bounded so a model that stubbornly refuses to
+# verify still terminates — the unverified action then grades honestly (empty/RAN),
+# never a false green. The verify stays MODEL-authored; the runner never invents it.
+_MAX_VERIFY_NUDGES = 2
+
 # The registry category whose tools are the kernel's domain-general ACTION surface
 # (file_read/file_write/file_edit/bash/glob/grep — see tools.__init__._TOOL_CATEGORIES
 # and worlds.dev.DEV_TOOL_ALLOWLIST, which is this category). The native loop offers
@@ -301,6 +307,15 @@ class NativeStepRunner:
         self._sub_goals: list[SubGoal] = []
         self._steps: list[StepRecord] = []
         self._step_idx: int = 0
+
+    @property
+    def has_unverified_action(self) -> bool:
+        """True iff a skill ran for the current step but no verify has closed it —
+        i.e. the model is about to finish/stop WITHOUT proving the action achieved
+        the goal (D23: weak models skip verify on easy tasks, yielding an empty,
+        ungraded trace). Used to nudge a model-authored verify before accepting finish.
+        """
+        return self._step_open
 
     # ------------------------------------------------------------------
     # Skill dispatch (capture baseline before the first skill of a step)
@@ -543,6 +558,7 @@ def run_turn_native(
             _emit(tail)
 
     turns = 0
+    verify_nudges = 0  # D23: re-prompts spent forcing a verify before a finish/stop
     while turns < max_turns:
         messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
@@ -557,12 +573,40 @@ def run_turn_native(
         _append_assistant(session, response, tool_calls)
 
         if not tool_calls:
+            # D23: the model stopped (narrated, no tools). If it ran an action but
+            # never verified it, force a model-authored verify before accepting the
+            # stop (up to a bounded number of nudges) — else the trace is empty and
+            # nothing is graded. Never invent the predicate; the model must choose it.
+            if runner.has_unverified_action and verify_nudges < _MAX_VERIFY_NUDGES:
+                verify_nudges += 1
+                _emit("re-prompting: verify before finishing")
+                _append_user(
+                    session,
+                    "You ran an action but did NOT verify it. You MUST call "
+                    "verify(<predicate>) to PROVE the goal was achieved before you "
+                    "stop. Pick the deterministic predicate that measures the goal "
+                    "and call verify now.",
+                )
+                continue
             break  # end_turn, no tools — conversation complete
 
         finished = False
         result_dicts: list[dict[str, Any]] = []
         for tc in tool_calls:
             if tc.name == FINISH_TOOL:
+                # D23: refuse a finish that rides on an unverified action — re-prompt
+                # for a model-authored verify first (bounded). Honest: a model that
+                # never verifies still terminates, with the action graded RAN/empty.
+                if runner.has_unverified_action and verify_nudges < _MAX_VERIFY_NUDGES:
+                    verify_nudges += 1
+                    _emit("verify required before finish")
+                    result_dicts.append(_tool_result_dict(
+                        tc.id,
+                        "Cannot finish yet: you ran an action but did not verify it. "
+                        "Call verify(<predicate>) to PROVE the goal FIRST, then finish.",
+                        is_error=True,
+                    ))
+                    continue
                 _emit("finishing")
                 finished = True
                 result_dicts.append(_tool_result_dict(tc.id, "Task finished."))
