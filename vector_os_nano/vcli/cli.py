@@ -457,10 +457,19 @@ def _repl_attempt_native(
             sys.stderr = open(os.devnull, "w")
         except OSError:
             pass
-        with console.status(f"[{TEAL}]native[/] working…", spinner="dots"):
+        with console.status(f"[{TEAL}]native[/] working…", spinner="dots") as _status:
+            # Live progress (D9 #2 perceived latency): stream the model's thinking
+            # tail + each tool call into the spinner so the multi-second LLM wait
+            # shows activity instead of a frozen line. Best-effort, never fatal.
+            def _on_progress(msg: str) -> None:
+                try:
+                    _status.update(f"[{TEAL}]native[/] {msg}")
+                except Exception:  # noqa: BLE001
+                    pass
             try:
                 trace = engine.run_turn_native(
-                    user_input, agent=agent, session=scratch, app_state=app_state
+                    user_input, agent=agent, session=scratch, app_state=app_state,
+                    on_progress=_on_progress,
                 )
             except Exception:  # noqa: BLE001 — native errored -> treat as no-action
                 trace = None

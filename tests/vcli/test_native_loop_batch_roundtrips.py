@@ -27,7 +27,7 @@ class _CountingBackend:
         return self._inner.call(**kwargs)
 
 
-def _run(tool_script):
+def _run(tool_script, on_progress=None):
     from vector_os_nano.core.agent import Agent
     from vector_os_nano.core.types import SkillResult
     from vector_os_nano.vcli.engine import VectorEngine
@@ -64,7 +64,8 @@ def _run(tool_script):
         eng._backend = backend
         session = Session(session_id="batch", created_at="t", updated_at="t",
                           path=Path(work) / "s.jsonl")
-        trace = eng.run_turn_native("create out.txt containing ready", session=session)
+        trace = eng.run_turn_native("create out.txt containing ready", session=session,
+                                    on_progress=on_progress)
         return backend.calls, trace
     finally:
         os.chdir(prev)
@@ -87,3 +88,21 @@ def test_batched_action_verify_uses_fewer_roundtrips():
     # Same honest trace shape: exactly one action->verify step either way.
     assert len(seq_trace.steps) == 1
     assert len(batch_trace.steps) == 1
+
+
+def test_on_progress_streams_steps():
+    """D9 #2 perceived latency: on_progress fires per tool call (+ model text), so
+    the REPL spinner shows live activity instead of a frozen 'load 好几秒'."""
+    from tests.harness.fake_backend import tool_turn
+
+    msgs: list[str] = []
+    _run(
+        [tool_turn(("write_file", {"file_path": "out.txt", "content": "ready\n"}),
+                   ("verify", {"expr": "path_contains('out.txt', 'ready')"})),
+         tool_turn(end=True)],
+        on_progress=msgs.append,
+    )
+    assert msgs, "on_progress never fired — the wait stays opaque"
+    blob = " | ".join(msgs)
+    assert "write_file" in blob          # the action streamed
+    assert "verify" in blob              # the verify streamed

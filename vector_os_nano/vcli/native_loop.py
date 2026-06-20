@@ -459,6 +459,18 @@ def verify_word(ok: bool) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _progress_args(inp: Any) -> str:
+    """A short '(k=v, …)' summary of a tool call's input for progress display."""
+    if not isinstance(inp, dict) or not inp:
+        return ""
+    parts = []
+    for k, v in inp.items():
+        parts.append(f"{k}={str(v)[:18]}")
+        if len(parts) >= 2:
+            break
+    return "(" + ", ".join(parts) + ")"
+
+
 def run_turn_native(
     engine: Any,
     user_message: str,
@@ -467,6 +479,7 @@ def run_turn_native(
     session: Any = None,
     app_state: dict[str, Any] | None = None,
     max_turns: int = _MAX_NATIVE_TURNS,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ExecutionTrace:
     """Run ONE user turn through the native tool-use loop; return an ExecutionTrace.
 
@@ -508,14 +521,37 @@ def run_turn_native(
     )
     _append_user(session, user_message)
 
+    # Progress feedback (D9 #2 perceived latency): the user's "load 好几秒" is the
+    # opaque wait during the synchronous LLM round-trips. Stream the model's text
+    # TAIL while it thinks (on_text deltas) and emit each tool call as it dispatches,
+    # so the spinner shows live activity instead of a frozen line. Pure UX — no
+    # effect on the trace, the verify spine, or routing. Fail-safe: never raises.
+    def _emit(msg: str) -> None:
+        if on_progress is None:
+            return
+        try:
+            on_progress(msg)
+        except Exception:  # noqa: BLE001 — progress is best-effort, never fatal
+            pass
+
+    _narration: list[str] = []
+
+    def _on_text(chunk: str) -> None:
+        _narration.append(chunk)
+        tail = "".join(_narration)[-72:].replace("\n", " ").strip()
+        if tail:
+            _emit(tail)
+
     turns = 0
     while turns < max_turns:
         messages = _to_messages(session)
+        _narration.clear()  # fresh "thinking" tail per round-trip
         response: LLMResponse = backend.call(
             messages=messages,
             tools=tool_schemas,
             system=system_prompt,
             max_tokens=getattr(engine, "_max_tokens", 4096),
+            on_text=_on_text if on_progress is not None else None,
         )
         tool_calls = list(response.tool_calls or [])
         _append_assistant(session, response, tool_calls)
@@ -527,13 +563,16 @@ def run_turn_native(
         result_dicts: list[dict[str, Any]] = []
         for tc in tool_calls:
             if tc.name == FINISH_TOOL:
+                _emit("finishing")
                 finished = True
                 result_dicts.append(_tool_result_dict(tc.id, "Task finished."))
                 continue
             if tc.name == VERIFY_TOOL:
                 expr = str((tc.input or {}).get("expr", ""))
+                _emit(f"verify {expr[:56]}")
                 res = runner.handle_verify(expr)
             else:
+                _emit(f"{tc.name} {_progress_args(tc.input)}".strip())
                 res = runner.dispatch_skill(tc.name, dict(tc.input or {}))
             result_dicts.append(_tool_result_dict(tc.id, res.content, res.is_error))
 
@@ -738,12 +777,6 @@ def _native_system_prompt(
         "verify reads the real world state itself, so do NOT call a read-only "
         "status/query skill (e.g. where_am_i, look) before verify — the motion "
         "action must be the LAST action call before each verify. "
-        "LATENCY — BATCH per step: emit the action and its verify as TWO tool calls "
-        "in the SAME response (they execute in order, action then verify); this halves "
-        "the round-trips. Do NOT put finish in that same response — wait to see the "
-        "verify result, then call finish in your NEXT response, and only once a verify "
-        "has PASSED (so a FAILed verify can still be recovered). One (action, verify) "
-        "pair per response. "
         f"Available verify predicate oracles: {names}. "
         "Choose the predicate that MEASURES the goal quantity: a goal of reaching a "
         "place/coordinate is proven by at_position (a position check), NOT by a "

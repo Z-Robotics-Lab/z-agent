@@ -1632,6 +1632,7 @@ class VectorEngine:
         agent: Any = None,
         session: Session | None = None,
         app_state: dict[str, Any] | None = None,
+        on_progress: "Callable[[str], None] | None" = None,
     ) -> "ExecutionTrace":
         """THIN delegate to ``native_loop.run_turn_native`` (M1, flag-gated OFF).
 
@@ -1652,6 +1653,7 @@ class VectorEngine:
             agent=agent if agent is not None else getattr(self, "_vgg_agent", None),
             session=session,
             app_state=app_state,
+            on_progress=on_progress,
         )
 
     # ------------------------------------------------------------------
