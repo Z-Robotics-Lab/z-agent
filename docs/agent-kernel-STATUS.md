@@ -5,28 +5,29 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · GRASP R1 — perception-driven Go2+Piper grasp core LANDED (D17); geometry real-verified
+updated: 2026-06-20 · GRASP R2 — foreground gating fixes red-can (180→9.5cm) + moondream2 shim (D18)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
 phase:   M1 manipulation — perception-driven grasp (the North-Star "VLM + point-cloud + IK" route).
 owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
          sim_tool _start_go2 manip-wiring + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
-doing:   GRASP R1 SHIPPED (D17, commits 19ef11d/b554ab6) — the honest perception→3D-grasp-point core:
-         grasp_point_from_rgbd (pure: real depth+mask → camera pointcloud → trimmed centroid → cam→world
-         flip; FAILS LOUD, never GT-fallback) + Go2GraspPerception (real d435 RGB-D + lazy VLM/EdgeTAM) +
-         PerceptionGraspSkill (detect→segment→point→delegate PickTopDown motion via target_xyz) + sim_tool
-         wiring (registered LAST under VECTOR_ENABLE_MANIPULATION). 18 unit tests; spine BYTE-UNCHANGED.
-         REAL-SIM: d435 renders the 3 pickables cleanly; geometry proven — green/blue grasp points 3.9/4.1cm
-         from GT on REAL depth. (red 180cm = color-prior caught background stool → proves EdgeTAM needed.)
-blocked: full VLM bare-cli acceptance ENV-blocked (decision queue, NOT code): timm missing (EdgeTAM dep);
-         GPU ~15.2/16GB held by another loop (jepa-ctrl) → moondream3 OOM, serialize; moondream2↔transformers
-         5.11 incompat. Run the full acceptance once GPU free + timm installed.
-next:    GRASP R2 = (a) full bare-cli "抓前面的东西" once GPU free + timm in: precise EdgeTAM mask → grasp
-         point → IK → motion end-to-end; (b) GROUNDED grading-binding — PiperROS2Proxy lacks
-         get_object_positions, PiperGripperROS2Proxy lacks weld_is_active, go2_piper.xml has no weld →
-         holding_object grades RAN today; add weld + bridge proxy oracle methods (touches Piper proxy
-         interface → CEO notification). Alt non-gated: D9 #2 native latency (sync→async).
+doing:   GRASP R2 SHIPPED (D18, commit dc6fa58; R1 core = D17, commits 19ef11d/b554ab6). R2 hardened the
+         geometry + unblocked the VLM model: (1) `_centroid.select_nearest_cluster` = foreground depth-band
+         gating in grasp_point (ON by default) → a mask leaking onto same-appearance background localizes the
+         FRONT object, not a midpoint. REAL-SIM: the R1 red-can failure 180cm → **9.5cm**; green/blue ~6cm;
+         mean 7.1cm (all grasp-viable). (2) vlm.py guarded compat shim (transformers≥5 all_tied_weights_keys)
+         → moondream2 now LOADS. 23 grasp unit tests; spine BYTE-UNCHANGED. The depth+mask→3D-point geometry
+         is now robust + real-verified end-to-end for ANY mask source.
+blocked: full VLM+EdgeTAM bare-cli acceptance (decision queue, NOT code): (a) `timm` install NETWORK-blocked
+         (pypi timeouts) → EdgeTAM won't load (now declared in pyproject); (b) VLM 识别 render-fidelity-limited
+         — moondream2 boxes the BACKGROUND not the small foreground cylinders on the 320×240 render (design
+         risk #2 CONFIRMED, annotated frame inspected); moondream3 is 13.5GB → OOMs the 16GB GPU.
+next:    GRASP R3 (frontier) = raise d435 render fidelity (textures/lighting/object framing — the real lever
+         for VLM 识别) and/or wire a fitting VLM; install timm + EdgeTAM precise masks once network back; THEN
+         GROUNDED grading-binding — PiperROS2Proxy lacks get_object_positions, PiperGripperROS2Proxy lacks
+         weld_is_active, go2_piper.xml has no weld → holding_object grades RAN; add weld + bridge proxy oracle
+         methods (touches Piper proxy interface → CEO notification). Alt non-gated: D9 #2 native latency.
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
