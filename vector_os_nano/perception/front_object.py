@@ -19,13 +19,23 @@ from __future__ import annotations
 
 import numpy as np
 
-_SAT_MIN = 140      # HSV saturation: vivid objects (cylinders p95~169) vs the
-                    # muted table/floor (p80~83). Tuned to the current sim render
-                    # fidelity; a VLM/EdgeTAM front-end would be lighting-robust.
+_SAT_MIN = 140      # HSV saturation: vivid objects (cylinders sat~164-194) vs the
+                    # muted scene. The brown table is NOT cleanly below this — its
+                    # saturation reaches ~160 (med~132, p90~146), so a raw threshold
+                    # leaves thin 1-3px table bridges that 8-connectivity FUSES the
+                    # vivid cylinders + table into one giant blob (the central object
+                    # then no longer exists as its own component → a brown table
+                    # sliver wins). _OPEN_KSIZE below severs those bridges; a
+                    # VLM/EdgeTAM front-end would be lighting/texture-robust instead.
 _VAL_MIN = 40       # reject near-black
 _MIN_BLOB = 50      # px; reject speckle
 _MAX_DEPTH = 2.0    # m; the front WORKSPACE only — excludes the far room/doorway
 _FRONT_BAND = 0.4   # m; blobs within this of the nearest count as "the front shelf"
+_OPEN_KSIZE = 3     # px; morphological-opening kernel. Erode→dilate severs the thin
+                    # saturation bridges between the table and the vivid cylinders so
+                    # each object survives as its OWN connected component, robustly
+                    # and threshold-independently (verified stable for sat_min 140-155;
+                    # a pure threshold flips central→wrong-object within ~5 sat units).
 
 
 def _saturation(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -41,6 +51,41 @@ def _saturation(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         with np.errstate(divide="ignore", invalid="ignore"):
             sat = np.where(mx > 0, (mx - mn) / mx, 0.0) * 255.0
         return sat.astype(np.uint8), mx.astype(np.uint8)
+
+
+def _open(binary: np.ndarray, ksize: int = _OPEN_KSIZE) -> np.ndarray:
+    """Morphological opening (erode→dilate) — sever thin bridges between blobs.
+
+    The salient mask fuses distinct vivid objects to each other and to the table
+    wherever a 1-3px chain of borderline-saturation pixels connects them; after
+    8-connectivity that makes one giant blob and the central object stops being a
+    selectable component. Opening removes structures thinner than the kernel
+    (the bridges) while preserving the solid object bodies. cv2 fast path, numpy
+    fallback (separable erode-then-dilate via a sliding min/max).
+    """
+    if ksize < 2:
+        return binary
+    try:
+        import cv2
+        k = np.ones((ksize, ksize), np.uint8)
+        return cv2.morphologyEx(binary.astype(np.uint8), cv2.MORPH_OPEN, k)
+    except Exception:  # noqa: BLE001 — numpy separable opening fallback
+        b = binary.astype(bool)
+        r = ksize // 2
+
+        def _slide(mask: np.ndarray, op) -> np.ndarray:
+            out = mask.copy()
+            for ax in (0, 1):
+                acc = mask
+                for s in range(1, r + 1):
+                    acc = op(acc, np.roll(mask, s, axis=ax))
+                    acc = op(acc, np.roll(mask, -s, axis=ax))
+                mask = acc
+            return mask
+
+        eroded = _slide(b, np.logical_and)
+        dilated = _slide(eroded, np.logical_or)
+        return dilated.astype(np.uint8)
 
 
 def _components(binary: np.ndarray):
@@ -94,6 +139,11 @@ def front_object_mask(
     # Near, valid depth only (the front workspace, not the far room/wall).
     if depth is not None:
         salient &= ((depth > 0) & (depth <= max_depth)).astype(np.uint8)
+
+    # Sever thin saturation bridges so each vivid object survives as its OWN
+    # connected component (the table else fuses the cylinders into one blob and
+    # the central object vanishes — the bug this resolver previously had).
+    salient = _open(salient)
 
     if int(salient.sum()) < min_blob:
         return None

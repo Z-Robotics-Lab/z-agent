@@ -62,3 +62,39 @@ def test_speckle_below_min_blob_rejected():
     rgb[24, 32] = (250, 0, 0)  # one vivid pixel
     depth = np.full((_H, _W), 1.0, dtype=np.float32)
     assert front_object_mask(rgb, depth, min_blob=50) is None
+
+
+def test_thin_bridge_keeps_central_object_selectable():
+    """Regression (D31): a thin saturated table band must not lose the central object.
+
+    The real go2+piper bug: the brown table's saturation reached the threshold in
+    a thin chain that 8-connectivity FUSED the central green cylinder into one
+    giant blob with the off-centre cylinders + table, so the central object
+    stopped existing as its own component and a brown table sliver won (12.2cm
+    error → green@2.3cm after the fix; proven on the live sim, not reproducible
+    in a clean synthetic frame because the winning sliver depends on real table
+    texture). This guards that opening still yields the central GREEN object as a
+    distinct component in a multi-object, table-bridged scene.
+    """
+    rgb = _muted_bg()
+    cy = _H // 2
+    # A wide, 1px-THIN saturated table band spanning the scene at the cylinders'
+    # base — its saturation just clears the threshold (like the real brown table),
+    # so without opening it 8-connects every vivid object into one giant blob and
+    # the central object stops existing as its own component (a sliver wins).
+    rgb[cy + 4, 6 : _W - 6] = (120, 200, 120)
+    _put_blob(rgb, _W // 2, cy, (30, 220, 30), r=4)        # central green (target)
+    _put_blob(rgb, _W // 2 - 18, cy, (220, 30, 30), r=4)   # left red
+    _put_blob(rgb, _W // 2 + 18, cy, (30, 30, 220), r=4)   # right blue
+    depth = np.full((_H, _W), 1.0, dtype=np.float32)
+    m = front_object_mask(rgb, depth)
+    assert m is not None
+    ys, xs = np.where(m > 0)
+    # Selection must land on the CENTRAL green blob, not a fused-blob centroid
+    # nor an off-centre object/table sliver.
+    assert abs(xs.mean() - _W / 2) < 5, (
+        f"selected centroid x={xs.mean():.1f} drifted off the central object "
+        "— the thin table band fused the blobs (opening failed)"
+    )
+    sel = rgb[m > 0]
+    assert sel[:, 1].mean() > sel[:, 0].mean() + 20, "selected object is not the green one"

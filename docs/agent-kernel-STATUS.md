@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R15 — perception last-mile HARD-BLOCKED (3 rounds); escalated to vr-lead deep-debug (D31)
+updated: 2026-06-20 · R15 — perception last-mile RESOLVED by vr-lead deep-debug (D32): saturation-bridge blob fusion, NOT self-occlusion; FULL-config grasp 12.2cm→2.3cm
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -21,10 +21,13 @@ doing:   GRASP R3 SHIPPED (D19, commit 7dd2e38; R1=D17 19ef11d/b554ab6, R2=D18 d
          mask, no VLM/EdgeTAM/network). 11 new unit tests (31 grasp/perception green); spine BYTE-UNCHANGED.
          The depth+mask→3D-point geometry (R1/R2) + the deictic resolver = perception localizes the front
          object end-to-end from real sensor data. IK+motion reuse the proven PickTopDown path (target_xyz).
-blocked: VLM识别 + EdgeTAM分割 = pluggable UPGRADE, not on the critical path now (decision queue): timm
-         install network-flaky (uv/pypi timeouts) → EdgeTAM pending; moondream2 loads (shim) but boxes
-         background on the low-fidelity render; moondream3 13.5GB OOMs. Classical deictic resolver is render-
-         tuned (sat_min); a VLM/EdgeTAM front-end would be lighting-robust.
+blocked: GROUNDED grading-binding (CEO gate): the grasp's perception+reach are now real-verified (D32,
+         green @ 2.3cm full config), but `is_holding`/`grasped_heuristic` is a no-weld FALSE-NEGATIVE —
+         binding a true GROUNDED verdict needs a weld + bridge→proxy object-state topic (Yusen-gated).
+         VLM识别 + EdgeTAM分割 = pluggable UPGRADE, off critical path (timm network-flaky; moondream low-fi).
+         R15 fix (D32): front_object._open morphological opening severs the table-saturation bridge that
+         FUSED the cylinders into one blob — the classical resolver is now topology-robust, not just
+         threshold-tuned. A VLM/EdgeTAM front-end would still be more lighting/texture-robust.
 next:    R10 — the 4 North-Star pillars (plan/route/verify/recover) are now real-verified honest on the
          native producer (D22-D25); the grasp's perception+reach are verified. Buildable-without-Yusen
          surface is largely covered. Pick at cold-ORIENT:

@@ -72,3 +72,34 @@ Routine bugs do NOT belong here; git history covers those.
 - **Lesson:** PYTHONPATH to a missing dir fails silent — when debugging "version
   mismatch" symptoms, print `module.__file__` to verify WHICH copy is actually loaded;
   single-source interpreter resolution.
+
+## Case 4 — Grasp picked a brown table sliver, not the green cylinder: saturation-bridge blob FUSION (2026-06-20, fixed in front_object.py `_open`)
+
+- **Symptom:** the deictic grasp aimed ~12cm off — a 116px brown sliver between the green
+  and blue cylinders — only when the Piper arm was connected (go2+piper). 3 rounds chased
+  it as robot SELF-OCCLUSION (the arm in the head camera): site-alpha=0, geomgroup hide,
+  segmentation self-mask — every "fix" was a no-op because the cause was not the arm.
+- **Why hidden (pointed away from cause):** the symptom CORRELATED with connecting the arm,
+  so it looked like an arm-view problem. It wasn't: connecting the arm only nudges the dog's
+  settle by mm, which shifts WHICH brown table sliver wins the (already-broken) selection.
+  The green cylinder was being lost in BOTH configs; one earlier render happened to let green
+  win, manufacturing a false "go2-only works / full broken" contrast.
+- **Root cause:** `front_object.py` `_SAT_MIN=140` is BELOW the brown table's saturation
+  (med~132, **p90~146, max~160**). The table therefore passes the saliency mask in thin
+  1-3px chains that 8-connectivity FUSES the vivid cylinders + table into one giant blob —
+  so the central green cylinder stops existing as its own connected component, and the
+  "most-central blob" fallback grabs a brown table sliver. (Verified: at sat≥140 the
+  green-centre pixel lands in a 2105px blob spanning the whole table; at sat≥160 it becomes
+  a clean 757px blob.)
+- **Fix:** morphological OPENING (`_open`, erode→dilate, 3×3) on the salient mask before
+  connected components — severs sub-kernel bridges so each object survives as its own
+  component, threshold-independently (stable for sat_min 140-155; a raw threshold flips
+  central→wrong-object within ~5 sat units, and the table reaches 160). Honest, pose/colour/
+  group-agnostic. REAL-SIM full-config: front=755px GREEN, grasp **2.3cm** (was 12.2cm); full
+  motion EE reaches (10.97,3.01,0.31) over the green cylinder at (11,3).
+- **Lesson:** when a saliency THRESHOLD overlaps the background, the failure shows up as a
+  CONNECTED-COMPONENT topology bug (blobs fuse), not as a thresholding bug — and the wrong
+  winner drifts with tiny scene changes, faking a "config A works, config B doesn't" signal.
+  Before blaming an occluder, dump the actual candidate blobs (area/centroid/colour) the
+  selector considers; the central object simply not being in the list is the tell. Fix the
+  topology (opening) rather than chasing the threshold.
