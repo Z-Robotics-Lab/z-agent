@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R6 — native latency diagnosed (LLM round-trips, not setup) + batch action+verify (D22); grasp Yusen-gated
+updated: 2026-06-20 · R7 — live REPL progress feedback real-verified (D23); native verify-skip finding; grasp Yusen-gated
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -25,15 +25,16 @@ blocked: VLM识别 + EdgeTAM分割 = pluggable UPGRADE, not on the critical path
          install network-flaky (uv/pypi timeouts) → EdgeTAM pending; moondream2 loads (shim) but boxes
          background on the low-fidelity render; moondream3 13.5GB OOMs. Classical deictic resolver is render-
          tuned (sat_min); a VLM/EdgeTAM front-end would be lighting-robust.
-next:    R7 — TWO open tracks, pick by what's unblocked at cold-ORIENT:
-         (A) GRASP [Yusen-gated, D20/D21]: (1) approach ~0.5-0.65m fwd (scripted walk suffices, not FAR) +
-             (2) grading-binding weld + bridge→proxy object-state topic [CEO gate]. Build when Yusen decides.
-         (B) NATIVE LATENCY [non-gated, D22]: batching shipped + unit-verified, but real-model adherence +
-             wall-clock NOT measured → real-cli native turn to count round-trips/time (needs LLM network);
-             then per-step streaming feedback in the REPL (perceived-latency fix for the multi-second wait).
-         If both A-gated and (B real-verify) network-blocked → next non-gated frontier (e.g. render-fidelity
-         for VLM naming). Verified to date: perception 6.9cm (R3), Piper reaches all objects post-approach
-         (R5), latency=round-trips + batching mechanism (D22).
+next:    R8 — pick by what's unblocked at cold-ORIENT:
+         (A) GRASP [Yusen-gated, D20/D21]: approach (scripted walk, not FAR) + grading-binding (weld +
+             bridge→proxy object-state topic, CEO gate). Build when Yusen decides.
+         (B) NATIVE VERIFY-COMPLIANCE [non-gated, D23 finding]: weak models (haiku) SKIP verify on easy
+             tasks → empty trace (steps=0). Honest fix: strengthen the verify directive / auto-inject a
+             verify when the model finishes without one / penalize a verify-less finish. Real-verify via a
+             real-LLM native turn (LLM network is UP). This protects the producer's honesty guarantee.
+         (C) ELSE next non-gated frontier (render-fidelity for VLM naming). Never idle; never cross a gate.
+         Verified to date: perception 6.9cm (R3), Piper reaches all objects post-approach (R5), latency
+         diagnosed + live REPL feedback real-verified (D22/D23).
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
