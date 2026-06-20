@@ -157,3 +157,13 @@ rewrite an accepted one (record corrections as a new dated line).
 - Shipped a fast scripted regression guard (flaky skill → trace [FAIL, PASS], 2 attempts) so the recover-via-retry path stays covered without a sim. Spine byte-unchanged.
 - NET native-producer arc this session (all real-verified on the live model): latency diagnosed (D22) → live REPL feedback (D23) → verify-compliance (D24) → recover pillar confirmed + D10 (D25). The native producer is faster-feeling, transparent, honest (won't finish unverified), and recovers on failure — the four North-Star pillars (plan/route/verify/recover) all exercised + honest on the real model.
 - (Grasp remains Yusen-gated per D20/D21 — approach-method + grading-binding. 9 rounds; everything buildable without his two decisions is done + verified.)
+
+## D26 — M1 milestone review (R10): clean, honest, green; grasp gated, non-gated surface near-exhausted · 2026-06-20
+- REVIEW round after 9 build/verify rounds (D17-D25). Findings, all clean:
+  - HONESTY: the verify spine (vcli/cognitive/ — trace_store/actor_causation/evidence_classifier/verdict/coord_goal) is BYTE-UNCHANGED across the entire session (`git diff 7b220d9..HEAD -- vcli/cognitive/` empty). Every change (grasp perception/skill + native producer) is producer-side; rule 5 honored by construction, not vigilance.
+  - TESTS: 770 passed; the only 3 reds are the documented pre-existing `test_config_deepseek_provider` env reds (real repo .env flips provider), NOT session regressions.
+  - HYGIENE: repo git-clean; 2 root .md (≤3), 7 docs/ (≤8); no stray/scratch files committed (probes live in /tmp).
+- STATE consolidated:
+  - GRASP (top goal): perception localizes the front object from real sensor data (6.9cm, R3, no GT); the Piper reaches all 3 table objects once approached ~0.5m (R5). BLOCKED on Yusen's two R4 decisions (D20): (1) approach-method (scripted walk vs unpark-nav), (2) grading-binding (weld + bridge→proxy object-state topic, CEO interface gate). Unanswered across 6 loop relaunches.
+  - NATIVE PRODUCER: all 4 North-Star pillars real-verified honest on the live model — plan/route (throughout), verify-compliance (D24), recover (D25); plus latency diagnosed (D22) + live REPL feedback (D23).
+- HONEST diminishing-returns note: the buildable-without-Yusen surface is largely exhausted. ONE genuinely-valuable non-gated test remains — PLAN/ROUTE on the real model (does haiku decompose+route+verify a MULTI-step task end-to-end? — the one pillar not isolate-tested, parallel to the verify-skip/recover findings). After that, further non-gated rounds would be incremental polish (render-fidelity for the weak VLM, etc.); the high-value path is Yusen deciding the two grasp gates.
