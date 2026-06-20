@@ -541,6 +541,19 @@ class SimStartTool:
             agent._skill_registry.register(PlaceTopDownSkill())
             agent._skill_registry.register(MobilePickSkill())
             agent._skill_registry.register(MobilePlaceSkill())
+            # Perception-driven grasp (the honest North-Star path): real RGB-D
+            # from the go2 d435 (bridge -> /camera/image + /camera/depth -> proxy)
+            # + Moondream VLM + EdgeTAM -> 3D grasp point (NOT ground truth).
+            # Registered LAST so it wins the shared 抓/grab aliases on the empty-
+            # world-model path (it needs no pre-populated world model; PickTopDown
+            # does). NOTE: holding_object grades RAN (honest "ran, can't prove the
+            # grasp held") here until the Piper proxy exposes get_object_positions
+            # + weld_is_active over ROS2 (next round — touches the proxy interface).
+            from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
+            from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+            agent._perception = Go2GraspPerception(base)
+            agent._skill_registry.register(PerceptionGraspSkill())
+            logger.info("[sim_tool] perception-grasp wired: Go2GraspPerception + PerceptionGraspSkill")
 
         # VLM perception (GPT-4o via OpenRouter)
         if api_key:
