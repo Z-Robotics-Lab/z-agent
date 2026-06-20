@@ -84,27 +84,35 @@ def _at_position_tol() -> float:
         return 0.5
 
 
-# D9 #1 — the avoidance NAVIGATION route. The bridge only drives the base while this
-# flag exists; the planner (FAR + local planner over lidar) computes a path that AVOIDS
-# obstacles — the obstacle avoidance the open-loop ``walk`` lacks.
-_NAV_FLAG = "/tmp/vector_nav_active"
+# D9 #1 — the avoidance NAVIGATION route.
 _NAV_TIMEOUT_S = 60.0
+
+
+def _agent_base(context: ToolContext) -> Any:
+    """The connected mobile base from the tool context's agent (the WIRED accessor).
+
+    The ``walk`` skill, the verify oracles, and actor-causation all reach the live base
+    via ``agent._base`` — the standalone ``vcli/primitives`` layer is NOT wired in the
+    product (``init_primitives`` is never called; its ``_ctx`` is None). So native must
+    use ``agent._base`` too, never ``primitives.navigation/locomotion``.
+    """
+    agent = getattr(context, "agent", None)
+    return getattr(agent, "_base", None)
 
 
 class _NativeBaseNavigateTool:
     """Coordinate navigation through the nav-stack AVOIDANCE route (D9 #1).
 
-    ``execute`` activates the nav flag, publishes the goal to the planner via
-    ``primitives.navigation.publish_goal`` (``nav_client.navigate_to``), then polls the
-    base pose until within tolerance of (x, y) or a timeout. The planner drives the base
-    over ``cmd_vel``, which is GATED OUT of the actor-causation counter (it runs on the
-    bridge thread, never setting ``_skill_ctrl_tid``) — so a ``navigate`` step's
-    ``at_position`` verify grades UNCAUSED and the spine downgrades GROUNDED -> RAN: an
-    HONEST "ran, cannot prove the actor caused it" until actor-causation is extended to
-    cmd_vel. The moat is never loosened (rule 5); this is strictly an honest
-    characterization of planner-driven motion. Duck-typed like a ``Tool`` so
-    ``dispatch_skill`` runs it uniformly (``.name`` / ``.description`` / ``.input_schema``
-    / ``.execute(params, ctx)``).
+    ``execute`` calls the connected base's ``navigate_to(x, y)`` — the go2 ROS2 proxy
+    method that sets the nav flag, publishes ``/goal_point`` to the FAR planner (which
+    routes over the lidar terrain map and AVOIDS obstacles), and blocks until arrival or
+    timeout. This is the obstacle avoidance the open-loop ``walk`` lacks. The planner
+    drives the base over ``cmd_vel``, which is GATED OUT of the actor-causation counter
+    (it runs on the bridge thread, never setting ``_skill_ctrl_tid``) — so a ``navigate``
+    step's ``at_position`` verify grades UNCAUSED and the spine downgrades GROUNDED -> RAN:
+    an HONEST "ran, cannot prove the actor caused it" until actor-causation is extended to
+    cmd_vel. The moat is never loosened (rule 5). Duck-typed like a ``Tool`` so
+    ``dispatch_skill`` runs it uniformly.
     """
 
     name = "navigate"
@@ -123,48 +131,43 @@ class _NativeBaseNavigateTool:
     }
 
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
-        import math
-        import time
-
-        from vector_os_nano.vcli.primitives import locomotion, navigation
-
         try:
             x = float(params["x"])
             y = float(params["y"])
         except (KeyError, TypeError, ValueError):
             return ToolResult(content="navigate requires numeric x and y.", is_error=True)
 
-        try:
-            with open(_NAV_FLAG, "w", encoding="utf-8") as fh:
-                fh.write("1")
-        except OSError as exc:
-            logger.debug("native_loop: nav flag write failed: %s", exc)
-
-        try:
-            navigation.publish_goal(x, y)
-        except Exception as exc:  # noqa: BLE001
+        base = _agent_base(context)
+        navigate_to = getattr(base, "navigate_to", None)
+        if not callable(navigate_to):
             return ToolResult(
-                content=f"navigate: publish_goal({x}, {y}) failed: {exc}", is_error=True
+                content="navigate: the connected base has no navigate_to (no nav stack).",
+                is_error=True,
             )
 
-        tol = _at_position_tol()
-        deadline = time.monotonic() + _NAV_TIMEOUT_S
-        pos: Any = None
-        while time.monotonic() < deadline:
+        try:
+            ok = bool(navigate_to(x, y, timeout=_NAV_TIMEOUT_S))
+        except TypeError:
+            # A base whose navigate_to does not accept a timeout kwarg.
             try:
-                pos = locomotion.get_position()
-                if math.hypot(pos[0] - x, pos[1] - y) <= tol:
-                    return ToolResult(
-                        content=f"navigate: arrived at ({pos[0]:.2f}, {pos[1]:.2f}) "
-                        f"~ target ({x}, {y})."
-                    )
+                ok = bool(navigate_to(x, y))
             except Exception as exc:  # noqa: BLE001
-                logger.debug("native_loop: navigate pose poll failed: %s", exc)
-            time.sleep(0.5)
+                return ToolResult(content=f"navigate({x}, {y}) failed: {exc}", is_error=True)
+        except Exception as exc:  # noqa: BLE001
+            return ToolResult(content=f"navigate({x}, {y}) failed: {exc}", is_error=True)
+
+        pos = None
+        getter = getattr(base, "get_position", None)
+        if callable(getter):
+            try:
+                pos = getter()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("native_loop: navigate get_position failed: %s", exc)
         where = f"({pos[0]:.2f}, {pos[1]:.2f})" if pos else "unknown"
+        status = "arrived" if ok else "did NOT confirm arrival (FAR graph unavailable or timeout)"
         return ToolResult(
-            content=f"navigate: drove toward ({x}, {y}); now at {where} "
-            f"(timeout {int(_NAV_TIMEOUT_S)}s — verify at_position to check)."
+            content=f"navigate: {status}; now at {where} (target ({x}, {y})). "
+            "Call verify(at_position) to confirm."
         )
 
 
