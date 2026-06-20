@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R8 — native verify-compliance fixed + real-verified (D24, steps0→1); grasp Yusen-gated
+updated: 2026-06-20 · R9 — RECOVER pillar real-verified on live model + D10 confirmed (D25); grasp Yusen-gated
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -25,17 +25,17 @@ blocked: VLM识别 + EdgeTAM分割 = pluggable UPGRADE, not on the critical path
          install network-flaky (uv/pypi timeouts) → EdgeTAM pending; moondream2 loads (shim) but boxes
          background on the low-fidelity render; moondream3 13.5GB OOMs. Classical deictic resolver is render-
          tuned (sat_min); a VLM/EdgeTAM front-end would be lighting-robust.
-next:    R9 — pick by what's unblocked at cold-ORIENT:
+next:    R10 — the 4 North-Star pillars (plan/route/verify/recover) are now real-verified honest on the
+         native producer (D22-D25); the grasp's perception+reach are verified. Buildable-without-Yusen
+         surface is largely covered. Pick at cold-ORIENT:
          (A) GRASP [Yusen-gated, D20/D21]: approach (scripted walk, not FAR) + grading-binding (weld +
-             bridge→proxy object-state topic, CEO gate). Build when Yusen decides. THE top goal — still
-             blocked only on his two calls; everything buildable without them is done + verified.
-         (B) ELSE next non-gated North-Star frontier — candidates: (i) native RECOVER on the real model
-             (does haiku recover after a FAIL verify? real-LLM turn); (ii) render-fidelity for VLM naming;
-             (iii) a milestone REVIEW round (adversarial-verify the native producer's honesty end-to-end on
-             the real model now that latency/feedback/verify-compliance shipped). 
-         Verified this session: perception 6.9cm (R3), Piper reaches all objects post-approach (R5), native
-         latency diagnosed (D22) + live REPL feedback (D23) + verify-compliance (D24) all real-verified.
-         Never idle; never cross a gate autonomously.
+             bridge→proxy object-state topic, CEO gate). THE top goal — build the moment Yusen decides.
+         (B) ELSE: (i) a milestone REVIEW/tidy round (root ≤3 .md, de-slop the session's /tmp probes, docs
+             current, adversarially re-confirm D22-25 honest end-to-end) — good cadence after 9 rounds;
+             (ii) render-fidelity for VLM naming (the named-object grasp path); (iii) native PLAN/ROUTE on
+             the real model (a multi-step task — does haiku decompose + route end-to-end?).
+         Verified this session: perception 6.9cm (R3), Piper reaches post-approach (R5), latency/feedback/
+         verify-compliance/recover all real-verified (D22-D25). Never idle; never cross a gate autonomously.
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
