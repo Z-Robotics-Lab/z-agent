@@ -44,41 +44,16 @@ sequences, verifies, and recovers; it does not re-implement nav/manip.
 > abandoned; `master` is the base. The canonical goal statement lives in `CLAUDE.md` → North
 > Star. Sections 2–8 below describe the prior implementation and will be reconciled in the redesign.
 
-> **Redesign status (2026-06-19, branch `feat/orchestrator-redesign`).** The orchestration vision
-> is now realized by a frontier-model **native tool-use producer** — `vcli/native_loop.py`
-> `run_turn_native`: the MODEL drives a ReAct loop (the world's skills + the engine registry's code
-> tools as native tools, plus a synthetic `verify`/`finish`), and the loop assembles an
-> `ExecutionTrace` the **honest verify spine** — `trace_store` + `actor_causation` +
-> `evidence_classifier` + `verdict` (the "moat") — grades BYTE-UNCHANGED. It has subsumed the
-> planner's job, all real-verified on the live `cli.main` PTY, for **go2** (walk / turn→facing /
-> multi-step), **arm** (pick→holding_object, gripper-weld causation), and **dev** (file_write→
-> path_contains), plus **cross-language** grasp.
->
-> **CEO architecture ruling (2026-06-19, owner): the native producer IS the correct design; the
-> legacy hardcoded planner (`should_use_vgg` → `vgg_decompose` → direct skill execution) is WRONG
-> and is being strangled.** Going forward the system uses the native producer and is OPTIMIZED
-> iteratively — we do NOT retreat to the legacy planner for any capability. See
-> [DECISIONS.md → D9](DECISIONS.md).
->
-> **CUTOVER status: DONE in the REPL (owner-approved).** Bare `vector-cli` + natural language now
-> runs the native producer by default (`cli.run_turn_unified` attempts native-first, falls back to
-> legacy only on a zero-action turn; `VECTOR_REPL_NATIVE=0` forces pure-legacy). The legacy VGG
-> layer (§2–8) stays only as the **strangler-fig fallback** for shapes native does not yet route,
-> pending staged reversible deletion. Merge-to-master remains a separate CEO gate.
->
-> **Known native limitations being OPTIMIZED (per the ruling — improvements, not retreats):**
-> (1) **Navigation avoidance** — native locomotion currently uses the open-loop `walk_forward`
-> (no lidar / no local planner → no obstacle avoidance; `走到坐标 (x,y)` walks straight at the
-> target). NEXT: route native "go to a place/coordinate" through the nav-stack avoidance route
-> (`publish_goal` → FAR + local planner + lidar) instead of `walk`; its cmd_vel motion grades
-> `UNCAUSED` → an honest `RAN` verdict until actor-causation extends to cmd_vel. (2) **Latency** —
-> native makes several LLM round-trips per task and currently runs SYNCHRONOUSLY (blocks the REPL),
-> versus the legacy VGG path's async/responsive execution; optimize via async execution + fewer
-> round-trips.
->
-> The verify moat is the durable invariant — it only ever gets STRICTER (a 2026-06-19 milestone
-> review closed a truthy-constant short-circuit hole; goal-authenticity for non-robot/state
-> predicates remains the next hardening target). See `agent-kernel-STATUS.md` for live state.
+> **Redesign (branch `feat/orchestrator-redesign`).** The orchestration vision is realized by a
+> frontier-model **native tool-use producer** (`vcli/native_loop.py run_turn_native`): the MODEL drives
+> a ReAct loop (world skills + registry code tools + synthetic `verify`/`finish`) and assembles an
+> `ExecutionTrace` the honest verify spine (`trace_store`/`actor_causation`/`evidence_classifier`/
+> `verdict` — the "moat") grades BYTE-UNCHANGED, never looser (rule 5). **CEO ruling (D9): native IS the
+> design; the legacy hardcoded planner is wrong and is being strangled — optimize native, never retreat.**
+> Cutover LANDED: bare `vector-cli` + NL runs native by default (`VECTOR_REPL_NATIVE=0` = reversible
+> legacy hatch); legacy VGG (§2–8) remains only as the strangler-fig fallback, pending deletion.
+> Native nav routes through the avoidance planner (D14, `navigate`→FAR; `at_position` grades RAN until
+> actor-causation reaches cmd_vel). Live state + full decision history: `agent-kernel-STATUS.md` + `DECISIONS.md`.
 
 ---
 
