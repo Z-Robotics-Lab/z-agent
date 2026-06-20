@@ -199,3 +199,49 @@ def test_callable_container_shortcircuit_flips_to_ran(sim_cleanup) -> None:
     # The predicate EVALUATES True (the dead-weight constant) — the classifier rejected
     # the STRUCTURE, not the truth value.
     assert step["verify_result"] is True
+
+
+# (E) STEP-15 WRONG-PREDICATE-TYPE: a COORDINATE goal verified ENTIRELY with a non-
+# at_position predicate. A real left TURN (yaw command -> facing graded CAUSED -> the
+# step is honestly GROUNDED per-step) + a huge-tol facing verify (always true). The
+# coord '走到坐标 (11,3)' is NEVER asserted by an at_position step, so the TURN-LEVEL
+# coordinate gate must reject the turn (verified False) EVEN THOUGH the step itself is
+# GROUNDED — the distinction from R2b (which downgrades the step) and from STEP-13
+# (which needs a literal at_position to mismatch).
+_WRONG_PREDICATE_TYPE_FALSE_GREEN = {
+    "turns": [
+        {"tool_calls": [{"name": "turn", "input": {"direction": "left", "angle": 120}}]},
+        {"tool_calls": [{"name": "verify", "input": {"expr": "facing(0.0, 3.2)"}}]},
+        {"tool_calls": [{"name": "finish", "input": {}}], "stop_reason": "end_turn"},
+    ]
+}
+
+
+@pytest.mark.sim
+@pytest.mark.cli_main
+@pytest.mark.capability
+def test_wrong_predicate_type_coord_goal_flips_to_ran(sim_cleanup) -> None:
+    """(E, STEP-15) a coordinate goal '走到坐标 (11,3)' verified ONLY with a facing
+    predicate after a real CAUSED turn -> turn verified False / RAN / exit 2, while the
+    facing STEP stays GROUNDED. The turn-level coordinate gate rejects a coord turn that
+    never asserts the commanded coordinate with an at_position; per-step honesty is
+    untouched (the distinction this round adds)."""
+    r = run_cli_turn(
+        "走到坐标 (11.0,3.0)",
+        sim_go2=True,
+        timeout_sec=_SIM_TIMEOUT_SEC,
+        extra_args=["--headless", "--native-loop"],
+        tool_script=_WRONG_PREDICATE_TYPE_FALSE_GREEN,
+    )
+    assert r.verified is False, f"coord goal verified with only facing must NOT verify; got {r.verdict}"
+    assert r.exit_code == 2, f"got {r.exit_code}"
+    assert r.evidence == "RAN", f"got evidence={r.evidence}"
+    step = r.verdict["per_step"][0]
+    # KEY DISTINCTION: the facing step is honestly GROUNDED (real CAUSED turn), yet the
+    # TURN is rejected because the coordinate was never asserted by an at_position.
+    assert step["strategy"] == "turn", f"got strategy={step['strategy']}"
+    assert step["evidence"] == "GROUNDED", (
+        f"the facing step itself is honest/GROUNDED; only the turn-level coord gate "
+        f"rejects the turn. got per-step evidence={step['evidence']}"
+    )
+    assert step["verify_result"] is True

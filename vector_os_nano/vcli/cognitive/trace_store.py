@@ -375,10 +375,52 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     if not checked:
         return False
     goal_text = trace.goal_tree.goal
-    return all(
+    all_grounded = all(
         classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
         for s in checked
     )
+    if not all_grounded:
+        return False
+    # STEP-15 COORDINATE-GOAL TURN GATE (stricter-only). A turn whose NL goal targets a
+    # coordinate must actually VERIFY reaching it: >=1 checked step that BOTH classifies
+    # GROUNDED and whose verify is a bounded-tol literal ``at_position`` matching the
+    # commanded coord. Closes the wrong-predicate-type hole — a coordinate goal verified
+    # ENTIRELY with non-``at_position`` predicates (``facing(...)``,
+    # ``len(get_position())==3``): STEP-13's per-step mismatch downgrade fails OPEN on a
+    # non-``at_position`` verify, so every step stays GROUNDED and the coordinate is never
+    # asserted. The gate can only REJECT (all_grounded already held) and can't fake-pass
+    # (the matching step must itself be GROUNDED = actor-CAUSED + honest constant).
+    # SCOPED to a go2-coordinate world (``at_position`` in the live oracle set, rule 3),
+    # so dev / arm / answer worlds — whose goal text may incidentally contain an (x,y)
+    # pair — are never affected.
+    if "at_position" not in oracle_names:
+        return True
+    from vector_os_nano.vcli.cognitive.coord_goal import (
+        at_position_const,
+        at_position_const_matches,
+        goal_has_coordinate_intent,
+        parse_goal_coord,
+    )
+
+    goal_xy = parse_goal_coord(goal_text)
+    if goal_xy is not None:
+        return any(
+            classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
+            and at_position_const_matches(sg_by_name[s.sub_goal_name].verify, goal_xy)
+            for s in checked
+        )
+    # Parse-evasion: a coordinate-shaped goal the regex cannot pin to a single (x, y)
+    # (paren-less "导航到 11,3", or >=2 distinct coords) must still not pass on a
+    # non-``at_position`` verify — require SOME GROUNDED bounded-tol literal at_position
+    # step (the coord can't be pinned, but the facing-only escape is closed). A go2 goal
+    # with NO coordinate intent (room name / "explore" / "turn") fails OPEN (unchanged).
+    if goal_has_coordinate_intent(goal_text):
+        return any(
+            classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
+            and at_position_const(sg_by_name[s.sub_goal_name].verify) is not None
+            for s in checked
+        )
+    return True
 
 
 def step_evidence_ok(

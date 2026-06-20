@@ -45,7 +45,7 @@ def test_parse_goal_coord(goal, expected) -> None:
     "expr, expected",
     [
         ("at_position(11.0, 3.0)", (11.0, 3.0)),
-        ("at_position(11, 3, 0.5)", (11.0, 3.0)),
+        ("at_position(11, 3, 0.5)", (11.0, 3.0)),       # tol == oracle tol -> kept
         ("at_position(-2, 0)", (-2.0, 0.0)),
         ("facing(1.5708)", None),
         ("holding_object('banana')", None),
@@ -53,6 +53,12 @@ def test_parse_goal_coord(goal, expected) -> None:
         ("at_position(get_x(), 3)", None),    # non-literal target -> fail open
         ("len(get_position()) == 3", None),
         ("", None),
+        # STEP-15 hardening:
+        ("at_position(x=11, y=3)", (11.0, 3.0)),        # kwarg form read
+        ("at_position(x=11, y=3, tol=0.3)", (11.0, 3.0)),  # tighter tol -> kept
+        ("at_position(11, 3, 99)", None),               # TOL-INFLATION (positional) -> rejected
+        ("at_position(11, 3, tol=99)", None),           # TOL-INFLATION (kwarg) -> rejected
+        ("at_position(11, 3, get_tol())", None),        # non-literal tol -> rejected
     ],
 )
 def test_at_position_const(expr, expected) -> None:
@@ -123,3 +129,163 @@ def test_spine_non_coordinate_fails_open_stays_grounded(verify, goal) -> None:
 
     step, sg = _caused_step(verify)
     assert classify_step_evidence(step, sg, _ORACLES, goal) == "GROUNDED"
+
+
+# ---------------------------------------------------------------------------
+# STEP-15 — positive dual helper + coordinate-intent detector.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "expr, goal_xy, expected",
+    [
+        ("at_position(11, 3)", (11.0, 3.0), True),
+        ("at_position(11.2, 3.1)", (11.0, 3.0), True),    # within 0.5 tol
+        ("at_position(x=11, y=3)", (11.0, 3.0), True),    # kwarg honest
+        ("at_position(5, 5)", (11.0, 3.0), False),        # wrong coord
+        ("at_position(11, 3, 99)", (11.0, 3.0), False),   # tol-inflated -> not honest
+        ("facing(0.5, 0.5)", (11.0, 3.0), False),         # non-at_position
+        ("len(get_position()) == 3", (11.0, 3.0), False),
+        ("", (11.0, 3.0), False),
+    ],
+)
+def test_at_position_const_matches(expr, goal_xy, expected) -> None:
+    from vector_os_nano.vcli.cognitive.coord_goal import at_position_const_matches
+
+    assert at_position_const_matches(expr, goal_xy) is expected
+
+
+@pytest.mark.parametrize(
+    "goal, expected",
+    [
+        ("走到坐标 (11,3)", True),
+        ("导航到 11,3", True),          # paren-less
+        ("go to 11, 3", True),
+        ("先到 (11,3) 再到 (12,3)", True),  # multi-coord
+        ("探索房间", False),
+        ("turn around", False),
+        ("go to the kitchen", False),
+        ("pick up the cup", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_goal_has_coordinate_intent(goal, expected) -> None:
+    from vector_os_nano.vcli.cognitive.coord_goal import goal_has_coordinate_intent
+
+    assert goal_has_coordinate_intent(goal) is expected
+
+
+# ---------------------------------------------------------------------------
+# STEP-15 — TURN-LEVEL coordinate gate in evidence_passed: a coordinate goal must be
+# VERIFIED with a GROUNDED at_position matching the commanded coord. Closes the
+# wrong-predicate-type hole (coord goal verified entirely with facing / len()==3) while
+# keeping every honest case + all non-go2 worlds green. Stricter-only (rule 5).
+# ---------------------------------------------------------------------------
+
+_GO2 = frozenset({"at_position", "facing", "visited", "get_position", "get_heading"})
+_DEV = frozenset({"file_exists", "path_contains"})
+_ARM = frozenset({"holding_object", "arm_at_home"})
+
+
+def _trace(goal: str, steps):
+    """steps = list of (verify, strategy, verify_result, ActorCaused)."""
+    from vector_os_nano.vcli.cognitive.types import (
+        ExecutionTrace,
+        GoalTree,
+        StepRecord,
+        SubGoal,
+    )
+
+    sgs = tuple(
+        SubGoal(name=f"s{i}", description="x", verify=v, strategy=st)
+        for i, (v, st, _vr, _ac) in enumerate(steps)
+    )
+    strs = tuple(
+        StepRecord(
+            sub_goal_name=f"s{i}", strategy=st, success=True, verify_result=vr,
+            duration_sec=0.1, actor_caused=ac,
+        )
+        for i, (_v, st, vr, ac) in enumerate(steps)
+    )
+    return ExecutionTrace(
+        goal_tree=GoalTree(goal=goal, sub_goals=sgs), steps=strs,
+        success=True, total_duration_sec=1.0,
+    )
+
+
+def _CA():
+    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+
+    return ActorCaused.CAUSED
+
+
+def test_turn_gate_blocks_wrong_predicate_type() -> None:
+    """A COORDINATE goal verified ENTIRELY with a non-at_position predicate (the
+    confirmed STEP-14 hole) must NOT verify, even though every step is GROUNDED."""
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    # HOLE A: facing under a coordinate goal (CAUSED -> per-step GROUNDED).
+    assert evidence_passed(_trace("走到坐标 (11,3)", [("facing(0.5,0.5)", "turn", True, _CA())]), _GO2) is False
+    # HOLE B: shape-trivial len()==3 under a coordinate goal.
+    assert evidence_passed(_trace("走到坐标 (11,3)", [("len(get_position())==3", "walk", True, _CA())]), _GO2) is False
+    # TOL-INFLATION: matching constant but a vacuous 99 m tolerance.
+    assert evidence_passed(_trace("走到坐标 (11,3)", [("at_position(11,3,99)", "walk", True, _CA())]), _GO2) is False
+    # KWARG wrong-coord: at_position(x=99,y=99) used to extract None -> fail open.
+    assert evidence_passed(_trace("走到坐标 (11,3)", [("at_position(x=99,y=99)", "walk", True, _CA())]), _GO2) is False
+    # PARSE-EVASION: paren-less + multi-coord phrasings still require honest at_position.
+    assert evidence_passed(_trace("导航到 11,3", [("facing(0.5,0.5)", "turn", True, _CA())]), _GO2) is False
+    assert evidence_passed(_trace("先到 (11,3) 再到 (12,3)", [("facing(0.5,0.5)", "turn", True, _CA())]), _GO2) is False
+
+
+def test_turn_gate_keeps_honest_coordinate_turns() -> None:
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    # Single honest at_position matching the goal.
+    assert evidence_passed(_trace("走到坐标 (11,3)", [("at_position(11,3)", "walk", True, _CA())]), _GO2) is True
+    # Honest kwarg + tolerance-edge landing.
+    assert evidence_passed(_trace("走到坐标 (11,3)", [("at_position(x=11,y=3)", "walk", True, _CA())]), _GO2) is True
+    assert evidence_passed(_trace("走到坐标 (11,3)", [("at_position(11.2,3.1)", "walk", True, _CA())]), _GO2) is True
+    # Multiskill: the at_position leg satisfies the requirement; facing leg rides along.
+    assert evidence_passed(_trace("走到坐标 (11,3) 然后转向", [
+        ("at_position(11,3)", "walk", True, _CA()),
+        ("facing(0.5,0.5)", "turn", True, _CA()),
+    ]), _GO2) is True
+    # Parse-evasion honest: multi-coord goal WITH at_position legs.
+    assert evidence_passed(_trace("先到 (11,3) 再到 (12,3)", [
+        ("at_position(11,3)", "walk", True, _CA()),
+        ("at_position(12,3)", "walk", True, _CA()),
+    ]), _GO2) is True
+
+
+def test_turn_gate_non_coordinate_go2_turns_fail_open() -> None:
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    # A coordinate-less go2 turn (turn / explore) is untouched.
+    assert evidence_passed(_trace("转向看桌子", [("facing(0.5,0.5)", "turn", True, _CA())]), _GO2) is True
+    assert evidence_passed(_trace("探索房间", [("visited('kitchen')", "explore", True, _CA())]), _GO2) is True
+
+
+def test_turn_gate_world_blind_non_go2_worlds_untouched() -> None:
+    """dev / arm / answer worlds carry no ``at_position`` oracle, so an incidental (x,y)
+    in the goal text must NEVER trigger the coordinate requirement (world-blind fix)."""
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    assert evidence_passed(_trace("write (3,4) to file out.txt", [
+        ("path_contains('out.txt','x')", "tool", True, _CA()),
+    ]), _DEV) is True
+    assert evidence_passed(_trace("place the cube at (0.5,0.3)", [
+        ("holding_object('cube')", "pick", True, _CA()),
+    ]), _ARM) is True
+
+
+def test_turn_gate_dummy_at_position_must_be_grounded() -> None:
+    """The gate cannot be gamed by a dummy at_position step the robot didn't reach: an
+    UNCAUSED (teleport / no-op) at_position is downgraded to RAN per-step, so it fails
+    the all-GROUNDED rule before the coordinate clause is even reached."""
+    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    assert evidence_passed(
+        _trace("走到坐标 (11,3)", [("at_position(11,3)", "walk", True, ActorCaused.UNCAUSED)]), _GO2
+    ) is False
