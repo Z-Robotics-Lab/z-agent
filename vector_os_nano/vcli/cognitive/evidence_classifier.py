@@ -126,6 +126,47 @@ def _state_oracle_vs_constant(tree: ast.AST, oracle_names: frozenset[str]) -> bo
     return False
 
 
+def _is_oracle_call(node: ast.AST, oracle_names: frozenset[str]) -> bool:
+    """True iff *node* is DIRECTLY an oracle call (its value comes from the world)."""
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in oracle_names
+    )
+
+
+def _truth_bearing_oracle(node: ast.AST, oracle_names: frozenset[str]) -> bool:
+    """True iff *node*'s VALUE is determined by an oracle result — the oracle's value
+    actually reaches the node's value, not discarded into a constant structure or a
+    non-oracle reduction.
+
+    A direct oracle call carries its value; so does an index / arithmetic over one
+    (``get_position()[0]``, ``get_heading() - 1``), and a reduction whose ARGUMENT is
+    itself truth-bearing (``len(detect_objects()) > 0`` — the count reflects the
+    oracle's actual return). But an oracle buried inside a LITERAL or builtin-constructed
+    CONTAINER (``len(tuple((at_position(x,y), True)))`` — the tuple's length is constant
+    and the oracle is an inert element, never reduced) is dead weight, NOT truth-bearing.
+    Closes the callable-container bypass (2026-06-20 review). STRICTER-only.
+    """
+    if _is_oracle_call(node, oracle_names):
+        return True
+    if isinstance(node, ast.Subscript):
+        return _truth_bearing_oracle(node.value, oracle_names)
+    if isinstance(node, ast.BinOp):
+        return _truth_bearing_oracle(node.left, oracle_names) or _truth_bearing_oracle(
+            node.right, oracle_names
+        )
+    if isinstance(node, ast.UnaryOp) and not isinstance(node.op, ast.Not):
+        return _truth_bearing_oracle(node.operand, oracle_names)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        # A non-oracle reduction (len/bool/sorted/...) carries the oracle's value IFF it
+        # reduces a DIRECTLY truth-bearing ARGUMENT (len(detect_objects())). An oracle
+        # buried inside a literal / builtin-constructed CONTAINER (len(tuple((x, True))))
+        # is inert — we do NOT descend into literal container ELEMENTS, only call args.
+        return any(_truth_bearing_oracle(a, oracle_names) for a in node.args)
+    return False
+
+
 def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
     """True iff *node*'s truth value is GATED by world-oracle results — i.e. NO
     constant or non-oracle operand can short-circuit it to True.
@@ -139,13 +180,14 @@ def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
     - ``and`` / ``or``: every operand must itself be grounded (a constant/non-oracle
       operand could make ``or`` True, or is dead weight in ``and``) — reject either.
     - ``not X``: grounded iff ``X`` is grounded.
-    - a Compare (equality/ordering): an oracle anchored against a CONSTANT (state-
-      oracle-vs-constant or a predicate-oracle-vs-constant), never oracle-vs-oracle
-      (proves no goal) and never constant-only.
-    - a Compare (membership ``in``/``not in``): grounded ONLY if the CONTAINER is
-      oracle-derived (``'table' in describe_scene()``); a constant-literal container
-      (``True in (at_position(9,9), True)``) is the ``... or True`` short-circuit
-      hidden in an ``in`` node — the oracle is dead weight — so it is NOT grounded.
+    - a Compare (equality/ordering): a TRUTH-BEARING oracle (its value reaches the
+      operand — a direct call, or an index/arithmetic over one) anchored against a
+      CONSTANT; an oracle buried inside a non-oracle reduction (``len(...)``,
+      ``tuple(...)``, ``bool(...)``) is dead weight, NOT grounded.
+    - a Compare (membership ``in``/``not in``): grounded ONLY if the CONTAINER is a
+      DIRECT oracle call (``'table' in describe_scene()``); a literal container OR a
+      builtin constructor (``True in tuple((at_position(9,9), True))``) is a constant-
+      structure container — the oracle is dead weight — so it is NOT grounded.
     - a bare Call: grounded ONLY for a PREDICATE oracle (goal-conditioned bool); a
       bare STATE oracle is not evidence.
     - anything else (a bare Constant, a non-oracle Name/Call, a Subscript, …):
@@ -171,18 +213,24 @@ def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
             for op, container in zip(node.ops, node.comparators):
                 if not isinstance(op, (ast.In, ast.NotIn)):
                     continue
-                if isinstance(container, (ast.Tuple, ast.List, ast.Set, ast.Dict)):
-                    return False
-                if not _contains_oracle(container, oracle_names):
+                # The container must be a DIRECT oracle call (its collection comes from
+                # the world, e.g. `describe_scene()`). A literal collection OR a builtin
+                # container constructor (`tuple(...)`/`list(...)`/`set(...)`) is a
+                # constant-structure container — an oracle buried inside is dead weight
+                # (`... or True` hidden in an `in` node). -> NOT grounded. [STEP-12/14]
+                if not _is_oracle_call(container, oracle_names):
                     return False
             return True
         # Equality / ordering: an oracle anchored against a CONSTANT (state-oracle-vs-
         # constant or predicate-oracle-vs-constant), never oracle-vs-oracle (proves no
         # goal) and never constant-only.
         operands = [node.left, *node.comparators]
-        has_oracle = any(_contains_oracle(o, oracle_names) for o in operands)
+        # A TRUTH-BEARING oracle operand (value reaches it) vs a constant — never an
+        # oracle buried inside a non-oracle reduction like len()/tuple()/bool(), which
+        # discards the oracle's value into a structural constant. [STEP-14]
+        has_oracle = any(_truth_bearing_oracle(o, oracle_names) for o in operands)
         has_const = any(_contains_constant(o) for o in operands)
-        oracle_only = all(_contains_oracle(o, oracle_names) for o in operands)
+        oracle_only = all(_truth_bearing_oracle(o, oracle_names) for o in operands)
         return has_oracle and has_const and not oracle_only
     if isinstance(node, ast.Call):
         return isinstance(node.func, ast.Name) and node.func.id in _PREDICATE_ORACLES

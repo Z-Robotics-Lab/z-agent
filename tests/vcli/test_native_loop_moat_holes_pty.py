@@ -160,3 +160,42 @@ def test_wrong_place_self_verified_landing_flips_to_ran(sim_cleanup) -> None:
     # goal-authenticity gate (constant (10,3) != goal (11,3)) downgrades it.
     assert step["verify_result"] is True
     assert step["strategy"] == "walk"
+
+
+# (D) STEP-14: the STEP-12 membership fix is bypassed by a BUILTIN container constructor
+# (tuple()/list()), an ast.Call rather than a literal collection — the constant member
+# satisfies the `in` while the oracle is dead weight. Must flip to RAN through cli.main.
+_CALLABLE_CONTAINER_FALSE_GREEN = {
+    "turns": [
+        {"tool_calls": [{"name": "walk", "input": {"direction": "forward", "distance": 0.4, "speed": 0.3}}]},
+        {"tool_calls": [{"name": "verify", "input": {"expr": "True in tuple((at_position(2.0, 0.0), True))"}}]},
+        {"tool_calls": [{"name": "finish", "input": {}}], "stop_reason": "end_turn"},
+    ]
+}
+
+
+@pytest.mark.sim
+@pytest.mark.cli_main
+@pytest.mark.capability
+def test_callable_container_shortcircuit_flips_to_ran(sim_cleanup) -> None:
+    """(D, STEP-14) the STEP-12 membership fix is bypassed by a builtin container
+    constructor: `True in tuple((at_position(2,0), True))` — the constant True member
+    satisfies the `in` while the oracle is dead weight (the `... or True` short-circuit
+    wrapped in a tuple() call). A real CAUSED walk + this verify (goal '走到坐标 (2,0)',
+    so goal-authenticity fails open as const==goal) must grade RAN / verified False /
+    exit 2 — ONLY the structural classifier can stop it."""
+    r = run_cli_turn(
+        "走到坐标 (2.0,0.0)",
+        sim_go2=True,
+        timeout_sec=_SIM_TIMEOUT_SEC,
+        extra_args=["--headless", "--native-loop"],
+        tool_script=_CALLABLE_CONTAINER_FALSE_GREEN,
+    )
+    assert r.verified is False, f"callable-container short-circuit must NOT verify; got {r.verdict}"
+    assert r.exit_code == 2, f"got {r.exit_code}"
+    assert r.evidence == "RAN", f"got evidence={r.evidence}"
+    step = r.verdict["per_step"][0]
+    assert step["evidence"] == "RAN"
+    # The predicate EVALUATES True (the dead-weight constant) — the classifier rejected
+    # the STRUCTURE, not the truth value.
+    assert step["verify_result"] is True

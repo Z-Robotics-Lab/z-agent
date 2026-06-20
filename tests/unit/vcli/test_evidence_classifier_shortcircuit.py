@@ -147,3 +147,46 @@ def test_spine_gate_flips_membership_shortcircuit_to_ran_even_when_caused() -> N
         verify_result=True, duration_sec=0.0, actor_caused=ActorCaused.CAUSED,
     )
     assert classify_step_evidence(step, sub, _ORACLES) == "RAN"
+
+
+# ---------------------------------------------------------------------------
+# STEP-14 review — the CALLABLE-wrapper bypass of the STEP-12 fix: an oracle buried
+# inside a builtin container constructor (tuple()/list()/set()) or a shape reduction
+# (len()/bool()) is dead weight — its value never reaches the verdict. The STEP-12 fix
+# only rejected LITERAL containers.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "True in tuple((at_position(2, 0), True))",       # builtin container constructor
+        "1 in list((at_position(2, 0), 1))",
+        "True in set((at_position(2, 0), True))",
+        "len(tuple((at_position(2, 0), True))) == 2",     # len() discards the oracle value
+        "bool(tuple((at_position(2, 0), True))) == True",
+    ],
+)
+def test_callable_wrapper_and_reduction_shortcircuit_is_ran(expr: str) -> None:
+    """An oracle BURIED inside a builtin container constructor (tuple()/list()/set()) or
+    reduced over such a literal container (len()/bool() over a constant tuple) is dead
+    weight — its value never gates the verdict. The STEP-12 fix only rejected LITERAL
+    containers; STEP-14 closes the callable-wrapper family via the truth-bearing check —
+    while a reduction DIRECTLY over an oracle (len(detect_objects())) stays honest.
+    RAN (rule 5 stricter-only)."""
+    assert classify_verify_expr(expr, _ORACLES) == "RAN", expr
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "get_position()[0] < 5.0",          # an index over an oracle PRESERVES its value
+        "get_position()[0] - 1.0 < 5.0",    # arithmetic over an oracle preserves its value
+        "placed_count() == 2",
+    ],
+)
+def test_truth_bearing_oracle_compare_stays_grounded(expr: str) -> None:
+    """A compare whose operand VALUE comes from an oracle (direct call, index, or
+    arithmetic over one) stays GROUNDED — STEP-14 rejects only reductions that DISCARD
+    the oracle value, never value-preserving access."""
+    assert classify_verify_expr(expr, _ORACLES) == "GROUNDED", expr

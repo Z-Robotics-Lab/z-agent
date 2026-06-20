@@ -75,8 +75,9 @@ def test_empty_oracle_names_fails_closed() -> None:
 
 @pytest.mark.xfail(
     reason="R1 known gap: a shape-trivial state-vs-constant compare reads an oracle "
-    "but proves nothing about the goal; authenticity is deferred to R2's "
-    "independent observer.",
+    "but proves nothing about the goal; STRUCTURALLY indistinguishable from the honest "
+    "len(detect_objects())>0, so not closeable by the truth-bearing check; authenticity "
+    "is deferred to R2's independent observer.",
     strict=True,
 )
 def test_r1_gap_shape_trivial_state_compare() -> None:
