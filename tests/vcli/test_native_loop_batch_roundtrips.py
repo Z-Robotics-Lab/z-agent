@@ -27,7 +27,7 @@ class _CountingBackend:
         return self._inner.call(**kwargs)
 
 
-def _run(tool_script, on_progress=None):
+def _run(tool_script, on_progress=None, skill=None):
     from vector_os_nano.core.agent import Agent
     from vector_os_nano.core.types import SkillResult
     from vector_os_nano.vcli.engine import VectorEngine
@@ -54,7 +54,7 @@ def _run(tool_script, on_progress=None):
     os.chdir(work)
     try:
         agent = Agent(config={})
-        agent._skill_registry.register(_WriteFileSkill())
+        agent._skill_registry.register(skill if skill is not None else _WriteFileSkill())
         backend = _CountingBackend(FakeToolScriptBackend.from_tool_script(tool_script))
         eng = VectorEngine(backend=backend, registry=CategorizedToolRegistry(),
                            permissions=PermissionContext())
@@ -152,3 +152,36 @@ def test_compliant_finish_after_verify_not_nudged():
     )
     assert len(trace.steps) == 1
     assert not any("re-prompt" in m.lower() or "verify required" in m.lower() for m in msgs)
+
+
+def test_recover_after_failed_verify_records_fail_then_pass():
+    """RECOVER pillar (north-star #4): a FAILed verify -> re-act -> verify PASS records
+    [FAIL, PASS]. The moat keeps the FAIL row (D10: a recovered turn is verified=False
+    via the all-GROUNDED gate — never a false green). Real-LLM confirmed (R9): haiku
+    re-acts after FAIL until PASS; this guards the path with a scripted retry."""
+    from pathlib import Path as _P
+    from vector_os_nano.core.types import SkillResult
+    from tests.harness.fake_backend import tool_turn
+
+    class _FlakyWrite:
+        name = "write_file"; description = "write text to a file"
+        parameters = {"file_path": {"type": "string", "required": True},
+                      "content": {"type": "string", "required": True}}
+        preconditions: list = []; effects: dict = {}
+        def __init__(self): self.calls = 0
+        def execute(self, params, context):
+            self.calls += 1
+            if self.calls >= 2:  # writes only on the retry
+                _P(params["file_path"]).write_text(str(params.get("content", "")), encoding="utf-8")
+            return SkillResult(success=True, result_data={"attempt": self.calls})
+
+    flaky = _FlakyWrite()
+    _calls, trace = _run(
+        [tool_turn(_WRITE, _VERIFY),   # attempt 1 -> verify FAIL (no-op write)
+         tool_turn(_WRITE, _VERIFY),   # retry -> verify PASS (writes)
+         tool_turn(_FINISH)],
+        skill=flaky,
+    )
+    results = [bool(s.verify_result) for s in trace.steps]
+    assert results == [False, True]    # recorded FAIL then PASS (recovered)
+    assert flaky.calls == 2            # the model re-acted (didn't give up)
