@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R10 — M1 milestone review: clean/honest/green, spine untouched (D26); grasp Yusen-gated
+updated: 2026-06-20 · R11 — PLAN/ROUTE real-verified (4/4 pillars done); CORRECTION: grasp approach NON-gated (D27)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -30,14 +30,15 @@ next:    R10 — the 4 North-Star pillars (plan/route/verify/recover) are now re
          surface is largely covered. Pick at cold-ORIENT:
          (A) GRASP [Yusen-gated, D20/D21]: approach (scripted walk, not FAR) + grading-binding (weld +
              bridge→proxy object-state topic, CEO gate). THE top goal — build the moment Yusen decides.
-         (B) ELSE non-gated, the LAST genuinely-valuable test: native PLAN/ROUTE on the real model — a
-             MULTI-step task (e.g. "create out.txt then append a line", or a 2-leg robot goal): does haiku
-             decompose + route + verify EACH step end-to-end? (the one pillar not isolate-tested; parallel to
-             the verify-skip/recover findings — may surface a real gap). AFTER that the non-gated surface is
-             exhausted → say so honestly; the high-value path is Yusen deciding the two grasp gates (don't
-             manufacture busywork — render-fidelity for the weak VLM etc. is incremental polish).
-         Review (D26): spine byte-unchanged all session, 770 tests green (3 documented deepseek env reds),
-         repo clean. 4 pillars real-verified (D22-25); grasp perception 6.9cm + reach verified, gated on Yusen.
+         R12 = build the scripted GRASP-APPROACH + full perception-grasp MOTION end-to-end (D27 correction:
+         the approach is NON-gated — a scripted open-loop forward walk, NOT the parked FAR nav-stack). In
+         PerceptionGraspSkill (or a wrapper): walk forward to standoff (so the object enters the ~0.34m Piper
+         envelope, R5) → front_object_mask → grasp_point → ik_top_down → PickTopDown motion. REAL-VERIFY on
+         the go2+arm sim via bare vector-cli "抓前面的东西": the arm physically reaches + closes on the front
+         object; verdict honestly RAN pending the grading-binding (the ONLY remaining CEO gate: weld + a new
+         bridge→proxy object-state ROS2 topic). Test-first; spine byte-unchanged; serialize the sim + nuke.
+         4/4 pillars real-verified (D22-25 latency/feedback/verify/recover + D27 plan/route); perception 6.9cm
+         (R3) + reach post-approach (R5) verified. THE remaining gate = GROUNDED grading-binding only.
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
