@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R12 — scripted approach + full grasp motion WIRED; approach real-verified, grasp not yet completing (D28)
+updated: 2026-06-20 · R13 — ROOT CAUSE: robot self-occlusion (grasp aims at own gripper); NOT working yet (D29)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -30,16 +30,17 @@ next:    R10 — the 4 North-Star pillars (plan/route/verify/recover) are now re
          surface is largely covered. Pick at cold-ORIENT:
          (A) GRASP [Yusen-gated, D20/D21]: approach (scripted walk, not FAR) + grading-binding (weld +
              bridge→proxy object-state topic, CEO gate). THE top goal — build the moment Yusen decides.
-         R13 = COMPLETE the grasp (D28: motion wired + approach real-verified, but ik_unreachable by margins).
-         Tune to close it, on the in-process go2+piper sim (bare PerceptionGraspSkill, "前面的东西"):
-          (a) APPROACH precision — get the dog reliably to ~10.6 (lower reach_m ~0.4, smaller steps/more
-              walks, handle the table-collision stall at ~10.45). R5 proved 10.6 IS reachable.
-          (b) PERCEPTION accuracy — the #1 lever: spawn perception was 12cm far-biased this run (R3 got
-              6.9cm); stabilize front_object selection + fix the centroid far-side bias to ~6cm.
-          (c) re-verify the arm REACHES + closes on the object (screenshot). Then the GROUNDED grade still
-              needs the CEO gate (weld + bridge→proxy object-state topic) — surface, don't cross.
-         Verified: 4/4 pillars (D22-25,D27); perception 6.9cm (R3); Piper reaches at dog~10.6 (R5); approach
-         drives the dog forward (D28). Spine byte-unchanged all session.
+         R14 = FIX robot SELF-OCCLUSION (D29 root cause): the Piper's own gripper / yellow piper_ee_site
+         (go2_piper.xml:398 rgba 1 1 0) sits in the head-camera FOV at table level → front_object_mask picks
+         IT (12cm, the robot aiming at its own gripper). Geometry is SOLID (per-color green/blue 2cm) +
+         approach works (D28) — ONLY target-selection is broken by self-view. Options: (i) DISABLE site
+         rendering in the perception camera (a real D435 wouldn't see the viz site) + a reliable stow that
+         HOLDS vs gripper droop; (ii) self-region/geom filter of the robot's own arm (it's at table depth, so
+         min-depth alone won't do); (iii) camera/stow geometry that excludes the arm. Then real-verify the
+         grasp aims at the cylinder (~2cm) + arm reaches/closes (screenshot). GROUNDED grade still needs the
+         CEO gate (weld + bridge→proxy object-state topic) — surface, don't cross.
+         WARNING: the Piper is_holding heuristic (no weld) FALSE-POSITIVES success — never believe skill.success
+         for the grasp; trust grasp_world accuracy + (gated) holding_object. Spine byte-unchanged all session.
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
