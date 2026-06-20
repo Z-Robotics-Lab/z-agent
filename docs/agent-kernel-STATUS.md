@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R13 — ROOT CAUSE: robot self-occlusion (grasp aims at own gripper); NOT working yet (D29)
+updated: 2026-06-20 · R14 — self-occlusion confirmed; simple hides ruled out; R15=segmentation self-filter (D30)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -30,17 +30,16 @@ next:    R10 — the 4 North-Star pillars (plan/route/verify/recover) are now re
          surface is largely covered. Pick at cold-ORIENT:
          (A) GRASP [Yusen-gated, D20/D21]: approach (scripted walk, not FAR) + grading-binding (weld +
              bridge→proxy object-state topic, CEO gate). THE top goal — build the moment Yusen decides.
-         R14 = FIX robot SELF-OCCLUSION (D29 root cause): the Piper's own gripper / yellow piper_ee_site
-         (go2_piper.xml:398 rgba 1 1 0) sits in the head-camera FOV at table level → front_object_mask picks
-         IT (12cm, the robot aiming at its own gripper). Geometry is SOLID (per-color green/blue 2cm) +
-         approach works (D28) — ONLY target-selection is broken by self-view. Options: (i) DISABLE site
-         rendering in the perception camera (a real D435 wouldn't see the viz site) + a reliable stow that
-         HOLDS vs gripper droop; (ii) self-region/geom filter of the robot's own arm (it's at table depth, so
-         min-depth alone won't do); (iii) camera/stow geometry that excludes the arm. Then real-verify the
-         grasp aims at the cylinder (~2cm) + arm reaches/closes (screenshot). GROUNDED grade still needs the
-         CEO gate (weld + bridge→proxy object-state topic) — surface, don't cross.
-         WARNING: the Piper is_holding heuristic (no weld) FALSE-POSITIVES success — never believe skill.success
-         for the grasp; trust grasp_world accuracy + (gated) holding_object. Spine byte-unchanged all session.
+         R15 = SEGMENTATION self-filter (D30: simple site/group hides RULED OUT — after MjSpec.attach the
+         piper geoms share group 0 with the cylinders; geomgroup[2]=0 = 0-pixel change). Render
+         enable_segmentation_rendering() on the perception camera (per-pixel geom/body id) → build a mask of
+         the robot's OWN piper geoms (body name "piper*") → EXCLUDE those pixels before front_object_mask.
+         Honest real-robot self-filter (by identity, pose/color/group-agnostic). Then real-verify front_object
+         picks the cylinder (~2cm) → approach → IK → arm closes ON the cylinder (screenshot, not skill.success).
+         GROUNDED grade still gated (weld + bridge→proxy object-state topic) — surface, don't cross.
+         STATE: grasp NOT working (self-occlusion); geometry 2cm + approach (D28) proven; ~70%. NEVER believe
+         skill.success (Piper is_holding no-weld FALSE-POSITIVE); trust grasp_world accuracy + (gated)
+         holding_object + the rendered frame. Spine byte-unchanged all session.
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
