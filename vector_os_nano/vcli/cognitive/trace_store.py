@@ -120,7 +120,8 @@ def _actor_uncaused(step: StepRecord) -> bool:
 
 
 def classify_step_evidence(
-    step: StepRecord, sub_goal: SubGoal, oracle_names: frozenset[str]
+    step: StepRecord, sub_goal: SubGoal, oracle_names: frozenset[str],
+    goal_text: str | None = None,
 ) -> StepEvidence:
     """Classify a single executed step's evidence: GROUNDED / RAN / FAILED.
 
@@ -152,6 +153,14 @@ def classify_step_evidence(
     ``NOT_GRADED`` (legacy / hand-built / non-robot-predicate steps the executor never
     graded) classifies EXACTLY as before R2b — zero regression. ``CAUSED`` is a no-op
     here (the step keeps its GROUNDED classification).
+
+    STEP-13 GOAL-AUTHENTICITY downgrade (also subtractive, fail-OPEN): when *goal_text*
+    is provided (the turn's NL goal, single-sourced from ``trace.goal_tree.goal``) and
+    BOTH it parses to a coordinate AND the verify is a literal ``at_position(x, y)``
+    whose constant differs from the goal by more than the oracle tolerance, the
+    otherwise-GROUNDED step DOWNGRADES to RAN — the model verified its OWN landing, not
+    the commanded target. Non-coordinate goals/verifies fail OPEN (unchanged);
+    ``goal_text=None`` (the per-step reward gate) is a no-op. Stricter-only (rule 5).
     """
     if not step.success:
         return "FAILED"
@@ -166,6 +175,15 @@ def classify_step_evidence(
     if grounded and _actor_uncaused(step):
         # R2b: GROUNDED predicate but the actor did not cause it -> downgrade to RAN.
         return "RAN"
+    if grounded and goal_text is not None:
+        # STEP-13 goal-authenticity: an actor-CAUSED at_position verify whose constant
+        # does NOT match the user's parsed COORDINATE goal means the model verified its
+        # OWN landing, not the commanded target -> downgrade to RAN. Fail-OPEN whenever
+        # the goal or the verify is not a parseable coordinate. Stricter-only.
+        from vector_os_nano.vcli.cognitive.coord_goal import coord_goal_mismatch
+
+        if coord_goal_mismatch(goal_text, sub_goal.verify):
+            return "RAN"
     return "GROUNDED" if grounded else "RAN"
 
 
@@ -356,8 +374,9 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     checked = [s for s in trace.steps if s.sub_goal_name in sg_by_name]
     if not checked:
         return False
+    goal_text = trace.goal_tree.goal
     return all(
-        classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names) == "GROUNDED"
+        classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
         for s in checked
     )
 

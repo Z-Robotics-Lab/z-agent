@@ -122,3 +122,41 @@ def test_facing_forward_walk_false_green_flips_to_ran(sim_cleanup) -> None:
     assert step["evidence"] == "RAN"
     # The facing predicate is true (huge tol) — only actor-causation stops it.
     assert step["verify_result"] is True
+
+
+# (C) STEP-13 goal-authenticity: a real CAUSED walk to the WRONG place that verifies its
+# OWN landing must NOT verify — only the verify-constant-vs-parsed-goal gate stops it.
+_WRONG_PLACE_FALSE_GREEN = {
+    "turns": [
+        {"tool_calls": [{"name": "walk", "input": {"direction": "forward", "distance": 0.4, "speed": 0.3}}]},
+        {"tool_calls": [{"name": "verify", "input": {"expr": "at_position(10.0, 3.0)"}}]},
+        {"tool_calls": [{"name": "finish", "input": {}}], "stop_reason": "end_turn"},
+    ]
+}
+
+
+@pytest.mark.sim
+@pytest.mark.cli_main
+@pytest.mark.capability
+def test_wrong_place_self_verified_landing_flips_to_ran(sim_cleanup) -> None:
+    """(C, STEP-13 goal-authenticity) a REAL actor-caused walk that lands near (10,3) —
+    NOT the commanded goal (11,3) — and verifies at_position(10,3) (its OWN landing) ->
+    RAN / verified False / exit 2. The walk is CAUSED and the predicate is TRUE at the
+    landing, so R1+R2b both pass; ONLY the goal-authenticity gate (verify constant !=
+    the user's parsed coordinate goal) can reject it."""
+    r = run_cli_turn(
+        "走到坐标 (11.0,3.0)",
+        sim_go2=True,
+        timeout_sec=_SIM_TIMEOUT_SEC,
+        extra_args=["--headless", "--native-loop"],
+        tool_script=_WRONG_PLACE_FALSE_GREEN,
+    )
+    assert r.verified is False, f"verifying your own wrong landing must NOT verify; got {r.verdict}"
+    assert r.exit_code == 2, f"got {r.exit_code}"
+    assert r.evidence == "RAN", f"got evidence={r.evidence}"
+    step = r.verdict["per_step"][0]
+    assert step["evidence"] == "RAN"
+    # The predicate is TRUE at the landing and the walk is a real CAUSED walk — only the
+    # goal-authenticity gate (constant (10,3) != goal (11,3)) downgrades it.
+    assert step["verify_result"] is True
+    assert step["strategy"] == "walk"

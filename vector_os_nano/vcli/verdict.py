@@ -116,7 +116,7 @@ class VerdictReport:
                 ev = EVIDENCE_RAN if s.success else EVIDENCE_FAILED
                 verify_str = ""
             else:
-                ev = classify_step_evidence(s, sg, oracle_names)
+                ev = classify_step_evidence(s, sg, oracle_names, trace.goal_tree.goal)
                 verify_str = sg.verify
             if ev == EVIDENCE_GROUNDED:
                 n_grounded += 1
