@@ -101,6 +101,21 @@ class Go2GraspPerception:
         mask = results[0].get("mask")
         return mask if mask is not None else None
 
+    def front_object_mask(
+        self, rgb: np.ndarray | None = None, depth: np.ndarray | None = None,
+    ) -> np.ndarray | None:
+        """Mask of the salient object in front (deictic '前面的东西'), or None.
+
+        Needs no VLM/EdgeTAM — resolves the front object from the rendered RGB
+        saliency + depth. Renders fresh frames if not supplied.
+        """
+        from vector_os_nano.perception.front_object import front_object_mask
+        if rgb is None:
+            rgb = self.get_color_frame()
+        if depth is None:
+            depth = self.get_depth_frame()
+        return front_object_mask(rgb, depth)
+
     # --- lifecycle -----------------------------------------------------------
 
     def connect(self) -> None:

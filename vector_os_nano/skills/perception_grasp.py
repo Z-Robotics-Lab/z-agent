@@ -52,6 +52,22 @@ def _fail(diagnosis: str, message: str, **extra: Any) -> SkillResult:
     return SkillResult(success=False, error_message=message, result_data=data)
 
 
+# Deictic markers: "the thing in front" — a spatial reference, no object name.
+_DEICTIC_TOKENS = (
+    "前面", "前方", "面前", "眼前", "前边", "前",
+    "front", "in front", "ahead", "nearest", "this", "that",
+)
+_GENERIC_TOKENS = ("东西", "物体", "object", "thing", "something", "it", "")
+
+
+def _is_deictic(query: str) -> bool:
+    """True when the query names no object (resolve by space/depth, not a VLM)."""
+    q = (query or "").strip().lower()
+    if q in _GENERIC_TOKENS:
+        return True
+    return any(tok in q for tok in _DEICTIC_TOKENS)
+
+
 @skill(
     aliases=[
         # Perception-natural grasp phrasings. Registered LAST (after PickTopDown)
@@ -128,34 +144,51 @@ class PerceptionGraspSkill:
         except Exception as exc:  # noqa: BLE001
             return _fail("no_camera", f"Failed to read RGB-D frame: {exc}")
 
-        # --- VLM detect -------------------------------------------------------
-        try:
-            detections = perception.detect(query)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[PGRASP] detect raised: %s", exc)
-            detections = []
-        if not detections:
-            return _fail(
-                "no_detections",
-                f"VLM found nothing matching {query!r}. The object is not visible; "
-                "reposition the robot/camera or refine the query.",
-                query=query,
-            )
-        det = max(detections, key=lambda d: getattr(d, "confidence", 0.0))
-        resolved = str(getattr(det, "label", query) or query)
+        # --- resolve the target MASK ------------------------------------------
+        # Deictic query ("前面的东西" / generic) -> resolve the front object from
+        # saliency + depth (no VLM naming needed). Named query -> VLM detect +
+        # EdgeTAM segment. Fall back to the front-object resolver if the VLM
+        # finds nothing (honest: still perceived, never a ground-truth lookup).
+        deictic = _is_deictic(query)
+        have_front = hasattr(perception, "front_object_mask")
+        mask = None
+        resolved = query or "front object"
+        detection_found = False  # a VLM detection was localized (segment then owns the fail)
 
-        # --- EdgeTAM segment --------------------------------------------------
-        try:
-            mask = perception.segment(rgb, det.bbox)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[PGRASP] segment raised: %s", exc)
-            mask = None
+        if deictic and have_front:
+            try:
+                mask = perception.front_object_mask(rgb, depth)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[PGRASP] front_object_mask raised: %s", exc)
+        else:
+            try:
+                detections = perception.detect(query)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[PGRASP] detect raised: %s", exc)
+                detections = []
+            if detections:
+                detection_found = True
+                det = max(detections, key=lambda d: getattr(d, "confidence", 0.0))
+                resolved = str(getattr(det, "label", query) or query)
+                try:
+                    mask = perception.segment(rgb, det.bbox)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[PGRASP] segment raised: %s", exc)
+            elif have_front:
+                # VLM saw nothing -> deictic fallback (still honest perception).
+                logger.info("[PGRASP] VLM empty for %r -> front-object fallback", query)
+                mask = perception.front_object_mask(rgb, depth)
+                resolved = query or "front object"
+
         if mask is None or int(np.count_nonzero(mask)) == 0:
-            return _fail(
-                "segmentation_failed",
-                f"EdgeTAM produced no mask for {resolved!r}.",
-                detection_label=resolved, query=query,
-            )
+            if detection_found:
+                return _fail("segmentation_failed",
+                             f"Segmentation produced no mask for {resolved!r}.",
+                             detection_label=resolved, query=query)
+            return _fail("no_detections",
+                         f"Nothing localizable for {query!r} "
+                         f"({'no salient object in front' if deictic else 'VLM found nothing'}).",
+                         query=query)
 
         # --- pointcloud 取中点 -> world grasp point (REAL depth, never GT) -----
         gp = grasp_point_from_rgbd(depth, rgb, mask, intrinsics, cam_xpos, cam_xmat)

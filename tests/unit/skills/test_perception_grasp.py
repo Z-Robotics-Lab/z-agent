@@ -197,6 +197,44 @@ def test_ik_unreachable_surfaced():
     assert res.result_data["diagnosis"] == "ik_unreachable"
 
 
+class FrontPerception(FakePerception):
+    """Adds the deictic front-object resolver surface."""
+
+    def front_object_mask(self, rgb=None, depth=None):
+        self.calls.append("front")
+        return self._mask
+
+
+def test_deictic_query_uses_front_object_not_vlm():
+    """'抓前面的东西' must resolve via the front-object mask, NOT a VLM name."""
+    perc = FrontPerception()
+    arm = FakeArm()
+    res = PerceptionGraspSkill().execute({"query": "前面的东西"}, _ctx(perc, arm=arm))
+    assert res.success is True
+    assert res.result_data["perceived"] is True
+    assert "front" in perc.calls
+    assert not any(c.startswith("detect") for c in perc.calls)  # no VLM naming
+    expected = grasp_point_from_rgbd(perc._depth, perc._color, perc._mask,
+                                     _INTR, _CAM_XPOS, _CAM_XMAT)
+    assert res.result_data["grasp_world"] == pytest.approx(
+        [expected.x, expected.y, expected.z], abs=1e-6)
+
+
+def test_deictic_nothing_in_front_fails_loud():
+    perc = FrontPerception(mask=np.zeros((_H, _W), dtype=np.uint8))
+    res = PerceptionGraspSkill().execute({"query": "前面的东西"}, _ctx(perc))
+    assert res.success is False
+    assert res.result_data["diagnosis"] == "no_detections"
+
+
+def test_named_query_empty_vlm_falls_back_to_front():
+    """A named query the VLM misses falls back to the front object (honest)."""
+    perc = FrontPerception(detections=[])
+    res = PerceptionGraspSkill().execute({"query": "banana"}, _ctx(perc))
+    assert res.success is True
+    assert "front" in perc.calls
+
+
 def test_no_arm_fails_loud():
     perc = FakePerception()
     ctx = SkillContext(arm=None, gripper=FakeGripper(), world_model=WorldModel(),
