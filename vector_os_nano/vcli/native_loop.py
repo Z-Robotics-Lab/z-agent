@@ -84,6 +84,90 @@ def _at_position_tol() -> float:
         return 0.5
 
 
+# D9 #1 — the avoidance NAVIGATION route. The bridge only drives the base while this
+# flag exists; the planner (FAR + local planner over lidar) computes a path that AVOIDS
+# obstacles — the obstacle avoidance the open-loop ``walk`` lacks.
+_NAV_FLAG = "/tmp/vector_nav_active"
+_NAV_TIMEOUT_S = 60.0
+
+
+class _NativeBaseNavigateTool:
+    """Coordinate navigation through the nav-stack AVOIDANCE route (D9 #1).
+
+    ``execute`` activates the nav flag, publishes the goal to the planner via
+    ``primitives.navigation.publish_goal`` (``nav_client.navigate_to``), then polls the
+    base pose until within tolerance of (x, y) or a timeout. The planner drives the base
+    over ``cmd_vel``, which is GATED OUT of the actor-causation counter (it runs on the
+    bridge thread, never setting ``_skill_ctrl_tid``) — so a ``navigate`` step's
+    ``at_position`` verify grades UNCAUSED and the spine downgrades GROUNDED -> RAN: an
+    HONEST "ran, cannot prove the actor caused it" until actor-causation is extended to
+    cmd_vel. The moat is never loosened (rule 5); this is strictly an honest
+    characterization of planner-driven motion. Duck-typed like a ``Tool`` so
+    ``dispatch_skill`` runs it uniformly (``.name`` / ``.description`` / ``.input_schema``
+    / ``.execute(params, ctx)``).
+    """
+
+    name = "navigate"
+    description = (
+        "Go to a world coordinate (x, y) using the navigation PLANNER, which AVOIDS "
+        "obstacles (lidar + local planner). Use this to REACH a place/coordinate. After "
+        "it returns, call verify(at_position(x, y))."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "x": {"type": "number", "description": "Target x (world frame, metres)."},
+            "y": {"type": "number", "description": "Target y (world frame, metres)."},
+        },
+        "required": ["x", "y"],
+    }
+
+    def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
+        import math
+        import time
+
+        from vector_os_nano.vcli.primitives import locomotion, navigation
+
+        try:
+            x = float(params["x"])
+            y = float(params["y"])
+        except (KeyError, TypeError, ValueError):
+            return ToolResult(content="navigate requires numeric x and y.", is_error=True)
+
+        try:
+            with open(_NAV_FLAG, "w", encoding="utf-8") as fh:
+                fh.write("1")
+        except OSError as exc:
+            logger.debug("native_loop: nav flag write failed: %s", exc)
+
+        try:
+            navigation.publish_goal(x, y)
+        except Exception as exc:  # noqa: BLE001
+            return ToolResult(
+                content=f"navigate: publish_goal({x}, {y}) failed: {exc}", is_error=True
+            )
+
+        tol = _at_position_tol()
+        deadline = time.monotonic() + _NAV_TIMEOUT_S
+        pos: Any = None
+        while time.monotonic() < deadline:
+            try:
+                pos = locomotion.get_position()
+                if math.hypot(pos[0] - x, pos[1] - y) <= tol:
+                    return ToolResult(
+                        content=f"navigate: arrived at ({pos[0]:.2f}, {pos[1]:.2f}) "
+                        f"~ target ({x}, {y})."
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("native_loop: navigate pose poll failed: %s", exc)
+            time.sleep(0.5)
+        where = f"({pos[0]:.2f}, {pos[1]:.2f})" if pos else "unknown"
+        return ToolResult(
+            content=f"navigate: drove toward ({x}, {y}); now at {where} "
+            f"(timeout {int(_NAV_TIMEOUT_S)}s — verify at_position to check)."
+        )
+
+
 def _scene_object_names(agent: Any) -> tuple[str, ...]:
     """Return the world's graspable object NAMES, the canonical names the oracle matches.
 
@@ -416,7 +500,9 @@ def run_turn_native(
         # No backend wired -> no native turns -> empty trace (verdict fails closed).
         return runner.build_trace(user_message)
 
-    system_prompt = _native_system_prompt(engine, oracle_names, _scene_object_names(agent))
+    system_prompt = _native_system_prompt(
+        engine, oracle_names, _scene_object_names(agent), has_navigate="navigate" in motor_tools
+    )
     _append_user(session, user_message)
 
     turns = 0
@@ -507,12 +593,21 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
     # Source 2: the engine registry's code tools (present in every world).
     for name, code_tool in _code_tools_from_registry(engine).items():
         tools[name] = code_tool
-    # Source 1: the world's skills (robot worlds only; dev world has no agent).
+    # Source 3 (D9 #1): the avoidance NAVIGATION route, only for a world with a mobile
+    # base (go2). ``publish_goal`` -> FAR/local planner/lidar, so "go to a place/
+    # coordinate" AVOIDS obstacles instead of blind-walking into them. cmd_vel is gated
+    # out of actor-causation -> a navigate step honestly grades RAN (the moat never
+    # loosens). The arm/dev worlds (no base) do not get it.
+    if agent is not None and getattr(agent, "_base", None) is not None:
+        tools["navigate"] = _NativeBaseNavigateTool()
+    # Source 1: the world's skills (robot worlds only; dev world has no agent). The
+    # world's own ``navigate`` skill (door-chain walk, NOT lidar avoidance) stays
+    # excluded; our coordinate ``navigate`` above is the planner/avoidance route.
     if agent is not None:
         try:
             for skill_tool in wrap_skills(agent):
                 if skill_tool.name == "navigate":
-                    continue  # gated-out of actor-causation -> never a native step strategy
+                    continue  # world room-navigate is door-chain walk; ours is the avoidance route
                 tools[skill_tool.name] = skill_tool
         except Exception as exc:  # noqa: BLE001
             logger.debug("native_loop: wrap_skills failed: %s", exc)
@@ -572,6 +667,7 @@ def _native_system_prompt(
     engine: Any,
     oracle_names: frozenset[str],
     object_names: tuple[str, ...] = (),
+    has_navigate: bool = False,
 ) -> list[dict[str, Any]]:
     """A minimal native system prompt, single-sourcing the verify vocab.
 
@@ -601,13 +697,44 @@ def _native_system_prompt(
         )
     else:
         object_vocab = ""
+    # Locomotion guidance: when the avoidance NAVIGATION route is available (a world
+    # with a mobile base, D9 #1) the model REACHES a place/coordinate via navigate(x, y)
+    # — the planner avoids obstacles — and uses walk only for an explicit relative step.
+    # Without it, fall back to the open-loop walk-toward-coordinate guidance.
+    if has_navigate:
+        locomotion_guidance = (
+            f"at_position(x, y, tol={tol}) is True when the robot is within tol metres "
+            "of (x, y). To REACH a place or coordinate (x, y), call navigate(x, y): it "
+            "routes through the planner and AVOIDS obstacles (lidar + local planner). Do "
+            "NOT walk toward a far target — walk is OPEN-LOOP and collides with anything "
+            "in the way; use walk ONLY for an explicit short relative step the user asked "
+            "for (e.g. 'walk forward 2m'). After navigate, verify at_position(x, y). "
+            "CRITICAL — RECOVER on failure: if a verify returns FAIL, call navigate(x, y) "
+            "AGAIN and re-verify, repeating until at_position PASSES. NEVER call finish "
+            "while the latest verify is FAIL. Only finish once a verify has PASSED."
+        )
+    else:
+        locomotion_guidance = (
+            f"at_position(x, y, tol={tol}) is True when the robot is within tol metres of "
+            "(x, y). To reach a target coordinate, walk toward it (a forward walk "
+            "advances along the robot's heading) and verify with at_position(x, y) for "
+            "that target. The legged gait UNDER-SHOOTS the commanded distance "
+            "substantially, so command a walk distance well LARGER than the straight-line "
+            "gap to the target (about 2x, and never less than ~1.5m even for a short hop) "
+            "so a single move lands within tolerance. CRITICAL — RECOVER on failure: if a "
+            "verify returns FAIL the robot fell SHORT, so you MUST immediately issue "
+            "ANOTHER walk covering the remaining gap and verify again, repeating "
+            "(walk -> verify) until at_position returns PASS. NEVER call finish while the "
+            "latest verify is FAIL, and NEVER stop after a single failed verify — always "
+            "walk again and re-verify. Only finish once a verify has PASSED."
+        )
     text = (
-        "You control a robot through tools. For each goal: call the MOTION skill "
-        "that achieves it (e.g. walk), then IMMEDIATELY call verify(expr) with a "
+        "You control a robot through tools. For each goal: call the MOTION skill or "
+        "navigate that achieves it, then IMMEDIATELY call verify(expr) with a "
         "deterministic predicate to PROVE the goal was achieved, then call finish. "
         "verify reads the real world state itself, so do NOT call a read-only "
         "status/query skill (e.g. where_am_i, look) before verify — the motion "
-        "skill must be the LAST action call before each verify. "
+        "action must be the LAST action call before each verify. "
         f"Available verify predicate oracles: {names}. "
         "Choose the predicate that MEASURES the goal quantity: a goal of reaching a "
         "place/coordinate is proven by at_position (a position check), NOT by a "
@@ -617,18 +744,7 @@ def _native_system_prompt(
         "QUOTED string, e.g. holding_object('banana'), to prove you grasped THAT specific "
         "object (a bare word without quotes is not a valid argument). "
         + object_vocab
-        + f"at_position(x, y, tol={tol}) is True when the robot is within tol metres of "
-        f"(x, y). To reach a target coordinate, walk toward it (a forward walk "
-        "advances along the robot's heading) and verify with at_position(x, y) for "
-        "that target. The legged gait UNDER-SHOOTS the commanded distance "
-        "substantially, so command a walk distance well LARGER than the straight-line "
-        "gap to the target (about 2x, and never less than ~1.5m even for a short hop) "
-        "so a single move lands within tolerance. CRITICAL — RECOVER on failure: if a "
-        "verify returns FAIL the robot fell SHORT, so you MUST immediately issue "
-        "ANOTHER walk covering the remaining gap and verify again, repeating "
-        "(walk -> verify) until at_position returns PASS. NEVER call finish while the "
-        "latest verify is FAIL, and NEVER stop after a single failed verify — always "
-        "walk again and re-verify. Only finish once a verify has PASSED."
+        + locomotion_guidance
     )
     return [{"type": "text", "text": text}]
 
