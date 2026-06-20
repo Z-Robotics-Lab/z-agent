@@ -408,3 +408,66 @@ def test_executor_no_agent_stays_not_graded() -> None:
     sg = SubGoal(name="stand", description="原地", verify="at_position(10.0, 3.0)", strategy="walk_forward")
     trace = ex.execute(GoalTree(goal="g", sub_goals=(sg,)))
     assert trace.steps[0].actor_caused is ActorCaused.NOT_GRADED
+
+
+# ---------------------------------------------------------------------------
+# (cross-channel, STEP-12 fix) a base predicate grades on the dimension it
+# MEASURES: a forward walk must NOT launder a satisfied-at-baseline facing(h)
+# no-op to CAUSED, and a pure turn must NOT launder at_position. The old
+# max(planar, yaw) metric accepted the irrelevant channel.
+# ---------------------------------------------------------------------------
+
+
+def test_facing_uncaused_after_forward_walk_no_turn() -> None:
+    # Forward walk: position moves ~1.5m, heading UNCHANGED. facing(h0) was already
+    # true at baseline; the planar move must NOT grade the heading no-op CAUSED.
+    base = _FakeBase(10.0, 3.0, yaw=0.5, cmd_motion=0.0)
+    before = capture(_agent(base=base))
+    base.command(0.3)
+    base.teleport(11.5, 3.0)  # dxy ~1.5, dyaw 0
+    after = capture(_agent(base=base))
+    assert grade(before, after, "facing(0.5)", ROBOT_ORACLES) == ActorCaused.UNCAUSED
+
+
+def test_facing_caused_after_real_turn() -> None:
+    # A real turn: heading changes ~0.5 rad (>_YAW_CAUSE_EPS), position unchanged.
+    base = _FakeBase(10.0, 3.0, yaw=0.0, cmd_motion=0.0)
+    before = capture(_agent(base=base))
+    base.command(0.3)
+    base._yaw = 0.5  # ~29deg intentional turn
+    after = capture(_agent(base=base))
+    assert grade(before, after, "facing(0.5)", ROBOT_ORACLES) == ActorCaused.CAUSED
+
+
+def test_facing_uncaused_on_drift_below_yaw_threshold() -> None:
+    # Gait yaw-drift below the ~10deg threshold must NOT count as an intentional turn
+    # for facing — even alongside a planar move (a forward walk that wobbles).
+    base = _FakeBase(10.0, 3.0, yaw=0.0, cmd_motion=0.0)
+    before = capture(_agent(base=base))
+    base.command(0.3)
+    base.teleport(11.5, 3.0)
+    base._yaw = 0.05  # ~2.9deg drift < _YAW_CAUSE_EPS (~10deg)
+    after = capture(_agent(base=base))
+    assert grade(before, after, "facing(0.0)", ROBOT_ORACLES) == ActorCaused.UNCAUSED
+
+
+def test_at_position_still_caused_after_forward_walk() -> None:
+    # The planar channel is unaffected by the fix: a forward walk grades at_position
+    # CAUSED exactly as before.
+    base = _FakeBase(10.0, 3.0, yaw=0.0, cmd_motion=0.0)
+    before = capture(_agent(base=base))
+    base.command(0.3)
+    base.teleport(11.0, 3.0)
+    after = capture(_agent(base=base))
+    assert grade(before, after, "at_position(11.0, 3.0)", ROBOT_ORACLES) == ActorCaused.CAUSED
+
+
+def test_at_position_uncaused_after_pure_turn() -> None:
+    # STEP-12 bonus tightening: a pure turn (no planar move) must NOT grade an
+    # at_position predicate CAUSED — the position channel didn't move.
+    base = _FakeBase(10.0, 3.0, yaw=0.0, cmd_motion=0.0)
+    before = capture(_agent(base=base))
+    base.command(0.3)
+    base._yaw = 1.0  # turned in place, position unchanged
+    after = capture(_agent(base=base))
+    assert grade(before, after, "at_position(10.0, 3.0)", ROBOT_ORACLES) == ActorCaused.UNCAUSED

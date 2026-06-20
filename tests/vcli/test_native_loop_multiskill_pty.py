@@ -24,10 +24,10 @@ subsumes a distinct (skill, predicate) the first acceptance never exercised:
     ``navigate``, which is gated out of actor-causation and not offered as a tool);
   - PREDICATE: each verify names the registry-derived oracle that MEASURES that
     goal — ``at_position`` for a position, ``facing`` for a heading;
-  - CAUSATION: a real forward walk grades the ``at_position`` step CAUSED; a real
-    yaw command + yaw displacement grades the ``facing`` step CAUSED (R2b's
-    ``_BASE_PREDICATES`` includes ``facing``, and ``_base_displacement`` keys on
-    ``max(planar, yaw)`` so a turn's yaw move counts).
+  - CAUSATION: a real forward walk grades the ``at_position`` step CAUSED (planar
+    channel); a real yaw command + yaw displacement grades the ``facing`` step CAUSED
+    (R2b's ``_BASE_PREDICATES`` includes ``facing``, graded PER-CHANNEL on the heading
+    delta — a forward walk's planar move does NOT count for facing). [STEP-12 fix]
 
 GAIT UNDER-ROTATION (empirical, documented honestly): the MPC gait achieves only
 about HALF its commanded yaw within the step's wall-clock (a commanded 180deg turn

@@ -58,6 +58,14 @@ MOTION_EPS: float = 1e-3
 # Generous: a few mm of jitter from the gait settle must not read as "moved".
 DISPLACEMENT_EPS: float = 0.02
 
+# Heading change (rad) below which a base rotation is treated as gait drift, not an
+# intentional turn — so a forward walk's yaw-wobble cannot launder a satisfied-at-
+# baseline facing(heading) no-op to CAUSED (review fix STEP-12: cross-channel leak).
+# ~10deg: well above forward-walk drift, well below an intentional turn-to-face (the
+# facing oracle tol is 20deg and the gait under-rotates, so honest turns command far
+# more).
+_YAW_CAUSE_EPS: float = math.radians(10.0)
+
 
 class ActorCaused(enum.Enum):
     """Tri-state actor-causation grade for a StepRecord (R2b).
@@ -325,20 +333,35 @@ def _names_in_expr(verify: str, names: frozenset[str]) -> bool:
     return bool(tokens & names)
 
 
-def _base_displacement(baseline: ActorBaseline, post: ActorBaseline) -> float | None:
-    """Planar+yaw displacement between baseline and post base pose, or None."""
+def _base_channel_caused(
+    baseline: ActorBaseline, post: ActorBaseline, verify: str
+) -> bool | None:
+    """True iff the base moved in the dimension *verify*'s predicate constrains.
+
+    A base predicate's causation must come from the channel it actually measures,
+    NOT a blended ``max(planar, yaw)`` (review fix STEP-12: a forward walk's planar
+    move must NOT satisfy a ``facing(heading)`` no-op, and a pure turn's yaw move must
+    NOT satisfy ``at_position``/``visited``):
+
+      - ``facing``                    -> heading channel: ``dyaw >= _YAW_CAUSE_EPS``
+      - ``at_position`` / ``visited`` -> planar channel:  ``dxy  >= DISPLACEMENT_EPS``
+
+    Returns None when the relevant snapshot is unavailable (grade fail-closes to
+    UNCAUSED).
+    """
     if baseline.base_pos is None or post.base_pos is None:
         return None
-    dxy = math.dist(baseline.base_pos[:2], post.base_pos[:2])
-    dyaw = 0.0
-    if baseline.base_heading is not None and post.base_heading is not None:
+    if _names_in_expr(verify, frozenset({"facing"})):
+        if baseline.base_heading is None or post.base_heading is None:
+            return None
         dyaw = abs(
             math.atan2(
                 math.sin(post.base_heading - baseline.base_heading),
                 math.cos(post.base_heading - baseline.base_heading),
             )
         )
-    return max(dxy, dyaw)
+        return dyaw >= _YAW_CAUSE_EPS
+    return math.dist(baseline.base_pos[:2], post.base_pos[:2]) >= DISPLACEMENT_EPS
 
 
 def _arm_displacement(baseline: ActorBaseline, post: ActorBaseline) -> float | None:
@@ -399,10 +422,10 @@ def grade(
         if baseline.base_cmd_motion is None or post.base_cmd_motion is None:
             return ActorCaused.UNCAUSED
         commanded = post.base_cmd_motion - baseline.base_cmd_motion
-        disp = _base_displacement(baseline, post)
-        if disp is None:
+        moved = _base_channel_caused(baseline, post, verify)
+        if moved is None:
             return ActorCaused.UNCAUSED
-        if commanded >= MOTION_EPS and disp >= DISPLACEMENT_EPS:
+        if commanded >= MOTION_EPS and moved:
             return ActorCaused.CAUSED
         return ActorCaused.UNCAUSED
 

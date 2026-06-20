@@ -139,9 +139,13 @@ def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
     - ``and`` / ``or``: every operand must itself be grounded (a constant/non-oracle
       operand could make ``or`` True, or is dead weight in ``and``) — reject either.
     - ``not X``: grounded iff ``X`` is grounded.
-    - a Compare: an oracle anchored against a CONSTANT (state-oracle-vs-constant or a
-      predicate-oracle-vs-constant), never oracle-vs-oracle (proves no goal) and
-      never constant-only.
+    - a Compare (equality/ordering): an oracle anchored against a CONSTANT (state-
+      oracle-vs-constant or a predicate-oracle-vs-constant), never oracle-vs-oracle
+      (proves no goal) and never constant-only.
+    - a Compare (membership ``in``/``not in``): grounded ONLY if the CONTAINER is
+      oracle-derived (``'table' in describe_scene()``); a constant-literal container
+      (``True in (at_position(9,9), True)``) is the ``... or True`` short-circuit
+      hidden in an ``in`` node — the oracle is dead weight — so it is NOT grounded.
     - a bare Call: grounded ONLY for a PREDICATE oracle (goal-conditioned bool); a
       bare STATE oracle is not evidence.
     - anything else (a bare Constant, a non-oracle Name/Call, a Subscript, …):
@@ -157,6 +161,24 @@ def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return _is_grounded_node(node.operand, oracle_names)
     if isinstance(node, ast.Compare):
+        # Membership (`X in Y` / `X not in Y`): grounded ONLY if the CONTAINER being
+        # searched is oracle-derived (its collection comes from the world, e.g.
+        # `'table' in describe_scene()`). A constant-literal container (tuple/list/
+        # set/dict) makes membership constant-structure-determined — an oracle buried
+        # inside it is dead weight, the `... or True` short-circuit hidden in an `in`
+        # node (e.g. `True in (at_position(9,9), True)`). -> NOT grounded. [STEP-12]
+        if any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops):
+            for op, container in zip(node.ops, node.comparators):
+                if not isinstance(op, (ast.In, ast.NotIn)):
+                    continue
+                if isinstance(container, (ast.Tuple, ast.List, ast.Set, ast.Dict)):
+                    return False
+                if not _contains_oracle(container, oracle_names):
+                    return False
+            return True
+        # Equality / ordering: an oracle anchored against a CONSTANT (state-oracle-vs-
+        # constant or predicate-oracle-vs-constant), never oracle-vs-oracle (proves no
+        # goal) and never constant-only.
         operands = [node.left, *node.comparators]
         has_oracle = any(_contains_oracle(o, oracle_names) for o in operands)
         has_const = any(_contains_constant(o) for o in operands)

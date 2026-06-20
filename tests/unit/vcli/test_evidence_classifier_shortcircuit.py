@@ -94,3 +94,56 @@ def test_spine_gate_flips_shortcircuit_to_ran_even_when_caused() -> None:
     # Sanity: the same step with an honest bare-oracle verify IS grounded.
     honest = SubGoal(name="s0", description="walk", verify="at_position(11, 3)", strategy="walk")
     assert classify_step_evidence(step, honest, _ORACLES) == "GROUNDED"
+
+
+# ---------------------------------------------------------------------------
+# STEP-12 review — the Compare-MEMBERSHIP short-circuit (a constant-literal
+# container satisfies `in` while the oracle is dead weight). The STEP-8 fix
+# tightened or/and but never descended the Compare branch.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "True in (at_position(99, 99), True)",     # the constant member alone satisfies it
+        "1 in (at_position(99, 99), 1)",
+        "at_position(99, 99) in (True, False)",    # a bool is ALWAYS in (True, False)
+        "at_position(99, 99) in [False]",
+        "'x' in ('x', describe_scene())",          # oracle buried in a literal tuple
+        "holding_object('banana') in {True, False}",
+    ],
+)
+def test_membership_constant_container_shortcircuit_is_ran(expr: str) -> None:
+    """``<oracle> in <constant-literal container>`` is the ``... or True`` short-
+    circuit hidden in an ``in`` node — the container's constants gate the verdict and
+    the oracle is dead weight, so it proves nothing about the goal -> RAN (rule 5)."""
+    assert classify_verify_expr(expr, _ORACLES) == "RAN", expr
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "'table' in describe_scene()",     # the documented LEGIT form
+        "'mug' not in describe_scene()",
+    ],
+)
+def test_membership_against_oracle_container_stays_grounded(expr: str) -> None:
+    """The legit membership form — searching an ORACLE-derived collection — is
+    preserved: the oracle's returned collection gates the verdict."""
+    assert classify_verify_expr(expr, _ORACLES) == "GROUNDED", expr
+
+
+def test_spine_gate_flips_membership_shortcircuit_to_ran_even_when_caused() -> None:
+    """End-to-end at the spine: a CAUSED walk + a membership short-circuit -> RAN."""
+    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+    from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
+    from vector_os_nano.vcli.cognitive.types import StepRecord, SubGoal
+
+    sub = SubGoal(name="s0", description="walk then fake-verify",
+                  verify="True in (at_position(99, 99), True)", strategy="walk")
+    step = StepRecord(
+        sub_goal_name="s0", strategy="walk", success=True,
+        verify_result=True, duration_sec=0.0, actor_caused=ActorCaused.CAUSED,
+    )
+    assert classify_step_evidence(step, sub, _ORACLES) == "RAN"
