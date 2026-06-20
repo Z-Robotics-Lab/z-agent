@@ -62,8 +62,24 @@ class Go2GraspPerception:
         return self._base.get_camera_frame(self._w, self._h)
 
     def get_depth_frame(self) -> np.ndarray:
-        """(H, W) float32 depth in METRES (use depth_scale=1.0 downstream)."""
-        return self._base.get_depth_frame(self._w, self._h)
+        """(H, W) float32 depth in METRES (use depth_scale=1.0 downstream).
+
+        SELF-FILTER: zero out pixels showing the robot's OWN Piper arm (segmentation
+        self-mask) so the arm — which occludes the table in the head camera — is never
+        picked as the grasp target (D30 self-occlusion). depth==0 is already treated as
+        invalid by front_object_mask + the pointcloud, so this cleanly removes the arm.
+        """
+        depth = self._base.get_depth_frame(self._w, self._h)
+        get_self = getattr(self._base, "get_self_mask", None)
+        if get_self is not None:
+            try:
+                self_mask = get_self(self._w, self._h)
+                if self_mask is not None and self_mask.shape == depth.shape:
+                    depth = depth.copy()
+                    depth[self_mask] = 0.0
+            except Exception as exc:  # noqa: BLE001 — self-filter is best-effort
+                logger.debug("[GO2-PERCEPT] self-mask failed: %s", exc)
+        return depth
 
     def get_intrinsics(self):
         return mujoco_intrinsics(self._w, self._h, vfov_deg=42.0)

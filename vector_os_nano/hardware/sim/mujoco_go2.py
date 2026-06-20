@@ -1183,6 +1183,55 @@ class MuJoCoGo2:
         depth = self.get_depth_frame(width, height)
         return rgb, depth
 
+    def get_self_mask(
+        self, width: int = 640, height: int = 480,
+    ) -> "np.ndarray":
+        """Bool (H, W) mask of pixels showing the robot's OWN Piper arm geoms.
+
+        Segmentation render on the d435_rgb camera → per-pixel geom id → True where
+        the geom's body name starts with 'piper'. The honest real-robot self-filter
+        (by IDENTITY, pose/colour/group-agnostic): the arm at rest occludes the table
+        in the head camera and would otherwise be picked as the grasp target (D30 —
+        site/geom-group hides are no-ops after MjSpec.attach). Used by the perception
+        backend to drop the arm's pixels before object detection.
+        """
+        self._require_connection()
+        mj = _get_mujoco()
+        import numpy as np
+        model = self._mj.model
+        if not hasattr(self, "_seg_renderer"):
+            self._seg_renderer = mj.Renderer(model, height, width)
+            self._seg_renderer.enable_segmentation_rendering()
+        if not hasattr(self, "_piper_geom_ids"):
+            # Collect EVERY body in the arm subtree (descendants of piper_base_link),
+            # not just "piper*"-named ones — the gripper/finger bodies are named
+            # differently and a name-prefix filter misses them (R15: caught only 21px,
+            # leaving the gripper as a distractor). Walk each body's parent chain to
+            # the arm root; include its geoms. Pose/colour/group/name-agnostic.
+            root = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "piper_base_link")
+            arm_bodies: set[int] = set()
+            if root >= 0:
+                for b in range(model.nbody):
+                    x = b
+                    while x > 0:
+                        if x == root:
+                            arm_bodies.add(b)
+                            break
+                        x = int(model.body_parentid[x])
+            ids = [
+                g for g in range(model.ngeom)
+                if int(model.geom_bodyid[g]) in arm_bodies
+                or (mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, int(model.geom_bodyid[g])) or "").startswith("piper")
+            ]
+            self._piper_geom_ids = np.asarray(ids, dtype=np.int32)
+        cam_id = model.cam("d435_rgb").id
+        self._seg_renderer.update_scene(self._mj.data, camera=cam_id)
+        seg = self._seg_renderer.render()  # (H, W, 2): [...,0] = geom id, -1 = none
+        geom_ids = seg[:, :, 0] if seg.ndim == 3 else seg
+        if self._piper_geom_ids.size == 0:
+            return np.zeros(geom_ids.shape, dtype=bool)
+        return np.isin(geom_ids, self._piper_geom_ids)
+
     # ------------------------------------------------------------------
     # Sensor update helpers
     # ------------------------------------------------------------------
