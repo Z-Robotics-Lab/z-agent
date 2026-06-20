@@ -185,3 +185,17 @@ def test_recover_after_failed_verify_records_fail_then_pass():
     results = [bool(s.verify_result) for s in trace.steps]
     assert results == [False, True]    # recorded FAIL then PASS (recovered)
     assert flaky.calls == 2            # the model re-acted (didn't give up)
+
+
+def test_multistep_plan_records_one_step_per_subgoal():
+    """PLAN/ROUTE (north-star #1/#2): a 2-step task decomposes into 2 (action->verify)
+    steps, both GROUNDED. Real-LLM confirmed (R9/D27): haiku decomposes + routes +
+    verifies EACH step (out.txt='a', done.txt='b'); this guards the path scripted."""
+    from tests.harness.fake_backend import tool_turn
+
+    w1 = ("write_file", {"file_path": "out.txt", "content": "a"})
+    v1 = ("verify", {"expr": "path_contains('out.txt', 'a')"})
+    w2 = ("write_file", {"file_path": "done.txt", "content": "b"})
+    v2 = ("verify", {"expr": "path_contains('done.txt', 'b')"})
+    _calls, trace = _run([tool_turn(w1, v1), tool_turn(w2, v2), tool_turn(_FINISH)])
+    assert [bool(s.verify_result) for s in trace.steps] == [True, True]  # both subgoals graded
