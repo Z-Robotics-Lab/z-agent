@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · GRASP R3 — deictic front-object resolver "抓前面的东西"→6.9cm on real sim (D19)
+updated: 2026-06-20 · GRASP R4 — perception milestone reached (gap closed); 3 blockers to full GROUNDED grasp (D20)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -25,11 +25,13 @@ blocked: VLM识别 + EdgeTAM分割 = pluggable UPGRADE, not on the critical path
          install network-flaky (uv/pypi timeouts) → EdgeTAM pending; moondream2 loads (shim) but boxes
          background on the low-fidelity render; moondream3 13.5GB OOMs. Classical deictic resolver is render-
          tuned (sat_min); a VLM/EdgeTAM front-end would be lighting-robust.
-next:    GRASP R4 = GROUNDED grading-binding so a full bare-cli "抓前面的东西" grades GROUNDED:
-         PiperROS2Proxy lacks get_object_positions, PiperGripperROS2Proxy lacks weld_is_active, go2_piper.xml
-         has no weld → holding_object grades RAN today. Add a weld + bridge the proxy oracle methods (touches
-         the Piper proxy interface → CEO notification), then full bare-cli acceptance via cli.main + screenshot.
-         Alt non-gated: D9 #2 native latency; or a render-fidelity bump to unblock the VLM naming path.
+next:    GRASP R5 (non-gated) = grasp-MOTION FEASIBILITY investigation: R4 found the perceived object is
+         IK-UNREACHABLE from spawn AND in a quick 0.5m-nearer probe (arm EE rest ≈(10.15,3,0.55) vs table
+         objects z≈0.2). Investigate IK reachability vs approach distance + grasp pose; can the Piper
+         top-down-grasp these objects at all on this geometry; is the arm mount / table height / approach
+         angle the issue. The full GROUNDED grasp is blocked by THREE things (D20): (1) nav-approach [PARKED
+         by CEO], (2) this motion feasibility [non-gated, R5], (3) grading-binding weld + bridge→proxy
+         object-state topic [CEO GATE — exec summary surfaced]. Alt non-gated: D9 #2 native latency.
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
