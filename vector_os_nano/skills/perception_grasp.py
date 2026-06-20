@@ -68,6 +68,44 @@ def _is_deictic(query: str) -> bool:
     return any(tok in q for tok in _DEICTIC_TOKENS)
 
 
+# Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
+# object (R5/D21: reachable once the dog is within ~0.5m of the table object).
+_GRASP_REACH_M = 0.5
+# Pre-grasp clearance above the object used for the reach (IK) check.
+_PRE_GRASP_H = 0.08
+
+
+def _approach_object(
+    base: Any, target_xy: tuple[float, float], *,
+    reach_m: float = _GRASP_REACH_M, step_v: float = 0.35,
+    max_walks: int = 8, on_progress: Any = None,
+) -> bool:
+    """Walk the base FORWARD toward target_xy until within reach_m (position feedback).
+
+    A scripted open-loop forward walk (the base `walk` primitive — NOT the parked FAR
+    nav-stack): "前面的东西" is straight ahead, so a heading-aligned forward step closes
+    the gap; the gait under-shoots, so we re-read get_position() after each step and
+    repeat until within reach (or capped). Returns True iff within reach at the end.
+    """
+    import math
+    for _ in range(max_walks):
+        pos = base.get_position()
+        dist = math.hypot(target_xy[0] - pos[0], target_xy[1] - pos[1])
+        if dist <= reach_m:
+            return True
+        gap = dist - reach_m
+        dur = max(0.6, min(1.6, gap / max(step_v, 1e-3)))
+        if on_progress:
+            on_progress(f"approach: {dist:.2f}m to target — walk {dur:.1f}s")
+        try:
+            base.walk(vx=step_v, vy=0.0, vyaw=0.0, duration=dur)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[PGRASP] approach walk raised: %s", exc)
+            return False
+    pos = base.get_position()
+    return math.hypot(target_xy[0] - pos[0], target_xy[1] - pos[1]) <= reach_m + 0.15
+
+
 @skill(
     aliases=[
         # Perception-natural grasp phrasings. Registered LAST (after PickTopDown)
@@ -135,26 +173,75 @@ class PerceptionGraspSkill:
                 f"Perception backend {type(perception).__name__} lacks RGB-D grasp surface: {missing}",
             )
 
-        # --- acquire frames (real rendered RGB-D + camera pose) ---------------
+        # --- perceive the target's 3D grasp point (real depth + mask, never GT) ---
+        gp, resolved, fail = self._perceive_grasp_point(perception, query)
+        if fail is not None:
+            return fail
+        approached = False
+
+        # --- approach if out of reach (scripted forward walk; D27: NON-gated, it is
+        # the base `walk` primitive, not the parked FAR nav-stack). "前面的东西" can be
+        # ~0.84m ahead at spawn (out of the Piper ~0.34m top-down envelope, R5); drive
+        # the dog forward to standoff. We do NOT re-perceive after the approach: the
+        # object's WORLD coordinate is invariant under the dog's motion, and the
+        # forward head camera is well-framed from AFAR but looks OVER the table when
+        # close (poor framing) — so the afar grasp point (R3: ~6.9cm) is the accurate
+        # one; the approach simply brings the dog within reach of that fixed point.
+        base = context.base
+        if base is not None and arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is None:
+            logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — approaching", resolved, gp.x, gp.y)
+            _approach_object(base, (gp.x, gp.y))
+            approached = True
+
+        logger.info("[PGRASP] %s -> grasp_world=(%.3f, %.3f, %.3f) approached=%s",
+                    resolved, gp.x, gp.y, gp.z, approached)
+
+        # --- delegate the proven top-down motion via the target_xyz seam ------
+        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+        pick_params = dict(params)
+        pick_params["target_xyz"] = [gp.x, gp.y, gp.z]
+        pick_params["object_id"] = resolved
+        res = PickTopDownSkill().execute(pick_params, context)
+
+        rd = dict(res.result_data or {})
+        rd.update({
+            "perceived": True,
+            "grasp_world": [gp.x, gp.y, gp.z],
+            "detection_label": resolved,
+            "query": query,
+            "approached": approached,
+        })
+        if not res.success and "diagnosis" not in rd:
+            rd["diagnosis"] = "grasp_failed"
+        return SkillResult(
+            success=res.success,
+            error_message=res.error_message,
+            result_data=rd,
+        )
+
+    def _perceive_grasp_point(self, perception: Any, query: str):
+        """Acquire RGB-D, resolve the target mask, compute the WORLD grasp point.
+
+        Returns ``(gp | None, resolved_label, fail_result | None)``. Pure perception:
+        the 3D point is from real depth + mask, NEVER a ground-truth pose. Callable
+        twice (before/after an approach) so the point tracks the live camera pose.
+        """
+        import numpy as np
         try:
             rgb = perception.get_color_frame()
             depth = perception.get_depth_frame()
             intrinsics = perception.get_intrinsics()
             cam_xpos, cam_xmat = perception.get_camera_pose()
         except Exception as exc:  # noqa: BLE001
-            return _fail("no_camera", f"Failed to read RGB-D frame: {exc}")
+            return None, (query or "front object"), _fail("no_camera", f"Failed to read RGB-D frame: {exc}")
 
-        # --- resolve the target MASK ------------------------------------------
-        # Deictic query ("前面的东西" / generic) -> resolve the front object from
-        # saliency + depth (no VLM naming needed). Named query -> VLM detect +
-        # EdgeTAM segment. Fall back to the front-object resolver if the VLM
-        # finds nothing (honest: still perceived, never a ground-truth lookup).
+        # Deictic ("前面的东西"/generic) -> front-object resolver (no VLM naming).
+        # Named -> VLM detect + segment; VLM-empty -> front-object fallback (honest).
         deictic = _is_deictic(query)
         have_front = hasattr(perception, "front_object_mask")
         mask = None
         resolved = query or "front object"
-        detection_found = False  # a VLM detection was localized (segment then owns the fail)
-
+        detection_found = False
         if deictic and have_front:
             try:
                 mask = perception.front_object_mask(rgb, depth)
@@ -175,51 +262,26 @@ class PerceptionGraspSkill:
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("[PGRASP] segment raised: %s", exc)
             elif have_front:
-                # VLM saw nothing -> deictic fallback (still honest perception).
                 logger.info("[PGRASP] VLM empty for %r -> front-object fallback", query)
                 mask = perception.front_object_mask(rgb, depth)
                 resolved = query or "front object"
 
         if mask is None or int(np.count_nonzero(mask)) == 0:
             if detection_found:
-                return _fail("segmentation_failed",
-                             f"Segmentation produced no mask for {resolved!r}.",
-                             detection_label=resolved, query=query)
-            return _fail("no_detections",
-                         f"Nothing localizable for {query!r} "
-                         f"({'no salient object in front' if deictic else 'VLM found nothing'}).",
-                         query=query)
+                return None, resolved, _fail("segmentation_failed",
+                                             f"Segmentation produced no mask for {resolved!r}.",
+                                             detection_label=resolved, query=query)
+            return None, resolved, _fail("no_detections",
+                                         f"Nothing localizable for {query!r} "
+                                         f"({'no salient object in front' if deictic else 'VLM found nothing'}).",
+                                         query=query)
 
-        # --- pointcloud 取中点 -> world grasp point (REAL depth, never GT) -----
         gp = grasp_point_from_rgbd(depth, rgb, mask, intrinsics, cam_xpos, cam_xmat)
         if gp is None:
-            return _fail(
+            return None, resolved, _fail(
                 "no_depth_points",
                 f"No valid depth points under the {resolved!r} mask; cannot localize a grasp point. "
                 "FAIL LOUD — not substituting a ground-truth pose.",
                 detection_label=resolved, query=query,
             )
-        logger.info("[PGRASP] %s -> perceived grasp_world=(%.3f, %.3f, %.3f)",
-                    resolved, gp.x, gp.y, gp.z)
-
-        # --- delegate the proven top-down motion via the target_xyz seam ------
-        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-        pick_params = dict(params)
-        pick_params["target_xyz"] = [gp.x, gp.y, gp.z]
-        pick_params["object_id"] = resolved
-        res = PickTopDownSkill().execute(pick_params, context)
-
-        rd = dict(res.result_data or {})
-        rd.update({
-            "perceived": True,
-            "grasp_world": [gp.x, gp.y, gp.z],
-            "detection_label": resolved,
-            "query": query,
-        })
-        if not res.success and "diagnosis" not in rd:
-            rd["diagnosis"] = "grasp_failed"
-        return SkillResult(
-            success=res.success,
-            error_message=res.error_message,
-            result_data=rd,
-        )
+        return gp, resolved, None

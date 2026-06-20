@@ -235,6 +235,39 @@ def test_named_query_empty_vlm_falls_back_to_front():
     assert "front" in perc.calls
 
 
+class _FakeBase:
+    """A go2 stand-in: walk(vx,..,duration) advances x by vx*duration*0.7 (gait
+    under-shoot); get_position returns the live pose. Faces +x (toward the table)."""
+    def __init__(self, x=10.0, y=3.0):
+        self._x, self._y = x, y
+        self.walks = 0
+    def get_position(self):
+        return [self._x, self._y, 0.3]
+    def walk(self, vx=0.0, vy=0.0, vyaw=0.0, duration=1.0):
+        self.walks += 1
+        self._x += vx * duration * 0.7  # under-shoot, like the real gait
+        return True
+
+
+def test_approach_object_converges_with_position_feedback():
+    """The scripted forward-walk approach closes the gap to within reach via feedback
+    despite gait under-shoot (D27: non-gated, the base walk primitive not FAR)."""
+    from vector_os_nano.skills.perception_grasp import _approach_object, _GRASP_REACH_M
+    base = _FakeBase(x=10.0, y=3.0)
+    ok = _approach_object(base, (11.0, 3.0))  # object 1.0m ahead, out of ~0.34m reach
+    assert ok
+    assert base.walks >= 1                       # it actually walked
+    assert (11.0 - base.get_position()[0]) <= _GRASP_REACH_M + 0.15  # within reach now
+
+
+def test_approach_noop_when_already_in_reach():
+    from vector_os_nano.skills.perception_grasp import _approach_object
+    base = _FakeBase(x=10.7, y=3.0)  # already 0.3m from the object -> in reach
+    ok = _approach_object(base, (11.0, 3.0))
+    assert ok
+    assert base.walks == 0           # no walk needed
+
+
 def test_no_arm_fails_loud():
     perc = FakePerception()
     ctx = SkillContext(arm=None, gripper=FakeGripper(), world_model=WorldModel(),
