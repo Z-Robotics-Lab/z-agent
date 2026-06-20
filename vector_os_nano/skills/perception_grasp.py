@@ -69,16 +69,21 @@ def _is_deictic(query: str) -> bool:
 
 
 # Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
-# object (R5/D21: reachable once the dog is within ~0.5m of the table object).
-_GRASP_REACH_M = 0.5
+# object (R5/D21: reachable at ~0.5m; 0.45 leaves margin against perception/gait error).
+_GRASP_REACH_M = 0.45
 # Pre-grasp clearance above the object used for the reach (IK) check.
 _PRE_GRASP_H = 0.08
+# The arm AT REST sits across the forward head-camera FOV (the gripper bar occludes
+# the table), corrupting the front-object mask. Lift the shoulder (joint2) to raise
+# the arm ABOVE the FOV before perceiving — empirically clears the view (R13: front
+# mask 115px@12cm -> 812px@2cm). The grasp IK then moves the arm down to the object.
+_STOW_FOR_VIEW: list[float] = [0.0, 1.2, 0.0, 0.0, 0.0, 0.0]
 
 
 def _approach_object(
     base: Any, target_xy: tuple[float, float], *,
-    reach_m: float = _GRASP_REACH_M, step_v: float = 0.35,
-    max_walks: int = 8, on_progress: Any = None,
+    reach_m: float = _GRASP_REACH_M, step_v: float = 0.4,
+    max_walks: int = 12, on_progress: Any = None,
 ) -> bool:
     """Walk the base FORWARD toward target_xy until within reach_m (position feedback).
 
@@ -172,6 +177,16 @@ class PerceptionGraspSkill:
                 "no_camera",
                 f"Perception backend {type(perception).__name__} lacks RGB-D grasp surface: {missing}",
             )
+
+        # --- stow the arm OUT of the camera FOV before perceiving (the arm at rest
+        # occludes the forward head camera and corrupts the front-object mask) -----
+        if hasattr(arm, "move_joints"):
+            try:
+                import time as _time
+                arm.move_joints(_STOW_FOR_VIEW, duration=1.2)
+                _time.sleep(0.4)  # let the arm physically reach stow before looking
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[PGRASP] stow-for-view move failed: %s", exc)
 
         # --- perceive the target's 3D grasp point (real depth + mask, never GT) ---
         gp, resolved, fail = self._perceive_grasp_point(perception, query)
