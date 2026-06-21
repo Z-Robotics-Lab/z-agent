@@ -347,7 +347,7 @@ class PerceptionGraspSkill:
         base = context.base
         if base is not None and arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is None:
             logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — approaching", resolved, gp.x, gp.y)
-            _approach_object(base, (gp.x, gp.y))
+            _approach_object(base, (gp.x, gp.y), max_walks=30)
             approached = True
 
         logger.info("[PGRASP] %s -> grasp_world=(%.3f, %.3f, %.3f) approached=%s",
@@ -438,6 +438,12 @@ class PerceptionGraspSkill:
         detection_found = False
         if deictic and have_front:
             try:
+                # max_depth=12.0 m: allows long-range initial detection when the
+                # dog spawns far from the pick table (the approach follows,
+                # using the world-coordinate grasp point computed here).
+                mask = perception.front_object_mask(rgb, depth, max_depth=12.0)
+            except TypeError:
+                # Older perception backends without max_depth kwarg
                 mask = perception.front_object_mask(rgb, depth)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[PGRASP] front_object_mask raised: %s", exc)
@@ -470,7 +476,12 @@ class PerceptionGraspSkill:
                                          f"({'no salient object in front' if deictic else 'VLM found nothing'}).",
                                          query=query)
 
-        gp = grasp_point_from_rgbd(depth, rgb, mask, intrinsics, cam_xpos, cam_xmat)
+        gp = grasp_point_from_rgbd(
+            depth, rgb, mask, intrinsics, cam_xpos, cam_xmat,
+            # depth_trunc=15 m: allow initial long-range detection when the dog
+            # spawns far from the pick table (the approach closes the gap after).
+            depth_trunc=15.0,
+        )
         if gp is None:
             return None, resolved, _fail(
                 "no_depth_points",
