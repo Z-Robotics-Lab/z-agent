@@ -264,7 +264,7 @@ def test_approach_object_converges_with_position_feedback():
 
 def test_approach_noop_when_already_in_reach():
     from vector_os_nano.skills.perception_grasp import _approach_object
-    base = _FakeBase(x=10.8, y=3.0)  # already 0.2m from the object -> within reach_m=0.25
+    base = _FakeBase(x=10.97, y=3.0)  # already 0.03m from the object -> within reach_m=0.05
     ok = _approach_object(base, (11.0, 3.0))
     assert ok
     assert base.walks == 0           # no walk needed

@@ -43,6 +43,14 @@ _ARM_JOINT_NAMES: list[str] = [
     "piper_joint1", "piper_joint2", "piper_joint3",
     "piper_joint4", "piper_joint5", "piper_joint6",
 ]
+
+# Sensor frame offset relative to body origin — must match go2_vnav_bridge.py
+# _SENSOR_X/_SENSOR_Z constants (0.3 m forward, 0.2 m up).
+# The bridge publishes /state_estimation in sensor frame (body + offset).
+# _sync_ik_base must subtract this offset to obtain the true body position
+# that the MJCF free-body qpos[0:3] represents.
+_BODY_SENSOR_DX: float = 0.3  # forward offset (x) in body frame
+_BODY_SENSOR_DZ: float = 0.2  # up offset (z) in body frame
 _EE_SITE_NAME: str = "piper_ee_site"
 _GRIPPER_JOINT_NAME: str = "piper_joint7"
 
@@ -364,9 +372,21 @@ class PiperROS2Proxy:
     # ------------------------------------------------------------------
 
     def _sync_ik_base(self, arm_joints: list[float] | None) -> None:
-        """Write dog world pose (from base_proxy) into the IK data."""
-        x, y, z = self._base.get_position()
+        """Write dog world pose (from base_proxy) into the IK data.
+
+        The base proxy's ``get_position()`` returns the *sensor* frame
+        position published on /state_estimation (body + _SENSOR_X forward,
+        _SENSOR_Z up).  The MJCF free-body qpos[0:3] represents the *body*
+        origin, so we must subtract the sensor offset before writing.
+        """
+        sx, sy, sz = self._base.get_position()
         yaw = float(self._base.get_heading())
+        # Sensor → body: reverse the bridge's rotation + offset
+        cos_h = math.cos(yaw)
+        sin_h = math.sin(yaw)
+        x = sx - cos_h * _BODY_SENSOR_DX
+        y = sy - sin_h * _BODY_SENSOR_DX
+        z = sz - _BODY_SENSOR_DZ
         qw, qx, qy, qz = _yaw_to_quat_wxyz(yaw)
 
         self._ik_data.qpos[0] = float(x)

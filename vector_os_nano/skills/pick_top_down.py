@@ -240,24 +240,10 @@ class PickTopDownSkill:
         pre_grasp = (obj_xyz[0], obj_xyz[1], obj_xyz[2] + pre_h)
         grasp = (obj_xyz[0], obj_xyz[1], obj_xyz[2] + grasp_dz)
         logger.info("[PICK-TD] pre_grasp=%s  grasp=%s", pre_grasp, grasp)
-        try:
-            _bp = None
-            _b = getattr(arm, "_base", None)
-            if _b is not None and hasattr(_b, "get_position"):
-                _bp = _b.get_position()
-            with open("/tmp/pick_td_debug.txt", "a") as _f:
-                _f.write(f"PICK-TD pre_grasp={pre_grasp} base_pos={_bp}\n")
-        except Exception:
-            pass
 
         # IK — solve pre-grasp first, seed grasp from it for minimal joint change
         q_pre = arm.ik_top_down(pre_grasp)
         logger.info("[PICK-TD] pre-grasp IK %s", "OK" if q_pre is not None else "FAIL")
-        try:
-            with open("/tmp/pick_td_debug.txt", "a") as _f:
-                _f.write(f"PICK-TD IK q_pre={'OK' if q_pre is not None else 'FAIL'}\n")
-        except Exception:
-            pass
         if q_pre is None:
             return SkillResult(
                 success=False,

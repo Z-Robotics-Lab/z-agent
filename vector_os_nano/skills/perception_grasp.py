@@ -70,10 +70,13 @@ def _is_deictic(query: str) -> bool:
 
 # Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
 # object. MEASURED R17: the top-down EE reaches only ~0.22m forward of the dog centre
-# (+0.06m weld radius), so the dog must stand ~0.25m from the object — 0.45 left it
-# 0.18m short (EE never within grasp range, weld never fired). 0.25 puts the dog's
-# front feet ~at the pick-table edge with the arm just reaching the near-edge objects.
-_GRASP_REACH_M = 0.25
+# the dog's SENSOR (0.3 m forward of body origin) must sit within this distance
+# of the grasp point so that the body origin is ≥ 0.40 m behind the target —
+# the Piper's IK feasibility boundary measured with the corrected body-frame
+# sync in piper_ros2_proxy._sync_ik_base (sensor offset subtracted).
+# 0.18 m → sensor at (target.x − 0.18), body at (target.x − 0.48), EE within
+# 20-22 mm of the bottle (< 60 mm weld radius) across all tested body_z values.
+_GRASP_REACH_M = 0.05
 # Forward progress (m) below which the dog is treated as STALLED (jammed against
 # the pick-table edge) over one approach step — its closest stable standoff. The
 # gait advances ~6-12 cm per 0.8 s step when free, so 3 cm cleanly separates a
@@ -505,14 +508,6 @@ class PerceptionGraspSkill:
                 gp.x, gp.y, gp.z,
                 float(cam_xpos[0]), float(cam_xpos[1]), float(cam_xpos[2]),
             )
-            try:
-                with open("/tmp/pick_td_debug.txt", "a") as _dbgf:
-                    _dbgf.write(
-                        f"PGRASP gp_xyz=({gp.x:.3f},{gp.y:.3f},{gp.z:.3f}) "
-                        f"cam_xpos=({float(cam_xpos[0]):.3f},{float(cam_xpos[1]):.3f},{float(cam_xpos[2]):.3f})\n"
-                    )
-            except Exception:
-                pass
         if gp is None:
             return None, resolved, _fail(
                 "no_depth_points",
