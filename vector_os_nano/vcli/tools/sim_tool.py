@@ -481,7 +481,7 @@ class SimStartTool:
                 )
                 piper_arm = PiperROS2Proxy(base_proxy=base, scene_xml_path=scene_xml)
                 piper_arm.connect()
-                piper_gripper = PiperGripperROS2Proxy()
+                piper_gripper = PiperGripperROS2Proxy(scene_xml_path=scene_xml)
                 piper_gripper.connect()
                 logger.info("[sim_tool] Piper proxies connected (arm + gripper)")
             except ImportError as exc:
@@ -531,8 +531,13 @@ class SimStartTool:
         from vector_os_nano.skills.go2 import get_go2_skills  # type: ignore[import]
         for skill in get_go2_skills():
             agent._skill_registry.register(skill)
-        # Local manipulation (Piper pick/place) PAUSED/deferred — set VECTOR_ENABLE_MANIPULATION=1 to re-enable. Skills + tests retained in-tree.
-        if piper_arm is not None and os.environ.get("VECTOR_ENABLE_MANIPULATION") == "1":
+        # Local manipulation (Piper pick/place) is wired whenever the user
+        # launched go2 WITH the arm — per the North Star, a capability behind a
+        # flag is NOT done, and `with_arm=True` is the user explicitly asking for
+        # the arm. Escape hatch to disable for a bare-mobility demo:
+        # VECTOR_ENABLE_MANIPULATION=0 (default ON for with_arm).
+        _manip_on = os.environ.get("VECTOR_ENABLE_MANIPULATION", "1") != "0"
+        if piper_arm is not None and _manip_on:
             from vector_os_nano.skills.pick_top_down import PickTopDownSkill
             from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
             from vector_os_nano.skills.mobile_pick import MobilePickSkill
@@ -546,9 +551,11 @@ class SimStartTool:
             # + Moondream VLM + EdgeTAM -> 3D grasp point (NOT ground truth).
             # Registered LAST so it wins the shared 抓/grab aliases on the empty-
             # world-model path (it needs no pre-populated world model; PickTopDown
-            # does). NOTE: holding_object grades RAN (honest "ran, can't prove the
-            # grasp held") here until the Piper proxy exposes get_object_positions
-            # + weld_is_active over ROS2 (next round — touches the proxy interface).
+            # does). holding_object grades GROUNDED on this bare-cli path: the
+            # bridge welds the object on gripper-close and publishes per-body world
+            # xpos + per-weld active over /piper/object_state; the Piper proxies
+            # expose get_object_positions() + weld_is_active() + weld-backed
+            # is_holding() the verify oracle + actor_causation read (D36).
             from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
             from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
             agent._perception = Go2GraspPerception(base)

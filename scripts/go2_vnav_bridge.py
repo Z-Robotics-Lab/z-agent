@@ -575,6 +575,37 @@ class Go2VNavBridge(Node):
                 raise RuntimeError("piper gripper joint/actuator missing")
             self._piper_gripper_qpos_adr: int = int(model.jnt_qposadr[gjid])
             self._piper_gripper_act_id: int = int(gaid)
+
+            # EE site for the weld grasp (nearest-free-body pick). Mirrors
+            # MuJoCoPiperGripper: absent -> grasp degrades to a no-op (logged).
+            self._piper_ee_site_id: int = int(
+                mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "piper_ee_site")
+            )
+
+            # Cache pickable free-body names (for /piper/object_state) and the
+            # weld constraints (for grasp-on-close + per-weld active flags). A
+            # pickable is any body with a FREE joint; the welds are the MJCF
+            # GRASP_WELDS (piper_link6 -> pickable_*). Order is fixed so the
+            # proxy can decode the flat /piper/object_state array by index.
+            self._piper_pickable_names: list[str] = []
+            for bi in range(model.nbody):
+                bname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, bi)
+                if bname is None:
+                    continue
+                jadr = int(model.body_jntadr[bi])
+                if jadr < 0:
+                    continue
+                if model.jnt_type[jadr] == mujoco.mjtJoint.mjJNT_FREE:
+                    self._piper_pickable_names.append(str(bname))
+            # Weld eqs: (eq_index, body2_name) for every WELD constraint.
+            self._piper_weld_eqs: list[tuple[int, str]] = []
+            for i in range(model.neq):
+                if model.eq_type[i] != mujoco.mjtEq.mjEQ_WELD:
+                    continue
+                b2 = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, int(model.eq_obj2id[i]))
+                if b2 is not None:
+                    self._piper_weld_eqs.append((int(i), str(b2)))
+            self._piper_grasp_radius: float = 0.06  # mirrors MuJoCoPiperGripper._GRASP_RADIUS
         except Exception as exc:
             self.get_logger().error(f"Piper bridge init failed: {exc}")
             return
@@ -586,6 +617,19 @@ class Go2VNavBridge(Node):
         self._piper_state_pub = self.create_publisher(
             JointState, "/piper/joint_state", 10
         )
+        # Additive object-state topic (D36): the bridge owns the live MjData, so
+        # it is the ONLY place that can publish real per-pickable world xpos +
+        # per-weld active to the main process. The proxies decode this so the
+        # verify oracle's get_object_positions()/weld_is_active()/is_holding()
+        # read REAL physics over ROS2. Layout (flat Float64MultiArray):
+        #   [N_obj, N_weld,
+        #    (x,y,z) * N_obj,            # pickable world positions, names order
+        #    active * N_weld]            # weld active flags (0/1), weld order
+        # Names are fixed by self._piper_pickable_names / self._piper_weld_eqs,
+        # shared with the proxy via the same MJCF body-discovery order.
+        self._piper_object_state_pub = self.create_publisher(
+            Float64MultiArray, "/piper/object_state", 10
+        )
         self.create_subscription(
             Float64MultiArray, "/piper/joint_cmd", self._piper_joint_cmd_cb, 10
         )
@@ -593,10 +637,14 @@ class Go2VNavBridge(Node):
             Float64, "/piper/gripper_cmd", self._piper_gripper_cmd_cb, 10
         )
         self.create_timer(1.0 / 20.0, self._publish_piper_state)  # 20 Hz
+        self.create_timer(1.0 / 20.0, self._publish_object_state)  # 20 Hz
 
         self._piper_enabled = True
         self.get_logger().info(
-            "Piper bridge: enabled (6 arm + 1 gripper joints, topics /piper/*)"
+            f"Piper bridge: enabled (6 arm + 1 gripper, "
+            f"{len(self._piper_pickable_names)} pickables, "
+            f"{len(self._piper_weld_eqs)} welds, ee_site={self._piper_ee_site_id}, "
+            f"topics /piper/*)"
         )
 
     def _piper_joint_cmd_cb(self, msg) -> None:
@@ -613,13 +661,23 @@ class Go2VNavBridge(Node):
             data.ctrl[aid] = float(msg.data[i])
 
     def _piper_gripper_cmd_cb(self, msg) -> None:
-        """Write gripper ctrl from /piper/gripper_cmd (0.0=closed, 1.0=open)."""
+        """Write gripper ctrl from /piper/gripper_cmd (0.0=closed, 1.0=open) and,
+        on a CLOSE command, activate the weld of the nearest pickable within
+        grasp range so the object physically attaches + lifts with the arm
+        (port of MuJoCoPiperGripper.close/_try_grasp). On OPEN, release welds.
+        The weld is what makes the verify oracle's holding_object grade GROUNDED.
+        """
         if not self._piper_enabled:
             return
         # Normalized 0..1 -> joint7 ctrl range 0..0.035
         x = float(msg.data)
         x = max(0.0, min(1.0, x))
         self._go2._mj.data.ctrl[self._piper_gripper_act_id] = x * 0.035
+        # cmd ~0 -> closing: try to grasp the nearest pickable. cmd ~open: release.
+        if x <= 0.01:
+            self._try_grasp()
+        else:
+            self._release_welds()
 
     def _publish_piper_state(self) -> None:
         """Publish /piper/joint_state at 20 Hz: 6 arm + 1 gripper positions."""
@@ -635,6 +693,108 @@ class Go2VNavBridge(Node):
         ]
         msg.position.append(float(data.qpos[self._piper_gripper_qpos_adr]))
         self._piper_state_pub.publish(msg)
+
+    # ------------------------------------------------------------------
+    # Weld-constraint grasping (port of MuJoCoPiperGripper, bridge-side)
+    # ------------------------------------------------------------------
+
+    def _try_grasp(self) -> None:
+        """Find the nearest free pickable within grasp range of the EE and
+        activate its weld (anchor pinned to the live relative pose so it does
+        not snap). The go2 runs a 1 kHz physics thread, so PAUSE it around the
+        eq_data/eq_active write to avoid racing a step, then resume to settle.
+        Mirrors MuJoCoPiperGripper._try_grasp exactly — the proven in-process
+        path — just reading the bridge's own (self._go2) MjData.
+        """
+        if self._piper_ee_site_id < 0:
+            return
+        import mujoco
+        model = self._go2._mj.model
+        data = self._go2._mj.data
+        pause = getattr(self._go2, "_pause_physics", None)
+        resume = getattr(self._go2, "_resume_physics", None)
+        try:
+            if pause:
+                pause()
+            try:
+                ee_pos = np.array(
+                    data.site_xpos[self._piper_ee_site_id], dtype=float
+                ).copy()
+                best_name, best_dist = None, self._piper_grasp_radius
+                for name in self._piper_pickable_names:
+                    d = float(np.linalg.norm(np.array(data.body(name).xpos) - ee_pos))
+                    if d < best_dist:
+                        best_dist, best_name = d, name
+                if best_name is None:
+                    self.get_logger().info(
+                        f"Piper grasp: no pickable within "
+                        f"{self._piper_grasp_radius * 1000:.0f}mm of EE"
+                    )
+                    return
+                for i, b2 in self._piper_weld_eqs:
+                    if b2 != best_name:
+                        continue
+                    b1 = int(model.eq_obj1id[i])
+                    b2id = int(model.eq_obj2id[i])
+                    p1 = data.xpos[b1]; R1 = data.xmat[b1].reshape(3, 3)
+                    p2 = data.xpos[b2id]; R2 = data.xmat[b2id].reshape(3, 3)
+                    rel_pos = R1.T @ (p2 - p1)
+                    rel_quat = np.zeros(4)
+                    mujoco.mju_mat2Quat(rel_quat, (R1.T @ R2).flatten())
+                    model.eq_data[i, :3] = 0.0
+                    model.eq_data[i, 3:6] = rel_pos
+                    model.eq_data[i, 6:10] = rel_quat
+                    data.eq_active[i] = 1
+                    self.get_logger().info(
+                        f"Piper grasp: welded '{best_name}' ({best_dist * 1000:.0f}mm)"
+                    )
+                    return
+                self.get_logger().warn(f"Piper grasp: no weld for '{best_name}'")
+            finally:
+                if resume:
+                    resume()
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warn(f"Piper grasp failed: {exc}")
+
+    def _release_welds(self) -> None:
+        """Disable all weld constraints (release any held object)."""
+        data = self._go2._mj.data
+        pause = getattr(self._go2, "_pause_physics", None)
+        resume = getattr(self._go2, "_resume_physics", None)
+        try:
+            if pause:
+                pause()
+            try:
+                for i, _b2 in self._piper_weld_eqs:
+                    data.eq_active[i] = 0
+            finally:
+                if resume:
+                    resume()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _publish_object_state(self) -> None:
+        """Publish /piper/object_state at 20 Hz: real per-pickable world xpos +
+        per-weld active read from the live MjData (D36). This is the bridge's
+        honest report of the physics the main-process proxies cannot see, so
+        the verify oracle reads REAL object positions + grasp state over ROS2.
+        Flat layout: [N_obj, N_weld, x,y,z per obj..., active per weld...].
+        """
+        if not self._piper_enabled:
+            return
+        from std_msgs.msg import Float64MultiArray
+        data = self._go2._mj.data
+        n_obj = len(self._piper_pickable_names)
+        n_weld = len(self._piper_weld_eqs)
+        out: list[float] = [float(n_obj), float(n_weld)]
+        for name in self._piper_pickable_names:
+            xpos = data.body(name).xpos
+            out.extend([float(xpos[0]), float(xpos[1]), float(xpos[2])])
+        for i, _b2 in self._piper_weld_eqs:
+            out.append(1.0 if int(data.eq_active[i]) != 0 else 0.0)
+        msg = Float64MultiArray()
+        msg.data = out
+        self._piper_object_state_pub.publish(msg)
 
     def _cmd_vel_cb(self, msg: Twist) -> None:
         self._go2.set_velocity(msg.linear.x, msg.linear.y, msg.angular.z)

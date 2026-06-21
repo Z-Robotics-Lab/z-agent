@@ -186,6 +186,27 @@ class PiperROS2Proxy:
         if self._ik_ee_site_id < 0:
             raise RuntimeError(f"PiperROS2Proxy: {_EE_SITE_NAME!r} missing from MJCF")
 
+        # Pickable free-body names, derived from the SAME MJCF the bridge loads
+        # (deterministic body-discovery order), so the flat /piper/object_state
+        # array decodes to {name: [x,y,z]} without sending names over the wire.
+        self._pickable_names: list[str] = []
+        for bi in range(m.nbody):
+            bname = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, bi)
+            if bname is None:
+                continue
+            jadr = int(m.body_jntadr[bi])
+            if jadr < 0:
+                continue
+            if m.jnt_type[jadr] == mujoco.mjtJoint.mjJNT_FREE:
+                self._pickable_names.append(str(bname))
+        # Latest object positions decoded from /piper/object_state (fail-safe {}).
+        self._object_positions: dict[str, list[float]] = {}
+        self._object_state_lock = threading.Lock()
+        from std_msgs.msg import Float64MultiArray
+        self._node.create_subscription(
+            Float64MultiArray, "/piper/object_state", self._object_state_cb, 10
+        )
+
         # Route to shared executor or legacy per-proxy spin.
         import os as _os
         if _os.environ.get("VECTOR_SHARED_EXECUTOR", "1") == "1":
@@ -250,6 +271,43 @@ class PiperROS2Proxy:
         self._require_connected()
         with self._state_lock:
             return list(self._last_joint_state[:6])
+
+    def _object_state_cb(self, msg: Any) -> None:
+        """Decode the flat /piper/object_state array into {name: [x,y,z]}.
+
+        Layout (matches the bridge's _publish_object_state):
+          [N_obj, N_weld, x,y,z per obj..., active per weld...]
+        Object names come from this proxy's own MJCF discovery order (same MJCF
+        the bridge loads). Malformed/short messages are ignored (fail-safe).
+        """
+        data = list(msg.data)
+        if len(data) < 2:
+            return
+        n_obj = int(round(data[0]))
+        if n_obj <= 0 or len(data) < 2 + 3 * n_obj:
+            return
+        positions: dict[str, list[float]] = {}
+        for k in range(n_obj):
+            base = 2 + 3 * k
+            xyz = [float(data[base]), float(data[base + 1]), float(data[base + 2])]
+            name = (
+                self._pickable_names[k]
+                if k < len(self._pickable_names)
+                else f"pickable_{k}"
+            )
+            positions[name] = xyz
+        with self._object_state_lock:
+            self._object_positions = positions
+
+    def get_object_positions(self) -> dict[str, list[float]]:
+        """Return {pickable-body-name: [x,y,z]} world positions over ROS2.
+
+        Mirrors MuJoCoPiper.get_object_positions (the in-process surface the
+        verify oracle reads): the REAL per-body world xpos the bridge publishes
+        on /piper/object_state. Fail-safe to {} before the first message.
+        """
+        with self._object_state_lock:
+            return {k: list(v) for k, v in self._object_positions.items()}
 
     # ------------------------------------------------------------------
     # Motion
@@ -471,9 +529,11 @@ class PiperGripperROS2Proxy:
         self,
         arm_proxy: PiperROS2Proxy | None = None,
         node_name: str | None = None,
+        scene_xml_path: str | None = None,
     ) -> None:
         self._arm_proxy = arm_proxy
         self._node_name = node_name or self._NODE_NAME
+        self._scene_xml_path = scene_xml_path
         self._connected: bool = False
         self._node: Any = None
         self._cmd_pub: Any = None
@@ -481,12 +541,18 @@ class PiperGripperROS2Proxy:
         self._last_gripper_cmd: float = _GRIPPER_OPEN_CMD
         self._state_lock = threading.Lock()
         self._shared_runtime_used: bool = False
+        # Weld body2 names in the SAME model.neq WELD order the bridge sends them
+        # (derived from scene_xml_path on connect). Latest weld-active map decoded
+        # from /piper/object_state (fail-safe {} before the first message).
+        self._weld_body_names: list[str] = []
+        self._weld_active: dict[str, bool] = {}
+        self._weld_lock = threading.Lock()
 
     def connect(self) -> None:
         import rclpy
         from rclpy.node import Node
         from sensor_msgs.msg import JointState
-        from std_msgs.msg import Float64
+        from std_msgs.msg import Float64, Float64MultiArray
 
         if not rclpy.ok():
             rclpy.init()
@@ -496,6 +562,28 @@ class PiperGripperROS2Proxy:
         # Independent joint_state subscriber (simpler than sharing with arm_proxy)
         self._node.create_subscription(
             JointState, "/piper/joint_state", self._joint_state_cb, 10
+        )
+
+        # Derive weld body2 names from the scene MJCF in the SAME order the bridge
+        # iterates model.neq WELD constraints, so the flat /piper/object_state
+        # weld-active tail decodes to {body: active}. Absent path -> no weld map
+        # (weld_is_active stays {}, is_holding falls back to the position read).
+        if self._scene_xml_path and os.path.exists(self._scene_xml_path):
+            try:
+                import mujoco
+                m = mujoco.MjModel.from_xml_path(self._scene_xml_path)
+                for i in range(m.neq):
+                    if m.eq_type[i] != mujoco.mjtEq.mjEQ_WELD:
+                        continue
+                    name = mujoco.mj_id2name(
+                        m, mujoco.mjtObj.mjOBJ_BODY, int(m.eq_obj2id[i])
+                    )
+                    if name is not None:
+                        self._weld_body_names.append(str(name))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("PiperGripperROS2Proxy: weld-name derive failed: %s", exc)
+        self._node.create_subscription(
+            Float64MultiArray, "/piper/object_state", self._object_state_cb, 10
         )
 
         # Route to shared executor or legacy per-proxy spin.
@@ -537,6 +625,41 @@ class PiperGripperROS2Proxy:
             with self._state_lock:
                 self._last_gripper_pos = float(msg.position[6])
 
+    def _object_state_cb(self, msg: Any) -> None:
+        """Decode the weld-active tail of /piper/object_state into {body: active}.
+
+        Layout: [N_obj, N_weld, x,y,z per obj..., active per weld...]. Weld body
+        names come from this proxy's own scene-MJCF discovery order (same order
+        the bridge iterates model.neq). Malformed/short -> ignored (fail-safe).
+        """
+        data = list(msg.data)
+        if len(data) < 2:
+            return
+        n_obj = int(round(data[0]))
+        n_weld = int(round(data[1]))
+        weld_start = 2 + 3 * n_obj
+        if n_weld <= 0 or len(data) < weld_start + n_weld:
+            return
+        active: dict[str, bool] = {}
+        for k in range(n_weld):
+            name = (
+                self._weld_body_names[k]
+                if k < len(self._weld_body_names)
+                else f"weld_{k}"
+            )
+            active[name] = bool(float(data[weld_start + k]) != 0.0)
+        with self._weld_lock:
+            self._weld_active = active
+
+    def weld_is_active(self) -> dict[str, bool]:
+        """``{welded-body-name -> active}`` over the live weld eqs the bridge
+        publishes — the SAME body2-keyed map MuJoCoPiperGripper exposes, read by
+        actor_causation (_capture_gripper) for the 0->1 fresh-grasp transition.
+        Fail-safe to ``{}`` before the first /piper/object_state message.
+        """
+        with self._weld_lock:
+            return dict(self._weld_active)
+
     # --- GripperProtocol ---
 
     def open(self) -> bool:
@@ -560,9 +683,19 @@ class PiperGripperROS2Proxy:
         return True
 
     def is_holding(self) -> bool:
-        """Commanded closed AND joint7 > 5 mm (jaws held open by contact)."""
+        """Weld-backed: True iff some object is WELDED to the gripper (the honest
+        physical-grasp signal the bridge reports over /piper/object_state — same
+        semantics as MuJoCoPiperGripper.is_holding). Before any weld map has
+        arrived (no /piper/object_state yet) fall back to the legacy position
+        heuristic (commanded-closed AND joint7 held open) so a bare-topic setup
+        still reports something, never raising.
+        """
         if not self._connected:
             return False
+        with self._weld_lock:
+            welds = self._weld_active
+            if welds:
+                return any(welds.values())
         with self._state_lock:
             pos = self._last_gripper_pos
         return self._last_gripper_cmd <= 0.01 and pos > 0.005
