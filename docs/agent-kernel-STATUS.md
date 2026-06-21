@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R25 — grasp reliability ~80% (honest red-team 8/10; nudge kept; vr-dev's 100% NOT reproduced, D41); next D9 latency
+updated: 2026-06-21 · R26 — grasp ~90% reliable (9/10 vy-nudge, D43); D9 latency ruled out (D42); top goal DONE+polished
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -19,13 +19,13 @@ doing:   ★ R24 DONE (D40). Reliability 80%→100%: post-approach IK nudge in p
          Spine vcli/cognitive/ BYTE-UNCHANGED. Commit: fe66489.
 
 blocked: none.
-next:    R26 — D9 #2 NATIVE LATENCY (sync→async). Profile vcli/native_loop.py run_turn_native; make the
-         tool/verify calls non-blocking WITHOUT touching the verify spine (vcli/cognitive/ byte-unchanged);
-         real-verify a bare-cli turn still grades correctly + measurably faster. Grasp is DONE + honest
-         (bare-cli GROUNDED D39; reliability ~80%, grades RAN on a miss — never false GROUNDED). TRACKED polish
-         (not now): grasp reliability ≥90% needs a nudge that also corrects lateral y-drift (the residual ~20%
-         miss) + ~20-run validation. VLM+EdgeTAM pluggable upgrade (timm network-blocked). NEVER trust
-         skill.success / sub-agent reliability claims — red-team independently. Spine byte-unchanged.
+next:    R27 — top goal DONE+polished (bare-cli GROUNDED D39; ~90% reliable D43; producer fast D42). Pick
+         at cold-ORIENT: (A) MILESTONE REVIEW/consolidation — red-team the full grasp campaign still works
+         end-to-end via bare-cli, tidy/dedupe (clean /tmp slop refs, docs ≤ limit), confirm spine
+         byte-unchanged, milestone report; (B) RECOVER pillar — grasp RAN(miss) → producer/model auto-retry →
+         GROUNDED (the North Star's 4th pillar on the grasp; turns the residual ~10% miss into a recovered
+         success; available, no FAR). Parked/blocked: multi-skill orchestration (needs FAR un-park);
+         VLM+EdgeTAM (timm net). NEVER trust skill.success / sub-agent claims — red-team. Spine byte-unchanged.
 
 
 ## Standing facts (durable)
