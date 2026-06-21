@@ -5,22 +5,23 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R15 — perception last-mile RESOLVED by vr-lead deep-debug (D32): saturation-bridge blob fusion, NOT self-occlusion; FULL-config grasp 12.2cm→2.3cm
+updated: 2026-06-20 · R16 — grasp perception fix RED-TEAM CONFIRMED on live sim (green @2.0cm, was 12.2cm); only GROUNDED weld gate remains
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
 phase:   M1 manipulation — perception-driven grasp (the North-Star "VLM + point-cloud + IK" route).
 owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
          sim_tool _start_go2 manip-wiring + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
-doing:   GRASP R3 SHIPPED (D19, commit 7dd2e38; R1=D17 19ef11d/b554ab6, R2=D18 dc6fa58). The acceptance
-         phrase "抓前面的东西" is DEICTIC → resolved WITHOUT a VLM: `perception/front_object.py` picks the
-         nearest-shelf most-central vivid-saliency blob (sat_min=140 above the table; 2m workspace; gated out
-         the background stool a 'most central' rule first wrongly grabbed). Wired into Go2GraspPerception +
-         PerceptionGraspSkill (deictic→front object; named→VLM; VLM-empty→front fallback). REAL-SIM: "前面的
-         东西" → center GREEN cylinder, perceived grasp point **6.9cm** from GT (clean 816px single-cylinder
-         mask, no VLM/EdgeTAM/network). 11 new unit tests (31 grasp/perception green); spine BYTE-UNCHANGED.
-         The depth+mask→3D-point geometry (R1/R2) + the deictic resolver = perception localizes the front
-         object end-to-end from real sensor data. IK+motion reuse the proven PickTopDown path (target_xyz).
+doing:   GRASP perception last-mile RESOLVED + RED-TEAM CONFIRMED (R16). Root cause (D32, vr-lead 84ee646)
+         = saturation-bridge BLOB FUSION, NOT self-occlusion (a 3-round red herring, R13-R15): the brown
+         table's saturation reaches sat_min, so thin table pixel-chains 8-connect cylinders+table into ONE
+         blob -> the central green stops being its own component -> a table sliver won. FIX: front_object._open
+         morphological opening severs the bridges (topology-robust). I INDEPENDENTLY REPRODUCED on the live
+         go2+piper sim (didn't trust the sub-report): full PerceptionGraspSkill "front object" -> grasp_world
+         green @ 2.0cm (was 12.2cm; red/blue 15cm), dog approaches, arm reaches over green (11,3). 34
+         grasp/perception + regression tests green; spine BYTE-UNCHANGED. The full grasp PERCEIVES ->
+         APPROACHES -> REACHES the correct object end-to-end via real perception.
+
 blocked: GROUNDED grading-binding (CEO gate): the grasp's perception+reach are now real-verified (D32,
          green @ 2.3cm full config), but `is_holding`/`grasped_heuristic` is a no-weld FALSE-NEGATIVE —
          binding a true GROUNDED verdict needs a weld + bridge→proxy object-state topic (Yusen-gated).
@@ -28,21 +29,14 @@ blocked: GROUNDED grading-binding (CEO gate): the grasp's perception+reach are n
          R15 fix (D32): front_object._open morphological opening severs the table-saturation bridge that
          FUSED the cylinders into one blob — the classical resolver is now topology-robust, not just
          threshold-tuned. A VLM/EdgeTAM front-end would still be more lighting/texture-robust.
-next:    R10 — the 4 North-Star pillars (plan/route/verify/recover) are now real-verified honest on the
-         native producer (D22-D25); the grasp's perception+reach are verified. Buildable-without-Yusen
-         surface is largely covered. Pick at cold-ORIENT:
-         (A) GRASP [Yusen-gated, D20/D21]: approach (scripted walk, not FAR) + grading-binding (weld +
-             bridge→proxy object-state topic, CEO gate). THE top goal — build the moment Yusen decides.
-         R15 = SEGMENTATION self-filter (D30: simple site/group hides RULED OUT — after MjSpec.attach the
-         piper geoms share group 0 with the cylinders; geomgroup[2]=0 = 0-pixel change). Render
-         enable_segmentation_rendering() on the perception camera (per-pixel geom/body id) → build a mask of
-         the robot's OWN piper geoms (body name "piper*") → EXCLUDE those pixels before front_object_mask.
-         Honest real-robot self-filter (by identity, pose/color/group-agnostic). Then real-verify front_object
-         picks the cylinder (~2cm) → approach → IK → arm closes ON the cylinder (screenshot, not skill.success).
-         GROUNDED grade still gated (weld + bridge→proxy object-state topic) — surface, don't cross.
-         STATE: grasp NOT working (self-occlusion); geometry 2cm + approach (D28) proven; ~70%. NEVER believe
-         skill.success (Piper is_holding no-weld FALSE-POSITIVE); trust grasp_world accuracy + (gated)
-         holding_object + the rendered frame. Spine byte-unchanged all session.
+next:    R17 — the grasp PERCEIVES+APPROACHES+REACHES the correct object end-to-end (R16, green@2cm). The
+         ONLY blocker to a VERIFIED grasp is the GROUNDED grading-binding (CEO gate, D20): a weld in
+         go2_piper.xml + a bridge->proxy object-state topic so holding_object grades GROUNDED (today is_holding
+         is a no-weld FALSE result). Surface to Yusen; do NOT cross. Non-gated cleanup available: drop the
+         D31 seg self-filter (get_self_mask) — self-occlusion was a red herring; it adds a per-frame seg
+         render for no benefit. Verified this session: perception green@2cm (D32, reproduced R16), approach
+         (D28), motion, 4 native pillars (D22-27). Spine byte-unchanged all session.
+
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).
