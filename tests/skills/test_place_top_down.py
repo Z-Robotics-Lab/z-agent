@@ -288,3 +288,44 @@ def test_place_top_down_missing_target_returns_missing_target() -> None:
 
     assert result.success is False
     assert result.result_data["diagnosis"] == "missing_target"
+
+
+# ---------------------------------------------------------------------------
+# Test 9 — verify_hint: skill declares a grounded placed_count predicate
+# ---------------------------------------------------------------------------
+
+
+def test_place_top_down_has_verify_hint_with_placed_count() -> None:
+    """PlaceTopDownSkill.verify_hint must be a non-empty str containing
+    'placed_count' — the grounded place-success predicate.  It must NOT be
+    empty, 'True', or the old always-passing fallback."""
+    skill = PlaceTopDownSkill()
+    hint = getattr(skill, "verify_hint", None)
+    assert hint is not None, "PlaceTopDownSkill must declare verify_hint"
+    assert isinstance(hint, str), "verify_hint must be a str"
+    assert hint.strip(), "verify_hint must be non-empty"
+    assert "placed_count" in hint, (
+        f"verify_hint must reference 'placed_count'; got {hint!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 10 — to_schemas() surfaces the verify_hint via SkillRegistry
+# ---------------------------------------------------------------------------
+
+
+def test_place_top_down_schema_surfaces_verify_hint() -> None:
+    """When PlaceTopDownSkill is registered, to_schemas() carries the
+    verify_hint == the class attribute value (not the fallback 'True')."""
+    from vector_os_nano.core.skill import SkillRegistry
+
+    reg = SkillRegistry()
+    reg.register(PlaceTopDownSkill())
+    schemas = reg.to_schemas()
+    by_name = {s["name"]: s for s in schemas}
+    assert "place_top_down" in by_name, "place_top_down skill must appear in schemas"
+    hint = by_name["place_top_down"]["verify_hint"]
+    assert "placed_count" in hint, (
+        f"schema verify_hint must contain 'placed_count'; got {hint!r}"
+    )
+    assert hint != "True", "verify_hint must not be the fallback 'True'"

@@ -113,6 +113,14 @@ class PlaceTopDownSkill:
         "Arm lifts back to pre-place pose (does NOT return home to avoid "
         "wrist rotation spilling any residue)."
     )
+    # Grounded success predicate for the PLACE step.  The producer substitutes
+    # the real region literal (x_min, y_min, x_max, y_max) — a ±0.15 m box
+    # around the drop XY, built with skills.utils.place_region.region_around.
+    # Example after substitution:
+    #   placed_count((10.45, 2.55, 10.75, 2.85)) >= 1
+    # This is consumed by vcli/cognitive/vocab_from_registry.py:_verify_hint
+    # via schema["verify_hint"] — do NOT edit that file to change this signal.
+    verify_hint: str = "placed_count((x_min, y_min, x_max, y_max)) >= 1"
     parameters: dict = {
         "target_xyz": {
             "type": "list",

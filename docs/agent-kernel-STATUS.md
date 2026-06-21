@@ -5,27 +5,27 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R28 — ★ CAMPAIGN CORE COMPLETE: all 4 North-Star pillars DONE on the grasp (recover covered D45); awaiting CEO next-direction
+updated: 2026-06-21 · R29 — ★ GRASP+PLACE multi-skill orchestration BARE-CLI BOTH-GROUNDED (2/2); spine byte-unchanged
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
-         CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
-phase:   M1 manipulation — GROUNDED + RELIABLE (15/15 HOLD in-process; bare-cli GROUNDED re-confirmed).
-owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
-         hardware/sim/go2_room.xml (pick geometry) + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
-doing:   ★ R24 DONE (D40). Reliability 80%→100%: post-approach IK nudge in perception_grasp.execute().
-         Root cause: gait stall fired 5-10cm short when dog had lateral drift; lateral/yaw corrections
-         competed with forward advance. Fix: 5 pure-vx presses (vy=0, vyaw=0) after approach, IK-gated.
-         Nudge 1/5 always sufficient. 15/15 HOLD (was 12/15=80%), bare-cli GROUNDED, 34/34 unit tests.
-         Spine vcli/cognitive/ BYTE-UNCHANGED. Commit: fe66489.
+         CURRENT TOP GOAL: multi-skill GRASP→PLACE orchestration verified GROUNDED through bare cli.main + NL.
+phase:   M1 manipulation — orchestration: grasp GROUNDED (D39) + place GROUNDED via placed_count(region) (D46).
+owns:    skills/place_top_down.py (verify_hint), skills/utils/place_region.py + tests/skills/{test_place_region,
+         test_place_top_down}.py. (Moat M0 solid D10-D16; spine vcli/cognitive/ BYTE-UNCHANGED.)
+doing:   ★ R29 DONE (D46). GRASP+PLACE orchestration. ONE NL command "把前面的东西抓起来放到旁边" the native
+         producer decomposes into perception_grasp→verify holding_object→place_top_down→verify placed_count→finish.
+         Added GROUNDED verify_hint to PlaceTopDownSkill (read by frozen vocab_from_registry via schema —
+         spine untouched) + region_around helper. Place target = floor (10.60,2.70,0.05) in the reachable
+         central corridor; green rests z~0.04 < _LIFT_MIN_Z=0.10 → placed_count((10.45,2.55,10.75,2.85))==1,
+         weld released, is_holding False. BARE-CLI verdict GROUNDED verified=True (2/2 grounded). 114 tests
+         green. Commit: bf2accd.
 
 blocked: none.
-next:    R29 — CAMPAIGN CORE COMPLETE (top goal + all 4 pillars). Next-evolution fork (surfaced to Yusen):
-         (A) grasp+PLACE multi-skill orchestration (pick→verify→place→verify; available, adds a WORLD
-         place-oracle, NOT a spine change); (B) attribute grasp "抓红色的东西" (HSV color, no VLM); (C) nav+grasp
-         orchestration (needs FAR un-park — CEO gate); (D) VLM+EdgeTAM (timm net-blocked). On the next /loop:
-         if Yusen chose a direction, execute it; else default to (A) grasp+place (most North-Star-aligned,
-         autonomous). Bare vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust
-         skill.success / sub-agent claims.
+next:    R30 — orchestration proven. Measure grasp+place RELIABILITY across N runs (this round = 1/1 bare-cli +
+         1/1 probe; rate not yet measured). Then next frontier: (B) attribute grasp "抓红色的东西" (HSV, no VLM);
+         (C) nav+grasp orchestration (needs FAR un-park — CEO gate); (D) VLM+EdgeTAM (timm net-blocked); or
+         (E) stricter place verify (add `not holding_object()` cross-check alongside placed_count). Bare
+         vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust skill.success / sub-agent claims.
 
 
 ## Standing facts (durable)
