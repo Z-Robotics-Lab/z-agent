@@ -108,6 +108,7 @@ _PRE_GRASP_H = 0.08
 _POST_APPROACH_NUDGE_N = 5
 _POST_APPROACH_NUDGE_V = 0.4    # m/s forward
 _POST_APPROACH_NUDGE_DUR = 0.8  # s per press
+_POST_APPROACH_NUDGE_VY = 0.2    # m/s lateral cap (correct y-drift toward the object)
 # Go2+Piper-specific pick geometry handed to PickTopDownSkill. The arm's
 # forward-reach envelope at the table standoff is a THIN z-band (it reaches far
 # forward only at z~0.32 and cannot also hover 5 cm higher there), so a SHALLOW
@@ -364,20 +365,34 @@ class PerceptionGraspSkill:
             _approach_object(base, (gp.x, gp.y), max_walks=30)
             approached = True
 
-        # Post-approach nudge: if the approach stall fired 5-10 cm short of the
-        # true reach standoff (gait dynamics can false-stall before reaching the
-        # physical table), IK still fails. Close the gap with pure-forward presses
-        # (no lateral/yaw that competes with forward advance) until IK succeeds or
-        # _POST_APPROACH_NUDGE_N presses are exhausted (the physical limit).
+        # Post-approach nudge: if the approach stall fired short of the true reach
+        # standoff (gait false-stall), IK still fails. Nudge the dog TOWARD the
+        # object in 2D until IK succeeds or _POST_APPROACH_NUDGE_N presses exhaust.
+        # D42/D41: the residual ~20% MISS was LATERAL y-drift the old pure-vx nudge
+        # could not fix -> correct BOTH the forward gap (vx, only while a gap remains
+        # so we do not drive into the table) AND the lateral error (vy toward the
+        # object y-line, body-frame via heading).
         if base is not None and approached:
+            import math
             for _n in range(_POST_APPROACH_NUDGE_N):
                 if arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is not None:
                     break
-                logger.info("[PGRASP] post-approach nudge %d/%d (IK still fails)",
-                            _n + 1, _POST_APPROACH_NUDGE_N)
+                pos = base.get_position()
+                dx, dy = gp.x - pos[0], gp.y - pos[1]
                 try:
-                    base.walk(vx=_POST_APPROACH_NUDGE_V, vy=0.0, vyaw=0.0,
-                              duration=_POST_APPROACH_NUDGE_DUR)
+                    th = float(base.get_heading())
+                except Exception:  # noqa: BLE001 -- no heading: assume facing +x
+                    th = 0.0
+                fwd = dx * math.cos(th) + dy * math.sin(th)
+                lat = -dx * math.sin(th) + dy * math.cos(th)
+                vx = _POST_APPROACH_NUDGE_V if fwd > 0.03 else 0.0
+                vy = max(-_POST_APPROACH_NUDGE_VY, min(_POST_APPROACH_NUDGE_VY, lat * 2.0))
+                if vx == 0.0 and abs(vy) < 0.02:
+                    break
+                logger.info("[PGRASP] post-approach nudge %d/%d (IK fails) vx=%.2f vy=%.2f (fwd=%.2f lat=%.2f)",
+                            _n + 1, _POST_APPROACH_NUDGE_N, vx, vy, fwd, lat)
+                try:
+                    base.walk(vx=vx, vy=vy, vyaw=0.0, duration=_POST_APPROACH_NUDGE_DUR)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("[PGRASP] nudge walk raised: %s", exc)
                     break
