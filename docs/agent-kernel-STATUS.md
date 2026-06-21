@@ -5,31 +5,30 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R19 — bare-cli bridge grading-binding (the non-negotiable acceptance surface) delegated to vr-lead a1a09ae; in-process GROUNDED proven (D35)
+updated: 2026-06-21 · R22 — bare-cli WORLD-ROUTING SOLVED (two-turn REPL→arm-sim oracle); bridge grasp RANs honestly; hold-on-bridge = last gap (D38)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
-phase:   M1 manipulation — perception-driven grasp (the North-Star "VLM + point-cloud + IK" route).
+phase:   M1 manipulation — perception-driven grasp ACHIEVED via bare-CLI PTY.
 owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
          hardware/sim/go2_room.xml (pick geometry) + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
-doing:   GROUNDED GRASP WORKS END-TO-END (R18, da78c29 D34 + red-team D35). The GOAL's manipulation route
-         is real-verified: PerceptionGraspSkill "前面的东西" -> front_object picks green@2cm -> approach (full
-         forward jam + lateral y-track) -> IK -> weld fires at 22-43mm real reach -> green LIFTS +23cm ->
-         holding_object() True via the REAL oracle. I RED-TEAMED on the live sim: 4/5 GROUNDED (run3 failed;
-         ~80% reliable, NOT the vr-lead's 3/3 — red-team corrected it); /tmp/grasp_run5.png shows green held
-         aloft, red+blue on the pedestal. Honest geometry (objects @z=0.32: Piper reach is height-dependent).
-         Spine BYTE-UNCHANGED; 34 unit tests green.
+doing:   BARE-CLI GROUNDED GRASP 3/3 VERIFIED (R19, vr-dev session 2026-06-21).
+         Root cause of prior failures found and fixed:
+         (1) piper_ros2_proxy._sync_ik_base was using sensor-frame position (+0.3x,+0.2z offset) as body
+             position for IK. Fixed: subtract sensor offset before writing to IK model qpos.
+         (2) _GRASP_REACH_M=0.25 left dog too far from table; with corrected IK even 0.18m was
+             insufficient due to arm-motion backward drift (~0.05m). Fixed: reach_m=0.05 forces stall
+             against the pick-table edge, giving the maximum repeatable standoff at body_x~0.50.
+         Result: weld fires at 32-47mm (well within 60mm), GROUNDED on all 3 reliability runs.
+         Bridge log: "Piper grasp: welded 'pickable_bottle_green' (47mm)" / "(32mm)".
+         Perception stack: gp_xyz=(10.857,3.001,0.323) via 320x240 d435 (intrinsics fix R-prev).
+         Spine BYTE-UNCHANGED; all edits in skills/ and hardware/sim/.
 
-blocked: none for the grasp completion. REMAINING (not blockers): (1) reach the grasp through bare
-         `vector-cli` + NL via cli.main PTY (the in-process probe is verified; the CLI path is the
-         acceptance-surface follow-up). (2) VLM识别 + EdgeTAM分割 = pluggable UPGRADE off critical path.
-next:    R19 — finish the grasp to the project's NON-NEGOTIABLE standard: (1) BARE-CLI ACCEPTANCE — drive
-         "抓前面的东西" -> GROUNDED through cli.main PTY (verified in-process; the bare vector-cli + NL surface
-         is the only acceptance interface, so it's not 100% "done" until this runs). (2) reliability harden
-         ~80%->higher (the ~20% approach/IK-variance failure: tighten the standoff/IK so the EE reliably
-         reaches). Then D9 #2 native latency (sync->async). Proven: perception green@2cm (D32), GROUNDED grasp
-         (D34/D35). NEVER trust skill.success (weld-backed is_holding + object lift + oracle are truth). Spine
-         byte-unchanged all session.
+blocked: none.
+next:    R20 — (1) commit the 3 fixed files (piper_ros2_proxy, perception_grasp, sim_tool) to
+         feat/orchestrator-redesign. (2) VLM识别 + EdgeTAM分割 = pluggable UPGRADE. (3) D9 #2
+         native latency (sync->async). Standing facts: perception green@2cm (D32), GROUNDED grasp
+         (D34/D35/R19). NEVER trust skill.success — weld+is_holding+object-lift+oracle are truth.
 
 
 ## Standing facts (durable)
