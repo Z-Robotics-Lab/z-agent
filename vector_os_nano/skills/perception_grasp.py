@@ -97,6 +97,17 @@ _LATERAL_VMAX = 0.25
 _LATERAL_DEADBAND = 0.03
 # Pre-grasp clearance above the object used for the reach (IK) check.
 _PRE_GRASP_H = 0.08
+# Post-approach forward nudge: if IK still fails after _approach_object (the
+# approach stall can fire 5-10 cm short of the true maximum-reach standoff due
+# to gait dynamics — measured from ~20% MISS runs), press forward with pure vx
+# (no lateral/yaw) up to this many times so the dog closes the last 5-10 cm.
+# Pure-vx steps are used because the lateral correction in the seat phase
+# competes with forward advance and can prevent progress below _SEAT_EPS.
+# 5 presses × 0.8 s @ vx=0.4 → up to ~15 cm commanded; effective ~8-12 cm on
+# the MPC gait — enough to close the typical 5 cm gap that causes IK FAIL.
+_POST_APPROACH_NUDGE_N = 5
+_POST_APPROACH_NUDGE_V = 0.4    # m/s forward
+_POST_APPROACH_NUDGE_DUR = 0.8  # s per press
 # Go2+Piper-specific pick geometry handed to PickTopDownSkill. The arm's
 # forward-reach envelope at the table standoff is a THIN z-band (it reaches far
 # forward only at z~0.32 and cannot also hover 5 cm higher there), so a SHALLOW
@@ -352,6 +363,24 @@ class PerceptionGraspSkill:
             logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — approaching", resolved, gp.x, gp.y)
             _approach_object(base, (gp.x, gp.y), max_walks=30)
             approached = True
+
+        # Post-approach nudge: if the approach stall fired 5-10 cm short of the
+        # true reach standoff (gait dynamics can false-stall before reaching the
+        # physical table), IK still fails. Close the gap with pure-forward presses
+        # (no lateral/yaw that competes with forward advance) until IK succeeds or
+        # _POST_APPROACH_NUDGE_N presses are exhausted (the physical limit).
+        if base is not None and approached:
+            for _n in range(_POST_APPROACH_NUDGE_N):
+                if arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is not None:
+                    break
+                logger.info("[PGRASP] post-approach nudge %d/%d (IK still fails)",
+                            _n + 1, _POST_APPROACH_NUDGE_N)
+                try:
+                    base.walk(vx=_POST_APPROACH_NUDGE_V, vy=0.0, vyaw=0.0,
+                              duration=_POST_APPROACH_NUDGE_DUR)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[PGRASP] nudge walk raised: %s", exc)
+                    break
 
         logger.info("[PGRASP] %s -> grasp_world=(%.3f, %.3f, %.3f) approached=%s",
                     resolved, gp.x, gp.y, gp.z, approached)
