@@ -61,3 +61,4 @@ scratch/
 # sim smoke-test / nav output dumps (build artifacts — not repo content)
 artifacts/
 assets/
+robot_mode.txt

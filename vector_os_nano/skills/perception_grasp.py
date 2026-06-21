@@ -438,13 +438,34 @@ class PerceptionGraspSkill:
         detection_found = False
         if deictic and have_front:
             try:
-                # max_depth=12.0 m: allows long-range initial detection when the
-                # dog spawns far from the pick table (the approach follows,
-                # using the world-coordinate grasp point computed here).
-                mask = perception.front_object_mask(rgb, depth, max_depth=12.0)
-            except TypeError:
-                # Older perception backends without max_depth kwarg
+                # Save frames for diagnosis
+                try:
+                    import cv2 as _cv2
+                    _cv2.imwrite("/tmp/pgrasp_rgb.png", rgb[:, :, ::-1] if rgb is not None else np.zeros((240,320,3),np.uint8))
+                    if depth is not None:
+                        _dvis = np.clip(depth / 3.0 * 255, 0, 255).astype(np.uint8)
+                        _cv2.imwrite("/tmp/pgrasp_depth.png", _dvis)
+                except Exception:
+                    pass
                 mask = perception.front_object_mask(rgb, depth)
+                _mask_px = int(np.count_nonzero(mask)) if mask is not None else 0
+                _d_valid = int((depth > 0).sum()) if depth is not None else -1
+                _d_near = int(((depth > 0) & (depth <= 2.0)).sum()) if depth is not None else -1
+                _d_min = float(depth[depth > 0].min()) if depth is not None and (depth > 0).any() else -1
+                _d_med = float(np.median(depth[depth > 0])) if depth is not None and (depth > 0).any() else -1
+                # Save mask overlay
+                try:
+                    if mask is not None and rgb is not None:
+                        _overlay = rgb.copy()
+                        _overlay[mask > 0] = [255, 0, 0]  # red highlight
+                        _cv2.imwrite("/tmp/pgrasp_mask.png", _overlay[:, :, ::-1])
+                except Exception:
+                    pass
+                logger.info(
+                    "[PGRASP] front_object_mask: mask_px=%d valid_depth=%d "
+                    "near_depth(<=2m)=%d d_min=%.3f d_med=%.3f",
+                    _mask_px, _d_valid, _d_near, _d_min, _d_med,
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[PGRASP] front_object_mask raised: %s", exc)
         else:
@@ -476,12 +497,22 @@ class PerceptionGraspSkill:
                                          f"({'no salient object in front' if deictic else 'VLM found nothing'}).",
                                          query=query)
 
-        gp = grasp_point_from_rgbd(
-            depth, rgb, mask, intrinsics, cam_xpos, cam_xmat,
-            # depth_trunc=15 m: allow initial long-range detection when the dog
-            # spawns far from the pick table (the approach closes the gap after).
-            depth_trunc=15.0,
-        )
+        gp = grasp_point_from_rgbd(depth, rgb, mask, intrinsics, cam_xpos, cam_xmat)
+        if gp is not None:
+            logger.info(
+                "[PGRASP] grasp_point_from_rgbd → xyz=(%.3f, %.3f, %.3f) "
+                "cam_xpos=(%.3f, %.3f, %.3f)",
+                gp.x, gp.y, gp.z,
+                float(cam_xpos[0]), float(cam_xpos[1]), float(cam_xpos[2]),
+            )
+            try:
+                with open("/tmp/pick_td_debug.txt", "a") as _dbgf:
+                    _dbgf.write(
+                        f"PGRASP gp_xyz=({gp.x:.3f},{gp.y:.3f},{gp.z:.3f}) "
+                        f"cam_xpos=({float(cam_xpos[0]):.3f},{float(cam_xpos[1]):.3f},{float(cam_xpos[2]):.3f})\n"
+                    )
+            except Exception:
+                pass
         if gp is None:
             return None, resolved, _fail(
                 "no_depth_points",

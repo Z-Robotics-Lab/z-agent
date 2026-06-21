@@ -121,35 +121,18 @@ class Go2GraspPerception:
         self,
         rgb: np.ndarray | None = None,
         depth: np.ndarray | None = None,
-        *,
-        max_depth: float = 12.0,
-        min_blob: int | None = None,
     ) -> np.ndarray | None:
         """Mask of the salient object in front (deictic '前面的东西'), or None.
 
         Needs no VLM/EdgeTAM — resolves the front object from the rendered RGB
         saliency + depth. Renders fresh frames if not supplied.
-
-        ``max_depth`` controls how far (metres) the depth gate reaches.  The
-        default of 12 m allows initial long-range detection when the dog spawns
-        far from the pick table; callers may pass a tighter value (e.g. 2 m)
-        for close-workspace filtering.
-
-        ``min_blob`` overrides the speckle rejection threshold (px).  When None
-        (default), it is derived from ``max_depth``: long-range detection uses a
-        lower threshold (20 px) because each object subtends fewer pixels; close
-        range uses the standard 50 px threshold.
         """
         from vector_os_nano.perception.front_object import front_object_mask
         if rgb is None:
             rgb = self.get_color_frame()
         if depth is None:
             depth = self.get_depth_frame()
-        if min_blob is None:
-            # Objects at >4 m subtend fewer pixels: relax speckle rejection so
-            # a vivid cylinder at 10 m (~28 px each) is not silently discarded.
-            min_blob = 20 if max_depth > 4.0 else 50
-        return front_object_mask(rgb, depth, max_depth=max_depth, min_blob=min_blob)
+        return front_object_mask(rgb, depth)
 
     # --- lifecycle -----------------------------------------------------------
 

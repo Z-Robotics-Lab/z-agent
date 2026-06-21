@@ -76,6 +76,13 @@ class Go2ROS2Proxy:
         self._last_depth_frame: Any = None   # numpy (H, W) float32 metres
         self._last_camera_ts: float = 0.0    # monotonic time of last /camera/image
         self._last_depth_ts: float = 0.0     # monotonic time of last /camera/depth
+        # Real d435_rgb world pose published by the bridge over /camera/pose
+        # (D36). When present, get_camera_pose() returns this EXACT pose so the
+        # depth back-projection matches the camera the image was rendered from.
+        # None until the first message → falls back to the mount approximation.
+        self._last_cam_xpos: Any = None      # numpy (3,) world position
+        self._last_cam_xmat: Any = None      # numpy (9,) row-major rotation
+        self._last_cam_pose_ts: float = 0.0  # monotonic time of last /camera/pose
         # Tracks the last time a /path message arrived from localPlanner.
         # Used by navigate_to() FAR probe phase to detect whether FAR has a
         # routing graph. Value 0.0 means no_path_received yet.
@@ -125,6 +132,12 @@ class Go2ROS2Proxy:
             )
             self._node.create_subscription(
                 Image, "/camera/depth", self._depth_cb, reliable_qos
+            )
+            # Real d435_rgb world pose from the bridge (D36) — the single source
+            # of truth for back-projecting /camera/depth in get_camera_pose().
+            from std_msgs.msg import Float64MultiArray
+            self._node.create_subscription(
+                Float64MultiArray, "/camera/pose", self._cam_pose_cb, reliable_qos
             )
             # Subscribe to /way_point from FAR planner — used by navigate_to()
             # to detect whether FAR has a routing graph and is actively routing.
@@ -242,6 +255,24 @@ class Go2ROS2Proxy:
         except Exception:
             pass
 
+    def _cam_pose_cb(self, msg: Any) -> None:
+        """Cache the real d435_rgb world pose from /camera/pose (D36).
+
+        Flat layout [xpos(3), xmat(9)] published by the bridge from the live
+        MjData. Cached as numpy arrays so get_camera_pose() can return the EXACT
+        pose the depth was rendered from instead of a mount approximation.
+        """
+        try:
+            import numpy as np
+            data = list(msg.data)
+            if len(data) != 12:
+                return
+            self._last_cam_xpos = np.array(data[:3], dtype=float)
+            self._last_cam_xmat = np.array(data[3:], dtype=float)
+            self._last_cam_pose_ts = time.monotonic()
+        except Exception:
+            pass
+
     def _waypoint_cb(self, msg: Any) -> None:
         """Record timestamp and position when FAR publishes a /way_point.
 
@@ -304,10 +335,19 @@ class Go2ROS2Proxy:
         return self.get_camera_frame(width, height), self.get_depth_frame(width, height)
 
     def get_camera_pose(self) -> tuple:
-        """Compute D435 camera world pose from robot odometry + MJCF mount config.
+        """Return the D435 camera world pose (cam_xpos, cam_xmat).
 
-        Returns (cam_xpos, cam_xmat) matching MuJoCoGo2.get_camera_pose()
-        semantics (the live MuJoCo path reads data.cam_xmat directly).
+        Preferred path (D36): the real d435_rgb pose published by the bridge on
+        /camera/pose, read straight from the live MjData. This is the EXACT pose
+        the depth pixels were rendered from, so back-projecting /camera/depth
+        lands on the object. Returned as numpy (3,) + (9,) matching
+        MuJoCoGo2.get_camera_pose() semantics.
+
+        Fallback (no /camera/pose seen yet): compute the pose from robot
+        odometry + the MJCF mount approximation below, so manipulation still
+        degrades gracefully if the topic is absent. NOTE this approximation does
+        NOT match the real d435_rgb camera and is back-project-inaccurate — it
+        exists only so nothing breaks before the first /camera/pose arrives.
 
         Mount geometry sourced from MJCF go2_piper.xml::d435_camera body:
             pos="0.25 0 0.1" quat="0.999054 0 0.0434863 0"
@@ -322,6 +362,10 @@ class Go2ROS2Proxy:
         gives world +Z for a level, +X-facing camera. v2.4 G3 fix.
         """
         import numpy as np
+
+        # Preferred: real pose from the bridge (single source of truth).
+        if self._last_cam_xpos is not None and self._last_cam_xmat is not None:
+            return (self._last_cam_xpos.copy(), self._last_cam_xmat.copy())
 
         pos = self._position
         heading = self._heading

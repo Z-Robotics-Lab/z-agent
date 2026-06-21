@@ -243,6 +243,16 @@ class Go2VNavBridge(Node):
         self._speed_pub = self.create_publisher(Float32, "/speed", 5)
         self._img_pub = self.create_publisher(Image, "/camera/image", reliable_qos)
         self._depth_pub = self.create_publisher(Image, "/camera/depth", reliable_qos)
+        # Real d435_rgb world pose (D36): the bridge owns the live MjData, so it
+        # is the single source of truth for the camera pose the depth pixels were
+        # rendered from. Published as a flat Float64MultiArray [xpos(3), xmat(9)]
+        # so Go2ROS2Proxy.get_camera_pose() can back-project /camera/depth with
+        # the EXACT pose (not a hand-approximated mount), which is what makes
+        # grasp_point_from_rgbd land on the object instead of high+far.
+        from std_msgs.msg import Float64MultiArray
+        self._cam_pose_pub = self.create_publisher(
+            Float64MultiArray, "/camera/pose", reliable_qos
+        )
 
         self._tf_broadcaster = TransformBroadcaster(self)
         # NOTE: static TF sensor→base_link is published by local_planner.launch.py
@@ -726,9 +736,15 @@ class Go2VNavBridge(Node):
                     if d < best_dist:
                         best_dist, best_name = d, name
                 if best_name is None:
+                    # Log EE and all pickable positions for diagnosis
+                    pick_info = []
+                    for name in self._piper_pickable_names:
+                        bd = float(np.linalg.norm(np.array(data.body(name).xpos) - ee_pos))
+                        pick_info.append(f"{name}={np.array(data.body(name).xpos).round(3)} d={bd*1000:.0f}mm")
                     self.get_logger().info(
                         f"Piper grasp: no pickable within "
-                        f"{self._piper_grasp_radius * 1000:.0f}mm of EE"
+                        f"{self._piper_grasp_radius * 1000:.0f}mm of EE "
+                        f"ee={ee_pos.round(3)} pickables=[{'; '.join(pick_info)}]"
                     )
                     return
                 for i, b2 in self._piper_weld_eqs:
@@ -949,49 +965,31 @@ class Go2VNavBridge(Node):
         self._speed_pub.publish(speed)
 
     def _publish_camera(self) -> None:
-        """Render first-person camera from Go2 head (free camera).
+        """Render first-person RGB+depth from the d435_rgb/d435_depth named cameras.
 
-        Uses a free camera positioned at the sensor mount looking forward.
-        The named d435_rgb camera produces a rotated image in this context,
-        so we keep the manually positioned free camera for ROS /camera/image.
-
-        NOTE: The VLM pipeline (get_camera_frame) uses the named d435
-        camera directly in mujoco_go2.py — that is separate from this bridge
-        camera and produces correct images for VLM scene description.
+        Delegates to MuJoCoGo2.get_camera_frame / get_depth_frame which use the
+        exact MJCF-defined d435 camera pose — the same pose returned by
+        get_camera_pose(). This ensures the depth pixels align with cam_xpos/xmat
+        used in grasp_point_from_rgbd for correct 3D reconstruction.
         """
         try:
-            import mujoco
-            if not hasattr(self, '_renderer'):
-                self._renderer = mujoco.Renderer(
-                    self._go2._mj.model, 240, 320
-                )
-                self._cam = mujoco.MjvCamera()
-                self._cam.type = mujoco.mjtCamera.mjCAMERA_FREE
-
-            model = self._go2._mj.model
-            data = self._go2._mj.data
-
-            odom = self._go2.get_odometry()
-            heading = self._go2.get_heading()
-            cos_h = math.cos(heading)
-            sin_h = math.sin(heading)
-
-            cam_x = odom.x + cos_h * (_SENSOR_X + 0.1)
-            cam_y = odom.y + sin_h * (_SENSOR_X + 0.1)
-            cam_z = odom.z + _SENSOR_Z - 0.04
-
-            self._cam.lookat[:] = [
-                cam_x + cos_h * 1.0,
-                cam_y + sin_h * 1.0,
-                cam_z - 0.1,
-            ]
-            self._cam.distance = 1.0
-            self._cam.azimuth = math.degrees(heading) + 180
-            self._cam.elevation = -10
-
-            self._renderer.update_scene(data, camera=self._cam)
-            rgb = self._renderer.render().copy()
+            rgb = self._go2.get_camera_frame(320, 240)
             now = self.get_clock().now().to_msg()
+
+            # Publish the REAL d435_rgb world pose alongside the image it was
+            # rendered from (D36). cam_xpos/cam_xmat are kept current by the
+            # bridge's continuous physics stepping (mj_step updates them), so a
+            # plain read here is live. Flat [xpos(3), xmat(9)].
+            try:
+                cam_xpos, cam_xmat = self._go2.get_camera_pose()
+                from std_msgs.msg import Float64MultiArray
+                pose_msg = Float64MultiArray()
+                pose_msg.data = [float(v) for v in cam_xpos] + [
+                    float(v) for v in cam_xmat
+                ]
+                self._cam_pose_pub.publish(pose_msg)
+            except Exception:
+                pass
 
             img_msg = Image()
             img_msg.header.stamp = now
@@ -1003,32 +1001,20 @@ class Go2VNavBridge(Node):
             img_msg.data = bytes(rgb)
             self._img_pub.publish(img_msg)
 
-            # Depth via separate renderer
-            if not hasattr(self, '_depth_renderer'):
-                try:
-                    self._depth_renderer = mujoco.Renderer(
-                        self._go2._mj.model, 240, 320
-                    )
-                    self._depth_renderer.enable_depth_rendering()
-                except Exception:
-                    self._depth_renderer = None
+            try:
+                depth = self._go2.get_depth_frame(320, 240)
 
-            if self._depth_renderer is not None:
-                try:
-                    self._depth_renderer.update_scene(data, camera=self._cam)
-                    depth = self._depth_renderer.render().copy()
-
-                    depth_msg = Image()
-                    depth_msg.header.stamp = now
-                    depth_msg.header.frame_id = "camera_link"
-                    depth_msg.height = 240
-                    depth_msg.width = 320
-                    depth_msg.encoding = "32FC1"
-                    depth_msg.step = 320 * 4
-                    depth_msg.data = bytes(depth.astype(np.float32))
-                    self._depth_pub.publish(depth_msg)
-                except Exception:
-                    pass
+                depth_msg = Image()
+                depth_msg.header.stamp = now
+                depth_msg.header.frame_id = "camera_link"
+                depth_msg.height = 240
+                depth_msg.width = 320
+                depth_msg.encoding = "32FC1"
+                depth_msg.step = 320 * 4
+                depth_msg.data = bytes(depth.astype(np.float32))
+                self._depth_pub.publish(depth_msg)
+            except Exception:
+                pass
         except Exception as e:
             if not hasattr(self, '_cam_err_logged'):
                 self.get_logger().warn(f"Camera render failed: {e}")

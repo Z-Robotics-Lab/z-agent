@@ -558,7 +558,8 @@ class SimStartTool:
             # is_holding() the verify oracle + actor_causation read (D36).
             from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
             from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-            agent._perception = Go2GraspPerception(base)
+            # Bridge publishes 320×240; intrinsics must match the actual frame size.
+            agent._perception = Go2GraspPerception(base, width=320, height=240)
             agent._skill_registry.register(PerceptionGraspSkill())
             logger.info("[sim_tool] perception-grasp wired: Go2GraspPerception + PerceptionGraspSkill")
 
