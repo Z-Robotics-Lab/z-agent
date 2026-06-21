@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R26 — grasp ~90% reliable (9/10 vy-nudge, D43); D9 latency ruled out (D42); top goal DONE+polished
+updated: 2026-06-21 · R27 — MILESTONE consolidated: bare-cli GROUNDED re-confirmed (weld 41mm), spine intact, tests green (D44)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -19,13 +19,13 @@ doing:   ★ R24 DONE (D40). Reliability 80%→100%: post-approach IK nudge in p
          Spine vcli/cognitive/ BYTE-UNCHANGED. Commit: fe66489.
 
 blocked: none.
-next:    R27 — top goal DONE+polished (bare-cli GROUNDED D39; ~90% reliable D43; producer fast D42). Pick
-         at cold-ORIENT: (A) MILESTONE REVIEW/consolidation — red-team the full grasp campaign still works
-         end-to-end via bare-cli, tidy/dedupe (clean /tmp slop refs, docs ≤ limit), confirm spine
-         byte-unchanged, milestone report; (B) RECOVER pillar — grasp RAN(miss) → producer/model auto-retry →
-         GROUNDED (the North Star's 4th pillar on the grasp; turns the residual ~10% miss into a recovered
-         success; available, no FAR). Parked/blocked: multi-skill orchestration (needs FAR un-park);
-         VLM+EdgeTAM (timm net). NEVER trust skill.success / sub-agent claims — red-team. Spine byte-unchanged.
+next:    R28 — milestone consolidated (D44). Best available frontier: RECOVER pillar — a missed grasp (verify
+         RAN) → producer/model AUTO-RETRY → GROUNDED (North Star's 4th pillar on the grasp; turns the residual
+         ~10% miss into a recovered success; available, no FAR). Verify the native producer retries on a RAN
+         verdict (real LLM sees the trace + re-calls perception_grasp), demo'd via bare-cli (force/catch a miss
+         → recover → GROUNDED). After that the major available work is exhausted → multi-skill orchestration
+         nav+grasp needs FAR un-park = a CEO gate (surface, don't cross); VLM+EdgeTAM blocked (timm net).
+         Bare vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust skill.success/sub-claims.
 
 
 ## Standing facts (durable)
