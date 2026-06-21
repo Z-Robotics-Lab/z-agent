@@ -5,30 +5,27 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R22 — bare-cli WORLD-ROUTING SOLVED (two-turn REPL→arm-sim oracle); bridge grasp RANs honestly; hold-on-bridge = last gap (D38)
+updated: 2026-06-21 · R23 — ★ BARE-CLI GROUNDED ACHIEVED — GOAL COMPLETE (D39): cli REPL '抓前面的东西' → GROUNDED 1/1 verified=True
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
 phase:   M1 manipulation — perception-driven grasp ACHIEVED via bare-CLI PTY.
 owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
          hardware/sim/go2_room.xml (pick geometry) + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
-doing:   BARE-CLI GROUNDED GRASP 3/3 VERIFIED (R19, vr-dev session 2026-06-21).
-         Root cause of prior failures found and fixed:
-         (1) piper_ros2_proxy._sync_ik_base was using sensor-frame position (+0.3x,+0.2z offset) as body
-             position for IK. Fixed: subtract sensor offset before writing to IK model qpos.
-         (2) _GRASP_REACH_M=0.25 left dog too far from table; with corrected IK even 0.18m was
-             insufficient due to arm-motion backward drift (~0.05m). Fixed: reach_m=0.05 forces stall
-             against the pick-table edge, giving the maximum repeatable standoff at body_x~0.50.
-         Result: weld fires at 32-47mm (well within 60mm), GROUNDED on all 3 reliability runs.
-         Bridge log: "Piper grasp: welded 'pickable_bottle_green' (47mm)" / "(32mm)".
-         Perception stack: gp_xyz=(10.857,3.001,0.323) via 320x240 d435 (intrinsics fix R-prev).
-         Spine BYTE-UNCHANGED; all edits in skills/ and hardware/sim/.
+doing:   ★ GOAL COMPLETE (R23, D39). The full Go2+Piper perception-driven GROUNDED grasp runs end-to-end
+         through the PROJECT'S ONLY acceptance surface — bare vector-cli + NL. Literal two-turn REPL
+         (real cli.main --native-loop, LLM faked ONLY): `切换到 go2 带机械臂` → `抓前面的东西` →
+         `perception_grasp → verify holding_object('pickable_bottle_green') ✓` → verdict GROUNDED verified=True
+         (1/1). Confirmed twice (instrumented bridge probe: weld fires + object lifts +23cm + oracle GROUNDED
+         via /piper/object_state over ROS2). Route: VLM/perception 3D point (depth+mask) → IK → grasp →
+         holding_object GROUNDED. Spine vcli/cognitive/ BYTE-UNCHANGED all session.
 
 blocked: none.
-next:    R20 — (1) commit the 3 fixed files (piper_ros2_proxy, perception_grasp, sim_tool) to
-         feat/orchestrator-redesign. (2) VLM识别 + EdgeTAM分割 = pluggable UPGRADE. (3) D9 #2
-         native latency (sync->async). Standing facts: perception green@2cm (D32), GROUNDED grasp
-         (D34/D35/R19). NEVER trust skill.success — weld+is_holding+object-lift+oracle are truth.
+next:    R24 — goal met. Pick at cold-ORIENT: (1) RELIABILITY harden the grasp ~80%→higher (the ~20%
+         approach/IK-variance miss grades RAN honestly); (2) D9 #2 native latency (sync→async); (3) VLM+EdgeTAM
+         pluggable upgrade (deictic front_object is the current detector; timm network-blocked). All non-gated.
+         Proven this session: perception green@2cm (D32), in-process GROUNDED (D34/D35), bare-cli GROUNDED
+         (D38/D39). NEVER trust skill.success; honest verdict only. Spine byte-unchanged.
 
 
 ## Standing facts (durable)
