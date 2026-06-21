@@ -314,6 +314,20 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
     xml = template.replace("GO2_MODEL_PATH", str(go2_xml))
     xml = xml.replace("GO2_ASSETS_DIR", str(assets_dir))
 
+    # Grasp welds — only with the arm (the no-arm model has no piper_link6, and a
+    # weld to a missing body fails to compile). body1=piper_link6 (wrist carrying
+    # piper_ee_site + fingers), body2=each pickable; active="false" until the
+    # gripper's _try_grasp activates one on close. This is what lets a grasp grade
+    # GROUNDED — the object physically attaches + lifts (mirrors so101_mujoco.xml).
+    welds = (
+        "  <equality>\n"
+        '    <weld name="grasp_pickable_bottle_blue"  body1="piper_link6" body2="pickable_bottle_blue"  active="false"/>\n'
+        '    <weld name="grasp_pickable_bottle_green" body1="piper_link6" body2="pickable_bottle_green" active="false"/>\n'
+        '    <weld name="grasp_pickable_can_red"      body1="piper_link6" body2="pickable_can_red"      active="false"/>\n'
+        "  </equality>\n"
+    ) if with_arm else ""
+    xml = xml.replace("GRASP_WELDS", welds)
+
     out = _MJCF_DIR / scene_name
     out.write_text(xml)
     return out

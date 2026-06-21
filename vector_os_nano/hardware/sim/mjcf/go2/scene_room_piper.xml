@@ -641,4 +641,10 @@
     <geom name="df_guest_t" type="box" pos="16.0 10 2.23" size="0.62 0.06 0.03" material="dark_wood" contype="0" conaffinity="0"/>
 
   </worldbody>
+  <equality>
+    <weld name="grasp_pickable_bottle_blue"  body1="piper_link6" body2="pickable_bottle_blue"  active="false"/>
+    <weld name="grasp_pickable_bottle_green" body1="piper_link6" body2="pickable_bottle_green" active="false"/>
+    <weld name="grasp_pickable_can_red"      body1="piper_link6" body2="pickable_can_red"      active="false"/>
+  </equality>
+
 </mujoco>

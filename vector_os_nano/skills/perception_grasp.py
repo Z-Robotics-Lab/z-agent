@@ -69,8 +69,11 @@ def _is_deictic(query: str) -> bool:
 
 
 # Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
-# object (R5/D21: reachable at ~0.5m; 0.45 leaves margin against perception/gait error).
-_GRASP_REACH_M = 0.45
+# object. MEASURED R17: the top-down EE reaches only ~0.22m forward of the dog centre
+# (+0.06m weld radius), so the dog must stand ~0.25m from the object — 0.45 left it
+# 0.18m short (EE never within grasp range, weld never fired). 0.25 puts the dog's
+# front feet ~at the pick-table edge with the arm just reaching the near-edge objects.
+_GRASP_REACH_M = 0.25
 # Pre-grasp clearance above the object used for the reach (IK) check.
 _PRE_GRASP_H = 0.08
 # The arm AT REST sits across the forward head-camera FOV (the gripper bar occludes
@@ -93,22 +96,50 @@ def _approach_object(
     repeat until within reach (or capped). Returns True iff within reach at the end.
     """
     import math
-    for _ in range(max_walks):
+
+    def _state() -> tuple[float, float]:
+        """(planar distance, wrapped heading error toward target)."""
         pos = base.get_position()
-        dist = math.hypot(target_xy[0] - pos[0], target_xy[1] - pos[1])
+        dx, dy = target_xy[0] - pos[0], target_xy[1] - pos[1]
+        dist = math.hypot(dx, dy)
+        bearing = math.atan2(dy, dx)
+        try:
+            hd = float(base.get_heading())
+        except Exception:  # noqa: BLE001 — no heading -> skip steering
+            return dist, 0.0
+        return dist, math.atan2(math.sin(bearing - hd), math.cos(bearing - hd))
+
+    for _ in range(max_walks):
+        dist, yaw_err = _state()
         if dist <= reach_m:
-            return True
+            break
         gap = dist - reach_m
         dur = max(0.6, min(1.6, gap / max(step_v, 1e-3)))
+        # STEER toward the target each step — the open-loop forward walk drifts
+        # in heading (gait curvature), which both veers the dog off the object's
+        # bearing and leaves the forward-facing arm mis-aligned laterally. A
+        # proportional yaw correction keeps the dog on the bearing; if badly
+        # mis-headed, turn more and creep forward less.
+        vyaw = max(-0.6, min(0.6, yaw_err * 1.5))
+        vx = step_v if abs(yaw_err) < 0.5 else step_v * 0.3
         if on_progress:
-            on_progress(f"approach: {dist:.2f}m to target — walk {dur:.1f}s")
+            on_progress(f"approach: {dist:.2f}m, yaw_err {math.degrees(yaw_err):.0f}deg — walk {dur:.1f}s")
         try:
-            base.walk(vx=step_v, vy=0.0, vyaw=0.0, duration=dur)
+            base.walk(vx=vx, vy=0.0, vyaw=vyaw, duration=dur)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[PGRASP] approach walk raised: %s", exc)
             return False
-    pos = base.get_position()
-    return math.hypot(target_xy[0] - pos[0], target_xy[1] - pos[1]) <= reach_m + 0.15
+
+    # Final heading alignment so the forward-mounted arm points AT the object
+    # (lateral mis-alignment otherwise makes the top-down IK miss in y).
+    _, yaw_err = _state()
+    if abs(yaw_err) > 0.08:
+        try:
+            base.walk(vx=0.0, vy=0.0, vyaw=max(-0.6, min(0.6, yaw_err * 1.5)), duration=0.8)
+        except Exception:  # noqa: BLE001
+            pass
+    dist, _ = _state()
+    return dist <= reach_m + 0.15
 
 
 @skill(

@@ -241,6 +241,8 @@ class _FakeBase:
     def __init__(self, x=10.0, y=3.0):
         self._x, self._y = x, y
         self.walks = 0
+    def get_heading(self):
+        return 0.0  # faces +x toward the table
     def get_position(self):
         return [self._x, self._y, 0.3]
     def walk(self, vx=0.0, vy=0.0, vyaw=0.0, duration=1.0):
@@ -262,7 +264,7 @@ def test_approach_object_converges_with_position_feedback():
 
 def test_approach_noop_when_already_in_reach():
     from vector_os_nano.skills.perception_grasp import _approach_object
-    base = _FakeBase(x=10.7, y=3.0)  # already 0.3m from the object -> in reach
+    base = _FakeBase(x=10.8, y=3.0)  # already 0.2m from the object -> within reach_m=0.25
     ok = _approach_object(base, (11.0, 3.0))
     assert ok
     assert base.walks == 0           # no walk needed

@@ -641,4 +641,5 @@
     <geom name="df_guest_t" type="box" pos="16.0 10 2.23" size="0.62 0.06 0.03" material="dark_wood" contype="0" conaffinity="0"/>
 
   </worldbody>
+GRASP_WELDS
 </mujoco>
