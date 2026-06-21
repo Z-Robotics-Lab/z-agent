@@ -5,34 +5,28 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R17 — GROUNDED grading-binding BUILT (CEO-approved, 782834b); completion (tight reach) escalated to vr-lead (D33)
+updated: 2026-06-20 · R18 — Go2+Piper grasp RELIABLY GROUNDED 3/3 on live sim (D34); in-process probe verified
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
 phase:   M1 manipulation — perception-driven grasp (the North-Star "VLM + point-cloud + IK" route).
 owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
-         sim_tool _start_go2 manip-wiring + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
-doing:   GROUNDED grading-binding BUILT (R17, D33, commit 782834b) — Yusen approved the weld gate.
-         Mirrors the proven SO-101 weld: scene weld eqs injected via the go2_room.xml GRASP_WELDS
-         placeholder (scene_room_piper.xml is GENERATED from that template each connect — edit the TEMPLATE);
-         MuJoCoPiperGripper._try_grasp/weld_is_active + weld-backed is_holding; MuJoCoPiper.get_object_positions;
-         heading-corrected approach + reach_m 0.45->0.25. VERIFIED welds load + _try_grasp fires when the EE
-         reaches the object (good run: EE 10.97 reaches green@11.0). 34 unit tests green; spine byte-unchanged.
+         hardware/sim/go2_room.xml (pick geometry) + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
+doing:   Go2+Piper grasp RELIABLY GROUNDED (R18, D34). `PerceptionGraspSkill "前面的东西"` -> perceive green ->
+         approach (dog jams + tracks y-line) -> weld (EE within 6cm, real reach) -> shoulder-up LIFT. Live
+         in-process probe /tmp/grasp_grounded.py: 3/3 (8/8 all runs) GROUNDED — green z 0.32->0.55-0.59
+         (~24cm lift), holding_object() AND holding_object('pickable_bottle_green') True via the real oracle.
+         Fixes: reach-matched pick geometry (tall pedestal, green at 10.88 = visible+reachable+no-knock);
+         skill approach now SEATS the dog to full jam + LATERAL vy y-tracking + shallow pre-grasp + post-weld
+         lift. Spine (vcli/cognitive/) BYTE-UNCHANGED. 65 grasp + 17 gripper/oracle unit tests green.
 
-blocked: GROUNDED grading-binding (CEO gate): the grasp's perception+reach are now real-verified (D32,
-         green @ 2.3cm full config), but `is_holding`/`grasped_heuristic` is a no-weld FALSE-NEGATIVE —
-         binding a true GROUNDED verdict needs a weld + bridge→proxy object-state topic (Yusen-gated).
-         VLM识别 + EdgeTAM分割 = pluggable UPGRADE, off critical path (timm network-flaky; moondream low-fi).
-         R15 fix (D32): front_object._open morphological opening severs the table-saturation bridge that
-         FUSED the cylinders into one blob — the classical resolver is now topology-robust, not just
-         threshold-tuned. A VLM/EdgeTAM front-end would still be more lighting/texture-robust.
-next:    R18 — make the grasp RELIABLY complete -> GROUNDED (vr-lead abfbfe3 deep-iterating live). The
-         MECHANISM is built; the blocker is TIGHT geometry: Piper reaches ~0.22-0.27m fwd, dog table-limited
-         to ~10.6 standoff, cylinders at table-CENTER 11.0 at the edge of reach (near-edge 10.85 -> dog knocks
-         them). Fix honestly: robust approach/standoff + reach, or reachable object placement the dog doesn't
-         knock (template go2_room.xml), or forward-tilt grasp/forward arm mount. Object must PHYSICALLY lift +
-         holding_object grade via the real oracle (NEVER trust skill.success). Then bare-cli "抓前面的东西" ->
-         GROUNDED via cli.main. Proven: perception green@2cm (D32), weld mechanism (D33). Spine byte-unchanged.
+blocked: none for the grasp completion. REMAINING (not blockers): (1) reach the grasp through bare
+         `vector-cli` + NL via cli.main PTY (the in-process probe is verified; the CLI path is the
+         acceptance-surface follow-up). (2) VLM识别 + EdgeTAM分割 = pluggable UPGRADE off critical path.
+next:    R19 — drive the GROUNDED grasp through bare `vector-cli` + NL ("抓前面的东西" -> GROUNDED verdict in
+         the REPL conversation via cli.main), then red-team the 3/3 claim. The honest acceptance is the
+         oracle reading real physics; the weld fires only from a genuine EE reach (16-44mm measured),
+         object physically lifts ~24cm. NEVER trust skill.success.
 
 
 ## Standing facts (durable)

@@ -74,8 +74,39 @@ def _is_deictic(query: str) -> bool:
 # 0.18m short (EE never within grasp range, weld never fired). 0.25 puts the dog's
 # front feet ~at the pick-table edge with the arm just reaching the near-edge objects.
 _GRASP_REACH_M = 0.25
+# Forward progress (m) below which the dog is treated as STALLED (jammed against
+# the pick-table edge) over one approach step — its closest stable standoff. The
+# gait advances ~6-12 cm per 0.8 s step when free, so 3 cm cleanly separates a
+# real jam from a slow-but-advancing step.
+_STALL_EPS = 0.03
+# Final "seat" phase after the approach loop: press forward up to this many firm
+# short steps until the dog truly stops advancing (two consecutive sub-_SEAT_EPS
+# steps), so it ends at its MAXIMALLY-forward standoff every run (the Piper's
+# forward reach band is thin — a few cm of standoff is reach-vs-unreachable).
+_SEAT_PRESSES = 6
+_SEAT_EPS = 0.015
+# Lateral (vy) tracking of the object's y-line during the approach — the gait
+# drifts sideways several cm over an approach, and the Piper's lateral grasp window
+# is narrow, so we close that y-error with a proportional sidestep. Deadband avoids
+# hunting once aligned.
+_LATERAL_GAIN = 1.2
+_LATERAL_VMAX = 0.25
+_LATERAL_DEADBAND = 0.03
 # Pre-grasp clearance above the object used for the reach (IK) check.
 _PRE_GRASP_H = 0.08
+# Go2+Piper-specific pick geometry handed to PickTopDownSkill. The arm's
+# forward-reach envelope at the table standoff is a THIN z-band (it reaches far
+# forward only at z~0.32 and cannot also hover 5 cm higher there), so a SHALLOW
+# pre-grasp hover keeps both the pre-grasp and the grasp inside the reachable band
+# (a tall hover IK-fails -> the whole grasp bails). The EE extends straight to the
+# object's reachable height; the weld fires within _GRASP_RADIUS from there.
+_GO2_PRE_GRASP_H = 0.02
+_GO2_GRASP_Z_ABOVE = 0.0
+# Post-grasp lift: after the weld fires, raise the Piper shoulder (joint2) by this
+# much to haul the welded object clear of the table top (z rises several cm) —
+# proof of a real pick, not a weld-in-place. Runs ONLY after gripper.is_holding().
+_LIFT_SHOULDER_DELTA = 0.5   # rad
+_LIFT_DURATION = 2.0         # s
 # The arm AT REST sits across the forward head-camera FOV (the gripper bar occludes
 # the table), corrupting the front-object mask. Lift the shoulder (joint2) to raise
 # the arm ABOVE the FOV before perceiving — empirically clears the view (R13: front
@@ -88,17 +119,35 @@ def _approach_object(
     reach_m: float = _GRASP_REACH_M, step_v: float = 0.4,
     max_walks: int = 12, on_progress: Any = None,
 ) -> bool:
-    """Walk the base FORWARD toward target_xy until within reach_m (position feedback).
+    """Walk the base FORWARD toward target_xy to its CLOSEST stable standoff.
 
     A scripted open-loop forward walk (the base `walk` primitive — NOT the parked FAR
     nav-stack): "前面的东西" is straight ahead, so a heading-aligned forward step closes
-    the gap; the gait under-shoots, so we re-read get_position() after each step and
-    repeat until within reach (or capped). Returns True iff within reach at the end.
+    the gap. Two stop conditions, whichever fires first:
+
+      1. within ``reach_m`` of the target (the nominal standoff), OR
+      2. the dog STALLS — its front jams against the pick-table edge and stops
+         advancing (forward progress < _STALL_EPS over a step). This is the
+         furthest-forward, most-repeatable standoff and is what makes the grasp
+         robust: the Piper's top-down reach SATURATES forward, so the dog being
+         maximally forward (jammed) maximises EE reach, and the jam pose is
+         kinematically defined (table edge) — independent of perceived-x noise.
+
+    Either way the dog ends at its closest stable pose, then we align heading so the
+    forward-mounted arm points AT the object. Returns True iff the dog is within a
+    graspable band of the target at the end (reach_m + margin).
     """
     import math
 
-    def _state() -> tuple[float, float]:
-        """(planar distance, wrapped heading error toward target)."""
+    def _state() -> tuple[float, float, float, float]:
+        """(planar distance, heading error toward target, forward-x, lateral error).
+
+        ``lateral`` is the target's offset PERPENDICULAR to the dog's heading (body
+        +y, left): >0 means the target is to the dog's left. Used to command ``vy``
+        so the dog tracks the object's y-line instead of drifting laterally with the
+        gait (the gait accumulates several cm of side-drift over an approach, which
+        — with the Piper's narrow lateral grasp window — pushes the IK target out of
+        reach in y; runs failed at y-drift ~0.22 m)."""
         pos = base.get_position()
         dx, dy = target_xy[0] - pos[0], target_xy[1] - pos[1]
         dist = math.hypot(dx, dy)
@@ -106,40 +155,102 @@ def _approach_object(
         try:
             hd = float(base.get_heading())
         except Exception:  # noqa: BLE001 — no heading -> skip steering
-            return dist, 0.0
-        return dist, math.atan2(math.sin(bearing - hd), math.cos(bearing - hd))
+            return dist, 0.0, float(pos[0]), 0.0
+        yaw_err = math.atan2(math.sin(bearing - hd), math.cos(bearing - hd))
+        # Perpendicular offset in the body frame: rotate (dx,dy) by -heading, take y.
+        lateral = -dx * math.sin(hd) + dy * math.cos(hd)
+        return dist, yaw_err, float(pos[0]), lateral
 
+    def _vy(lateral: float) -> float:
+        """Lateral set-point: track the object's y-line. Clamped, with a deadband."""
+        if abs(lateral) < _LATERAL_DEADBAND:
+            return 0.0
+        return max(-_LATERAL_VMAX, min(_LATERAL_VMAX, lateral * _LATERAL_GAIN))
+
+    prev_x: float | None = None
+    stalls = 0
+    jammed = False
     for _ in range(max_walks):
-        dist, yaw_err = _state()
+        dist, yaw_err, cur_x, lateral = _state()
         if dist <= reach_m:
             break
+        # STALL check — the dog jammed against the table and is no longer
+        # advancing. Require TWO consecutive low-progress steps (a single slow step
+        # can happen mid-gait or during a heading correction; a real table jam stays
+        # stalled) so the dog is driven to its FULL forward standoff (max EE reach),
+        # not stopped a few cm short on a momentary slowdown. Only count a stall once
+        # a real step has happened (prev_x set) and while roughly on-heading.
+        if prev_x is not None and (cur_x - prev_x) < _STALL_EPS and abs(yaw_err) < 0.3:
+            stalls += 1
+            if stalls >= 2:
+                jammed = True
+                if on_progress:
+                    on_progress(f"approach: jammed at x={cur_x:.2f} (stall x2) — standoff reached")
+                break
+        else:
+            stalls = 0
+        prev_x = cur_x
         gap = dist - reach_m
         dur = max(0.6, min(1.6, gap / max(step_v, 1e-3)))
-        # STEER toward the target each step — the open-loop forward walk drifts
-        # in heading (gait curvature), which both veers the dog off the object's
-        # bearing and leaves the forward-facing arm mis-aligned laterally. A
-        # proportional yaw correction keeps the dog on the bearing; if badly
-        # mis-headed, turn more and creep forward less.
+        # STEER toward the target each step — the open-loop forward walk drifts in
+        # BOTH heading (gait curvature) and lateral position. A proportional yaw
+        # correction keeps the dog pointed on the bearing; a proportional ``vy``
+        # correction keeps it ON the object's y-line (so the forward-mounted arm
+        # ends up laterally aligned). If badly mis-headed, turn more, creep less.
         vyaw = max(-0.6, min(0.6, yaw_err * 1.5))
         vx = step_v if abs(yaw_err) < 0.5 else step_v * 0.3
         if on_progress:
-            on_progress(f"approach: {dist:.2f}m, yaw_err {math.degrees(yaw_err):.0f}deg — walk {dur:.1f}s")
+            on_progress(f"approach: {dist:.2f}m, yaw {math.degrees(yaw_err):.0f}deg, "
+                        f"lat {lateral:.2f}m — walk {dur:.1f}s")
         try:
-            base.walk(vx=vx, vy=0.0, vyaw=vyaw, duration=dur)
+            base.walk(vx=vx, vy=_vy(lateral), vyaw=vyaw, duration=dur)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[PGRASP] approach walk raised: %s", exc)
             return False
 
-    # Final heading alignment so the forward-mounted arm points AT the object
-    # (lateral mis-alignment otherwise makes the top-down IK miss in y).
-    _, yaw_err = _state()
+    # SEAT firmly against the table. The stall above can trip a few cm short of the
+    # true jam (the gait slows before it fully seats), and the Piper's forward reach
+    # band is thin — a 5 cm standoff difference is reach-vs-unreachable. So press
+    # forward a few firm short steps until the dog truly stops advancing (two
+    # consecutive sub-_SEAT_EPS steps), driving it to its MAXIMALLY-forward, most
+    # repeatable standoff every run. Heading AND lateral are corrected each press so
+    # the dog seats square on the object's y-line, not drifted to a neighbour's.
+    # Only seat when the loop ended on a JAM (stall) — if the dog reached the nominal
+    # reach_m standoff without jamming, it is already correctly placed and pressing
+    # further would walk it INTO / past the object.
+    seat_prev: float | None = None
+    seat_stalls = 0
+    for _ in range(_SEAT_PRESSES if jammed else 0):
+        _, yaw_err, cur_x, lateral = _state()
+        if seat_prev is not None and (cur_x - seat_prev) < _SEAT_EPS:
+            seat_stalls += 1
+            if seat_stalls >= 2:
+                break
+        else:
+            seat_stalls = 0
+        seat_prev = cur_x
+        try:
+            base.walk(vx=step_v, vy=_vy(lateral),
+                      vyaw=max(-0.4, min(0.4, yaw_err * 1.5)), duration=0.7)
+        except Exception:  # noqa: BLE001
+            break
+
+    # Final alignment: correct any residual lateral offset (sidestep onto the y-line)
+    # then heading, so the forward-mounted arm points AT the object in BOTH axes.
+    _, yaw_err, _, lateral = _state()
+    if abs(lateral) > _LATERAL_DEADBAND:
+        try:
+            base.walk(vx=0.0, vy=_vy(lateral), vyaw=0.0, duration=0.8)
+        except Exception:  # noqa: BLE001
+            pass
+    _, yaw_err, _, _ = _state()
     if abs(yaw_err) > 0.08:
         try:
             base.walk(vx=0.0, vy=0.0, vyaw=max(-0.6, min(0.6, yaw_err * 1.5)), duration=0.8)
         except Exception:  # noqa: BLE001
             pass
-    dist, _ = _state()
-    return dist <= reach_m + 0.15
+    dist, _, _, _ = _state()
+    return dist <= reach_m + 0.20
 
 
 @skill(
@@ -243,11 +354,48 @@ class PerceptionGraspSkill:
                     resolved, gp.x, gp.y, gp.z, approached)
 
         # --- delegate the proven top-down motion via the target_xyz seam ------
+        # The Piper's forward-reach envelope at full extension is a THIN z-band: at
+        # the far standoff the object sits at (it reaches ~0.49 m forward only when
+        # reaching to z~0.32, and cannot also hover 5 cm HIGHER there — measured
+        # /tmp/param_probe.py: pre-grasp at obj_z+0.05 IK-fails while the grasp at
+        # obj_z IK-succeeds). So we tell PickTopDownSkill to use a SHALLOW pre-grasp
+        # hover (obj_z + _GO2_PRE_GRASP_H) that stays inside that band — the EE
+        # extends straight to the object's reachable height and the weld fires from
+        # there (within _GRASP_RADIUS), rather than first reaching an unreachable
+        # high hover and bailing ik_unreachable. World-specific config injection (the
+        # perception skill owns the Go2+Piper reach knowledge), not a kernel change.
+        ctx_cfg = dict(context.config or {})
+        skills_cfg = dict(ctx_cfg.get("skills", {}))
+        ptd_cfg = dict(skills_cfg.get("pick_top_down", {}))
+        ptd_cfg.setdefault("pre_grasp_height", _GO2_PRE_GRASP_H)
+        ptd_cfg.setdefault("grasp_z_above", _GO2_GRASP_Z_ABOVE)
+        skills_cfg["pick_top_down"] = ptd_cfg
+        ctx_cfg["skills"] = skills_cfg
+        context.config = ctx_cfg
+
         from vector_os_nano.skills.pick_top_down import PickTopDownSkill
         pick_params = dict(params)
         pick_params["target_xyz"] = [gp.x, gp.y, gp.z]
         pick_params["object_id"] = resolved
         res = PickTopDownSkill().execute(pick_params, context)
+
+        # --- LIFT the grasped object clear of the table -----------------------
+        # PickTopDownSkill's lift only returns to the (shallow) pre-grasp hover, so
+        # with the Go2+Piper's thin forward z-band the object rises barely ~1 cm —
+        # not a convincing pick. Once the weld has actually fired (gripper holding),
+        # retract the shoulder UP (joint2) so the welded object is hauled clear of
+        # the table (z rises several cm). This is honest: it only runs AFTER a real
+        # weld, and the object moves because it is physically attached to link6.
+        try:
+            if gripper.is_holding() and hasattr(arm, "get_joint_positions") and hasattr(arm, "move_joints"):
+                import time as _t
+                cur = list(arm.get_joint_positions())
+                lift_q = list(cur)
+                lift_q[1] = max(0.0, cur[1] - _LIFT_SHOULDER_DELTA)  # raise shoulder -> EE up
+                arm.move_joints(lift_q, duration=_LIFT_DURATION)
+                _t.sleep(0.3)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[PGRASP] post-grasp lift failed: %s", exc)
 
         rd = dict(res.result_data or {})
         rd.update({

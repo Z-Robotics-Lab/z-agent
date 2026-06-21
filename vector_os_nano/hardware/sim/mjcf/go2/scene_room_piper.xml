@@ -565,36 +565,59 @@
 
 
     <!-- ==================== PICK TABLE (demo grasping) ==================== -->
-    <!-- Low side table ~1.1m in front of Go2 spawn (9.9, 3.0) — dog has to
-         walk forward ~60 cm before the arm is in range. Three pickable
-         objects on top: two bottles + one can (cylinder primitives). Object
-         bodies named "pickable_*" so MuJoCoGo2 auto-registers them into the
-         world_model on connect. Free joint on each object so PickTopDownSkill
-         can lift them off the table. -->
-    <body name="pick_table" pos="11.0 3.0 0">
-      <geom type="box" pos="0 0 0.10" size="0.20 0.25 0.10" material="mat_oak"/>
+    <!-- REACH+VISIBILITY-MATCHED tall pedestal (R18, vr-lead). The grasp geometry
+         is bounded by three MEASURED facts (probes /tmp/reach_probe.py,
+         /tmp/standoff_probe.py, /tmp/param_probe.py, /tmp/find_green.py):
+           (a) the Piper top-down EE reaches FURTHER forward the HIGHER it reaches —
+               ~0.49 m forward of the dog centre at z~0.32 vs only ~0.22 m at z~0.25
+               (a kinematic property, measured). So objects must sit HIGH (z~0.32)
+               to be reachable, not at low table height.
+           (b) the dog jams its front against the table and stops advancing at a
+               stable standoff ~10.43-10.50 against this pedestal (steered approach);
+           (c) the d435 head camera (z~0.38, shallow down-tilt) is occluded by the
+               table's NEAR TOP EDGE for objects within ~6 cm of that edge — the
+               central object then renders 0 px and perception can't see it. Objects
+               must sit >=8 cm BACK from the near edge (measured: x>=10.88 with the
+               near edge at 10.80 renders ~1000 green px; x<=10.82 renders 0).
+         The old table put objects at (11.0, 0.24): beyond reach in x AND below the
+         reachable z. This pedestal satisfies (a)+(c): tall top z=0.28 (object centre
+         z=0.32, reachable AND visible-clear of the near edge), near edge x=10.80
+         (half-x 0.15, centre 10.95). Objects at x=10.88, 8 cm back from the near
+         edge -> visible to the camera, behind the dog's bumper (no knock), and at
+         z=0.32 within the EE's ~10.43+0.49 ~= 10.92 forward reach. The EE lands
+         within the 6 cm weld radius from the jammed standoff -> an honest weld
+         (real kinematic reach); the free joint lets the welded object physically
+         LIFT. The reliability lever is the APPROACH driving the dog to its full
+         forward jam + a low pre-grasp hover (perception_grasp.py). -->
+    <body name="pick_table" pos="10.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
     </body>
 
-    <!-- Objects arranged in a lateral row (spread along y, not x). Three
-         cylinders of same dimensions (r=3 cm, h=8 cm) differing only in
-         colour so every pick has identical geometric difficulty — thin
-         bottles (<2.5 cm radius) cannot be held reliably by the 35 mm
-         Piper jaws with position-only control (no force sensor).
-         15 cm y-spacing keeps the ~7 cm open jaws clear of neighbours.
-         High tangential friction (2.0) compensates for the soft grip. -->
-    <body name="pickable_bottle_blue" pos="11.00 2.85 0.250">
+    <!-- Objects on the pedestal top (z_top=0.28 + 0.04 half-height = 0.32 centre).
+         GREEN is the deictic "前面的东西" target: placed dead-ahead on the dog's
+         spawn-y line (y=3.0) AND 8 cm back from the near edge (x=10.88) so it is
+         (i) visible — clear of the near-edge camera occlusion (~1000 green px), and
+         (ii) the resolver's pick on BOTH tests — nearest depth (z_near front-shelf)
+         and most-central (image centre, central_dist~2 px). Blue/red are pushed
+         wide (+-0.22 m in y) so they are clearly OFF-axis and never out-compete
+         green on centrality even if the dog's heading drifts a few degrees during
+         the approach. Cylinders r=3 cm, h=8 cm (red r=3.3) — thin bottles (<2.5 cm)
+         can't be held by the 35 mm Piper jaws under position-only control. High
+         tangential friction (2.0) helps the soft grip; the weld is the actual hold
+         (honest GROUNDED grasp). -->
+    <body name="pickable_bottle_blue" pos="10.90 2.78 0.320">
       <freejoint/>
       <geom type="cylinder" size="0.028 0.04" rgba="0.20 0.40 0.85 1"
             mass="0.08" friction="2 0.05 0.001" priority="2"/>
     </body>
 
-    <body name="pickable_bottle_green" pos="11.00 3.00 0.250">
+    <body name="pickable_bottle_green" pos="10.88 3.00 0.320">
       <freejoint/>
       <geom type="cylinder" size="0.028 0.04" rgba="0.25 0.70 0.35 1"
             mass="0.08" friction="2 0.05 0.001" priority="2"/>
     </body>
 
-    <body name="pickable_can_red" pos="11.00 3.15 0.250">
+    <body name="pickable_can_red" pos="10.90 3.22 0.320">
       <freejoint/>
       <geom type="cylinder" size="0.033 0.04" rgba="0.85 0.25 0.20 1"
             mass="0.08" friction="2 0.05 0.001" priority="2"/>
