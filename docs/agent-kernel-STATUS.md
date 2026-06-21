@@ -5,27 +5,22 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R23 — ★ BARE-CLI GROUNDED ACHIEVED — GOAL COMPLETE (D39): cli REPL '抓前面的东西' → GROUNDED 1/1 verified=True
+updated: 2026-06-21 · R24 — ★ RELIABILITY 80%→100% (15/15 HOLD, D40): post-approach IK nudge
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
-phase:   M1 manipulation — perception-driven grasp ACHIEVED via bare-CLI PTY.
+phase:   M1 manipulation — GROUNDED + RELIABLE (15/15 HOLD in-process; bare-cli GROUNDED re-confirmed).
 owns:    perception/{grasp_point,_centroid,go2_grasp_perception}.py, skills/perception_grasp.py,
          hardware/sim/go2_room.xml (pick geometry) + tests/unit/{perception,skills}. (Moat M0 = solid, D10-D16.)
-doing:   ★ GOAL COMPLETE (R23, D39). The full Go2+Piper perception-driven GROUNDED grasp runs end-to-end
-         through the PROJECT'S ONLY acceptance surface — bare vector-cli + NL. Literal two-turn REPL
-         (real cli.main --native-loop, LLM faked ONLY): `切换到 go2 带机械臂` → `抓前面的东西` →
-         `perception_grasp → verify holding_object('pickable_bottle_green') ✓` → verdict GROUNDED verified=True
-         (1/1). Confirmed twice (instrumented bridge probe: weld fires + object lifts +23cm + oracle GROUNDED
-         via /piper/object_state over ROS2). Route: VLM/perception 3D point (depth+mask) → IK → grasp →
-         holding_object GROUNDED. Spine vcli/cognitive/ BYTE-UNCHANGED all session.
+doing:   ★ R24 DONE (D40). Reliability 80%→100%: post-approach IK nudge in perception_grasp.execute().
+         Root cause: gait stall fired 5-10cm short when dog had lateral drift; lateral/yaw corrections
+         competed with forward advance. Fix: 5 pure-vx presses (vy=0, vyaw=0) after approach, IK-gated.
+         Nudge 1/5 always sufficient. 15/15 HOLD (was 12/15=80%), bare-cli GROUNDED, 34/34 unit tests.
+         Spine vcli/cognitive/ BYTE-UNCHANGED. Commit: fe66489.
 
 blocked: none.
-next:    R24 — goal met. Pick at cold-ORIENT: (1) RELIABILITY harden the grasp ~80%→higher (the ~20%
-         approach/IK-variance miss grades RAN honestly); (2) D9 #2 native latency (sync→async); (3) VLM+EdgeTAM
-         pluggable upgrade (deictic front_object is the current detector; timm network-blocked). All non-gated.
-         Proven this session: perception green@2cm (D32), in-process GROUNDED (D34/D35), bare-cli GROUNDED
-         (D38/D39). NEVER trust skill.success; honest verdict only. Spine byte-unchanged.
+next:    R25 — (1) D9 #2 native latency (sync→async); (2) VLM+EdgeTAM pluggable upgrade (timm blocked);
+         (3) multi-object / place skill. NEVER trust skill.success; honest verdict only. Spine byte-unchanged.
 
 
 ## Standing facts (durable)
