@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R31 — ★ ATTRIBUTE (colour) GRASP — "抓红色的东西/抓蓝色的" grasps the RIGHT-coloured cylinder, GROUNDED (D47); spine byte-unchanged
+updated: 2026-06-21 · R32 — ★ MANIPULATION FRONTIER RICH: deictic+color grasp, place orchestration, recover — all bare-cli GROUNDED (D47-confirm)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: attribute-specified grasp — NL colour selects + grasps the right cylinder, GROUNDED via bare cli.main + NL.
@@ -23,13 +23,13 @@ doing:   ★ R31 DONE (D47). ATTRIBUTE colour grasp, perception-side ADDITIVE on
          ✓ verdict GROUNDED verified=True; bridge "welded 'pickable_can_red' (51mm)". 44 unit tests green.
 
 blocked: none.
-next:    R32 — manipulation frontier broad: grasp (D39), reliability ~90% (D43), recover (D45), grasp+PLACE (D46),
-         ATTRIBUTE/colour grasp (D47). HONEST residual: colour SELECTION is reliable (perception correct every run),
-         but the BLUE full-grasp is ~50% (2/4) — an EXECUTION reach-limit of the reuse-unchanged approach machinery
-         at the most laterally-offset cylinder (y=2.78), not a colour defect; tightening blue's approach/nudge +
-         an N-run reliability sweep is the next autonomous chunk. Bigger in-KIND leap (nav+grasp cross-skill) needs
-         FAR un-park = a CEO gate (surface, don't cross). VLM+EdgeTAM blocked (timm net).
-         Bare vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust skill.success/sub-claims.
+next:    R33 — manipulation frontier RICHLY covered via bare-cli: deictic grasp (D39 ~90%), recover (D45),
+         grasp+PLACE orchestration (D46), ATTRIBUTE/color grasp (D47, selection 100%; offset red~75%/blue~50%
+         reach-limited, central green ~90%). Autonomous manipulation frontier near-exhausted. Next-MAJOR
+         direction is a CEO fork (all need un-parking a stack): nav+grasp (FAR), explore (TARE), VLN (SysNav).
+         Autonomous remainder (no gate, diminishing): offset-color reliability polish (lateral-reach hardening).
+         Surfaced to Yusen. Bare vector-cli + NL = ONLY acceptance; spine only STRICTER; never trust
+         skill.success / sub-agent claims (red-team caught 4 this session).
 
 
 ## Standing facts (durable)
