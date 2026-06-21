@@ -5,28 +5,30 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R30 — ★ GRASP+PLACE orchestration BOTH-GROUNDED (red-team reproduced, D46); multi-skill North Star demonstrated
+updated: 2026-06-21 · R31 — ★ ATTRIBUTE (colour) GRASP — "抓红色的东西/抓蓝色的" grasps the RIGHT-coloured cylinder, GROUNDED (D47); spine byte-unchanged
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
-         CURRENT TOP GOAL: multi-skill GRASP→PLACE orchestration verified GROUNDED through bare cli.main + NL.
-phase:   M1 manipulation — orchestration: grasp GROUNDED (D39) + place GROUNDED via placed_count(region) (D46).
-owns:    skills/place_top_down.py (verify_hint), skills/utils/place_region.py + tests/skills/{test_place_region,
-         test_place_top_down}.py. (Moat M0 solid D10-D16; spine vcli/cognitive/ BYTE-UNCHANGED.)
-doing:   ★ R29 DONE (D46). GRASP+PLACE orchestration. ONE NL command "把前面的东西抓起来放到旁边" the native
-         producer decomposes into perception_grasp→verify holding_object→place_top_down→verify placed_count→finish.
-         Added GROUNDED verify_hint to PlaceTopDownSkill (read by frozen vocab_from_registry via schema —
-         spine untouched) + region_around helper. Place target = floor (10.60,2.70,0.05) in the reachable
-         central corridor; green rests z~0.04 < _LIFT_MIN_Z=0.10 → placed_count((10.45,2.55,10.75,2.85))==1,
-         weld released, is_holding False. BARE-CLI verdict GROUNDED verified=True (2/2 grounded). 114 tests
-         green. Commit: bf2accd.
+         CURRENT TOP GOAL: attribute-specified grasp — NL colour selects + grasps the right cylinder, GROUNDED via bare cli.main + NL.
+phase:   M1 manipulation — grasp GROUNDED (D39), grasp+PLACE orchestration (D46), ATTRIBUTE/colour grasp (D47).
+owns:    perception/front_object.py (parse_color/_hue/_COLOR_HUE/color= kwarg), perception/go2_grasp_perception.py
+         (color thread), skills/perception_grasp.py (_COLOR_TO_SCENE verify-label) + tests/unit/{perception/test_front_object,
+         skills/test_perception_grasp}.py. (Moat M0 solid D10-D16; spine vcli/cognitive/ BYTE-UNCHANGED.)
+doing:   ★ R31 DONE (D47). ATTRIBUTE colour grasp, perception-side ADDITIVE only (spine untouched). NL colour
+         ("抓红色的东西"/"抓蓝色的") → front_object_mask keeps only the in-band-hue blobs, picks the most-central
+         (FAIL LOUD if no colour match — never the front-most); verify LABEL maps colour→scene name. Grasp POINT
+         still perceived from depth+mask. Measured render hues red=2/green=66/blue=111 (cv2 0..180) all in-band → no
+         tuning needed. REAL-VERIFY in-process: RED grasp_world 0.028m from red GT (oracle holding_object('pickable_can_red')=True),
+         BLUE 0.024m from blue GT (oracle blue=True), GREEN deictic regression unchanged (0.023m, oracle green=True);
+         each lifts its own cylinder, others stay down. BARE-CLI: "抓红色的东西" → verify holding_object('pickable_can_red')
+         ✓ verdict GROUNDED verified=True; bridge "welded 'pickable_can_red' (51mm)". 44 unit tests green.
 
 blocked: none.
-next:    R31 — manipulation frontier covered: grasp (D39), reliability ~90% (D43), recover (D45), grasp+PLACE
-         orchestration (D46, both-GROUNDED, red-team reproduced). Next chunk (autonomous, in-degree):
-         ATTRIBUTE GRASP "抓红色的东西" — extend the deictic front_object resolver to attribute/color selection
-         (HSV: pick the RED/BLUE/GREEN blob by NL, not just the front one), verify holding_object('pickable_*')
-         for the named color; bare-cli GROUNDED. No VLM/timm. The bigger in-KIND leap (nav+grasp cross-skill
-         orchestration) needs FAR un-park = a CEO gate (surface, don't cross). VLM+EdgeTAM blocked (timm net).
+next:    R32 — manipulation frontier broad: grasp (D39), reliability ~90% (D43), recover (D45), grasp+PLACE (D46),
+         ATTRIBUTE/colour grasp (D47). HONEST residual: colour SELECTION is reliable (perception correct every run),
+         but the BLUE full-grasp is ~50% (2/4) — an EXECUTION reach-limit of the reuse-unchanged approach machinery
+         at the most laterally-offset cylinder (y=2.78), not a colour defect; tightening blue's approach/nudge +
+         an N-run reliability sweep is the next autonomous chunk. Bigger in-KIND leap (nav+grasp cross-skill) needs
+         FAR un-park = a CEO gate (surface, don't cross). VLM+EdgeTAM blocked (timm net).
          Bare vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust skill.success/sub-claims.
 
 

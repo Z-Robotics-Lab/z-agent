@@ -68,6 +68,17 @@ def _is_deictic(query: str) -> bool:
     return any(tok in q for tok in _DEICTIC_TOKENS)
 
 
+# ATTRIBUTE (colour) grasp (D47): map a parsed colour to the scene object name the
+# verify oracle grades. The grasp POINT still comes from perception (depth+mask) —
+# only the verify LABEL uses this colour→name convention, so an emitted verify reads
+# holding_object('pickable_can_red') etc. The colour cylinders in scene_room_piper.xml.
+_COLOR_TO_SCENE: dict[str, str] = {
+    "red": "pickable_can_red",
+    "blue": "pickable_bottle_blue",
+    "green": "pickable_bottle_green",
+}
+
+
 # Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
 # object. MEASURED R17: the top-down EE reaches only ~0.22m forward of the dog centre
 # the dog's SENSOR (0.3 m forward of body origin) must sit within this distance
@@ -345,8 +356,15 @@ class PerceptionGraspSkill:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("[PGRASP] stow-for-view move failed: %s", exc)
 
+        # --- ATTRIBUTE grasp (D47): parse a colour from the query. When present, the
+        # perception resolver selects the blob of THAT colour (not the front-most) and
+        # the verify LABEL maps to the colour's scene name (the grasp POINT is still
+        # perceived from depth+mask). A deictic "前面的东西" parses no colour → unchanged.
+        from vector_os_nano.perception.front_object import parse_color
+        color = parse_color(query)
+
         # --- perceive the target's 3D grasp point (real depth + mask, never GT) ---
-        gp, resolved, fail = self._perceive_grasp_point(perception, query)
+        gp, resolved, fail = self._perceive_grasp_point(perception, query, color=color)
         if fail is not None:
             return fail
         approached = False
@@ -460,12 +478,16 @@ class PerceptionGraspSkill:
             result_data=rd,
         )
 
-    def _perceive_grasp_point(self, perception: Any, query: str):
+    def _perceive_grasp_point(self, perception: Any, query: str, *, color: str | None = None):
         """Acquire RGB-D, resolve the target mask, compute the WORLD grasp point.
 
         Returns ``(gp | None, resolved_label, fail_result | None)``. Pure perception:
         the 3D point is from real depth + mask, NEVER a ground-truth pose. Callable
         twice (before/after an approach) so the point tracks the live camera pose.
+
+        ATTRIBUTE grasp (D47): when *color* is given, the front-object resolver selects
+        the salient blob of that colour (FAIL LOUD if none) and the resolved LABEL is the
+        colour's scene name (verify oracle key) — the grasp POINT remains from depth+mask.
         """
         import numpy as np
         try:
@@ -476,12 +498,14 @@ class PerceptionGraspSkill:
         except Exception as exc:  # noqa: BLE001
             return None, (query or "front object"), _fail("no_camera", f"Failed to read RGB-D frame: {exc}")
 
-        # Deictic ("前面的东西"/generic) -> front-object resolver (no VLM naming).
-        # Named -> VLM detect + segment; VLM-empty -> front-object fallback (honest).
-        deictic = _is_deictic(query)
+        # Deictic ("前面的东西"/generic) OR a colour query -> front-object resolver (no
+        # VLM naming). Named -> VLM detect + segment; VLM-empty -> front-object fallback.
+        deictic = _is_deictic(query) or color is not None
         have_front = hasattr(perception, "front_object_mask")
         mask = None
-        resolved = query or "front object"
+        # A colour query's verify LABEL is the colour's scene name (the grasp POINT is
+        # still perceived); a plain deictic query keeps the query text as its label.
+        resolved = _COLOR_TO_SCENE.get(color, query or "front object") if color else (query or "front object")
         detection_found = False
         if deictic and have_front:
             try:
@@ -494,7 +518,7 @@ class PerceptionGraspSkill:
                         _cv2.imwrite("/tmp/pgrasp_depth.png", _dvis)
                 except Exception:
                     pass
-                mask = perception.front_object_mask(rgb, depth)
+                mask = perception.front_object_mask(rgb, depth, color=color)
                 _mask_px = int(np.count_nonzero(mask)) if mask is not None else 0
                 _d_valid = int((depth > 0).sum()) if depth is not None else -1
                 _d_near = int(((depth > 0) & (depth <= 2.0)).sum()) if depth is not None else -1

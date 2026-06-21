@@ -200,8 +200,8 @@ def test_ik_unreachable_surfaced():
 class FrontPerception(FakePerception):
     """Adds the deictic front-object resolver surface."""
 
-    def front_object_mask(self, rgb=None, depth=None):
-        self.calls.append("front")
+    def front_object_mask(self, rgb=None, depth=None, *, color=None):
+        self.calls.append(f"front:{color}" if color else "front")
         return self._mask
 
 
@@ -233,6 +233,35 @@ def test_named_query_empty_vlm_falls_back_to_front():
     res = PerceptionGraspSkill().execute({"query": "banana"}, _ctx(perc))
     assert res.success is True
     assert "front" in perc.calls
+
+
+def test_color_query_threads_color_and_maps_verify_label():
+    """ATTRIBUTE grasp (D47): '抓红色的东西' resolves via front_object_mask(color='red')
+    and the verify LABEL maps to the colour's scene name (pickable_can_red)."""
+    perc = FrontPerception()
+    arm = FakeArm()
+    res = PerceptionGraspSkill().execute({"query": "抓红色的东西"}, _ctx(perc, arm=arm))
+    assert res.success is True
+    assert "front:red" in perc.calls               # colour threaded to the resolver
+    assert not any(c.startswith("detect") for c in perc.calls)  # no VLM naming
+    assert res.result_data["detection_label"] == "pickable_can_red"  # verify LABEL
+
+
+def test_color_query_blue_maps_to_blue_bottle():
+    perc = FrontPerception()
+    res = PerceptionGraspSkill().execute({"query": "抓蓝色的"}, _ctx(perc, arm=FakeArm()))
+    assert res.success is True
+    assert "front:blue" in perc.calls
+    assert res.result_data["detection_label"] == "pickable_bottle_blue"
+
+
+def test_deictic_no_color_keeps_query_label():
+    """A plain deictic query parses no colour: front_object_mask(color=None), label unchanged."""
+    perc = FrontPerception()
+    res = PerceptionGraspSkill().execute({"query": "前面的东西"}, _ctx(perc, arm=FakeArm()))
+    assert res.success is True
+    assert "front" in perc.calls and "front:red" not in perc.calls
+    assert res.result_data["detection_label"] == "前面的东西"
 
 
 class _FakeBase:

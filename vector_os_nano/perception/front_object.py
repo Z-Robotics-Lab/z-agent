@@ -37,6 +37,71 @@ _OPEN_KSIZE = 3     # px; morphological-opening kernel. Erode→dilate severs th
                     # and threshold-independently (verified stable for sat_min 140-155;
                     # a pure threshold flips central→wrong-object within ~5 sat units).
 
+# --- ATTRIBUTE (colour) selection (D47) ---------------------------------------
+# OpenCV hue is 0..180. Red wraps the 0/180 seam so it needs two bands. Ranges are
+# the assumed nominal bands for the three scene cylinders (red rgba .85/.25/.20,
+# green .25/.70/.35, blue .20/.40/.85); REAL-VERIFY measures the rendered blob hues
+# and these are tuned to the measured values if the render fidelity shifts them.
+_COLOR_HUE: dict[str, list[tuple[int, int]]] = {
+    "red": [(0, 12), (168, 180)],
+    "green": [(38, 88)],
+    "blue": [(92, 135)],
+}
+# NL → canonical colour. Substring match (zh + en), so "抓红色的东西" → "red".
+_COLOR_ALIASES: dict[str, str] = {
+    "红": "red", "红色": "red", "red": "red",
+    "绿": "green", "绿色": "green", "green": "green",
+    "蓝": "blue", "蓝色": "blue", "blue": "blue",
+}
+
+
+def parse_color(query: str | None) -> str | None:
+    """Return the canonical colour ('red'/'green'/'blue') named in *query*, else None.
+
+    Substring match over the zh/en aliases on the lowercased query. A deictic query
+    with no colour word ("抓前面的东西") returns None → existing front-most behaviour.
+    """
+    q = (query or "").lower()
+    for alias, color in _COLOR_ALIASES.items():
+        if alias in q:
+            return color
+    return None
+
+
+def _hue(rgb: np.ndarray) -> np.ndarray:
+    """Return the HSV hue channel (0..180) for *rgb*, cv2 if present else numpy.
+
+    The numpy fallback replicates OpenCV's 0..180 hue convention so the
+    `_COLOR_HUE` bands apply identically on both paths.
+    """
+    try:
+        import cv2
+        return cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)[:, :, 0]
+    except Exception:  # noqa: BLE001 — numpy HSV hue fallback (OpenCV 0..180 scale)
+        a = rgb.astype(np.float32)
+        r, g, b = a[:, :, 0], a[:, :, 1], a[:, :, 2]
+        mx = a.max(axis=2)
+        mn = a.min(axis=2)
+        diff = mx - mn
+        hue = np.zeros_like(mx)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mask = diff > 0
+            rm = (mx == r) & mask
+            gm = (mx == g) & mask & ~rm
+            bm = (mx == b) & mask & ~rm & ~gm
+            hue[rm] = (60.0 * (g[rm] - b[rm]) / diff[rm]) % 360.0
+            hue[gm] = 60.0 * (b[gm] - r[gm]) / diff[gm] + 120.0
+            hue[bm] = 60.0 * (r[bm] - g[bm]) / diff[bm] + 240.0
+        return (hue / 2.0).astype(np.uint8)  # 0..360 -> OpenCV 0..180
+
+
+def _hue_in_color(hue_val: float, color: str) -> bool:
+    """True iff *hue_val* (0..180) falls in any band of *color*."""
+    for lo, hi in _COLOR_HUE.get(color, []):
+        if lo <= hue_val <= hi:
+            return True
+    return False
+
 
 def _saturation(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Return (saturation, value) in 0..255, cv2 if present else numpy."""
@@ -109,6 +174,7 @@ def front_object_mask(
     rgb: np.ndarray,
     depth: np.ndarray | None = None,
     *,
+    color: str | None = None,
     sat_min: int = _SAT_MIN,
     val_min: int = _VAL_MIN,
     min_blob: int = _MIN_BLOB,
@@ -122,6 +188,11 @@ def front_object_mask(
     connected blobs, the one whose centroid is CLOSEST to the image centre wins
     ("前面" = directly ahead). Returns None when nothing salient is in front
     (FAIL LOUD — never fabricate a target).
+
+    ATTRIBUTE selection (D47): when *color* is given ('red'/'green'/'blue'), keep
+    only the salient blobs whose MEDIAN hue falls in `_COLOR_HUE[color]` and pick the
+    most-central of THOSE — returns None if none match (FAIL LOUD, never falls back
+    to the front-most for a colour query). color=None → front-most behaviour, UNCHANGED.
     """
     if rgb is None or rgb.ndim != 3:
         return None
@@ -151,6 +222,13 @@ def front_object_mask(
     n, labels, centroids, areas = _components(salient)
     img_c = np.array([w / 2.0, h / 2.0])
 
+    # ATTRIBUTE selection: when a colour is requested, pre-compute the hue over the
+    # salient pixels so each blob can be matched on its median hue (computed over the
+    # blob ∩ salient pixels — exactly the vivid object body, not its anti-aliased rim).
+    hue_img = _hue(rgb) if color is not None else None
+    if color is not None and color not in _COLOR_HUE:
+        return None  # FAIL LOUD on an unknown colour, never the front-most
+
     # Per-blob: centrality + median depth. "前面" = NEAREST (a foreground object
     # at ~1 m beats a same-colored background object at ~3 m, which 'most central'
     # would wrongly pick when the background sits dead-centre in a doorway).
@@ -159,6 +237,11 @@ def front_object_mask(
         if areas[i] < min_blob:
             continue
         comp = labels == i
+        # Colour gate: keep only blobs whose MEDIAN hue is in the requested band.
+        if color is not None:
+            hv = hue_img[comp]
+            if hv.size == 0 or not _hue_in_color(float(np.median(hv)), color):
+                continue
         cen = float(np.linalg.norm(centroids[i] - img_c))
         if depth is not None:
             dv = depth[comp & (depth > 0)]
@@ -167,9 +250,13 @@ def front_object_mask(
             zmed = 0.0
         cands.append((i, cen, zmed))
     if not cands:
-        return None
+        return None  # colour query with no matching blob -> FAIL LOUD (None)
 
-    if depth is not None:
+    if color is not None:
+        # Colour query: among the colour-matched blobs, the most central wins
+        # (the target colour need NOT be the front-most object — that is the point).
+        best = min(cands, key=lambda c: c[1])
+    elif depth is not None:
         z_near = min(c[2] for c in cands)
         front_shelf = [c for c in cands if c[2] <= z_near + _FRONT_BAND]
         best = min(front_shelf, key=lambda c: c[1])  # most central of the nearest shelf

@@ -121,18 +121,22 @@ class Go2GraspPerception:
         self,
         rgb: np.ndarray | None = None,
         depth: np.ndarray | None = None,
+        *,
+        color: str | None = None,
     ) -> np.ndarray | None:
         """Mask of the salient object in front (deictic '前面的东西'), or None.
 
         Needs no VLM/EdgeTAM — resolves the front object from the rendered RGB
-        saliency + depth. Renders fresh frames if not supplied.
+        saliency + depth. Renders fresh frames if not supplied. When *color* is
+        given ('red'/'green'/'blue', D47), selects the salient blob of THAT colour
+        instead of the front-most one (None if no such blob — FAIL LOUD).
         """
         from vector_os_nano.perception.front_object import front_object_mask
         if rgb is None:
             rgb = self.get_color_frame()
         if depth is None:
             depth = self.get_depth_frame()
-        return front_object_mask(rgb, depth)
+        return front_object_mask(rgb, depth, color=color)
 
     # --- lifecycle -----------------------------------------------------------
 

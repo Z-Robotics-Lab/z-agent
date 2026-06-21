@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from vector_os_nano.perception.front_object import front_object_mask
+from vector_os_nano.perception.front_object import front_object_mask, parse_color
 
 _H, _W = 48, 64
 
@@ -98,3 +98,86 @@ def test_thin_bridge_keeps_central_object_selectable():
     )
     sel = rgb[m > 0]
     assert sel[:, 1].mean() > sel[:, 0].mean() + 20, "selected object is not the green one"
+
+
+# ============================= ATTRIBUTE (colour) selection (D47) ============
+
+def _three_color_scene():
+    """Muted bg with three distinct-hue blobs at known x positions on a flat depth.
+
+    Layout (left→right): RED at x≈12, GREEN central at x=W/2, BLUE at x≈52.
+    Vivid rgba mirrors the scene cylinders so the median-hue gate is exercised on
+    realistic colours: red (217,64,51), green (64,179,89), blue (51,102,217).
+    """
+    rgb = _muted_bg()
+    cy = _H // 2
+    _put_blob(rgb, 12, cy, (217, 64, 51), r=4)        # red, left
+    _put_blob(rgb, _W // 2, cy, (64, 179, 89), r=4)   # green, central
+    _put_blob(rgb, _W - 12, cy, (51, 102, 217), r=4)  # blue, right
+    depth = np.full((_H, _W), 1.0, dtype=np.float32)
+    return rgb, depth
+
+
+def test_parse_color_chinese_and_english():
+    assert parse_color("抓红色的东西") == "red"
+    assert parse_color("抓蓝色的") == "blue"
+    assert parse_color("抓绿色的") == "green"
+    assert parse_color("grab the red can") == "red"
+    assert parse_color("pick the blue bottle") == "blue"
+
+
+def test_parse_color_deictic_is_none():
+    assert parse_color("抓前面的东西") is None
+    assert parse_color("前面的东西") is None
+    assert parse_color("grab the thing in front") is None
+    assert parse_color("") is None
+    assert parse_color(None) is None
+
+
+def test_color_red_selects_red_blob():
+    rgb, depth = _three_color_scene()
+    m = front_object_mask(rgb, depth, color="red")
+    assert m is not None
+    xs = np.where(m > 0)[1]
+    assert abs(xs.mean() - 12) < 5, f"red selection centroid x={xs.mean():.1f} not on red blob"
+    sel = rgb[m > 0]
+    assert sel[:, 0].mean() > sel[:, 1].mean() + 20 and sel[:, 0].mean() > sel[:, 2].mean() + 20
+
+
+def test_color_blue_selects_blue_blob():
+    rgb, depth = _three_color_scene()
+    m = front_object_mask(rgb, depth, color="blue")
+    assert m is not None
+    xs = np.where(m > 0)[1]
+    assert abs(xs.mean() - (_W - 12)) < 5, f"blue selection centroid x={xs.mean():.1f} not on blue blob"
+    sel = rgb[m > 0]
+    assert sel[:, 2].mean() > sel[:, 0].mean() + 20 and sel[:, 2].mean() > sel[:, 1].mean() + 20
+
+
+def test_color_green_selects_green_blob():
+    rgb, depth = _three_color_scene()
+    m = front_object_mask(rgb, depth, color="green")
+    assert m is not None
+    xs = np.where(m > 0)[1]
+    assert abs(xs.mean() - _W / 2) < 5, f"green selection centroid x={xs.mean():.1f} not on green blob"
+    sel = rgb[m > 0]
+    assert sel[:, 1].mean() > sel[:, 0].mean() + 20 and sel[:, 1].mean() > sel[:, 2].mean() + 20
+
+
+def test_color_none_keeps_frontmost_behavior():
+    """color=None must reproduce the existing front/central selection (the green centre)."""
+    rgb, depth = _three_color_scene()
+    m = front_object_mask(rgb, depth, color=None)
+    assert m is not None
+    xs = np.where(m > 0)[1]
+    assert abs(xs.mean() - _W / 2) < 6, "color=None should pick the central blob, unchanged"
+
+
+def test_color_no_match_fails_loud():
+    """A colour query with no blob of that colour returns None — never the front-most."""
+    rgb = _muted_bg()
+    _put_blob(rgb, _W // 2, _H // 2, (64, 179, 89), r=4)  # only a green blob present
+    depth = np.full((_H, _W), 1.0, dtype=np.float32)
+    assert front_object_mask(rgb, depth, color="red") is None
+    assert front_object_mask(rgb, depth, color="blue") is None
+    assert front_object_mask(rgb, depth, color="green") is not None
