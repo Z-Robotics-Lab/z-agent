@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R29 — ★ GRASP+PLACE multi-skill orchestration BARE-CLI BOTH-GROUNDED (2/2); spine byte-unchanged
+updated: 2026-06-21 · R30 — ★ GRASP+PLACE orchestration BOTH-GROUNDED (red-team reproduced, D46); multi-skill North Star demonstrated
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: multi-skill GRASP→PLACE orchestration verified GROUNDED through bare cli.main + NL.
@@ -21,11 +21,13 @@ doing:   ★ R29 DONE (D46). GRASP+PLACE orchestration. ONE NL command "把前�
          green. Commit: bf2accd.
 
 blocked: none.
-next:    R30 — orchestration proven. Measure grasp+place RELIABILITY across N runs (this round = 1/1 bare-cli +
-         1/1 probe; rate not yet measured). Then next frontier: (B) attribute grasp "抓红色的东西" (HSV, no VLM);
-         (C) nav+grasp orchestration (needs FAR un-park — CEO gate); (D) VLM+EdgeTAM (timm net-blocked); or
-         (E) stricter place verify (add `not holding_object()` cross-check alongside placed_count). Bare
-         vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust skill.success / sub-agent claims.
+next:    R31 — manipulation frontier covered: grasp (D39), reliability ~90% (D43), recover (D45), grasp+PLACE
+         orchestration (D46, both-GROUNDED, red-team reproduced). Next chunk (autonomous, in-degree):
+         ATTRIBUTE GRASP "抓红色的东西" — extend the deictic front_object resolver to attribute/color selection
+         (HSV: pick the RED/BLUE/GREEN blob by NL, not just the front one), verify holding_object('pickable_*')
+         for the named color; bare-cli GROUNDED. No VLM/timm. The bigger in-KIND leap (nav+grasp cross-skill
+         orchestration) needs FAR un-park = a CEO gate (surface, don't cross). VLM+EdgeTAM blocked (timm net).
+         Bare vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust skill.success/sub-claims.
 
 
 ## Standing facts (durable)
