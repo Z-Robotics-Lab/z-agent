@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-21 · R27 — MILESTONE consolidated: bare-cli GROUNDED re-confirmed (weld 41mm), spine intact, tests green (D44)
+updated: 2026-06-21 · R28 — ★ CAMPAIGN CORE COMPLETE: all 4 North-Star pillars DONE on the grasp (recover covered D45); awaiting CEO next-direction
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
@@ -19,13 +19,13 @@ doing:   ★ R24 DONE (D40). Reliability 80%→100%: post-approach IK nudge in p
          Spine vcli/cognitive/ BYTE-UNCHANGED. Commit: fe66489.
 
 blocked: none.
-next:    R28 — milestone consolidated (D44). Best available frontier: RECOVER pillar — a missed grasp (verify
-         RAN) → producer/model AUTO-RETRY → GROUNDED (North Star's 4th pillar on the grasp; turns the residual
-         ~10% miss into a recovered success; available, no FAR). Verify the native producer retries on a RAN
-         verdict (real LLM sees the trace + re-calls perception_grasp), demo'd via bare-cli (force/catch a miss
-         → recover → GROUNDED). After that the major available work is exhausted → multi-skill orchestration
-         nav+grasp needs FAR un-park = a CEO gate (surface, don't cross); VLM+EdgeTAM blocked (timm net).
-         Bare vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust skill.success/sub-claims.
+next:    R29 — CAMPAIGN CORE COMPLETE (top goal + all 4 pillars). Next-evolution fork (surfaced to Yusen):
+         (A) grasp+PLACE multi-skill orchestration (pick→verify→place→verify; available, adds a WORLD
+         place-oracle, NOT a spine change); (B) attribute grasp "抓红色的东西" (HSV color, no VLM); (C) nav+grasp
+         orchestration (needs FAR un-park — CEO gate); (D) VLM+EdgeTAM (timm net-blocked). On the next /loop:
+         if Yusen chose a direction, execute it; else default to (A) grasp+place (most North-Star-aligned,
+         autonomous). Bare vector-cli + NL = ONLY acceptance; spine only ever STRICTER; never trust
+         skill.success / sub-agent claims.
 
 
 ## Standing facts (durable)
