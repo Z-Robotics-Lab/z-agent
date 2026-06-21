@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-20 · R18 — GROUNDED grasp WORKS end-to-end, RED-TEAM CONFIRMED 4/5 (real lift+oracle+visual); ~80% reliable; bare-cli acceptance = R19
+updated: 2026-06-20 · R19 — bare-cli bridge grading-binding (the non-negotiable acceptance surface) delegated to vr-lead a1a09ae; in-process GROUNDED proven (D35)
 goal:    agent-orchestration runtime for physical AI — plan · route to the right model/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT TOP GOAL: full Go2+Piper GRASP (VLM→EdgeTAM→pointcloud→IK) as a native @skill.
