@@ -11,9 +11,12 @@ as today. It deliberately imports nothing robot-specific at module load.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from vector_os_nano.vcli.prompt import ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTIONS
+
+logger = logging.getLogger(__name__)
 
 
 class RobotWorld:
@@ -90,8 +93,32 @@ class RobotWorld:
         return ns
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
-        # No-op in C.1 — the robot path keeps its skill/primitive routing,
-        # byte-identical. C.3 registers detectors / planners / VLA policies here.
+        # Register the learned open-vocabulary DETECTOR (grounding-dino-tiny) as a
+        # routable second model family. Read-only — it only perceives; the verify
+        # spine remains the sole grader (the capability never self-certifies).
+        #
+        # Guarded two ways so dev / go2-only / CI without weights stay byte-identical:
+        #   1. torch/transformers must be importable (ImportError -> register nothing);
+        #   2. the agent must actually have an arm (the detector only drives the
+        #      manipulation route) — a base-only go2 or a no-agent probe registers
+        #      nothing. World-agnostic: an arm-presence CAPABILITY check, not an
+        #      embodiment special-case. The model itself is NOT loaded here — the
+        #      DetectorCapability/GroundingDinoDetector loads lazily on first detect.
+        if agent is None or getattr(agent, "_arm", None) is None:
+            return None
+        try:
+            import torch  # noqa: F401
+            import transformers  # noqa: F401
+        except ImportError:
+            logger.info(
+                "[ROBOT-WORLD] torch/transformers absent — detector capability "
+                "not registered (path stays detector-free)"
+            )
+            return None
+        from vector_os_nano.perception.detector_capability import DetectorCapability
+
+        registry.register(DetectorCapability())
+        logger.info("[ROBOT-WORLD] registered 'detect' capability (grounding-dino)")
         return None
 
     def decompose_vocab(self) -> None:

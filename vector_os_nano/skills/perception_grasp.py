@@ -68,6 +68,32 @@ def _is_deictic(query: str) -> bool:
     return any(tok in q for tok in _DEICTIC_TOKENS)
 
 
+# Concrete object NOUNS that name a thing — the trigger for the learned-DETECTOR
+# route (grounding-dino), with or without a colour ("罐子"/"红色的罐子"/"the can").
+# A query with NO such noun is either deictic ("前面的东西") or pure-colour
+# ("抓红色的") — both stay on the classical front_object resolver (the right cheap
+# tool). zh + en; substring match on the lowercased query.
+_OBJECT_NOUN_TOKENS = (
+    "罐子", "罐", "瓶子", "瓶", "杯子", "杯", "盒子", "盒", "球", "碗", "盘子", "盘",
+    "can", "bottle", "cup", "box", "ball", "bowl", "plate", "mug", "cylinder",
+    "banana", "apple", "object",
+)
+
+
+def _names_object(query: str) -> bool:
+    """True when *query* names a concrete object noun (-> the learned detector route).
+
+    Distinguishes a NAMED object ("罐子"/"red can") from a pure-colour ("抓红色的")
+    or deictic ("前面的东西") query. A deictic query (a spatial reference) never
+    counts as naming an object, even if a generic noun like "东西"/"object" appears —
+    those resolve by space, not by name.
+    """
+    if _is_deictic(query):
+        return False
+    q = (query or "").strip().lower()
+    return any(tok in q for tok in _OBJECT_NOUN_TOKENS)
+
+
 # ATTRIBUTE (colour) grasp (D47): map a parsed colour to the scene object name the
 # verify oracle grades. The grasp POINT still comes from perception (depth+mask) —
 # only the verify LABEL uses this colour→name convention, so an emitted verify reads
@@ -498,9 +524,17 @@ class PerceptionGraspSkill:
         except Exception as exc:  # noqa: BLE001
             return None, (query or "front object"), _fail("no_camera", f"Failed to read RGB-D frame: {exc}")
 
-        # Deictic ("前面的东西"/generic) OR a colour query -> front-object resolver (no
-        # VLM naming). Named -> VLM detect + segment; VLM-empty -> front-object fallback.
-        deictic = _is_deictic(query) or color is not None
+        # MODEL ROUTING (route each instruction to the right model+skill):
+        #   - NAMED object ("罐子"/"red can", _names_object) -> the LEARNED DETECTOR
+        #     (grounding-dino) via perception.detect(query). The new model-family route.
+        #   - pure COLOUR ("抓红色的", color set, no noun) -> classical front_object
+        #     colour/HSV resolver (cheap right tool; D47 must stay green).
+        #   - DEICTIC ("前面的东西"/generic) -> classical front_object resolver (geometry).
+        # A named query routes to the detector even when a colour is present; only a
+        # colour-WITHOUT-a-noun keeps the colour resolver. classical = front_object.
+        named = _names_object(query)
+        classical = not named  # deictic or pure-colour -> front_object resolver
+        deictic = classical
         have_front = hasattr(perception, "front_object_mask")
         mask = None
         # A colour query's verify LABEL is the colour's scene name (the grasp POINT is
@@ -548,7 +582,14 @@ class PerceptionGraspSkill:
             if detections:
                 detection_found = True
                 det = max(detections, key=lambda d: getattr(d, "confidence", 0.0))
-                resolved = str(getattr(det, "label", query) or query)
+                # Verify LABEL: when a colour is named ("红色的罐子") the verify oracle
+                # grades the colour's scene key (pickable_can_red); otherwise the
+                # detector's own label. The grasp POINT is still from depth+mask.
+                resolved = (
+                    _COLOR_TO_SCENE.get(color)
+                    if color and color in _COLOR_TO_SCENE
+                    else str(getattr(det, "label", query) or query)
+                )
                 try:
                     mask = perception.segment(rgb, det.bbox)
                 except Exception as exc:  # noqa: BLE001
