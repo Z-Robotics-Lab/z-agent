@@ -920,9 +920,21 @@ class PerceptionGraspSkill:
             if ok2:
                 return g2, r2, f2  # a plausible near-table object — take it
 
-        # No plausible target found in the sweep — return the CLOSEST seen (or the
-        # original failure). The downstream re-pose/approach is bounded, and a
-        # genuinely-unreachable point still FAILS LOUD at IK (no GT substitute).
+        # No PLAUSIBLE near-table target found in the full sweep. Do NOT return a far
+        # phantom point: the downstream re-pose/approach would chase it across the
+        # room (observed: a 8 m back-projection drove the dog 4.8 m away). FAIL LOUD
+        # instead — the target is not perceivable from this arrival framing (the
+        # can is out of the d435 FOV / occluded). This is honest: no GT substitute,
+        # and it surfaces the real cause (perception, not IK) to the replan context.
+        if best[0] is None or best[3] > _SCAN_MAX_LOCAL_M:
+            return None, best[1], _fail(
+                "no_detections",
+                f"Scanned {_SCAN_MAX_STEPS} headings; no plausible near-table target "
+                f"for {query!r} within {_SCAN_MAX_LOCAL_M:.1f} m (closest seen "
+                f"{best[3]:.1f} m). The object is not perceivable from this arrival "
+                "framing — not chasing a far phantom point.",
+                query=query,
+            )
         return best[0], best[1], best[2]
 
     def _perceive_grasp_point(self, perception: Any, query: str, *, color: str | None = None):

@@ -57,6 +57,16 @@ os.makedirs(ART, exist_ok=True)
 _RED_GT = (10.90, 3.22, 0.32)
 
 
+import logging as _logging
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(levelname)s %(name)s: %(message)s",
+)
+# Quiet the noisiest libs so the PGRASP/NAV lines are readable.
+for _n in ("transformers", "urllib3", "PIL", "matplotlib"):
+    _logging.getLogger(_n).setLevel(_logging.WARNING)
+
+
 def _log(msg: str) -> None:
     print(f"[R38] {msg}", flush=True)
 
