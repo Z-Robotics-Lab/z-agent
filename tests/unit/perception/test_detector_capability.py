@@ -178,6 +178,66 @@ def test_invoke_detector_error_is_failure():
     assert "cuda oom" in res.error
 
 
+def test_cold_turn_rebind_pulls_live_agent_perception():
+    """R37 Task B: registration runs BEFORE the NL sim-start boots the camera, so the
+    agent's _perception is None at bind time. Binding the AGENT (not the snapshot)
+    lets the capability pull the LIVE _perception lazily — so a cold turn (sim
+    started this same turn) perceives with no pre-boot."""
+    fake = _FakeDetector()
+
+    class _Perc:
+        def get_color_frame(self):
+            return _rgb()
+
+    class _Agent:
+        _perception = None  # None at registration (cold)
+
+    agent = _Agent()
+    # Snapshot perception is None (the cold-turn gap); bind the agent instead.
+    cap = DetectorCapability(detector=fake, perception=None, agent=agent)
+
+    # Before the sim-start: no frame source -> the routed detect cannot perceive.
+    res_cold = cap.invoke({"query": "bottle"}, None)
+    assert res_cold.success is False
+    assert "RGB" in res_cold.error or "rgb" in res_cold.error
+
+    # Mid-session NL sim-start populates the agent's live perception.
+    agent._perception = _Perc()
+
+    # Same capability instance now perceives via the LIVE agent perception.
+    res_warm = cap.invoke({"query": "bottle"}, None)
+    assert res_warm.success is True
+    assert fake.calls and fake.calls[-1][0] == (240, 320, 3)
+
+
+def test_snapshot_perception_wins_over_agent():
+    """A bound snapshot perception is preferred over the agent's (warm path identical)."""
+    fake = _FakeDetector()
+
+    class _Snap:
+        used = False
+
+        def get_color_frame(self):
+            _Snap.used = True
+            return _rgb()
+
+    class _AgentPerc:
+        used = False
+
+        def get_color_frame(self):
+            _AgentPerc.used = True
+            return _rgb()
+
+    class _Agent:
+        _perception = _AgentPerc()
+
+    cap = DetectorCapability(detector=fake, perception=_Snap(), agent=_Agent())
+    res = cap.invoke({"query": "x"}, None)
+    assert res.success is True
+    assert _Snap.used is True
+    assert _AgentPerc.used is False  # snapshot wins; agent never consulted
+
+
 def test_detector_signature_reads_only_rgb_and_query():
     """Structural moat: the detector contract takes ONLY (rgb, query) — no GT pose."""
     import inspect

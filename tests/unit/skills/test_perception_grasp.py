@@ -306,3 +306,126 @@ def test_no_arm_fails_loud():
     res = PerceptionGraspSkill().execute({"query": "banana"}, ctx)
     assert res.success is False
     assert res.result_data["diagnosis"] == "no_arm"
+
+
+# --- R37 TASK A: TRUE producer->consumer box-flow composition -----------------
+# The grasp CONSUMES a box passed in by an earlier detect step (via the
+# ${detect.output.detections} / ${detect.output.boxes} binding) and back-projects
+# it to a 3D grasp point — instead of running its OWN detect/front_object. The
+# composition claim ("the grasp's target came from the routed detector") is proven
+# by: segment fired, detect/front DID NOT, consumed_bbox=True, and the grasp point
+# equals grasp_point_from_rgbd over the SAME perceived depth+mask.
+
+# The producer DetectorCapability emits boxes as bbox lists and detections as dicts
+# (Detection.to_dict). Match the FakePerception's mask box so segment yields the mask.
+_PRODUCER_BOX = [29.0, 21.0, 35.0, 27.0]
+
+
+def test_passed_detections_consumed_no_reperceive():
+    """A passed detection box flows into the grasp; the grasp does NOT re-perceive."""
+    perc = FrontPerception()
+    arm = FakeArm()
+    dets = [{"label": "green bottle", "bbox": _PRODUCER_BOX, "confidence": 0.91}]
+    res = PerceptionGraspSkill().execute(
+        {"query": "绿色的瓶子", "detections": dets}, _ctx(perc, arm=arm)
+    )
+    assert res.success is True
+    rd = res.result_data
+    # Composition evidence: the box was consumed, the re-perceive was suppressed.
+    assert rd["consumed_bbox"] is True
+    assert rd["reperceived"] is False
+    # The bbox path fired (segment), the re-perceive path did NOT (no detect/front).
+    assert "segment" in perc.calls
+    assert not any(c.startswith("detect") for c in perc.calls)
+    assert not any(c.startswith("front") for c in perc.calls)
+    # The grasp point equals the perceived back-projection (same math, never GT).
+    expected = grasp_point_from_rgbd(perc._depth, perc._color, perc._mask,
+                                     _INTR, _CAM_XPOS, _CAM_XMAT)
+    assert rd["grasp_world"] == pytest.approx([expected.x, expected.y, expected.z], abs=1e-6)
+
+
+def test_passed_single_bbox_consumed():
+    """A single `bbox` (e.g. ${detect.output.boxes.0}) is consumed in place of detect."""
+    perc = FrontPerception()
+    res = PerceptionGraspSkill().execute(
+        {"query": "the bottle", "bbox": _PRODUCER_BOX}, _ctx(perc, arm=FakeArm())
+    )
+    assert res.success is True
+    assert res.result_data["consumed_bbox"] is True
+    assert "segment" in perc.calls
+    assert not any(c.startswith("detect") for c in perc.calls)
+
+
+def test_passed_bare_boxes_list_consumed():
+    """A bare `boxes` list (${detect.output.boxes}) is consumed (first box)."""
+    perc = FrontPerception()
+    res = PerceptionGraspSkill().execute(
+        {"query": "瓶子", "boxes": [_PRODUCER_BOX]}, _ctx(perc, arm=FakeArm())
+    )
+    assert res.success is True
+    assert res.result_data["consumed_bbox"] is True
+    assert not any(c.startswith("detect") for c in perc.calls)
+
+
+def test_passed_detections_colour_selects_right_box():
+    """Colour query selects the colour-matching box from passed detections (D49 rule).
+
+    The green box is dead-centre / highest-confidence, but a 'red' query must pick the
+    RED box by label — perceptual colour selection, not centrality. The verify LABEL
+    then maps to the colour's scene key (pickable_can_red)."""
+    perc = FrontPerception()
+    dets = [
+        {"label": "green bottle", "bbox": [10.0, 10.0, 14.0, 14.0], "confidence": 0.95},
+        {"label": "red can", "bbox": _PRODUCER_BOX, "confidence": 0.80},
+    ]
+    res = PerceptionGraspSkill().execute(
+        {"query": "拿起红色的罐子", "detections": dets}, _ctx(perc, arm=FakeArm())
+    )
+    assert res.success is True
+    assert res.result_data["consumed_bbox"] is True
+    # The red box (the lower-confidence one) was chosen by colour, and the verify
+    # label is the red scene key.
+    assert res.result_data["detection_label"] == "pickable_can_red"
+    assert not any(c.startswith("detect") for c in perc.calls)
+
+
+def test_no_passed_box_still_reperceives():
+    """Back-compat: no box passed -> the skill re-perceives as before (re-perceive ON)."""
+    perc = FakePerception()
+    res = PerceptionGraspSkill().execute({"query": "banana"}, _ctx(perc))
+    assert res.success is True
+    assert res.result_data["consumed_bbox"] is False
+    assert res.result_data["reperceived"] is True
+    assert any(c.startswith("detect") for c in perc.calls)  # it DID re-perceive
+
+
+def test_passed_box_no_depth_fails_loud_no_gt():
+    """A consumed box over all-zero depth FAILS LOUD — never a GT substitute."""
+    perc = FrontPerception(depth=np.zeros((_H, _W), dtype=np.float32))
+    res = PerceptionGraspSkill().execute(
+        {"query": "bottle", "bbox": _PRODUCER_BOX}, _ctx(perc, arm=FakeArm())
+    )
+    assert res.success is False
+    assert res.result_data["diagnosis"] == "no_depth_points"
+    assert res.result_data.get("consumed_bbox") is True
+
+
+def test_passed_box_empty_mask_fails_loud():
+    """A consumed box whose segment yields no mask FAILS LOUD (segmentation_failed)."""
+    perc = FrontPerception(mask=np.zeros((_H, _W), dtype=np.uint8))
+    res = PerceptionGraspSkill().execute(
+        {"query": "bottle", "bbox": _PRODUCER_BOX}, _ctx(perc, arm=FakeArm())
+    )
+    assert res.success is False
+    assert res.result_data["diagnosis"] == "segmentation_failed"
+
+
+def test_malformed_passed_box_falls_back_to_reperceive():
+    """A malformed box (wrong arity) is ignored; the skill re-perceives (fail-soft)."""
+    perc = FakePerception()
+    res = PerceptionGraspSkill().execute(
+        {"query": "banana", "bbox": [1.0, 2.0]}, _ctx(perc)
+    )
+    assert res.success is True
+    assert res.result_data["consumed_bbox"] is False
+    assert any(c.startswith("detect") for c in perc.calls)

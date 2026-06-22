@@ -122,11 +122,20 @@ class RobotWorld:
         # SkillContext for capability invoke (it has no camera frame), so without
         # this the routed detector returns "no RGB frame". World-side wiring only —
         # the kernel/cognitive seam is untouched.
+        #
+        # COLD-TURN rebind (R37 Task B): register_capabilities runs at init_vgg,
+        # which can precede the NL sim-start that actually boots the arm+camera — so
+        # ``agent._perception`` may be None RIGHT NOW. Bind the AGENT (not the
+        # current snapshot) so the capability pulls the LIVE ``_perception`` lazily at
+        # invoke time; a cold product turn (sim started this same turn) then perceives
+        # with no pre-boot. We still pass the snapshot perception when present (it
+        # wins in _live_perception, keeping the warm path identical).
         perception = getattr(agent, "_perception", None)
-        registry.register(DetectorCapability(perception=perception))
+        registry.register(DetectorCapability(perception=perception, agent=agent))
         logger.info(
             "[ROBOT-WORLD] registered 'detect' capability (grounding-dino), "
-            "perception=%s", type(perception).__name__ if perception else None,
+            "perception=%s (agent-bound for cold-turn rebind)",
+            type(perception).__name__ if perception else None,
         )
         return None
 

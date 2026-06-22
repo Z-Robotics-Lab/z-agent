@@ -323,7 +323,10 @@ class PerceptionGraspSkill:
         "segment it with EdgeTAM, compute the 3D grasp point from the depth "
         "camera + mask, then top-down grasp with the Piper arm. Use this when "
         "the object is NOT already in the world model (the normal case). The "
-        "grasp point is perceived, never read from ground truth."
+        "grasp point is perceived, never read from ground truth. If an earlier "
+        "detect step already produced boxes, pass them via 'detections' (or a "
+        "single 'bbox') and this skill CONSUMES them — back-projecting the box to "
+        "a 3D grasp point — instead of re-perceiving (true producer->consumer)."
     )
     verify_hint: str = "holding_object('<object>')"
     parameters: dict = {
@@ -331,6 +334,23 @@ class PerceptionGraspSkill:
             "type": "string",
             "required": True,
             "description": "What to grasp, in natural language (e.g. 'banana', 'red can', 'the bottle').",
+        },
+        "detections": {
+            "type": "array",
+            "required": False,
+            "description": (
+                "Optional. Detection dicts from a producer detect step "
+                "(${detect.output.detections}); when present the grasp CONSUMES the "
+                "matching box (colour-selected) and does NOT re-perceive."
+            ),
+        },
+        "bbox": {
+            "type": "array",
+            "required": False,
+            "description": (
+                "Optional. A single (x1,y1,x2,y2) pixel box from a producer; "
+                "consumed in place of re-perceiving (back-projected to 3D)."
+            ),
         },
     }
     preconditions: list[str] = ["gripper_empty"]
@@ -389,8 +409,27 @@ class PerceptionGraspSkill:
         from vector_os_nano.perception.front_object import parse_color
         color = parse_color(query)
 
-        # --- perceive the target's 3D grasp point (real depth + mask, never GT) ---
-        gp, resolved, fail = self._perceive_grasp_point(perception, query, color=color)
+        # --- PRODUCER->CONSUMER composition (R37): if an earlier `detect` step
+        # already produced boxes (flowed in via ${detect.output.detections} /
+        # ${detect.output.boxes}), CONSUME the matching box and back-project it to a
+        # 3D grasp point — instead of re-perceiving. The grasp's target then came
+        # FROM the routed detector (true composition), not a fresh independent
+        # re-perceive. The 3D math is identical (segment -> grasp_point_from_rgbd);
+        # only the box SOURCE differs (passed vs self-detected). FAIL LOUD if the
+        # passed box yields no depth points (never a GT fallback).
+        passed_box = self._resolve_passed_box(params, color)
+        consumed_bbox = passed_box is not None
+        if consumed_bbox:
+            logger.info(
+                "[PGRASP] CONSUMING producer box %s (colour=%s) — re-perceive SUPPRESSED",
+                passed_box, color,
+            )
+            gp, resolved, fail = self._grasp_point_from_passed_box(
+                perception, query, passed_box, color=color
+            )
+        else:
+            # --- perceive the target's 3D grasp point (real depth + mask, never GT) ---
+            gp, resolved, fail = self._perceive_grasp_point(perception, query, color=color)
         if fail is not None:
             return fail
         approached = False
@@ -495,6 +534,11 @@ class PerceptionGraspSkill:
             "detection_label": resolved,
             "query": query,
             "approached": approached,
+            # Composition evidence (R37): True iff the grasp target came from a
+            # producer-passed box (re-perceive suppressed); False iff this skill
+            # ran its own detect/front_object resolve.
+            "consumed_bbox": consumed_bbox,
+            "reperceived": not consumed_bbox,
         })
         if not res.success and "diagnosis" not in rd:
             rd["diagnosis"] = "grasp_failed"
@@ -503,6 +547,135 @@ class PerceptionGraspSkill:
             error_message=res.error_message,
             result_data=rd,
         )
+
+    @staticmethod
+    def _resolve_passed_box(params: dict, color: str | None):
+        """Extract a single (x1,y1,x2,y2) box passed in by a producer, or None.
+
+        Two producer seams (rule 4, ${step.path} binding):
+          - ``detections``: a list of detection dicts (``${detect.output.detections}``)
+            — each ``{"label", "bbox", "confidence"}``. The colour-matching box is
+            selected (D49 _select_detection logic on dicts) so a colour query still
+            targets the right object; absent a colour, the highest-confidence box.
+          - ``bbox``: a single ``[x1,y1,x2,y2]`` (``${detect.output.boxes.0}`` or a
+            pre-resolved box). Used directly.
+        A bare ``boxes`` list (``${detect.output.boxes}``) is also accepted, picking
+        the first box (no per-box label to colour-select on). Returns None when no
+        usable box is present — the caller then re-perceives (back-compatible).
+        """
+        # Single explicit box wins if well-formed.
+        bbox = params.get("bbox")
+        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+            try:
+                return tuple(float(v) for v in bbox)
+            except (TypeError, ValueError):
+                return None
+
+        # Full detection dicts -> colour-select, then take the bbox.
+        dets = params.get("detections")
+        if isinstance(dets, list) and dets:
+            det = PerceptionGraspSkill._select_detection_dict(dets, color)
+            box = det.get("bbox") if isinstance(det, dict) else None
+            if isinstance(box, (list, tuple)) and len(box) == 4:
+                try:
+                    return tuple(float(v) for v in box)
+                except (TypeError, ValueError):
+                    return None
+
+        # Bare boxes list (no labels) -> first box (cannot colour-select).
+        boxes = params.get("boxes")
+        if isinstance(boxes, list) and boxes:
+            first = boxes[0]
+            if isinstance(first, (list, tuple)) and len(first) == 4:
+                try:
+                    return tuple(float(v) for v in first)
+                except (TypeError, ValueError):
+                    return None
+        return None
+
+    @staticmethod
+    def _select_detection_dict(detections: list[dict], color: str | None) -> dict:
+        """_select_detection (D49) on detection DICTS instead of Detection objects.
+
+        Same perceptual-colour-preference rule: when a colour is requested, prefer a
+        box whose label NAMES that colour over raw max-confidence; among matches take
+        the highest confidence; else fall back to plain max-confidence.
+        """
+        def _conf(d: dict) -> float:
+            try:
+                return float(d.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                return 0.0
+
+        if color:
+            matching = [
+                d for d in detections
+                if isinstance(d, dict) and color in str(d.get("label", "") or "").lower()
+            ]
+            if matching:
+                return max(matching, key=_conf)
+        return max(detections, key=_conf)
+
+    def _grasp_point_from_passed_box(
+        self, perception: Any, query: str, box: tuple, *, color: str | None = None
+    ):
+        """Back-project a PRODUCER-passed pixel box to a WORLD grasp point.
+
+        The composition path (R37): the box came from the routed detector, NOT a
+        fresh perceive. We acquire ONLY the RGB-D frame + geometry (no detect /
+        front_object call), segment the passed box (same EdgeTAM->box-rect path the
+        self-detect route uses), then run the IDENTICAL grasp_point_from_rgbd math.
+        FAIL LOUD if the box yields no depth points — never a GT substitute.
+
+        Returns ``(gp | None, resolved_label, fail_result | None)``.
+        """
+        import numpy as np
+        try:
+            rgb = perception.get_color_frame()
+            depth = perception.get_depth_frame()
+            intrinsics = perception.get_intrinsics()
+            cam_xpos, cam_xmat = perception.get_camera_pose()
+        except Exception as exc:  # noqa: BLE001
+            return None, (query or "front object"), _fail(
+                "no_camera", f"Failed to read RGB-D frame: {exc}")
+
+        # Verify LABEL convention matches the self-detect route: a colour query grades
+        # the colour's scene key; otherwise the query text.
+        resolved = (
+            _COLOR_TO_SCENE.get(color)
+            if color and color in _COLOR_TO_SCENE
+            else (query or "front object")
+        )
+
+        # Segment the PASSED box — reuse the perception segmenter (EdgeTAM, box-rect
+        # fallback). NO perception.detect / front_object_mask call here (that is the
+        # re-perceive we are suppressing).
+        try:
+            mask = perception.segment(rgb, box)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[PGRASP] segment(passed box) raised: %s", exc)
+            mask = None
+        if mask is None or int(np.count_nonzero(mask)) == 0:
+            return None, resolved, _fail(
+                "segmentation_failed",
+                f"Segmentation produced no mask for producer box {box} ({resolved!r}).",
+                detection_label=resolved, query=query, consumed_bbox=True,
+            )
+
+        gp = grasp_point_from_rgbd(depth, rgb, mask, intrinsics, cam_xpos, cam_xmat)
+        if gp is None:
+            return None, resolved, _fail(
+                "no_depth_points",
+                f"No valid depth points under the producer box {box} ({resolved!r}); "
+                "cannot localize a grasp point. FAIL LOUD — not substituting a "
+                "ground-truth pose.",
+                detection_label=resolved, query=query, consumed_bbox=True,
+            )
+        logger.info(
+            "[PGRASP] consumed producer box %s -> grasp_world=(%.3f, %.3f, %.3f)",
+            box, gp.x, gp.y, gp.z,
+        )
+        return gp, resolved, None
 
     @staticmethod
     def _select_detection(detections: list, color: str | None):

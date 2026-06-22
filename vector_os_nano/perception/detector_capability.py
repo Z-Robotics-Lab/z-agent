@@ -57,7 +57,9 @@ class DetectorCapability:
         },
     }
 
-    def __init__(self, detector: Any = None, perception: Any = None) -> None:
+    def __init__(
+        self, detector: Any = None, perception: Any = None, agent: Any = None
+    ) -> None:
         # Default to the shared lazy singleton so this capability and the grasp
         # route share ONE loaded model. Injectable for tests (no torch load).
         self._detector = detector
@@ -68,6 +70,28 @@ class DetectorCapability:
         # ``detect`` sub-goal perceive WITHOUT any kernel/cognitive change. Stays
         # None for dev/CI; ``_resolve_rgb`` then falls back to the payload/context.
         self._perception = perception
+        # COLD-TURN rebind (R37 Task B): register_capabilities runs at init_vgg,
+        # BEFORE a mid-session NL `启动 go2 带机械臂` boots the arm — so the agent's
+        # ``_perception`` is None at bind time and a snapshot would stay None forever.
+        # Hold the AGENT instead and pull its LIVE ``_perception`` lazily at invoke
+        # time, so a cold product turn (sim started this same turn) perceives without
+        # any pre-boot. World-side wiring only; the cognitive seam is untouched.
+        self._agent = agent
+
+    def _live_perception(self) -> Any:
+        """The current frame source: a snapshot perception, else the agent's LIVE one.
+
+        Prefers an explicitly-bound ``perception`` (tests / a world that already had
+        one); otherwise reads ``agent._perception`` fresh on every call so a sim
+        started AFTER registration is picked up (cold-turn rebind). Returns None when
+        neither yields a source (dev/CI) — the payload/context fallback then applies.
+        """
+        if self._perception is not None:
+            return self._perception
+        agent = self._agent
+        if agent is not None:
+            return getattr(agent, "_perception", None)
+        return None
 
     def _get_detector(self) -> Any:
         if self._detector is None:
@@ -90,7 +114,7 @@ class DetectorCapability:
                 error="missing required input: query (non-empty string)",
             )
 
-        rgb = self._resolve_rgb(payload, context, self._perception)
+        rgb = self._resolve_rgb(payload, context, self._live_perception())
         if rgb is None:
             return CapabilityResult(
                 success=False,
