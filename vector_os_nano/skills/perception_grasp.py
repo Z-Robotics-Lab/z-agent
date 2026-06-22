@@ -35,6 +35,7 @@ from typing import Any
 from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
+from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +306,113 @@ def _approach_object(
     return dist <= reach_m + 0.20
 
 
+# Re-pose tuning (R38). The seam that converts FAR's "roughly near the table at
+# any heading" terminal pose into the head-on, correctly-facing precondition the
+# scripted _approach_object already handles.
+# Clearance the dog should stand at from the object before the jam/seat. 0.45 m
+# keeps the subsequent jam/seat landing the dog at ~x=10.45 (the proven standoff)
+# while staying inside the FAR arrival_radius so the move is short.
+_REPOSE_CLEARANCE_M = 0.45
+# Turn-in-place: yaw error below this is treated as "already facing the object"
+# (a no-op). Above it the dog turns toward the facing yaw before any forward creep.
+# Generous (~9 deg) so a head-on spawn pose (D34-D51) never triggers a real turn.
+_REPOSE_YAW_DEADBAND = 0.16     # rad (~9 deg)
+_REPOSE_TURN_VYAW = 0.8         # rad/s turn-in-place speed
+_REPOSE_TURN_MAX_S = 4.0        # cap a single turn command's duration
+# Short approach toward the computed standoff after turning. Only fires when the
+# dog is materially off the standoff; the existing jam/seat/nudge does the rest.
+_REPOSE_MOVE_DEADBAND = 0.12    # m
+_REPOSE_MOVE_VX = 0.4           # m/s
+_REPOSE_MOVE_MAX_S = 3.0        # cap a single move command's duration
+
+
+def _grasp_ready_repose(
+    base: Any, can_xy: tuple[float, float], *,
+    clearance: float = _REPOSE_CLEARANCE_M, on_progress: Any = None,
+) -> bool:
+    """Re-pose the base to a head-on, facing standoff before the scripted grasp.
+
+    FAR's nav primitive (``base.navigate_to``) has no terminal-heading control: it
+    stops within ~0.8 m of (x, y) at whatever heading the last way_point left, and
+    may overshoot. The scripted ``_approach_object`` below assumes a +X head-on
+    spawn pose, so from a FAR arrival (heading ~169 deg off, overshot in y/x) it
+    would creep the WRONG way. This deterministic sandwich fixes that:
+
+        compute_approach_pose(clearance)  -> a standoff (ax, ay) on the dog's side
+                                             with a yaw that FACES the can
+        turn-in-place to that facing yaw  -> the MISSING terminal-heading step
+        short forward move toward (ax,ay) -> close the standoff gap
+        (then the caller hands off to _approach_object/jam/seat/nudge)
+
+    Idempotent / benign when the dog is ALREADY head-on (yaw error below the
+    deadband, already at the standoff): it issues no large turn and no move, so the
+    scripted-from-spawn grasp (D34-D51) is preserved. Reuses the proven
+    ``compute_approach_pose`` (mobile_pick). World-agnostic — uses only the base's
+    ``walk`` / ``get_position`` / ``get_heading`` duck-typed surface.
+
+    Returns True if the re-pose ran (or was a benign no-op); False if the base
+    lacks the required surface (caller then proceeds as before — no regression).
+    """
+    import math
+
+    walk = getattr(base, "walk", None)
+    get_pos = getattr(base, "get_position", None)
+    get_hd = getattr(base, "get_heading", None)
+    if not callable(walk) or not callable(get_pos) or not callable(get_hd):
+        # Missing the surface we need (e.g. a base without get_heading) — skip the
+        # re-pose gracefully; the legacy approach still runs. No +X assumption.
+        return False
+
+    try:
+        pos = get_pos()
+        heading = float(get_hd())
+    except Exception as exc:  # noqa: BLE001 — no live pose -> skip, never assume +x
+        logger.debug("[PGRASP] re-pose skipped (no live pose/heading): %s", exc)
+        return False
+
+    dog_pose = (float(pos[0]), float(pos[1]), heading)
+    can3 = (float(can_xy[0]), float(can_xy[1]), 0.0)
+    try:
+        ax, ay, ayaw = compute_approach_pose(can3, dog_pose, clearance=clearance)
+    except ValueError:
+        # Dog is essentially on top of the can — face the can directly instead.
+        ax, ay = dog_pose[0], dog_pose[1]
+        ayaw = math.atan2(can3[1] - ay, can3[0] - ax)
+
+    # --- 1. turn in place to the facing yaw (the missing terminal-heading step) ---
+    yaw_err = math.atan2(math.sin(ayaw - heading), math.cos(ayaw - heading))
+    if abs(yaw_err) > _REPOSE_YAW_DEADBAND:
+        dur = min(_REPOSE_TURN_MAX_S, abs(yaw_err) / _REPOSE_TURN_VYAW)
+        vyaw = _REPOSE_TURN_VYAW if yaw_err > 0 else -_REPOSE_TURN_VYAW
+        if on_progress:
+            on_progress(f"re-pose: turn {math.degrees(yaw_err):.0f}deg to face object")
+        logger.info("[PGRASP] re-pose turn %.0fdeg (heading %.2f -> %.2f)",
+                    math.degrees(yaw_err), heading, ayaw)
+        try:
+            walk(vx=0.0, vy=0.0, vyaw=vyaw, duration=dur)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[PGRASP] re-pose turn raised: %s", exc)
+            return True
+
+    # --- 2. short forward move toward the standoff (ax, ay) -------------------
+    try:
+        pos = get_pos()
+    except Exception:  # noqa: BLE001
+        return True
+    move_gap = math.hypot(ax - pos[0], ay - pos[1])
+    if move_gap > _REPOSE_MOVE_DEADBAND:
+        dur = min(_REPOSE_MOVE_MAX_S, move_gap / max(_REPOSE_MOVE_VX, 1e-3))
+        if on_progress:
+            on_progress(f"re-pose: move {move_gap:.2f}m to standoff")
+        logger.info("[PGRASP] re-pose move %.2fm toward standoff (%.2f, %.2f)",
+                    move_gap, ax, ay)
+        try:
+            walk(vx=_REPOSE_MOVE_VX, vy=0.0, vyaw=0.0, duration=dur)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[PGRASP] re-pose move raised: %s", exc)
+    return True
+
+
 @skill(
     aliases=[
         # Perception-natural grasp phrasings. Registered LAST (after PickTopDown)
@@ -443,8 +551,19 @@ class PerceptionGraspSkill:
         # close (poor framing) — so the afar grasp point (R3: ~6.9cm) is the accurate
         # one; the approach simply brings the dog within reach of that fixed point.
         base = context.base
+        # R38 — GRASP-READY RE-POSE. The base may have arrived here under FAR
+        # navigation (the producer's navigate step), whose terminal pose has NO
+        # heading control: ~169 deg off, overshot in x/y (probe-confirmed). Before
+        # the scripted +X-head-on approach below, deterministically turn-in-place to
+        # FACE the object and close the standoff gap, so _approach_object starts from
+        # the precondition it assumes. Benign no-op when the dog is already head-on
+        # (scripted-from-spawn grasp D34-D51 preserved). World-agnostic; reuses the
+        # proven compute_approach_pose. Runs only when out of reach (a perfectly
+        # placed dog needs no re-pose).
         if base is not None and arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is None:
-            logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — approaching", resolved, gp.x, gp.y)
+            logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — re-pose + approach",
+                        resolved, gp.x, gp.y)
+            _grasp_ready_repose(base, (gp.x, gp.y), clearance=_REPOSE_CLEARANCE_M)
             _approach_object(base, (gp.x, gp.y), max_walks=30)
             approached = True
 
@@ -462,10 +581,17 @@ class PerceptionGraspSkill:
                     break
                 pos = base.get_position()
                 dx, dy = gp.x - pos[0], gp.y - pos[1]
+                # R38 — use the LIVE heading; the old ``except: th = 0.0  # assume
+                # +x`` fallback silently mis-fired from a FAR arrival heading (it
+                # is true only at spawn). If the base genuinely cannot report a
+                # heading, we cannot steer a body-frame nudge safely — STOP nudging
+                # rather than driving in a fabricated +X direction.
                 try:
                     th = float(base.get_heading())
-                except Exception:  # noqa: BLE001 -- no heading: assume facing +x
-                    th = 0.0
+                except Exception as exc:  # noqa: BLE001 -- no heading: cannot steer
+                    logger.info("[PGRASP] post-approach nudge: no heading (%s) — "
+                                "skipping (no +X assumption)", exc)
+                    break
                 fwd = dx * math.cos(th) + dy * math.sin(th)
                 lat = -dx * math.sin(th) + dy * math.cos(th)
                 vx = _POST_APPROACH_NUDGE_V if fwd > 0.03 else 0.0

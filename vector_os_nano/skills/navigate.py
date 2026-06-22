@@ -373,6 +373,18 @@ class NavigateSkill:
                 diagnosis_code="no_base",
             )
 
+        # --- Coordinate goal (R38): a navigate step may target a world COORDINATE
+        # rather than a named SceneGraph room (e.g. "去桌子那里" -> the table
+        # standoff, which has no room entry). When x/y (or target=[x, y]) are
+        # present, drive the FAR planner directly via base.navigate_to(x, y),
+        # bypassing room resolution. World-agnostic and additive — the named-room
+        # path below is unchanged when no coordinates are given. The step's
+        # at_position verify (graded RAN per D14) is the source of truth for
+        # arrival; we surface the actual position regardless of FAR's verdict.
+        coord = self._parse_coordinate(params)
+        if coord is not None:
+            return self._navigate_to_coordinate(coord, context)
+
         room_input = str(params.get("room", ""))
         sg = context.services.get("spatial_memory")
 
@@ -447,6 +459,87 @@ class NavigateSkill:
     # ------------------------------------------------------------------
     # Navigation modes (private)
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_coordinate(params: dict) -> tuple[float, float] | None:
+        """Extract a world (x, y) coordinate goal from params, or None.
+
+        Accepts ``{"x": .., "y": ..}`` or ``{"target": [x, y]}`` /
+        ``{"goal": [x, y]}`` (a 2-list/tuple). Returns None when no coordinate is
+        present (the named-room path then runs) — back-compatible.
+        """
+        x = params.get("x")
+        y = params.get("y")
+        if x is not None and y is not None:
+            try:
+                return (float(x), float(y))
+            except (TypeError, ValueError):
+                return None
+        for key in ("target", "goal", "coordinate", "coord"):
+            val = params.get(key)
+            if isinstance(val, (list, tuple)) and len(val) >= 2:
+                try:
+                    return (float(val[0]), float(val[1]))
+                except (TypeError, ValueError):
+                    return None
+        return None
+
+    def _navigate_to_coordinate(
+        self,
+        coord: tuple[float, float],
+        context: SkillContext,
+    ) -> SkillResult:
+        """Drive the base to a world coordinate via the FAR planner (navigate_to).
+
+        Used for a coordinate navigate goal (no SceneGraph room). Honest: the
+        step's success is the planner's own arrival verdict and the actual landing
+        position is reported; the at_position verify oracle (RAN) is what grades the
+        step. If the base lacks navigate_to (no nav stack) we fail loud.
+        """
+        base = context.base
+        tx, ty = coord
+        navigate_to = getattr(base, "navigate_to", None)
+        if not callable(navigate_to):
+            return SkillResult(
+                success=False,
+                error_message="Coordinate navigation needs a nav stack (base.navigate_to absent).",
+                diagnosis_code="navigation_failed",
+            )
+
+        # Ensure the bridge path follower is armed (same as the room path).
+        try:
+            import os
+            if not os.path.exists("/tmp/vector_nav_active"):
+                with open("/tmp/vector_nav_active", "w") as fh:
+                    fh.write("1")
+        except Exception:
+            pass
+
+        logger.info("[NAV] Coordinate goal -> navigate_to(%.2f, %.2f) via FAR", tx, ty)
+
+        def _progress(dist: float, elapsed: float) -> None:
+            print(f"  >> 距目标 {dist:.1f}m, 已走 {int(elapsed)}s",
+                  file=sys.stderr, flush=True)
+
+        try:
+            ok = bool(navigate_to(tx, ty, timeout=45.0, on_progress=_progress))
+        except TypeError:
+            # A base whose navigate_to does not accept the extra kwargs.
+            ok = bool(navigate_to(tx, ty))
+
+        pos = base.get_position()
+        dist = _distance(pos[0], pos[1], tx, ty)
+        return SkillResult(
+            success=ok,
+            error_message="" if ok else f"navigate_to({tx}, {ty}) did not confirm arrival",
+            diagnosis_code=None if ok else "navigation_failed",
+            result_data={
+                "target": [round(tx, 1), round(ty, 1)],
+                "position": [round(pos[0], 1), round(pos[1], 1)],
+                "distance_to_target": round(dist, 1),
+                "mode": "proxy_coord",
+            },
+        )
 
     def _navigate_with_proxy(
         self,
