@@ -106,6 +106,60 @@ def test_invoke_pulls_frame_from_context():
     assert res.success is True
 
 
+def test_invoke_pulls_frame_from_registration_bound_perception():
+    """R36: the producer-routed detect step reaches the live camera via the
+    REGISTRATION-BOUND perception. The kernel hands the capability a SkillContext
+    (no frame), so without this bound source the routed detector returns 'no RGB
+    frame' — exactly the gap the real-sim probe first hit before binding."""
+    fake = _FakeDetector()
+
+    class _Perc:
+        def get_color_frame(self):
+            return _rgb()
+
+    cap = DetectorCapability(detector=fake, perception=_Perc())
+    # payload has NO rgb/perception, context is None — only the bound source can
+    # supply the frame.
+    res = cap.invoke({"query": "bottle"}, None)
+    assert res.success is True
+    assert fake.calls and fake.calls[0][0] == (240, 320, 3)
+
+
+def test_invoke_pulls_frame_from_skillcontext_perception_attr():
+    """A SkillContext exposes its perception via ``.perception`` (not
+    get_color_frame directly). The capability unwraps it so a context-only call
+    still reaches a frame — the kernel capability path passes a SkillContext."""
+    fake = _FakeDetector()
+
+    class _Perc:
+        def get_color_frame(self):
+            return _rgb()
+
+    class _SkillCtxLike:
+        perception = _Perc()
+
+    res = DetectorCapability(detector=fake).invoke({"query": "cup"}, _SkillCtxLike())
+    assert res.success is True
+    assert fake.calls and fake.calls[0][0] == (240, 320, 3)
+
+
+def test_payload_rgb_beats_bound_perception():
+    """Source priority: an explicit payload rgb wins over the bound perception."""
+    fake = _FakeDetector()
+
+    class _Perc:
+        called = False
+
+        def get_color_frame(self):
+            _Perc.called = True
+            return _rgb()
+
+    cap = DetectorCapability(detector=fake, perception=_Perc())
+    res = cap.invoke({"query": "x", "rgb": _rgb()}, None)
+    assert res.success is True
+    assert _Perc.called is False  # bound source never consulted
+
+
 def test_invoke_empty_detections_reports_ran_but_unsuccessful():
     fake = _FakeDetector(dets=[])
     res = DetectorCapability(detector=fake).invoke({"query": "ghost", "rgb": _rgb()}, None)

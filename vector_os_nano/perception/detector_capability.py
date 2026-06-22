@@ -57,10 +57,17 @@ class DetectorCapability:
         },
     }
 
-    def __init__(self, detector: Any = None) -> None:
+    def __init__(self, detector: Any = None, perception: Any = None) -> None:
         # Default to the shared lazy singleton so this capability and the grasp
         # route share ONE loaded model. Injectable for tests (no torch load).
         self._detector = detector
+        # Optional bound RGB source (exposes ``get_color_frame()``), supplied at
+        # registration by the world. The capability-dispatch path builds a
+        # SkillContext (not a perception), so the kernel context cannot itself
+        # yield a frame; binding the world's perception here lets the routed
+        # ``detect`` sub-goal perceive WITHOUT any kernel/cognitive change. Stays
+        # None for dev/CI; ``_resolve_rgb`` then falls back to the payload/context.
+        self._perception = perception
 
     def _get_detector(self) -> Any:
         if self._detector is None:
@@ -83,7 +90,7 @@ class DetectorCapability:
                 error="missing required input: query (non-empty string)",
             )
 
-        rgb = self._resolve_rgb(payload, context)
+        rgb = self._resolve_rgb(payload, context, self._perception)
         if rgb is None:
             return CapabilityResult(
                 success=False,
@@ -115,12 +122,30 @@ class DetectorCapability:
         )
 
     @staticmethod
-    def _resolve_rgb(payload: dict[str, Any], context: Any) -> np.ndarray | None:
-        """Get an (H,W,3) RGB frame from the payload rgb, a perception, or context."""
+    def _resolve_rgb(
+        payload: dict[str, Any], context: Any, bound_perception: Any = None
+    ) -> np.ndarray | None:
+        """Get an (H,W,3) RGB frame from the payload rgb, a perception, or context.
+
+        Source priority: an explicit ``rgb`` array, then the payload's
+        ``perception``, then the capability's REGISTRATION-BOUND perception, then
+        a ``context`` that itself yields a frame (``get_color_frame`` or a
+        ``.perception`` exposing it). The bound source is how the routed ``detect``
+        sub-goal reaches the live go2 camera — the kernel context is a SkillContext
+        (no frame), so without it the capability route cannot perceive.
+        """
         rgb = payload.get("rgb")
         if isinstance(rgb, np.ndarray) and rgb.ndim == 3:
             return rgb
-        for src in (payload.get("perception"), context):
+        # A SkillContext exposes its perception via ``.perception``; unwrap it so a
+        # context-only call can still reach a frame source.
+        ctx_perception = getattr(context, "perception", None)
+        for src in (
+            payload.get("perception"),
+            bound_perception,
+            context,
+            ctx_perception,
+        ):
             getter = getattr(src, "get_color_frame", None)
             if getter is not None:
                 try:

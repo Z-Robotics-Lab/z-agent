@@ -117,8 +117,17 @@ class RobotWorld:
             return None
         from vector_os_nano.perception.detector_capability import DetectorCapability
 
-        registry.register(DetectorCapability())
-        logger.info("[ROBOT-WORLD] registered 'detect' capability (grounding-dino)")
+        # Bind the agent's live RGB source so a PRODUCER-routed ``detect`` sub-goal
+        # can perceive on the capability-dispatch path. The kernel builds a
+        # SkillContext for capability invoke (it has no camera frame), so without
+        # this the routed detector returns "no RGB frame". World-side wiring only —
+        # the kernel/cognitive seam is untouched.
+        perception = getattr(agent, "_perception", None)
+        registry.register(DetectorCapability(perception=perception))
+        logger.info(
+            "[ROBOT-WORLD] registered 'detect' capability (grounding-dino), "
+            "perception=%s", type(perception).__name__ if perception else None,
+        )
         return None
 
     def decompose_vocab(self) -> None:

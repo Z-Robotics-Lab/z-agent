@@ -18,9 +18,17 @@ from vector_os_nano.vcli.cognitive.capabilities import CapabilityRegistry
 from vector_os_nano.vcli.worlds.robot import RobotWorld
 
 
+class _Perc:
+    def get_color_frame(self):
+        import numpy as np
+
+        return np.zeros((240, 320, 3), dtype=np.uint8)
+
+
 class _ArmAgent:
-    def __init__(self):
+    def __init__(self, perception=None):
         self._arm = object()  # has an arm
+        self._perception = perception
 
 
 class _BaseOnlyAgent:
@@ -51,6 +59,20 @@ def test_arm_agent_registers_detect_when_torch_present():
     assert cap.kind == "detector" and cap.side_effecting is False
     # registration must NOT have loaded the model (lazy)
     assert getattr(cap, "_detector", None) is None
+
+
+def test_detect_capability_bound_to_agent_perception():
+    """R36: registration BINDS the agent's live RGB source into the capability so
+    a producer-routed detect step can perceive on the capability-dispatch path
+    (the kernel context is a SkillContext with no frame)."""
+    if not _torch_present():
+        return  # registration is a no-op without torch; covered elsewhere
+    perc = _Perc()
+    reg = CapabilityRegistry()
+    RobotWorld().register_capabilities(reg, _ArmAgent(perception=perc), backend=None)
+    cap = reg.get("detect")
+    assert cap is not None
+    assert getattr(cap, "_perception", None) is perc
 
 
 def test_base_only_agent_registers_nothing():
