@@ -324,6 +324,17 @@ _REPOSE_TURN_MAX_S = 4.0        # cap a single turn command's duration
 _REPOSE_MOVE_DEADBAND = 0.12    # m
 _REPOSE_MOVE_VX = 0.4           # m/s
 _REPOSE_MOVE_MAX_S = 3.0        # cap a single move command's duration
+# Pre-perceive orientation scan (R38). After a FAR navigate the dog can arrive
+# facing AWAY from the table; a single frame then localizes a far wall, not the
+# can. A PLAUSIBLE grasp target is a near-table object: its planar distance from
+# the dog must be below this radius (the dog navigated to the table standoff, so
+# the can is within ~1.2 m; a 7 m "object" is the wrong wall). The scan turns in
+# place by _SCAN_STEP_RAD up to _SCAN_MAX_STEPS times, perceiving at each heading,
+# and keeps the CLOSEST plausible perception. The dog returns to the best heading.
+_SCAN_MAX_LOCAL_M = 1.6
+_SCAN_STEP_RAD = 0.6            # ~34 deg per scan step
+_SCAN_MAX_STEPS = 6             # up to ~200 deg of sweep
+_SCAN_TURN_VYAW = 0.8           # rad/s
 
 
 def _grasp_ready_repose(
@@ -536,8 +547,19 @@ class PerceptionGraspSkill:
                 perception, query, passed_box, color=color
             )
         else:
-            # --- perceive the target's 3D grasp point (real depth + mask, never GT) ---
-            gp, resolved, fail = self._perceive_grasp_point(perception, query, color=color)
+            # --- perceive the target's 3D grasp point (real depth + mask, never GT).
+            # R38: after a FAR navigate the dog arrives at an ARBITRARY heading and
+            # may be facing AWAY from the table (observed: heading ~117deg, camera on
+            # a far wall -> a garbage grasp point 7 m away). So when a steerable base
+            # is present, perceive WITH A SCAN: turn in place sampling the camera and
+            # keep the heading whose perceived grasp point is the closest PLAUSIBLE
+            # near-table object (within a sane local radius of the dog). This honestly
+            # localizes the can by LOOKING for it, never by reading GT. On the
+            # scripted-from-spawn path (can dead-ahead) the first sample is already
+            # plausible, so the scan returns immediately — no D34-D51 regression.
+            gp, resolved, fail = self._perceive_with_scan(
+                perception, context.base, query, color=color
+            )
         if fail is not None:
             return fail
         approached = False
@@ -827,6 +849,81 @@ class PerceptionGraspSkill:
             if matching:
                 return max(matching, key=_conf)
         return max(detections, key=_conf)
+
+    def _perceive_with_scan(
+        self, perception: Any, base: Any, query: str, *, color: str | None = None
+    ):
+        """Perceive the grasp point, turning in place to FIND the target if needed.
+
+        R38 — robust to a FAR arrival heading. Perceives at the current heading
+        first; if that yields no localizable object OR an IMPLAUSIBLE one (planar
+        distance from the dog > _SCAN_MAX_LOCAL_M — i.e. a far wall, not the
+        near-table can), it rotates the base in place by _SCAN_STEP_RAD up to
+        _SCAN_MAX_STEPS times, perceiving at each heading, and keeps the CLOSEST
+        plausible perception. The dog is left at the best heading. Returns the same
+        ``(gp, resolved, fail)`` tuple as ``_perceive_grasp_point``.
+
+        Honest: every candidate point comes from real depth+mask (never GT); the
+        scan only decides WHICH camera direction to trust by how near/plausible the
+        perceived object is. No steerable base (or no get_position/get_heading) ->
+        a single perceive, byte-identical to the pre-R38 path (so the in-process
+        spawn grasp is unchanged).
+        """
+        import math
+
+        walk = getattr(base, "walk", None) if base is not None else None
+        get_pos = getattr(base, "get_position", None) if base is not None else None
+        get_hd = getattr(base, "get_heading", None) if base is not None else None
+        steerable = callable(walk) and callable(get_pos) and callable(get_hd)
+
+        def _plausible(gp: Any) -> tuple[bool, float]:
+            """(is a near-table object, planar distance from the dog)."""
+            if gp is None or not steerable:
+                return (gp is not None, 0.0)
+            try:
+                pos = get_pos()
+                d = math.hypot(gp.x - pos[0], gp.y - pos[1])
+            except Exception:  # noqa: BLE001
+                return (True, 0.0)
+            return (d <= _SCAN_MAX_LOCAL_M, d)
+
+        # First look at the current heading.
+        gp, resolved, fail = self._perceive_grasp_point(perception, query, color=color)
+        ok, dist = _plausible(gp)
+        if ok or not steerable:
+            if gp is not None:
+                logger.info("[PGRASP] perceive (no scan): plausible target d=%.2fm", dist)
+            return gp, resolved, fail
+
+        logger.info("[PGRASP] perceive at arrival heading implausible "
+                    "(d=%.2fm > %.2fm) — scanning to find the target",
+                    dist if gp is not None else -1.0, _SCAN_MAX_LOCAL_M)
+
+        best = (gp, resolved, fail, dist if gp is not None else float("inf"))
+        for step in range(_SCAN_MAX_STEPS):
+            try:
+                walk(vx=0.0, vy=0.0, vyaw=_SCAN_TURN_VYAW,
+                     duration=_SCAN_STEP_RAD / _SCAN_TURN_VYAW)
+                import time as _t
+                _t.sleep(0.3)  # let the camera settle on the new heading
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[PGRASP] scan turn raised: %s", exc)
+                break
+            g2, r2, f2 = self._perceive_grasp_point(perception, query, color=color)
+            ok2, d2 = _plausible(g2)
+            logger.info("[PGRASP] scan step %d/%d: %s d=%.2fm plausible=%s",
+                        step + 1, _SCAN_MAX_STEPS,
+                        "found" if g2 is not None else "none",
+                        d2 if g2 is not None else -1.0, ok2)
+            if g2 is not None and d2 < best[3]:
+                best = (g2, r2, f2, d2)
+            if ok2:
+                return g2, r2, f2  # a plausible near-table object — take it
+
+        # No plausible target found in the sweep — return the CLOSEST seen (or the
+        # original failure). The downstream re-pose/approach is bounded, and a
+        # genuinely-unreachable point still FAILS LOUD at IK (no GT substitute).
+        return best[0], best[1], best[2]
 
     def _perceive_grasp_point(self, perception: Any, query: str, *, color: str | None = None):
         """Acquire RGB-D, resolve the target mask, compute the WORLD grasp point.

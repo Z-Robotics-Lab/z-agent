@@ -130,6 +130,14 @@ _DOORCHAIN_WAYPOINT_TIMEOUT: float = _nav("waypoint_timeout", 30.0)
 
 _MIN_VISIT_COUNT: int = 1  # trust SceneGraph position after first visit
 
+# Coordinate-goal navigation (R38). A cross-room FAR leg takes ~30-50 s over the
+# lidar terrain map (probe v2: 32 s clean, 41 s through furniture), so the nav
+# budget must exceed that or the dog times out mid-drive. The VICINITY radius is
+# the step-success threshold (generous: FAR arrival radius 0.8 m + margin) — NOT
+# the honest arrival grade, which is the at_position(tol 0.5 m) verify oracle.
+_COORD_NAV_TIMEOUT_S: float = 90.0
+_COORD_VICINITY_RADIUS_M: float = 1.5
+
 
 # ---------------------------------------------------------------------------
 # Helper functions
@@ -522,21 +530,56 @@ class NavigateSkill:
                   file=sys.stderr, flush=True)
 
         try:
-            ok = bool(navigate_to(tx, ty, timeout=45.0, on_progress=_progress))
+            ok = bool(navigate_to(tx, ty, timeout=_COORD_NAV_TIMEOUT_S, on_progress=_progress))
         except TypeError:
             # A base whose navigate_to does not accept the extra kwargs.
             ok = bool(navigate_to(tx, ty))
 
+        # HOLD at the goal. navigate_to leaves the dog under the planner/TARE,
+        # which keeps publishing /way_point and DRIFTS the dog away from the goal
+        # (observed: dog wandered to (7.7, 4.5) before the next skill perceived).
+        # A downstream manipulation step needs the dog STATIONARY at the table, so
+        # disarm the nav flag and stop the base now. (Symmetric with how a stop
+        # command clears the flag; the proxy's loops treat the missing flag as
+        # "no active nav".)
+        try:
+            import os
+            if os.path.exists("/tmp/vector_nav_active"):
+                os.remove("/tmp/vector_nav_active")
+        except Exception:
+            pass
+        stop = getattr(base, "stop", None) or getattr(base, "set_velocity", None)
+        if callable(stop):
+            try:
+                if stop is getattr(base, "set_velocity", None):
+                    stop(0.0, 0.0, 0.0)
+                else:
+                    stop()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[NAV] coord-nav stop failed: %s", exc)
+
         pos = base.get_position()
         dist = _distance(pos[0], pos[1], tx, ty)
+        # The skill SUCCEEDS when it ran and the dog is in the goal's VICINITY — FAR
+        # may time out / not raise its arrival flag yet still leave the dog close
+        # (it drives over a lidar terrain map at variable speed). Step success only
+        # gates whether DEPENDENTS run; the honest arrival grade is the at_position
+        # verify oracle (RAN, tol 0.5 m). So we use a GENEROUS vicinity radius here
+        # (the FAR arrival radius 0.8 m + margin) — not a strict re-check — to avoid
+        # falsely failing the chain when the dog is geometrically at the table but
+        # FAR's bool timed out. Genuinely-far (FAR couldn't route) -> still fail loud.
+        arrived = ok or dist <= _COORD_VICINITY_RADIUS_M
         return SkillResult(
-            success=ok,
-            error_message="" if ok else f"navigate_to({tx}, {ty}) did not confirm arrival",
-            diagnosis_code=None if ok else "navigation_failed",
+            success=arrived,
+            error_message="" if arrived else (
+                f"navigate_to({tx}, {ty}) did not reach the goal vicinity "
+                f"(ended {dist:.1f} m away)"),
+            diagnosis_code=None if arrived else "navigation_failed",
             result_data={
                 "target": [round(tx, 1), round(ty, 1)],
                 "position": [round(pos[0], 1), round(pos[1], 1)],
                 "distance_to_target": round(dist, 1),
+                "far_confirmed": ok,
                 "mode": "proxy_coord",
             },
         )

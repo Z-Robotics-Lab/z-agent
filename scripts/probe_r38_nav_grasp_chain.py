@@ -62,6 +62,11 @@ def _log(msg: str) -> None:
 
 
 # Canned 2-step decompose plan for "去桌子那里把红的拿起来".
+# NOTE: the decompose validator's KNOWN_STRATEGIES is built as {f"{n}_skill"} from
+# the skill registry (goal_decomposer.py), so the LLM-facing strategy token is the
+# ``_skill``-suffixed form. _resolve_explicit then strips the suffix back to the
+# registered skill (navigate_skill -> navigate, perception_grasp_skill ->
+# perception_grasp), PRESERVING strategy_params. Bare names are cleared as unknown.
 # step0 navigate_table: COORDINATE goal to the table standoff (10.5, 3.0). The
 #       NavigateSkill coordinate path drives FAR. verify at_position -> RAN.
 # step1 grasp_red: the perception grasp SKILL, query the red can. The R38 re-pose
@@ -73,7 +78,7 @@ _PLAN = {
             "name": "navigate_table",
             "description": "navigate to the table at (10.5, 3.0)",
             "verify": "at_position(10.5, 3.0)",
-            "strategy": "navigate",
+            "strategy": "navigate_skill",
             "strategy_params": {"x": 10.5, "y": 3.0},
             "depends_on": [],
             "timeout_sec": 60.0,
@@ -82,7 +87,7 @@ _PLAN = {
             "name": "grasp_red",
             "description": "拿起红色的罐子",
             "verify": "holding_object('pickable_can_red')",
-            "strategy": "perception_grasp",
+            "strategy": "perception_grasp_skill",
             "strategy_params": {"query": "红色的罐子"},
             "depends_on": ["navigate_table"],
             "timeout_sec": 90.0,
@@ -130,13 +135,43 @@ def _run_once(engine, agent, world, trial: int) -> dict:
 
     goal = "去桌子那里把红色的罐子拿起来"
     base = agent._base
+
+    # Drive the dog AWAY from the table first (to ~16, 2.8 — the kitchen, per the
+    # decisive PROBE v2) so the chain's navigate leg genuinely CROSSES the room back
+    # to the table via FAR (not a 0.2 m no-op from spawn). This makes "FAR drove the
+    # dog" an honest, measurable claim. Uses the same navigate_to primitive.
+    try:
+        _log(f"trial {trial}: pre-drive AWAY to (16.0, 2.8) so the chain must drive back")
+        base.navigate_to(16.0, 2.8, timeout=45.0)
+    except Exception as exc:  # noqa: BLE001
+        _log(f"trial {trial}: pre-drive raised (continuing): {exc}")
+
     start_pos = base.get_position()
     start_hd = base.get_heading()
-    _log(f"trial {trial}: spawn pos=({start_pos[0]:.2f},{start_pos[1]:.2f}) "
+    _log(f"trial {trial}: chain start pos=({start_pos[0]:.2f},{start_pos[1]:.2f}) "
          f"heading={start_hd:.2f}")
 
     tree = engine._goal_decomposer.decompose(goal, engine._build_world_context())
-    _log(f"trial {trial}: plan {[(sg.name, sg.strategy) for sg in tree.sub_goals]}")
+    _log(f"trial {trial}: plan "
+         f"{[(sg.name, sg.strategy, dict(sg.strategy_params)) for sg in tree.sub_goals]}")
+    # Pin ALL harness retry budgets to 0 for the probe. We are testing the
+    # producer chain on the canned plan (attempt 0 = the explicit strategy +
+    # explicit strategy_params), NOT the LLM replan loop. CRITICAL: the Layer-1
+    # step retry (max_step_retries) CLEARS the explicit strategy on retry, which
+    # re-routes via the keyword ladder and OVERWRITES strategy_params with the
+    # description ({"room": description}) / empty query — the documented
+    # strategy_params/empty-query-on-retry spine residual (D51). Zeroing
+    # max_step_retries keeps attempt-0's explicit {x,y}/{query} params intact so
+    # we get the honest first-pass verdict on THIS plan.
+    try:
+        h = getattr(engine, "_vgg_harness", None)
+        if h is not None:
+            import dataclasses
+            h._config = dataclasses.replace(
+                h._config, max_step_retries=0, max_pipeline_retries=0,
+                max_redecompose=0, max_obs_replan=0)
+    except Exception as exc:  # noqa: BLE001
+        _log(f"trial {trial}: could not pin harness retries: {exc}")
 
     # Drive the chain; sample positions during the nav leg to prove FAR moved it.
     pos_trace = [(0.0, float(start_pos[0]), float(start_pos[1]), float(start_hd))]

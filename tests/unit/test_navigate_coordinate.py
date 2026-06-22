@@ -56,15 +56,27 @@ def test_navigate_xy_no_base_fails_loud():
     assert res.diagnosis_code == "no_base"
 
 
-def test_navigate_xy_reports_arrival_even_when_far_returns_false():
-    """FAR returning False (no arrival confirm) still reports honestly; the step
-    success is the planner's verdict, and the actual position is surfaced so the
-    at_position verify oracle (RAN) is the source of truth."""
-    ctx = _ctx(arrived=False, pos=(12.0, 3.0, 0.35))
+def test_navigate_xy_far_false_but_in_vicinity_succeeds():
+    """FAR returning False (no arrival confirm) but the dog ended in the goal
+    VICINITY -> step succeeds (the at_position verify oracle, RAN, is the honest
+    arrival grade; step success only gates dependents). Dog at (11.0, 3.0), goal
+    (10.5, 3.0): 0.5 m away, well within the vicinity radius."""
+    ctx = _ctx(arrived=False, pos=(11.0, 3.0, 0.35))
     res = NavigateSkill().execute({"x": 10.5, "y": 3.0}, ctx)
-    # navigate_to was called and the position is reported regardless of verdict.
     ctx.base.navigate_to.assert_called_once()
-    assert res.result_data["position"] == [12.0, 3.0]
+    assert res.success is True
+    assert res.result_data["far_confirmed"] is False
+    assert res.result_data["position"] == [11.0, 3.0]
+
+
+def test_navigate_xy_far_false_and_far_away_fails_loud():
+    """FAR False AND the dog far from the goal (couldn't route) -> fail loud.
+    Dog at (14.0, 3.0), goal (10.5, 3.0): 3.5 m away, outside the vicinity."""
+    ctx = _ctx(arrived=False, pos=(14.0, 3.0, 0.35))
+    res = NavigateSkill().execute({"x": 10.5, "y": 3.0}, ctx)
+    assert res.success is False
+    assert res.diagnosis_code == "navigation_failed"
+    assert res.result_data["position"] == [14.0, 3.0]
 
 
 def test_named_room_path_unchanged_when_no_coordinates():
