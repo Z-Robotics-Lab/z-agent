@@ -5,35 +5,41 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-22 · R35 — cross-MODEL route LANDED (D48) + colour selection now PERCEPTUAL (D49); spine byte-unchanged across 49 decisions
+updated: 2026-06-22 · R37 — TRUE producer→consumer box-flow composition + cold-turn detector rebind, BOTH GROUNDED; spine byte-unchanged across 50 decisions
 goal:    agent-orchestration runtime for physical AI — plan · route to the right MODEL/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT THRUST: prove the 3 under-proven North-Star axes (route-to-MODEL ✓ now at the ORCHESTRATION layer · cross-embodiment · live orchestration), using the moat to grade each.
 phase:   M2 cross-model — a learned detector is the first real 2nd model family, now routed-to BY THE PRODUCER via the
          engine capability-dispatch path (D50), not only inside the grasp skill (D48); colour selection PERCEPTUAL (D49).
-owns:    perception/grounding_dino.py, perception/detector_capability.py (now perception-bound), perception/go2_grasp_perception.py
-         (detect→gdino), skills/perception_grasp.py (named→detector routing), worlds/robot.py (register_capabilities binds perception).
+owns:    perception/grounding_dino.py, perception/detector_capability.py (now AGENT-bound, lazy cold-turn rebind),
+         perception/go2_grasp_perception.py (detect→gdino), skills/perception_grasp.py (named→detector routing +
+         CONSUMES a producer box), worlds/robot.py (register_capabilities binds the agent for the rebind).
          (Moat vcli/cognitive/ BYTE-UNCHANGED across 50 decisions; engine auto-threads the capability — no spine edit.)
-doing:   ★ R36 DONE (D50). Proved the PRODUCER routes a `detect` sub-goal through GoalExecutor._execute_capability to
-         REAL grounding-dino (executor_type=capability, strategy="detect", 4 boxes captured in result_data AND on the
-         Blackboard), composed into a GROUNDED grasp (holding_object oracle, actor_caused=CAUSED). Clean producer route =
-         EMPTY strategy + detect-keyword description (keyword ladder → capability; decomposer leaves empty strategy intact;
-         capability names are NOT in KNOWN_STRATEGIES so explicit "detect" would be cleared→invalid). REAL-VERIFY:
-         scripts/probe_r36_producer_routes_detect.py on real go2+arm sim + real gdino → PROBE_EXIT=0 PASS
-         (/tmp/r36_probe/trace.json). Non-cognitive fix: DetectorCapability now BINDS the agent's perception at
-         registration (the kernel hands capability invoke a SkillContext w/ no frame). detect=RAN (read-only, honest),
-         grasp=GROUNDED. 128 perception/skills/capability/routing tests green; cognitive diff EMPTY (--stat + --name-status).
+doing:   ★ R37 DONE — both D50 caveats CLOSED, spine byte-unchanged. (A) TRUE producer→consumer box-flow:
+         perception_grasp now accepts detections/bbox/boxes from a producer detect step (rule-4 binding
+         ${detect_bottle.output.detections}); it COLOUR-SELECTS the matching box and back-projects it via the SAME
+         segment + grasp_point_from_rgbd math (consumed_bbox=True, reperceived=False) — its own detect/front_object is
+         SUPPRESSED. The grasp's target came FROM the routed detector, not a re-perceive. REAL-VERIFY
+         scripts/probe_r37_box_flow_composition.py → real go2+arm + gdino, 4 boxes on Blackboard, grasp GROUNDED
+         (holding_object pickable_bottle_green), PROBE_EXIT=0 (/tmp/r37_probe/trace.json). (B) COLD-TURN rebind:
+         DetectorCapability now binds the AGENT (not the None-at-init perception snapshot) and pulls agent._perception
+         LAZILY at invoke; a capability registered while perception=None still perceives once a mid-session NL sim-start
+         restores it (NO re-registration). REAL-VERIFY scripts/probe_r37_cold_turn_rebind.py → cold gap real (snapshot
+         None), routed detector perceived (5 boxes) after restore, box consumed, GROUNDED attempt 1, PROBE_EXIT=0
+         (/tmp/r37_cold_probe/transcript.json). 50 perception/skills/capability/routing tests green; cognitive diff EMPTY
+         (7b220d9..HEAD --stat AND --name-status, + working tree).
 
-blocked: none.
-next:    R37 — deepen cross-MODEL / orchestration. Strong autonomous follow-ons (no gate): (a) TRUE box-flow composition —
-         add a non-cognitive `box→target_xyz` param to perception_grasp so the routed detect's `${detect.output.boxes}`
-         (already on the Blackboard) FLOWS to the grasp via depth back-projection, replacing the grasp's re-perceive
-         (producer→consumer composition end-to-end); (b) product-path perception re-bind — rebind the detect capability's
-         perception after a mid-session NL sim-start so the routed detector perceives WITHOUT a pre-boot (today
-         register_capabilities runs at init_vgg, before the arm boots); (c) route a SECOND capability KIND (EdgeTAM
-         `segment` / YOLOE-seg) so the registry holds >1 routed-to+graded model family; (d) live-LLM producer routing
-         (drop the faked token stream once a model reliably emits the empty-strategy detect step). Gated leaps (CEO):
-         cross-EMBODIMENT (g1), nav+grasp (un-park FAR), explore (TARE), VLN (SysNav), merge→master.
+blocked: none. KNOWN (spine, do-not-touch): when the grasp flakes (real-pick reach variance) the harness Layer-3
+         re-decompose re-emits the grasp with an EMPTY query (param loss on re-plan) → "Nothing localizable for ''".
+         This lives in vcli/cognitive/ (harness/decompose) — left untouched per the frozen-spine invariant; first-attempt
+         grasp succeeds, so the cold probe re-issues the cold turn up to 3x (each a genuine cold turn) to ride out pick
+         variance, not the empty-query bug. Flag for a future spine round (CEO): re-plan should preserve strategy_params.
+next:    R38 — deepen cross-MODEL / orchestration. No-gate follow-ons: (a) route a SECOND capability KIND (EdgeTAM
+         `segment` / YOLOE-seg) so the registry holds >1 routed-to+graded model family; (b) live-LLM producer routing
+         (drop the faked token stream once a model reliably emits the empty-strategy detect step + the
+         ${detect.output.detections} binding); (c) make the producer EMIT the box-flow binding itself (today the probe
+         authors the ${...} param). Gated leaps (CEO): re-plan param-preservation (spine), cross-EMBODIMENT (g1),
+         nav+grasp (un-park FAR), explore (TARE), VLN (SysNav), merge→master.
          Bare vector-cli + NL = ONLY acceptance; spine only STRICTER; never trust skill.success / sub-agent claims.
 
 
