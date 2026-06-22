@@ -22,6 +22,7 @@ from vector_os_nano.skills.perception_grasp import (
     PerceptionGraspSkill,
     _names_object,
 )
+from vector_os_nano.perception.front_object import parse_color
 
 _W, _H = 64, 48
 _INTR = mujoco_intrinsics(_W, _H, vfov_deg=42.0)
@@ -163,3 +164,55 @@ def test_deictic_routes_to_front_object():
     assert res.success is True
     assert "front" in perc.calls
     assert not any(c.startswith("detect:") for c in perc.calls)
+
+
+# --- D48 caveat 1: PERCEPTUAL colour selection among detector boxes ----------
+
+
+def test_named_colour_query_routes_to_detector_and_sets_verify_label():
+    """'红色的罐子' contains a noun -> DETECTOR route; colour sets verify label."""
+    assert parse_color("红色的罐子") == "red"
+    assert _names_object("红色的罐子") is True
+    perc = RoutingPerception()
+    res = PerceptionGraspSkill().execute({"query": "红色的罐子"}, _ctx(perc))
+    assert res.success is True
+    assert any(c.startswith("detect:") for c in perc.calls)
+    assert not any(c.startswith("front") for c in perc.calls)
+    assert res.result_data["detection_label"] == "pickable_can_red"
+
+
+def test_select_detection_prefers_colour_match_over_max_confidence():
+    """The crux: a colour-matching box wins even when a non-matching box scores higher.
+
+    This is what makes colour selection PERCEPTUAL rather than centrality-staged:
+    the green box has the highest confidence (scene authors green dead-centre) but
+    'red' must still pick the lower-confidence RED box."""
+    boxes = [
+        Detection(label="green bottle", bbox=(10.0, 10.0, 20.0, 20.0), confidence=0.90),
+        Detection(label="red can", bbox=(40.0, 10.0, 50.0, 20.0), confidence=0.55),
+        Detection(label="blue bottle", bbox=(70.0, 10.0, 80.0, 20.0), confidence=0.50),
+    ]
+    chosen = PerceptionGraspSkill._select_detection(boxes, "red")
+    assert chosen.label == "red can"
+    chosen_blue = PerceptionGraspSkill._select_detection(boxes, "blue")
+    assert chosen_blue.label == "blue bottle"
+    chosen_green = PerceptionGraspSkill._select_detection(boxes, "green")
+    assert chosen_green.label == "green bottle"
+
+
+def test_select_detection_no_colour_is_plain_max_confidence():
+    boxes = [
+        Detection(label="bottle", bbox=(10.0, 10.0, 20.0, 20.0), confidence=0.40),
+        Detection(label="can", bbox=(40.0, 10.0, 50.0, 20.0), confidence=0.80),
+    ]
+    assert PerceptionGraspSkill._select_detection(boxes, None).label == "can"
+
+
+def test_select_detection_falls_back_when_colour_absent_from_labels():
+    """If no box label names the colour (under-grounded adjective), fall back to
+    plain max-confidence rather than failing."""
+    boxes = [
+        Detection(label="bottle", bbox=(10.0, 10.0, 20.0, 20.0), confidence=0.40),
+        Detection(label="can", bbox=(40.0, 10.0, 50.0, 20.0), confidence=0.80),
+    ]
+    assert PerceptionGraspSkill._select_detection(boxes, "red").label == "can"

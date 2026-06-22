@@ -504,6 +504,31 @@ class PerceptionGraspSkill:
             result_data=rd,
         )
 
+    @staticmethod
+    def _select_detection(detections: list, color: str | None):
+        """Pick the box to grasp; PERCEPTUAL colour preference over max-confidence.
+
+        grounding-dino labels each box with the matched prompt phrase (e.g.
+        "a red can" → label "red can"), so when *color* is requested we prefer a box
+        whose label NAMES that colour over the raw highest-confidence box — this is
+        what makes colour selection perceptual rather than centrality-staged (the
+        scene authors green dead-centre, so plain max-confidence + staging would
+        always pick green). Among colour-matching boxes, take the highest confidence;
+        if none name the colour, fall back to plain max-confidence (the adjective may
+        have under-grounded). No colour → plain max-confidence (unchanged).
+        """
+        def _conf(d) -> float:
+            return float(getattr(d, "confidence", 0.0))
+
+        if color:
+            matching = [
+                d for d in detections
+                if color in str(getattr(d, "label", "") or "").lower()
+            ]
+            if matching:
+                return max(matching, key=_conf)
+        return max(detections, key=_conf)
+
     def _perceive_grasp_point(self, perception: Any, query: str, *, color: str | None = None):
         """Acquire RGB-D, resolve the target mask, compute the WORLD grasp point.
 
@@ -581,7 +606,16 @@ class PerceptionGraspSkill:
                 detections = []
             if detections:
                 detection_found = True
-                det = max(detections, key=lambda d: getattr(d, "confidence", 0.0))
+                # PERCEPTUAL colour selection (D48 caveat 1): grounding-dino is
+                # colour-conditioned, so when a colour is named, prefer the box whose
+                # detector LABEL actually contains that colour over raw max-confidence
+                # (so "红色的罐子" picks the RED box even if a green box scores higher —
+                # selection by perception, not by scene centrality). Among the boxes
+                # whose label matches the colour, take the highest-confidence one. If
+                # none match the colour (the prompt may have under-grounded the
+                # adjective), fall back to plain max-confidence. No colour → plain
+                # max-confidence, unchanged.
+                det = self._select_detection(detections, color)
                 # Verify LABEL: when a colour is named ("红色的罐子") the verify oracle
                 # grades the colour's scene key (pickable_can_red); otherwise the
                 # detector's own label. The grasp POINT is still from depth+mask.

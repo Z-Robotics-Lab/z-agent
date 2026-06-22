@@ -45,12 +45,39 @@ def test_zh_noun_maps_to_english_phrase():
     assert query_to_prompt("杯子") == "a cup."
 
 
+def test_zh_colour_plus_noun_preserves_colour():
+    """D48 caveat 1: grounding-dino is colour-conditioned, so the zh colour
+    adjective is PRESERVED into the prompt (not dropped to a bare noun)."""
+    assert query_to_prompt("绿色的瓶子") == "a green bottle."
+    assert query_to_prompt("红色的罐子") == "a red can."
+    assert query_to_prompt("蓝色的瓶子") == "a blue bottle."
+    # bare zh colour char + noun also maps
+    assert query_to_prompt("红罐子") == "a red can."
+    assert query_to_prompt("蓝瓶") == "a blue bottle."
+
+
+def test_zh_colour_without_noun_builds_colour_object():
+    """A colour-only zh query (skill routes these to HSV, not here) is colour-aware
+    if ever handed to the detector directly — colour never dropped."""
+    assert query_to_prompt("红色的") == "a red object."
+    assert query_to_prompt("绿色") == "a green object."
+
+
 def test_english_query_becomes_lowercase_period_phrase():
     assert query_to_prompt("the can") == "a the can."
     assert query_to_prompt("RED CUP") == "a red cup."
     # punctuation stripped, trailing period guaranteed
     assert query_to_prompt("bottle!").endswith(".")
     assert "!" not in query_to_prompt("bottle!")
+
+
+def test_english_colour_adjective_preserved():
+    """English queries already keep the adjective — that path is unchanged."""
+    assert query_to_prompt("red can") == "a red can."
+    assert query_to_prompt("green bottle") == "a green bottle."
+    # a bare english colour with no noun → colour-aware fallback, not dropped
+    assert query_to_prompt("red") == "a red object."
+    assert query_to_prompt("blue") == "a blue object."
 
 
 def test_empty_or_generic_query_falls_back_to_generic_prompt():

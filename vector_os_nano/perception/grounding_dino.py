@@ -61,30 +61,69 @@ _ZH_NOUN_EN: dict[str, str] = {
     "碗": "bowl",
 }
 
+# zh → en colour-adjective map. grounding-dino IS colour-conditioned (the probe
+# boxed "a red can./a green bottle./a blue bottle." with distinct scores), so a
+# zh colour word must be PRESERVED into the prompt — dropping it (the old
+# behaviour) collapsed all three cylinders to "a bottle." and made colour
+# selection staging-dependent. Substring match on the lowercased query; longest
+# alias first so "红色" beats the bare "红" prefix. Mirrors front_object's
+# _COLOR_ALIASES (the HSV path) so both routes speak the same colour vocabulary.
+_ZH_COLOR_EN: tuple[tuple[str, str], ...] = (
+    ("红色", "red"), ("红", "red"),
+    ("绿色", "green"), ("绿", "green"),
+    ("蓝色", "blue"), ("蓝", "blue"),
+)
+# English colour adjectives kept as-is when an English query already names one
+# (we never re-translate; this is only used by the colour-only fallback below).
+_EN_COLORS: tuple[str, ...] = ("red", "green", "blue")
+
+
+def _zh_color(q: str) -> str | None:
+    """Return the English colour named in zh in *q* (lowercased), else None."""
+    for zh, en in _ZH_COLOR_EN:
+        if zh in q:
+            return en
+    return None
+
 
 def query_to_prompt(query: str | None) -> str:
     """Map an NL query to a lowercase, period-terminated grounding-dino prompt.
 
-    - A query naming a known zh object noun → "a <english-noun>." (e.g. 罐子→"a can.").
-    - A query that already names a thing in English → "a <thing>." (lowercased,
-      punctuation stripped; a trailing period guaranteed).
-    - A deictic / empty query → the generic graspable-shapes prompt.
+    grounding-dino is colour-conditioned, so the colour adjective is PRESERVED:
 
-    The colour-only / deictic routing decision is the SKILL's job (it sends those
-    to the classical resolver, not here); this is a best-effort fallback so the
-    detector is still usable if ever handed a generic query directly.
+    - A zh colour+noun query → "a <colour> <english-noun>." (绿色的瓶子→"a green
+      bottle.", 红色的罐子→"a red can.", 蓝色的瓶子→"a blue bottle.").
+    - A zh noun without a colour → "a <english-noun>." (罐子→"a can.").
+    - A query that already names a thing in English keeps its adjective verbatim →
+      "a <thing>." (lowercased, punctuation stripped; trailing period guaranteed;
+      "red cup"→"a red cup.").
+    - A colour-WITHOUT-a-noun (zh "红色的" or en "red") → "a <colour> object."
+      rather than dropping the colour. (The SKILL routes a pure-colour query to the
+      classical HSV resolver, NOT here — this is only a best-effort fallback so the
+      detector is still colour-aware if ever handed a colour-only query directly.)
+    - A deictic / empty query → the generic graspable-shapes prompt.
     """
     q = (query or "").strip().lower()
     if not q:
         return _GENERIC_PROMPT
+    color = _zh_color(q)
     for zh, en in _ZH_NOUN_EN.items():
         if zh in q:
-            return f"a {en}."
-    # English (or already-romanized) query: strip to a bare noun phrase.
+            return f"a {color} {en}." if color else f"a {en}."
+    # No zh noun matched. If a zh colour was named with no recognised noun, build a
+    # colour-only prompt rather than dropping the colour.
+    if color:
+        return f"a {color} object."
+    # English (or already-romanized) query: strip to a bare noun phrase, adjective
+    # (incl. colour) preserved verbatim.
     cleaned = "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in q)
     cleaned = " ".join(cleaned.split())
     if not cleaned:
         return _GENERIC_PROMPT
+    # A bare English colour word with no noun → "a <colour> object." (parallel to
+    # the zh colour-only case above) so the colour is never dropped.
+    if cleaned in _EN_COLORS:
+        return f"a {cleaned} object."
     return f"a {cleaned}."
 
 
