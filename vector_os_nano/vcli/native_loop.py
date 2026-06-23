@@ -239,18 +239,16 @@ class _NativeDetectTool:
         labels = output.get("labels") or []
         scores = output.get("scores") or []
 
-        # Stash on the agent so the world's detect_objects() oracle reflects the
-        # LEARNED model's actual observation on this camera (rule 4: the observation
-        # flows to verify). World-side state, never the cognitive seam.
-        agent = getattr(context, "agent", None)
-        if agent is not None:
-            try:
-                agent._last_detection = {
-                    "query": query, "boxes": boxes, "labels": labels, "scores": scores,
-                }
-            except Exception as exc:  # noqa: BLE001 — best-effort capture
-                logger.debug("native_loop: detect result stash failed: %s", exc)
-
+        # MOAT DISCIPLINE (R6 audit): the detector's OWN output is deliberately NOT
+        # stashed on the agent. R4 stashed it as ``agent._last_detection`` so a
+        # world ``detect_objects()`` oracle could read it back — that made
+        # ``verify(len(detect_objects()) > 0)`` a TAUTOLOGY (the detector certifying
+        # itself) and minted a FALSE GREEN (D61). The self-read oracle was removed
+        # (worlds/robot.py), and the orphaned stash is removed here so no future
+        # round can re-wire the means' own output into the verify namespace. The
+        # detector's result still flows to the HUMAN-READABLE tool output below and
+        # (when a sim arm is present) the GROUND-TRUTH ``detect_objects`` oracle reads
+        # ``arm.get_object_positions()`` — independent of the means, never this output.
         if not getattr(result, "success", False) and not boxes:
             err = getattr(result, "error", "") or "no detections"
             return ToolResult(

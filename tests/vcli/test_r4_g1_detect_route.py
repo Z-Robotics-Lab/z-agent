@@ -159,16 +159,22 @@ def test_arm_agent_keeps_ground_truth_detect_objects():
 
 
 # --- 2. native detect tool routes to the capability ------------------------
-def test_native_detect_tool_routes_and_stashes():
+def test_native_detect_tool_routes_and_does_not_self_stash():
+    """The native detect tool ROUTES to the learned capability and surfaces a
+    human-readable result, but MUST NOT stash the detector's own output on the
+    agent (R6 moat discipline): a ``_last_detection`` stash that a verify oracle
+    could read back is self-certification — the FALSE GREEN removed at D61. The
+    detector's output flows ONLY to the human-readable tool text, never to verify.
+    """
     cap = _StubDetectCap([("a red object", (100, 120, 260, 380), 0.73)])
     tool = _NativeDetectTool(cap)
     agent = _G1Agent()
     res = tool.execute({"query": "找前面的红色的东西"}, _Ctx(agent))
     assert not res.is_error
-    assert cap.last_query == "找前面的红色的东西"
-    # boxes stashed for the verify oracle (rule 4: observation flows).
-    assert agent._last_detection["boxes"] == [[100, 120, 260, 380]]
-    assert "grounding-dino localized 1 object" in res.content
+    assert cap.last_query == "找前面的红色的东西"  # genuinely routed to the learned model
+    assert "grounding-dino localized 1 object" in res.content  # output flows to the human
+    # MOAT: the means' own output is NOT stashed anywhere a verify oracle can read it.
+    assert not hasattr(agent, "_last_detection")
 
 
 def test_native_detect_tool_empty_query_errors():
@@ -183,8 +189,9 @@ def test_native_detect_tool_nothing_localized_is_honest():
     agent = _G1Agent()
     res = tool.execute({"query": "red object"}, _Ctx(agent))
     assert not res.is_error
-    assert "localized nothing" in res.content
-    assert agent._last_detection["boxes"] == []  # honest empty, never fabricated
+    assert "localized nothing" in res.content  # honest empty, never fabricated
+    # MOAT: even on an empty detection, nothing is stashed for a verify oracle.
+    assert not hasattr(agent, "_last_detection")
 
 
 # --- 3. registry reach + motor-tool surfacing ------------------------------
