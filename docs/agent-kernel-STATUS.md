@@ -67,9 +67,8 @@ next:    R40 — perception RELIABILITY at the dock framing (NON-gated, non-spin
 - **DEP `timm>=1.0` (1.0.27) — CEO-APPROVED 2026-06-23.** Added to pyproject + .venv to make EdgeTAM actually LOAD
   (its undeclared backbone; EdgeTAM never loaded across the grasp campaign D17-D51 → masks were box-rect). Standard
   PyTorch-image-models lib; EdgeTAM backbone repvit_m1.dist_in1k fetches from HF once then caches. No longer a gate.
-- Merge/release `feat/orchestrator-redesign` → master: **CEO-APPROVED + DONE LOCALLY 2026-06-23** (FF, 135 commits
-  4158286→cd7029a; cross-MODEL D48-D50 + the moat now on local master). **origin/master NOT pushed** (local 135 ahead)
-  — pushing to the shared GitHub is the one remaining outward step, pending an explicit "push" from Yusen.
+- Merge/release `feat/orchestrator-redesign` → master: **CEO-APPROVED + DONE + PUSHED 2026-06-23** (FF, 135 commits;
+  origin/master 4158286→cd7029a). cross-MODEL (D48-D50) + the moat are live on the shared GitHub. Release gate CLOSED.
 - cross-EMBODIMENT (g1: removed, zero python — large rebuild) ; nav→FAR + explore→TARE (cmd_vel causation +
   nav-stack colcon bring-up, DQ-15) ; VLN→SysNav venv (DQ-16). New external deps / new-or-changed interfaces /
   hardware / security. Real SO-101 arm acceptance gated on `ls /dev/ttyACM*` (absent — sim only).
