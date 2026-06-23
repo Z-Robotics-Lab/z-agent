@@ -5,44 +5,42 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-23 · R42 FINAL + G1 R1 WIP floor — nav+grasp BANKED after 6 rounds (D56). Dock convergence FIXED (bridge-verified, R42 d0528aa) + publisher bug was a phantom; chain mechanically complete + perception accurate (2.3cm) + dock converges — but the GRASP still misses (post-dock approach standoff x≈10.41 too far back vs green@10.86 → marginal Piper reach). NOT reliably landed; each round fixed a layer + exposed the next. Per Yusen hard-stop, banked as a documented intermittent demo (one layer from working). NEXT = CEO ship-vs-pivot. Spine byte-unchanged across 56 decisions.
+updated: 2026-06-23 · G1 R1 LANDED (cross-EMBODIMENT axis) — Unitree G1 stands stably IN the existing go2 apartment room (SAME walls/furniture/pick_table/cans), with a real lidar (360 returns, 15 distinct range buckets 3.0-11.4m, detects walls across the 20×14m apartment, 0 self-hits) and a real head camera (g1_head_rgb, renders the room — door frame + table + can + floor visible, I Read /tmp/r1_g1_cam.png). Built by MIRRORING the proven go2_piper MjSpec.attach pattern (D57): each model loaded as its own spec with absolute mesh paths + meshdir="" → attach g1 into a room-only spec at (10,3) facing +x. _start_g1 registered in sim_tool (in-process; NL-switch=R2). Foreground real-verified (probe scripts/probe_r1_g1_room.py), sim torn down. Commit 65bc6c7 (WIP floor) + docs. Spine vcli/cognitive/ BYTE-UNCHANGED. PRIOR thrust (nav+grasp) BANKED after 6 rounds (D56), intermittent demo, awaiting CEO ship-vs-pivot.
 goal:    agent-orchestration runtime for physical AI — plan · route to the right MODEL/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT THRUST: prove the 3 under-proven North-Star axes (route-to-MODEL ✓ now at the ORCHESTRATION layer · cross-embodiment · live orchestration), using the moat to grade each.
-phase:   M2 cross-model — a learned detector is the first real 2nd model family, now routed-to BY THE PRODUCER via the
-         engine capability-dispatch path (D50), not only inside the grasp skill (D48); colour selection PERCEPTUAL (D49).
-owns:    perception/grounding_dino.py, perception/detector_capability.py (now AGENT-bound, lazy cold-turn rebind),
-         perception/go2_grasp_perception.py (detect→gdino), skills/perception_grasp.py (named→detector routing +
-         CONSUMES a producer box), worlds/robot.py (register_capabilities binds the agent for the rebind).
-         (Moat vcli/cognitive/ BYTE-UNCHANGED across 50 decisions; engine auto-threads the capability — no spine edit.)
-doing:   R39 — nav+grasp now COMPLETES end-to-end and GROUNDS the right object intermittently (honest, not a landed
-         headline). ROOT CAUSE found via Debug Protocol (NOT the A/B-probe "off-axis lateral IK" theory): the grasp
-         never grounded because PERCEPTION was silently degraded. Two real, independent fixes (both verified):
-         (1) `timm` — ALREADY declared in pyproject (perception extra) but MISSING from .venv → EdgeTAM failed to LOAD →
-             coarse box-rect mask → depth centroid averaged can+table → z collapsed to ~0.13 → gripper closed below the
-             can → no weld. Synced timm==1.0.27 into .venv (env-sync of a declared dep, NOT a new dependency / not a gate).
-         (2) EdgeTAM scores-shape bug (perception/tracker.py:330): transformers>=5 returns object_score_logits (N,1), so
-             `float(scores[i])` on a (1,)-array raised TypeError → segment() fell back to box-rect EVERY time even with
-             timm present. Flatten scores to 1-D (commit 8f9851e). Verified in isolation: EdgeTAM now returns a real mask.
-         RESULT (real sim, decompose→vgg_execute, retries=0, 3 trials each): GREEN grasp_GROUNDED 1/3 (green t1: real
-         perceive 2.3cm @ y=3.00 z=0.322 → weld + shoulder lift + holding_object('pickable_bottle_green') TRUE); RED 0/3.
-         The chain mechanically completes (FAR→dock converges +X→perceive→_approach_object vy-track→PickTopDown weld→lift).
-         Spine vcli/cognitive/ BYTE-UNCHANGED (verified empty diff 7b220d9..HEAD). Probes: scripts/probe_r39_e2e_green_red.py
-         (acceptance), probe_r39_reperceive_after_seat.py (proved: do NOT re-perceive after approach — close framing looks
-         OVER the table → garbage), probe_r39_debug_floor_vs_cans.py. Artifacts /tmp/r39_e2e/*.png + e2e.json.
+phase:   M3 cross-EMBODIMENT — G1 humanoid added as a 3rd embodiment (alongside go2 / go2+arm), standing in the SAME
+         go2 room with working lidar+camera. The cross-embodiment North-Star axis now has its first real 2nd body-class
+         beyond the quadruped. (M2 cross-model — learned detector routed-to BY THE PRODUCER, D48-D50 — remains proven.)
+owns:    hardware/sim/mjcf/g1/build_g1.py (g1 model + head camera, absolute meshes), hardware/sim/mjcf/g1/{g1,scene_g1_room}.xml
+         (generated), hardware/sim/mujoco_g1.py (_build_g1_room_scene_xml MjSpec attach + MuJoCoG1: stand-hold PD,
+         mj_ray lidar w/ g1 self-geom filter, g1_head_rgb camera), vcli/tools/sim_tool.py (_start_g1 + "g1" enum),
+         tests/unit/hardware/sim/test_g1_room.py, scripts/probe_r1_g1_room.py.
+         (Moat vcli/cognitive/ BYTE-UNCHANGED across 57 decisions; g1 is sim/world-side only — no spine edit.)
+doing:   G1 R1 (cross-EMBODIMENT) — DONE + foreground real-verified. G1 placed in the EXISTING go2 apartment room (NOT a new
+         scene): MjSpec.attach pattern (mirrors hardware/sim/mjcf/go2_piper/build_go2_piper.py) — load room-only spec + g1
+         spec each with absolute mesh paths + meshdir="" (solves the dual-meshdir conflict: room has 95 furniture meshes on
+         go2's meshdir, g1's meshes on menagerie's; one top-level meshdir can't serve both), attach g1 at (10,3) facing +x.
+         g1.xml from mujoco_menagerie/unitree_g1 (it HAS a `stand` keyframe; in-repo g1_29dof.xml does NOT) + a g1_head_rgb
+         camera added on torso_link. MuJoCoG1: stand-hold (menagerie position actuators @ stand ctrl) + mj_ray lidar (g1
+         pelvis bodyexclude + g1 self-geom-id filter) + mj.Renderer camera. VERIFIED (scripts/probe_r1_g1_room.py, foreground,
+         MUJOCO_GL=egl): base-z stable 0.7912 over 2s (STANDS); lidar 360 returns, 15 distinct buckets 3.0-11.4m, 3D points
+         span the full 20×14m apartment (907 pts >6m = far walls), 0 near-zero self-hits; camera renders the room (door frame
+         + pick_table + can + tiled floor, /tmp/r1_g1_cam.png — Read + confirmed, optical axis +x). 4/4 unit tests green.
+         Sim torn down (rosm nuke + pkill mujoco). Spine vcli/cognitive/ BYTE-UNCHANGED (verified). Commit 65bc6c7.
 
-blocked: NOT a CEO gate — a perception-quality round. The remaining miss is DETECTION SELECTION at the dock framing:
-         the 3 pickable objects (blue y=2.78, green 3.00, red 3.22) are only 22cm apart and the dog perceives them ~0.85m
-         away and slightly off-center (the dock leaves a small per-trial pose residual), so grounding-dino's colour
-         grounding intermittently picks a NEIGHBOUR's box and the back-projected z sometimes still lands low (table). Per
-         trial the perceived xy tracks the dog's dock-residual: green t2 grabbed RED's y, red t1 grabbed BLUE's y, etc.
-         KNOWN (spine, do-not-touch): re-plan still drops strategy_params (empty query on retry) — retries pinned to 0.
-next:    R40 — perception RELIABILITY at the dock framing (NON-gated, non-spine), to lift GREEN→~3/3 and land RED honestly:
-         (a) tighten the dock so the perceive pose is repeatable head-on AND closer-but-not-over-table (a fixed perceive
-             standoff where the 3 cans subtend more pixels); (b) constrain detection to the near-table depth band + select
-             the box nearest the commanded colour's expected screen region, reject low-z (table) back-projections FAIL-LOUD;
-             (c) consider a colour-segmentation cross-check (front_object colour resolver) to disambiguate the 3 close cans.
-         Then bare-cli two-turn "启动 go2 带机械臂 → 去桌子那里把绿色的瓶子拿起来" → nav RAN + grasp GROUNDED end-to-end.
+blocked: none — not a CEO gate (sim asset + in-sim embodiment registration; no new ROS2 interface, no new external dep —
+         menagerie g1 + g1_gait assets + sensors/ already in repo). HONEST shakiness for R2: (1) lidar gets 0 returns on the
+         pick_table — g1 spawns just BEHIND a doorway frame, table is ~3m through the doorway, small + partly occluded at the
+         lidar's elevation rings (the 3.0m min ring is the door frame/near walls, not the table) → R2 should move g1 closer /
+         add a lower ring, OR accept the table is a camera-perception target not a lidar one. (2) Stand is a static PD hold,
+         NOT locomotion — g1 cannot yet WALK in the room. (3) _start_g1 is in-process only; NL embodiment-switch not wired.
+next:    R2 (cross-EMBODIMENT, evolve) — bundle: (a) NL embodiment-switch — "切换到 g1" / "启动 g1" through bare vector-cli
+         routes to _start_g1 (wire the IntentRouter/sim_tool enum end-to-end, demonstrate in the REPL); (b) g1 LOCOMOTION in
+         the room — adapt the recovered G1MuJoCoBase gait (/tmp/recovered_mujoco_g1.py, or git show 62ee0de:...mujoco_g1.py)
+         so g1 walks to a commanded point without falling; (c) verify the lidar/camera while MOVING (scan updates as g1 walks,
+         table comes into lidar range as it approaches). Then a cross-embodiment task graded by the moat: g1 navigates +
+         perceives the room via NL. Recover gait, don't rebuild. Real-verify in the sim + Read a moving render.
          Gated leaps (CEO queue): re-plan strategy_params-preservation (SPINE — D52), cross-EMBODIMENT (g1), explore
          (TARE), VLN (SysNav), merge→master.
          ALSO record for reproducibility: `.venv` must have `timm` (uv pip install 'timm>=1.0'); EdgeTAM backbone
