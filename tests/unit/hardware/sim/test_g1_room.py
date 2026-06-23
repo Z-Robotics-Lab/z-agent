@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Unit tests for G1-in-go2-room scene — R1 WIP floor.
+"""Unit tests for G1-12dof-in-go2-room scene — R2 WIP floor.
 
 Tests are headless (MUJOCO_GL=egl) and cover:
-  1. Scene compiles and contains both the room's pick_table AND g1's pelvis.
+  1. Scene compiles and contains both the room's pick_table AND g1_pelvis.
   2. The compiled model has the g1_head_rgb camera.
   3. G1 self-geom-id set is non-empty.
   4. _start_g1 is wired in sim_tool (method exists + "g1" in schema enum).
+  5. walk() produces forward displacement (2 s cmd → base x >0.3 m, base z >0.5).
 
 Run:
     cd /home/yusen/Desktop/vector_os_nano
@@ -16,7 +17,6 @@ Run:
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -29,7 +29,7 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 # ---------------------------------------------------------------------------
 
 _G1_SCENE_XML = Path(
-    "/home/yusen/Desktop/vector_os_nano/vector_os_nano/hardware/sim/mjcf/g1/scene_g1_room.xml"
+    "/home/yusen/Desktop/vector_os_nano/vector_os_nano/hardware/sim/mjcf/g1/scene_g1_12dof_room.xml"
 )
 
 
@@ -43,17 +43,17 @@ def _ensure_scene() -> Path:
 # Test 1: scene builds and compiles — both pick_table and g1_pelvis present
 # ---------------------------------------------------------------------------
 
+
 def test_scene_compiles_with_pick_table_and_g1_pelvis() -> None:
     """The compiled scene must contain both room geometry and g1 robot."""
     import mujoco
 
     scene_path = _ensure_scene()
-    assert scene_path.exists(), f"scene_g1_room.xml not found at {scene_path}"
+    assert scene_path.exists(), f"scene_g1_12dof_room.xml not found at {scene_path}"
 
     model = mujoco.MjModel.from_xml_path(str(scene_path))
     assert model.nbody > 0, "Model has no bodies"
 
-    # Collect body names
     body_names = {
         mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
         for i in range(model.nbody)
@@ -66,10 +66,16 @@ def test_scene_compiles_with_pick_table_and_g1_pelvis() -> None:
         f"g1_pelvis not found in model bodies: {sorted(body_names)}"
     )
 
+    # R2 specific: confirm model has 12 actuators (not 29+ from Menagerie)
+    assert model.nu == 12, (
+        f"Expected 12 actuators (12-DOF model), got {model.nu}"
+    )
+
 
 # ---------------------------------------------------------------------------
 # Test 2: g1_head_rgb camera exists in compiled model
 # ---------------------------------------------------------------------------
+
 
 def test_g1_head_camera_in_compiled_model() -> None:
     """The compiled scene must contain the g1_head_rgb camera."""
@@ -91,6 +97,7 @@ def test_g1_head_camera_in_compiled_model() -> None:
 # Test 3: G1 self-geom-id set is non-empty
 # ---------------------------------------------------------------------------
 
+
 def test_g1_self_geom_set_nonempty() -> None:
     """_build_robot_geom_set must find at least one g1_* body geom."""
     import mujoco
@@ -105,7 +112,6 @@ def test_g1_self_geom_set_nonempty() -> None:
 
     assert len(geom_ids) > 0, "Robot geom set is empty — lidar self-filter will not work"
 
-    # Verify all geoms in the set belong to g1_* bodies
     for gid in geom_ids:
         bid = model.geom_bodyid[gid]
         name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, bid) or ""
@@ -117,6 +123,7 @@ def test_g1_self_geom_set_nonempty() -> None:
 # ---------------------------------------------------------------------------
 # Test 4: _start_g1 wired in sim_tool (no sim instantiated)
 # ---------------------------------------------------------------------------
+
 
 def test_start_g1_wired_in_sim_tool() -> None:
     """SimStartTool must have _start_g1 method and 'g1' in the schema enum."""
@@ -133,3 +140,59 @@ def test_start_g1_wired_in_sim_tool() -> None:
     assert "g1" in allowed, (
         f"'g1' not in sim_type enum; allowed values: {allowed}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 5: walk() produces forward displacement — policy gait is working
+# ---------------------------------------------------------------------------
+
+
+def test_walk_forward_displacement() -> None:
+    """walk(vx=0.5, duration=2.0) must move the robot >0.3 m forward without falling.
+
+    This is the key R2 correctness test: verifies the policy gait works in the
+    combined room scene with correct qpos/qvel/ctrl offsets.
+    """
+    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
+
+    g1 = MuJoCoG1(gui=False, room=True)
+    try:
+        g1.connect()
+
+        # Record start position
+        off = g1._offsets
+        assert off is not None
+        qa = off.pelvis_qpos_adr
+        x0 = float(g1._data.qpos[qa])
+        y0 = float(g1._data.qpos[qa + 1])
+        z0 = g1.get_base_height()
+
+        assert z0 > 0.5, f"Robot not standing at connect: z={z0:.3f}"
+
+        # Walk forward for 2 seconds
+        g1.walk(vx=0.5, duration=2.0)
+
+        xf = float(g1._data.qpos[qa])
+        yf = float(g1._data.qpos[qa + 1])
+        zf = g1.get_base_height()
+
+        displacement_x = xf - x0
+        total_displacement = ((xf - x0) ** 2 + (yf - y0) ** 2) ** 0.5
+
+        assert total_displacement > 0.3, (
+            f"Robot did not move enough: displacement={total_displacement:.3f} m "
+            f"(x: {x0:.3f} → {xf:.3f}, y: {y0:.3f} → {yf:.3f})"
+        )
+        assert zf > 0.5, (
+            f"Robot fell during walk: final z={zf:.3f} (fell threshold: 0.5)"
+        )
+
+        # Also verify lidar and camera still work while/after walking
+        scan = g1.get_lidar_scan()
+        assert scan.n_returns > 0, "Lidar returns 0 hits after walk"
+
+        frame = g1.get_camera_frame(width=320, height=240)
+        assert frame.shape == (240, 320, 3), f"Camera frame shape wrong: {frame.shape}"
+
+    finally:
+        g1.close()

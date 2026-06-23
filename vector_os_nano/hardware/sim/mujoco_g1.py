@@ -1,32 +1,41 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""MuJoCo-based simulated Unitree G1 humanoid — R1 WIP floor.
+"""MuJoCo-based simulated Unitree G1 humanoid — R2 floor.
 
-R1 scope: STAND + sensors (lidar, head camera) in the go2 apartment room.
-Gait / navigation are R2+ (see /tmp/recovered_mujoco_g1.py for prior art).
+R2 scope: WALK via the 12-DOF RL policy (motion.pt) in the go2 apartment room,
+plus sensors (lidar, head camera). The robot is the matched pair:
+  g1_12dof.xml + motion.pt  — proven to walk by the lead's spike (forward-0.5
+  cmd → 2.70 m in 6 s, base z 0.765-0.791, no fall).
 
 Architecture:
-  build_g1_room_scene_xml() — builds composite scene via MjSpec attach
-                              (mirrors mujoco_go2._build_room_scene_xml).
-  MuJoCoG1                 — loads scene, holds stand pose, exposes sensors.
+  _build_g1_room_scene_xml() — MjSpec attach of g1_12dof model into the go2
+                               room scene (mirrors R1 approach, swaps robot).
+  MuJoCoG1                  — loads scene, runs policy gait, exposes:
+                                walk(), navigate_to(), set_velocity(), stop(),
+                                get_base_height(), get_heading(),
+                                get_lidar_scan(), get_camera_frame(),
+                                get_camera_pose()
 
-The G1 Menagerie model uses position actuators (kp=500, dampratio=1 per
-default class).  Setting data.ctrl = key_ctrl[stand_kf] is enough to hold
-the stand pose — the actuators' own PD (kp/kd derived from dampratio) handle
-the rest.  No additional PD layer is needed for R1.
+Policy control loop (50 Hz, single-threaded / synchronous):
+  - _step_batch() advances 10 physics steps (0.002 s each = 0.02 s) and runs
+    one policy inference.  The probe drives it step-by-step — no daemon/threads.
+  - Obs layout (47): [3 ang_vel, 3 gravity, 3 cmd, 12 q, 12 dq, 12 prev_act, 2 gait_phase].
+    Exact match to spike_12dof_walk.py (proven correct).
 
-Spawn: (10, 3, 0.793) facing +x — same as the go2 spawn, directly in front
-of the pick_table at (10.95, 3.0).
+CRITICAL offset note (combined room scene):
+  The g1 freejoint is NOT at qpos[0] in the combined scene (room has 3 static
+  bodies before g1 is attached).  Empirically verified:
+    pelvis_qpos_adr = 21   (qpos[21:28] = root pos x,y,z + quat w,x,y,z)
+    pelvis_dof_adr  = 18   (qvel[18:24] = root lin_vel + ang_vel)
+    leg qpos        = qpos[28:40]  (12 joints)
+    leg qvel        = qvel[24:36]  (12 joints)
+    ctrl indices    = ctrl[0:12]   (all 12 g1 actuators, only robot in scene)
+    ang_vel obs     = qvel[21:24]  (pelvis_dof_adr + 3)
+    gravity quat    = qpos[24:28]  (pelvis_qpos_adr + 3)
 
-Camera convention: camera 'g1_head_rgb' (scene name after attach prefix)
-  Camera frame X_cam=(0,-1,0), Y_cam=(0,0,1), Z_cam=(-1,0,0).
-  Optical axis = -Z_cam = +X_world → looks forward when g1 faces +x.
-  Matches go2's d435_rgb xyaxes="0 -1 0 0 0 1" exactly.
-
-Lidar: 2D ring + 3D rings around g1's head height (~1.5m from ground),
-  self-filtered using pre-built robot geom set. Mirrors _update_lidar in
-  mujoco_go2.py.
+Camera: 'g1_head_rgb' on the pelvis body at pos=(0.04, 0, 0.42),
+  xyaxes="0 -1 0 0 0 1" — forward-facing, matches go2 d435_rgb convention.
 """
 from __future__ import annotations
 
@@ -46,29 +55,71 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _HERE = Path(__file__).resolve().parent
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _ROOM_XML = _HERE / "go2_room.xml"
 _GO2_ASSETS_DIR = _HERE / "mjcf" / "go2" / "assets"
-_G1_XML = _HERE / "mjcf" / "g1" / "g1.xml"
-_G1_SCENE_XML = _HERE / "mjcf" / "g1" / "scene_g1_room.xml"
 
-# G1 spawn position in the room (same as go2 spawn — facing pick_table)
+# 12-DOF model + policy from assets/g1_gait/
+_ASSET_DIR = _REPO_ROOT / "assets" / "g1_gait"
+_G1_12DOF_XML = _ASSET_DIR / "g1_12dof.xml"
+_G1_MESHES_DIR = _ASSET_DIR / "meshes"
+
+# Output scene (new 12dof scene — replaces the R1 29dof scene)
+_G1_SCENE_XML = _HERE / "mjcf" / "g1" / "scene_g1_12dof_room.xml"
+
+# G1 spawn position in the room
 _G1_SPAWN_X: float = 10.0
 _G1_SPAWN_Y: float = 3.0
-_G1_PELVIS_Z: float = 0.793  # from menagerie stand keyframe
+_G1_PELVIS_Z: float = 0.793  # from g1_12dof default stance height
 
-# Camera name in the COMPILED scene (attach prefix "g1_" + camera name "head_rgb")
+# Camera name in the compiled scene (attach prefix "g1_" + camera name "head_rgb")
 _SCENE_CAM_NAME: str = "g1_head_rgb"
 
-# Lidar mount offsets from pelvis (world-frame z component is additive to pelvis z)
-# Mount at ~head height to clear legs; pelvis z ≈ 0.793, so offset_z=0.72 → ~1.51m
+# Lidar mount offsets from pelvis (z-offset brings sensor to ~head height)
 _LIDAR_OFFSET_X: float = 0.0
-_LIDAR_OFFSET_Z: float = 0.72  # ~1.51m from floor when standing
+_LIDAR_OFFSET_Z: float = 0.72  # pelvis z ~0.793 + 0.72 = ~1.51 m from floor
 
 # ---------------------------------------------------------------------------
-# Lazy mujoco import
+# Policy / gait constants (from spike_12dof_walk.py — proven correct)
+# ---------------------------------------------------------------------------
+
+_SIM_DT: float = 0.002          # MuJoCo physics timestep (s)
+_DECIMATION: int = 10            # physics steps per policy step → 50 Hz policy
+_KPS = np.array([100, 100, 100, 150, 40, 40] * 2, dtype=np.float32)
+_KDS = np.array([2, 2, 2, 4, 2, 2] * 2, dtype=np.float32)
+_DEFAULT_ANGLES = np.array(
+    [-0.1, 0.0, 0.0, 0.3, -0.2, 0.0, -0.1, 0.0, 0.0, 0.3, -0.2, 0.0],
+    dtype=np.float32,
+)
+_ANG_VEL_SCALE: float = 0.25
+_DOF_POS_SCALE: float = 1.0
+_DOF_VEL_SCALE: float = 0.05
+_ACTION_SCALE: float = 0.25
+_CMD_SCALE = np.array([2.0, 2.0, 0.25], dtype=np.float32)
+_NUM_ACTIONS: int = 12
+_NUM_OBS: int = 47
+_GAIT_PERIOD: float = 0.8
+
+# ---------------------------------------------------------------------------
+# Navigation constants (tuned from the recovered gait's navigate_to)
+# ---------------------------------------------------------------------------
+
+_NAV_TOL_FLOOR: float = 0.30      # gait COM oscillation floor
+_NAV_VYAW_MAX: float = 0.6        # max yaw rate command
+_NAV_K_YAW: float = 2.0           # proportional heading gain
+_NAV_FACE_TOL: float = 0.35       # rad: pivot until aligned within this
+_NAV_YAW_DEADBAND: float = 0.12   # rad: stop correcting when aligned
+_NAV_SPEED: float = 0.5           # default forward command speed
+_NAV_CAPTURE_R: float = 0.5       # m: inside → freeze steering
+_NAV_FALL_Z: float = 0.4          # m: pelvis below this = fallen
+_NAV_TIMEOUT_S: float = 30.0      # max seconds before timeout
+
+# ---------------------------------------------------------------------------
+# Lazy mujoco / torch imports
 # ---------------------------------------------------------------------------
 
 _mujoco: Any = None
+_torch: Any = None
 
 
 def _get_mujoco() -> Any:
@@ -79,26 +130,45 @@ def _get_mujoco() -> Any:
     return _mujoco
 
 
+def _get_torch() -> Any:
+    global _torch
+    if _torch is None:
+        import torch  # noqa: PLC0415
+        _torch = torch
+    return _torch
+
+
+# ---------------------------------------------------------------------------
+# Gravity orientation (matches spike & recovered code exactly)
+# ---------------------------------------------------------------------------
+
+
+def _gravity_orientation(quat: np.ndarray) -> np.ndarray:
+    """Project gravity vector into body frame from quaternion (qw, qx, qy, qz)."""
+    qw, qx, qy, qz = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
+    return np.array(
+        [
+            2.0 * (-qz * qx + qw * qy),
+            -2.0 * (qz * qy + qw * qx),
+            1.0 - 2.0 * (qw * qw + qz * qz),
+        ],
+        dtype=np.float32,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Scene builder
 # ---------------------------------------------------------------------------
 
+
 def _build_g1_room_scene_xml() -> Path:
-    """Build composite G1-in-go2-room scene XML via MjSpec attach.
+    """Build composite G1-12dof-in-go2-room scene XML via MjSpec attach.
 
     Strategy:
-    1. Load go2_room.xml, replacing <include GO2_MODEL_PATH> with a comment
-       so the room geometry (walls/furniture/pick_table/cans) compiles without
-       the go2 robot.
-    2. Load the pre-built g1.xml (absolute mesh paths, head camera).
-    3. Attach g1 at a frame at (10, 3, 0) in the room worldbody (facing +x).
-    4. Compile and write to scene_g1_room.xml.
-
-    Textures in go2_room.xml use builtin types (gradient/checker/flat) and
-    furniture PNG textures loaded via texturedir=GO2_ASSETS_DIR.  We rewrite
-    texturedir to the absolute go2 assets path in the resolved XML so textures
-    survive the temp-file round-trip.  (If the PNG files are missing, MuJoCo
-    falls back to flat colors — the room geometry still loads.)
+    1. Load go2_room.xml with the go2 robot include removed (room geometry only).
+    2. Load g1_12dof.xml via MjSpec, set meshdir to absolute path, add head camera.
+    3. Attach g1 at spawn frame (10, 3, 0) with prefix "g1_".
+    4. Compile and write to scene_g1_12dof_room.xml.
 
     Returns the path to the written scene XML.
     """
@@ -106,55 +176,69 @@ def _build_g1_room_scene_xml() -> Path:
 
     if not _ROOM_XML.exists():
         raise FileNotFoundError(f"go2_room.xml not found at {_ROOM_XML}")
-    if not _G1_XML.exists():
+    if not _G1_12DOF_XML.exists():
         raise FileNotFoundError(
-            f"g1.xml not found at {_G1_XML}; run build_g1.py first."
+            f"g1_12dof.xml not found at {_G1_12DOF_XML}; "
+            "run scripts/setup_g1_gait.sh first."
         )
 
     # ------------------------------------------------------------------
-    # Step 1: resolve room template → room-only XML (no go2 robot)
+    # Step 1: resolve room template → room-only XML (no robot)
     # ------------------------------------------------------------------
     xml = _ROOM_XML.read_text()
-    # Remove go2 include — room geometry stays, no robot bodies
     xml = xml.replace('<include file="GO2_MODEL_PATH"/>', "<!-- no robot (g1 scene) -->")
-    # Substitute asset dirs (meshdir and texturedir for furniture)
     xml = xml.replace("GO2_ASSETS_DIR", str(_GO2_ASSETS_DIR))
-    # Remove grasp welds (piper-specific; g1 has no arm in R1)
     xml = xml.replace("GRASP_WELDS", "")
 
-    # Write to a temp file so MjSpec can resolve relative refs
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".xml", delete=False, dir="/tmp", prefix="g1_room_tmp_"
+        mode="w", suffix=".xml", delete=False, dir="/tmp", prefix="g1_room_12dof_tmp_"
     ) as fh:
         fh.write(xml)
         room_tmp = fh.name
 
     try:
         # ------------------------------------------------------------------
-        # Step 2: load MjSpec for room and g1
+        # Step 2: load MjSpec for room and 12dof g1
         # ------------------------------------------------------------------
         room_spec = mj.MjSpec.from_file(room_tmp)
-        g1_spec = mj.MjSpec.from_file(str(_G1_XML))
+
+        g1_spec = mj.MjSpec.from_file(str(_G1_12DOF_XML))
+        # Set absolute meshdir so mesh files resolve correctly after attach
+        g1_spec.meshdir = str(_G1_MESHES_DIR)
+
+        # Add head camera to pelvis body (the only body with torso+head geometry
+        # in the 12dof model).  Position (0.04, 0, 0.42) from pelvis center puts
+        # the camera at ~head height (~1.2 m from floor when standing).
+        # xyaxes="0 -1 0 0 0 1": X_cam=−Y_world (right), Y_cam=+Z_world (up) →
+        # optical axis = −Z_cam = +X_world — looks forward when g1 faces +x.
+        pelvis_body = None
+        for b in g1_spec.bodies:
+            if b.name == "pelvis":
+                pelvis_body = b
+                break
+        if pelvis_body is None:
+            raise RuntimeError("pelvis body not found in g1_12dof.xml")
+
+        pelvis_body.add_camera(
+            name="head_rgb",
+            pos=[0.04, 0.0, 0.42],
+            xyaxes=[0, -1, 0, 0, 0, 1],
+        )
 
         # ------------------------------------------------------------------
-        # Step 3: attach g1 at spawn frame
-        # G1's pelvis free joint starts at (0,0,0) relative to the attach
-        # frame; the stand keyframe sets pelvis z=0.793 within qpos, so
-        # physically it floats at frame_z + 0.793.  We place the frame at
-        # z=0 so connect() can set qpos[pelvis_z]=0.793 directly.
+        # Step 3: attach g1 at spawn frame (pelvis freejoint at z=0 frame;
+        # connect() sets qpos[pelvis_qpos_adr+2] = 0.793 for standing height)
         # ------------------------------------------------------------------
-        frame = room_spec.worldbody.add_frame(
-            pos=[_G1_SPAWN_X, _G1_SPAWN_Y, 0.0]
-        )
+        frame = room_spec.worldbody.add_frame(pos=[_G1_SPAWN_X, _G1_SPAWN_Y, 0.0])
         room_spec.attach(g1_spec, prefix="g1_", frame=frame)
         room_spec.compile()
 
         # ------------------------------------------------------------------
-        # Step 4: write scene
+        # Step 4: write compiled scene
         # ------------------------------------------------------------------
         _G1_SCENE_XML.parent.mkdir(parents=True, exist_ok=True)
         _G1_SCENE_XML.write_text(room_spec.to_xml())
-        logger.info("G1 room scene written to %s", _G1_SCENE_XML)
+        logger.info("G1-12dof room scene written to %s", _G1_SCENE_XML)
 
     finally:
         try:
@@ -166,34 +250,12 @@ def _build_g1_room_scene_xml() -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Internal sim state container
+# Robot geom set for lidar self-filtering
 # ---------------------------------------------------------------------------
-
-class _G1SimState:
-    """Lightweight container for the loaded MuJoCo model + data."""
-
-    def __init__(self, model: Any, data: Any) -> None:
-        self.model = model
-        self.data = data
-        # g1 pelvis freejoint qpos address in the combined scene
-        pelvis_bid = model.body("g1_pelvis").id
-        jnt_adr = model.body_jntadr[pelvis_bid]
-        self.pelvis_qpos_adr: int = int(model.jnt_qposadr[jnt_adr])
-        # Stand keyframe index (named "g1_stand" in combined scene)
-        self.stand_kf_id: int = -1
-        for ki in range(model.nkey):
-            nm = _get_mujoco().mj_id2name(model, _get_mujoco().mjtObj.mjOBJ_KEY, ki)
-            if nm == "g1_stand":
-                self.stand_kf_id = ki
-                break
-        # Pre-build robot geom id set (all geoms whose body is in g1 subtree)
-        self._robot_geom_ids: set[int] = _build_robot_geom_set(model)
-        # Pelvis body id for mj_ray bodyexclude
-        self.base_bid: int = pelvis_bid
 
 
 def _build_robot_geom_set(model: Any) -> set[int]:
-    """Return set of geom ids that belong to any g1_* body (self-filter for lidar)."""
+    """Return set of geom ids belonging to any g1_* body (lidar self-filter)."""
     mj = _get_mujoco()
     robot_geom_ids: set[int] = set()
     for gid in range(model.ngeom):
@@ -205,19 +267,69 @@ def _build_robot_geom_set(model: Any) -> set[int]:
 
 
 # ---------------------------------------------------------------------------
+# Internal offset container
+# ---------------------------------------------------------------------------
+
+
+class _G1Offsets:
+    """Pre-computed qpos/qvel/ctrl offsets for the g1 in the combined scene."""
+
+    def __init__(self, model: Any) -> None:
+        mj = _get_mujoco()
+        # Pelvis (root) freejoint
+        pelvis_bid = model.body("g1_pelvis").id
+        jnt_adr = model.body_jntadr[pelvis_bid]
+        self.pelvis_qpos_adr: int = int(model.jnt_qposadr[jnt_adr])
+        self.pelvis_dof_adr: int = int(model.jnt_dofadr[jnt_adr])
+        # Derived: leg joints start right after the 7-float root (pos+quat)
+        self.leg_qpos_start: int = self.pelvis_qpos_adr + 7
+        self.leg_dof_start: int = self.pelvis_dof_adr + 6
+        # Angular velocity slice (dof_adr + 3 → 3 floats)
+        self.angvel_start: int = self.pelvis_dof_adr + 3
+        # Gravity orientation quaternion slice (qpos_adr + 3 → 4 floats)
+        self.quat_start: int = self.pelvis_qpos_adr + 3
+        # Ctrl: all 12 actuators are the ONLY actuators in the room scene
+        # (verified: nu=12 and all are g1_ leg actuators)
+        self.ctrl_start: int = 0
+        self.ctrl_end: int = _NUM_ACTIONS
+        # Pelvis body id (for mj_ray bodyexclude)
+        self.pelvis_bid: int = pelvis_bid
+        # Pre-build robot geom set
+        self.robot_geom_ids: set[int] = _build_robot_geom_set(model)
+
+        logger.debug(
+            "G1 offsets: pelvis_qpos_adr=%d pelvis_dof_adr=%d "
+            "leg_qpos=%d:%d leg_dof=%d:%d ctrl=%d:%d nu=%d",
+            self.pelvis_qpos_adr,
+            self.pelvis_dof_adr,
+            self.leg_qpos_start,
+            self.leg_qpos_start + _NUM_ACTIONS,
+            self.leg_dof_start,
+            self.leg_dof_start + _NUM_ACTIONS,
+            self.ctrl_start,
+            self.ctrl_end,
+            model.nu,
+        )
+
+
+# ---------------------------------------------------------------------------
 # MuJoCoG1
 # ---------------------------------------------------------------------------
 
+
 class MuJoCoG1:
-    """Simulated Unitree G1 humanoid in the go2 apartment room.
+    """Simulated Unitree G1 humanoid in the go2 apartment room — R2 walking.
 
-    R1: stand, sensors (lidar + head camera), basic pose queries.
+    The robot is driven by a 12-DOF RL policy (motion.pt, 50 Hz) in a
+    single-threaded synchronous loop.  The probe calls walk() / navigate_to()
+    which internally step the policy the required number of batches.
 
-    Usage:
+    Usage::
+
         g1 = MuJoCoG1(gui=False)
         g1.connect()
-        g1.settle(seconds=0.5)
-        height = g1.get_base_height()
+        result = g1.walk(vx=0.5, duration=3.0)    # walk forward 3 s
+        nav = g1.navigate_to(12.0, 3.0)            # go to (12, 3)
         scan = g1.get_lidar_scan()
         frame = g1.get_camera_frame()
         g1.close()
@@ -226,9 +338,20 @@ class MuJoCoG1:
     def __init__(self, gui: bool = False, room: bool = True) -> None:
         self._gui = gui
         self._room = room
-        self._mj: _G1SimState | None = None
+        self._model: Any = None
+        self._data: Any = None
+        self._policy: Any = None
+        self._offsets: _G1Offsets | None = None
         self._viewer: Any = None
         self._cam_renderer: Any = None
+        # Policy per-batch state
+        self._action = np.zeros(_NUM_ACTIONS, dtype=np.float32)
+        self._target = _DEFAULT_ANGLES.copy()
+        self._obs = np.zeros(_NUM_OBS, dtype=np.float32)
+        self._counter: int = 0
+        # Velocity command [vx, vy, vyaw]
+        self._cmd = np.zeros(3, dtype=np.float32)
+        # Sensor cache
         self._last_scan: Any = None
         self._last_pointcloud: list[tuple[float, float, float, float]] = []
 
@@ -237,63 +360,82 @@ class MuJoCoG1:
     # ------------------------------------------------------------------
 
     def connect(self) -> None:
-        """Build scene (if needed), load model, reset to stand keyframe."""
+        """Build scene (if missing), load model + policy, reset to stance."""
         mj = _get_mujoco()
+        torch = _get_torch()
 
-        # Build scene if not present or if forced
         if not _G1_SCENE_XML.exists():
             _build_g1_room_scene_xml()
 
-        model = mj.MjModel.from_xml_path(str(_G1_SCENE_XML))
-        data = mj.MjData(model)
-        self._mj = _G1SimState(model, data)
+        self._model = mj.MjModel.from_xml_path(str(_G1_SCENE_XML))
+        self._model.opt.timestep = _SIM_DT
+        self._data = mj.MjData(self._model)
+        self._offsets = _G1Offsets(self._model)
 
-        # Reset to stand keyframe
-        self._reset_to_stand()
+        # Load policy
+        policy_path = _ASSET_DIR / "motion.pt"
+        if not policy_path.exists():
+            raise FileNotFoundError(
+                f"motion.pt not found at {policy_path}; "
+                "run scripts/setup_g1_gait.sh first."
+            )
+        self._policy = torch.jit.load(str(policy_path))
+
+        # Reset control state
+        self._action = np.zeros(_NUM_ACTIONS, dtype=np.float32)
+        self._target = _DEFAULT_ANGLES.copy()
+        self._obs = np.zeros(_NUM_OBS, dtype=np.float32)
+        self._counter = 0
+        self._cmd = np.zeros(3, dtype=np.float32)
+
+        self._reset_to_stance()
 
         if self._gui:
             try:
-                self._viewer = mj.viewer.launch_passive(model, data)
+                self._viewer = mj.viewer.launch_passive(self._model, self._data)
             except Exception as exc:
                 logger.warning("Viewer unavailable (gui=True ignored): %s", exc)
                 self._viewer = None
 
+        off = self._offsets
         logger.info(
-            "MuJoCoG1 connected: nbody=%d, njnt=%d, nu=%d, pelvis_qpos_adr=%d",
-            model.nbody, model.njnt, model.nu, self._mj.pelvis_qpos_adr,
+            "MuJoCoG1 R2 connected: nbody=%d nu=%d nq=%d "
+            "pelvis_qpos_adr=%d leg_qpos=%d:%d ctrl=%d:%d",
+            self._model.nbody,
+            self._model.nu,
+            self._model.nq,
+            off.pelvis_qpos_adr,
+            off.leg_qpos_start,
+            off.leg_qpos_start + _NUM_ACTIONS,
+            off.ctrl_start,
+            off.ctrl_end,
         )
 
-    def _reset_to_stand(self) -> None:
-        """Reset to stand keyframe and place pelvis at room spawn coordinates."""
+    def _reset_to_stance(self) -> None:
+        """Reset physics to default 12-DOF stance at room spawn coordinates."""
         mj = _get_mujoco()
-        state = self._mj
-        assert state is not None
+        d = self._data
+        m = self._model
+        off = self._offsets
+        assert d is not None and m is not None and off is not None
 
-        if state.stand_kf_id >= 0:
-            mj.mj_resetDataKeyframe(state.model, state.data, state.stand_kf_id)
-        else:
-            mj.mj_resetData(state.model, state.data)
-            # Manually set stand joint angles from keyframe ctrl
-            state.data.ctrl[:] = state.model.key_ctrl[0]
-            state.data.qpos[state.pelvis_qpos_adr + 3] = 1.0  # qw=1 (identity)
+        mj.mj_resetData(m, d)
 
-        # Override freejoint translation to world spawn position
-        # (keyframe has pelvis at (0,0,0.793) relative to attach frame —
-        # the attach frame is at (10,3,0) so we set the qpos to world coords)
-        qa = state.pelvis_qpos_adr
-        state.data.qpos[qa + 0] = _G1_SPAWN_X
-        state.data.qpos[qa + 1] = _G1_SPAWN_Y
-        state.data.qpos[qa + 2] = _G1_PELVIS_Z
-        state.data.qpos[qa + 3] = 1.0  # qw
-        state.data.qpos[qa + 4] = 0.0  # qx
-        state.data.qpos[qa + 5] = 0.0  # qy
-        state.data.qpos[qa + 6] = 0.0  # qz
+        # Set leg joints to default stance angles
+        lq = off.leg_qpos_start
+        d.qpos[lq : lq + _NUM_ACTIONS] = _DEFAULT_ANGLES
 
-        # Set ctrl to stand values so position actuators hold the pose
-        if state.stand_kf_id >= 0:
-            state.data.ctrl[:] = state.model.key_ctrl[state.stand_kf_id]
+        # Place pelvis freejoint at world spawn
+        qa = off.pelvis_qpos_adr
+        d.qpos[qa + 0] = _G1_SPAWN_X
+        d.qpos[qa + 1] = _G1_SPAWN_Y
+        d.qpos[qa + 2] = _G1_PELVIS_Z
+        d.qpos[qa + 3] = 1.0  # qw
+        d.qpos[qa + 4] = 0.0  # qx
+        d.qpos[qa + 5] = 0.0  # qy
+        d.qpos[qa + 6] = 0.0  # qz
 
-        mj.mj_forward(state.model, state.data)
+        mj.mj_forward(m, d)
 
     def close(self) -> None:
         """Release renderer and MuJoCo resources."""
@@ -309,41 +451,229 @@ class MuJoCoG1:
             except Exception:
                 pass
             self._viewer = None
-        self._mj = None
+        self._model = None
+        self._data = None
+        self._policy = None
+        self._offsets = None
 
     def _require_connection(self) -> None:
-        if self._mj is None:
+        if self._model is None or self._data is None:
             raise RuntimeError("Not connected. Call connect() first.")
 
     # ------------------------------------------------------------------
-    # Physics stepping
+    # Policy step (core control loop — single-threaded)
     # ------------------------------------------------------------------
 
-    def step(self, n: int = 1) -> None:
-        """Step physics n times, holding stand pose via ctrl each step."""
-        self._require_connection()
+    def _step_batch(self) -> None:
+        """Advance one policy batch: _DECIMATION physics steps + one policy inference.
+
+        Matches spike_12dof_walk.py exactly, using computed offsets for the
+        combined room scene (not hardcoded [7:] / [6:] which assumed robot at qpos[0]).
+        """
         mj = _get_mujoco()
-        state = self._mj
-        assert state is not None
-        for _ in range(n):
-            # Position actuators: keep ctrl at stand values
-            if state.stand_kf_id >= 0:
-                state.data.ctrl[:] = state.model.key_ctrl[state.stand_kf_id]
-            mj.mj_step(state.model, state.data)
+        torch = _get_torch()
+        d = self._data
+        m = self._model
+        off = self._offsets
+        assert d is not None and m is not None and off is not None and self._policy is not None
+
+        lq = off.leg_qpos_start
+        ld = off.leg_dof_start
+        cmd = self._cmd.copy()
+
+        # PD torque + physics advance
+        for _ in range(_DECIMATION):
+            tau = (self._target - d.qpos[lq : lq + _NUM_ACTIONS]) * _KPS - (
+                d.qvel[ld : ld + _NUM_ACTIONS] * _KDS
+            )
+            d.ctrl[off.ctrl_start : off.ctrl_end] = tau
+            mj.mj_step(m, d)
+            self._counter += 1
+
+        # Build observation vector (47 elements)
+        obs = self._obs
+        av = off.angvel_start
+        obs[:3] = d.qvel[av : av + 3] * _ANG_VEL_SCALE
+        obs[3:6] = _gravity_orientation(d.qpos[off.quat_start : off.quat_start + 4])
+        obs[6:9] = cmd * _CMD_SCALE
+        obs[9 : 9 + _NUM_ACTIONS] = (
+            d.qpos[lq : lq + _NUM_ACTIONS] - _DEFAULT_ANGLES
+        ) * _DOF_POS_SCALE
+        obs[9 + _NUM_ACTIONS : 9 + 2 * _NUM_ACTIONS] = (
+            d.qvel[ld : ld + _NUM_ACTIONS] * _DOF_VEL_SCALE
+        )
+        obs[9 + 2 * _NUM_ACTIONS : 9 + 3 * _NUM_ACTIONS] = self._action
+        phase = (self._counter * _SIM_DT) % _GAIT_PERIOD / _GAIT_PERIOD
+        obs[9 + 3 * _NUM_ACTIONS] = math.sin(2.0 * math.pi * phase)
+        obs[9 + 3 * _NUM_ACTIONS + 1] = math.cos(2.0 * math.pi * phase)
+
+        with torch.no_grad():
+            self._action = (
+                self._policy(torch.from_numpy(obs).unsqueeze(0)).numpy().squeeze()
+            )
+        self._target = self._action * _ACTION_SCALE + _DEFAULT_ANGLES
 
         if self._viewer is not None:
             try:
-                self._viewer.sync()
+                if self._viewer.is_running():
+                    self._viewer.sync()
+                else:
+                    self._viewer = None
             except Exception:
-                pass
+                self._viewer = None
 
-    def settle(self, seconds: float) -> None:
-        """Step physics for a given wall time equivalent (100 Hz control loop)."""
+    def step(self, n: int = 1) -> None:
+        """Step the policy n times (n policy batches = n * DECIMATION physics steps)."""
         self._require_connection()
-        mj = _get_mujoco()
-        dt = float(self._mj.model.opt.timestep)  # type: ignore[union-attr]
-        n_steps = max(1, int(seconds / dt))
-        self.step(n_steps)
+        for _ in range(n):
+            self._step_batch()
+
+    # ------------------------------------------------------------------
+    # Velocity / gait commands
+    # ------------------------------------------------------------------
+
+    def set_velocity(self, vx: float, vy: float = 0.0, vyaw: float = 0.0) -> None:
+        """Set the current velocity command [vx, vy, vyaw]."""
+        self._cmd[0] = float(vx)
+        self._cmd[1] = float(vy)
+        self._cmd[2] = float(vyaw)
+
+    def stop(self) -> None:
+        """Zero the velocity command."""
+        self._cmd[:] = 0.0
+
+    def walk(
+        self, vx: float, vy: float = 0.0, vyaw: float = 0.0, duration: float = 1.0
+    ) -> None:
+        """Walk with given velocity command for `duration` seconds, then stop."""
+        self._require_connection()
+        self.set_velocity(vx, vy, vyaw)
+        n_batches = max(1, int(duration / (_SIM_DT * _DECIMATION)))
+        for _ in range(n_batches):
+            self._step_batch()
+        self.stop()
+
+    def navigate_to(
+        self,
+        x: float,
+        y: float,
+        tol: float = 0.3,
+        speed: float = _NAV_SPEED,
+    ) -> dict[str, Any]:
+        """Walk the robot to world position (x, y).
+
+        Uses a closed-loop face→walk→arrive controller.  The robot first pivots
+        to face the goal, then walks forward with a small heading correction.
+
+        Args:
+            x: goal x in world frame (metres)
+            y: goal y in world frame (metres)
+            tol: arrival tolerance (metres); clamped to _NAV_TOL_FLOOR
+            speed: forward speed command
+
+        Returns:
+            dict with keys: reached (bool), moved_m (float), net_m (float),
+            pos ([x,y,z]), reason (str).
+        """
+        self._require_connection()
+        tol = max(tol, _NAV_TOL_FLOOR)
+
+        # Track odometry
+        off = self._offsets
+        assert off is not None
+        qa = off.pelvis_qpos_adr
+        start_x = float(self._data.qpos[qa])
+        start_y = float(self._data.qpos[qa + 1])
+        prev_x, prev_y = start_x, start_y
+        path_len: float = 0.0
+
+        # Each tick = 5 policy batches ≈ 0.1 s
+        _TICK_BATCHES = 5
+        tick_s = _TICK_BATCHES * _SIM_DT * _DECIMATION
+        max_ticks = int(_NAV_TIMEOUT_S / tick_s) + 1
+
+        for _tick in range(max_ticks):
+            # Read current state
+            cx = float(self._data.qpos[qa])
+            cy = float(self._data.qpos[qa + 1])
+            cz = float(self._data.qpos[qa + 2])
+
+            # Accumulate path length
+            step_m = math.hypot(cx - prev_x, cy - prev_y)
+            path_len += step_m
+            prev_x, prev_y = cx, cy
+
+            # Fall detection
+            if cz < _NAV_FALL_Z:
+                self.stop()
+                net_m = math.hypot(cx - start_x, cy - start_y)
+                return {
+                    "reached": False,
+                    "moved_m": float(path_len),
+                    "net_m": float(net_m),
+                    "pos": [cx, cy, cz],
+                    "reason": "fell",
+                }
+
+            # Check arrival
+            dx = x - cx
+            dy = y - cy
+            dist = math.hypot(dx, dy)
+            if dist < tol:
+                self.stop()
+                net_m = math.hypot(cx - start_x, cy - start_y)
+                return {
+                    "reached": True,
+                    "moved_m": float(path_len),
+                    "net_m": float(net_m),
+                    "pos": [cx, cy, cz],
+                    "reason": "arrived",
+                }
+
+            # Compute heading error
+            desired_heading = math.atan2(dy, dx)
+            current_heading = self.get_heading()
+            yaw_err = desired_heading - current_heading
+            # Wrap to [-π, π]
+            while yaw_err > math.pi:
+                yaw_err -= 2.0 * math.pi
+            while yaw_err < -math.pi:
+                yaw_err += 2.0 * math.pi
+
+            # Choose control mode
+            if abs(yaw_err) > _NAV_FACE_TOL and dist > _NAV_CAPTURE_R:
+                # Pivot in place to face the goal
+                vyaw = float(
+                    max(-_NAV_VYAW_MAX, min(_NAV_VYAW_MAX, _NAV_K_YAW * yaw_err))
+                )
+                self.set_velocity(0.0, 0.0, vyaw)
+            else:
+                # Walk forward with optional small heading correction
+                if abs(yaw_err) < _NAV_YAW_DEADBAND or dist < _NAV_CAPTURE_R:
+                    vyaw = 0.0
+                else:
+                    vyaw = float(
+                        max(-_NAV_VYAW_MAX, min(_NAV_VYAW_MAX, _NAV_K_YAW * yaw_err))
+                    )
+                self.set_velocity(float(speed), 0.0, vyaw)
+
+            # Advance ~0.1 s
+            for _ in range(_TICK_BATCHES):
+                self._step_batch()
+
+        # Timeout
+        self.stop()
+        cx = float(self._data.qpos[qa])
+        cy = float(self._data.qpos[qa + 1])
+        cz = float(self._data.qpos[qa + 2])
+        net_m = math.hypot(cx - start_x, cy - start_y)
+        return {
+            "reached": False,
+            "moved_m": float(path_len),
+            "net_m": float(net_m),
+            "pos": [cx, cy, cz],
+            "reason": "timeout",
+        }
 
     # ------------------------------------------------------------------
     # Pose queries
@@ -352,15 +682,15 @@ class MuJoCoG1:
     def get_base_height(self) -> float:
         """Return pelvis z coordinate in world frame."""
         self._require_connection()
-        qa = self._mj.pelvis_qpos_adr  # type: ignore[union-attr]
-        return float(self._mj.data.qpos[qa + 2])  # type: ignore[union-attr]
+        qa = self._offsets.pelvis_qpos_adr  # type: ignore[union-attr]
+        return float(self._data.qpos[qa + 2])
 
     def get_heading(self) -> float:
-        """Return yaw angle (radians) from pelvis quaternion (qw,qx,qy,qz)."""
+        """Return yaw (radians) from pelvis quaternion (qw, qx, qy, qz)."""
         self._require_connection()
-        qa = self._mj.pelvis_qpos_adr  # type: ignore[union-attr]
-        q = self._mj.data.qpos[qa + 3: qa + 7]  # type: ignore[union-attr]
-        # q = [qw, qx, qy, qz]
+        off = self._offsets
+        assert off is not None
+        q = self._data.qpos[off.quat_start : off.quat_start + 4]
         qw, qx, qy, qz = float(q[0]), float(q[1]), float(q[2]), float(q[3])
         siny_cosp = 2.0 * (qw * qz + qx * qy)
         cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
@@ -373,39 +703,40 @@ class MuJoCoG1:
     def get_lidar_scan(self) -> Any:
         """Cast lidar rays from head height, return LaserScan + 3D points.
 
-        Mirrors mujoco_go2._update_lidar.  Lidar mounted at ~1.5m
+        Mirrors R1 / mujoco_go2._update_lidar.  Lidar mounted at ~1.51 m
         (pelvis_z + LIDAR_OFFSET_Z) — above all g1 leg geoms.
-
-        Returns:
-            LaserScan dataclass with: ranges, n_returns, min_range,
-            median_range, and near_zero_self_hits count.
+        Uses the pelvis pose live (works while walking).
         """
         self._require_connection()
         from vector_os_nano.core.types import LaserScan  # noqa: PLC0415
-        mj = _get_mujoco()
-        state = self._mj
-        assert state is not None
 
-        qa = state.pelvis_qpos_adr
-        pos_base = state.data.qpos[qa: qa + 3].copy().astype(np.float64)
+        mj = _get_mujoco()
+        d = self._data
+        m = self._model
+        off = self._offsets
+        assert d is not None and m is not None and off is not None
+
+        qa = off.pelvis_qpos_adr
+        pos_base = d.qpos[qa : qa + 3].copy().astype(np.float64)
         heading = self.get_heading()
         cos_h = math.cos(heading)
         sin_h = math.sin(heading)
 
-        # Lidar position in world frame
-        pos_lidar = np.array([
-            float(pos_base[0]) + cos_h * _LIDAR_OFFSET_X,
-            float(pos_base[1]) + sin_h * _LIDAR_OFFSET_X,
-            float(pos_base[2]) + _LIDAR_OFFSET_Z,
-        ], dtype=np.float64)
+        pos_lidar = np.array(
+            [
+                float(pos_base[0]) + cos_h * _LIDAR_OFFSET_X,
+                float(pos_base[1]) + sin_h * _LIDAR_OFFSET_X,
+                float(pos_base[2]) + _LIDAR_OFFSET_Z,
+            ],
+            dtype=np.float64,
+        )
 
-        # Scan beam tilt: 10° downward (shallow — at 1.5m height sees walls fine)
         tilt_rad = math.radians(-10.0)
         cos_tilt = math.cos(tilt_rad)
         sin_tilt = math.sin(tilt_rad)
 
         n_azimuth = 360
-        elevations = sorted(set([0] + list(range(-8, 30, 3))))  # include 0° for 2D ring
+        elevations = sorted(set([0] + list(range(-8, 30, 3))))
         mid_ring_ranges: list[float] = []
         points_3d: list[tuple[float, float, float, float]] = []
         near_zero_hits: int = 0
@@ -419,40 +750,39 @@ class MuJoCoG1:
             for i in range(n_azimuth):
                 azimuth = heading + math.radians(i * azimuth_step - 180.0)
 
-                # Ray direction in world frame (no tilt yet)
                 dx_w = cos_elev * math.cos(azimuth)
                 dy_w = cos_elev * math.sin(azimuth)
                 dz_w = sin_elev
 
-                # World → body frame
                 dx_b = dx_w * cos_h + dy_w * sin_h
                 dy_b = -dx_w * sin_h + dy_w * cos_h
                 dz_b = dz_w
 
-                # Apply pitch tilt in body frame
                 dx_bt = dx_b * cos_tilt - dz_b * sin_tilt
                 dz_bt = dx_b * sin_tilt + dz_b * cos_tilt
 
-                # Body → world frame
-                direction = np.array([
-                    dx_bt * cos_h - dy_b * sin_h,
-                    dx_bt * sin_h + dy_b * cos_h,
-                    dz_bt,
-                ], dtype=np.float64)
+                direction = np.array(
+                    [
+                        dx_bt * cos_h - dy_b * sin_h,
+                        dx_bt * sin_h + dy_b * cos_h,
+                        dz_bt,
+                    ],
+                    dtype=np.float64,
+                )
 
                 geom_id = np.zeros(1, dtype=np.int32)
                 dist = mj.mj_ray(
-                    state.model,
-                    state.data,
+                    m,
+                    d,
                     pos_lidar,
                     direction,
                     None,
                     1,
-                    state.base_bid,
+                    off.pelvis_bid,
                     geom_id,
                 )
 
-                is_self = int(geom_id[0]) in state._robot_geom_ids
+                is_self = int(geom_id[0]) in off.robot_geom_ids
                 hit_valid = dist > 0 and dist < 15.0 and not is_self
 
                 if hit_valid:
@@ -471,7 +801,7 @@ class MuJoCoG1:
 
         valid_ranges = [r for r in mid_ring_ranges if r < 15.0]
         scan = LaserScan(
-            timestamp=float(state.data.time),
+            timestamp=float(d.time),
             angle_min=-math.pi,
             angle_max=math.pi,
             angle_increment=math.radians(360.0 / n_azimuth),
@@ -479,21 +809,20 @@ class MuJoCoG1:
             range_max=15.0,
             ranges=tuple(mid_ring_ranges),
         )
-        # Diagnostics returned as a companion dict (LaserScan is frozen)
         diagnostics = {
             "n_returns": len(valid_ranges),
             "min_range": min(valid_ranges) if valid_ranges else float("inf"),
-            "median_range": float(np.median(valid_ranges)) if valid_ranges else float("inf"),
+            "median_range": (
+                float(np.median(valid_ranges)) if valid_ranges else float("inf")
+            ),
             "points_3d": points_3d,
             "near_zero_self_hits": near_zero_hits,
         }
 
-        # Expose diagnostics as a plain struct so callers can use scan.n_returns etc
         class _ScanWithDiag:  # noqa: N801
-            def __init__(self, s: LaserScan, d: dict) -> None:
+            def __init__(self, s: LaserScan, diag: dict) -> None:
                 self._scan = s
-                self.__dict__.update(d)
-                # Forward LaserScan fields
+                self.__dict__.update(diag)
                 self.timestamp = s.timestamp
                 self.angle_min = s.angle_min
                 self.angle_max = s.angle_max
@@ -518,58 +847,59 @@ class MuJoCoG1:
         """
         self._require_connection()
         mj = _get_mujoco()
-        state = self._mj
-        assert state is not None
+        m = self._model
+        d = self._data
+        assert m is not None and d is not None
 
         if self._cam_renderer is None:
-            self._cam_renderer = mj.Renderer(state.model, height, width)
+            self._cam_renderer = mj.Renderer(m, height, width)
 
-        # Resolve camera name: "g1_head_rgb" in the compiled scene
         try:
-            cam_id = state.model.cam(_SCENE_CAM_NAME).id
+            cam_id = m.cam(_SCENE_CAM_NAME).id
         except Exception:
-            # Fallback: iterate to find the first camera containing "head_rgb"
             cam_id = -1
-            for ci in range(state.model.ncam):
-                nm = mj.mj_id2name(state.model, mj.mjtObj.mjOBJ_CAMERA, ci) or ""
+            for ci in range(m.ncam):
+                nm = mj.mj_id2name(m, mj.mjtObj.mjOBJ_CAMERA, ci) or ""
                 if "head_rgb" in nm:
                     cam_id = ci
                     break
             if cam_id < 0:
+                available = [
+                    mj.mj_id2name(m, mj.mjtObj.mjOBJ_CAMERA, i)
+                    for i in range(m.ncam)
+                ]
                 raise RuntimeError(
-                    f"Camera '{_SCENE_CAM_NAME}' not found in model. "
-                    f"Available cameras: {[mj.mj_id2name(state.model, mj.mjtObj.mjOBJ_CAMERA, i) for i in range(state.model.ncam)]}"
+                    f"Camera '{_SCENE_CAM_NAME}' not found. Available: {available}"
                 )
 
-        self._cam_renderer.update_scene(state.data, camera=cam_id)
+        self._cam_renderer.update_scene(d, camera=cam_id)
         return self._cam_renderer.render().copy()
 
     def get_camera_pose(self) -> tuple[np.ndarray, np.ndarray]:
         """Return (cam_xpos, cam_xmat) for the g1_head_rgb camera.
 
-        cam_xpos: (3,) world position of camera
-        cam_xmat: (9,) rotation matrix (row-major, reshape to 3x3)
-
-        The cam_xmat -Z column is the optical axis direction.
+        cam_xpos: (3,) world position.
+        cam_xmat: (9,) row-major rotation matrix; -Z column is optical axis.
         """
         self._require_connection()
         mj = _get_mujoco()
-        state = self._mj
-        assert state is not None
+        m = self._model
+        d = self._data
+        assert m is not None and d is not None
         try:
-            cam_id = state.model.cam(_SCENE_CAM_NAME).id
+            cam_id = m.cam(_SCENE_CAM_NAME).id
         except Exception:
             cam_id = 0
         return (
-            state.data.cam_xpos[cam_id].copy(),
-            state.data.cam_xmat[cam_id].copy(),
+            d.cam_xpos[cam_id].copy(),
+            d.cam_xmat[cam_id].copy(),
         )
 
     # ------------------------------------------------------------------
-    # Convenience scene builder (for external callers)
+    # Scene builder (external callers / tests)
     # ------------------------------------------------------------------
 
     @staticmethod
     def build_scene() -> Path:
-        """(Re)build the g1-in-room scene XML and return its path."""
+        """(Re)build the g1-12dof-in-room scene XML and return its path."""
         return _build_g1_room_scene_xml()
