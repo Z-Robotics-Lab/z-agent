@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from vector_os_nano.hardware.sim.sensors.g1_lidar import g1_lidar_scan
 
 logger = logging.getLogger(__name__)
 
@@ -182,9 +183,7 @@ def _build_g1_room_scene_xml() -> Path:
             "run scripts/setup_g1_gait.sh first."
         )
 
-    # ------------------------------------------------------------------
     # Step 1: resolve room template → room-only XML (no robot)
-    # ------------------------------------------------------------------
     xml = _ROOM_XML.read_text()
     xml = xml.replace('<include file="GO2_MODEL_PATH"/>', "<!-- no robot (g1 scene) -->")
     xml = xml.replace("GO2_ASSETS_DIR", str(_GO2_ASSETS_DIR))
@@ -197,25 +196,17 @@ def _build_g1_room_scene_xml() -> Path:
         room_tmp = fh.name
 
     try:
-        # ------------------------------------------------------------------
         # Step 2: load MjSpec for room and 12dof g1
-        # ------------------------------------------------------------------
         room_spec = mj.MjSpec.from_file(room_tmp)
 
         g1_spec = mj.MjSpec.from_file(str(_G1_12DOF_XML))
-        # Rewrite mesh file paths to absolute so they survive the to_xml()
-        # round-trip (the compiled scene's meshdir is overridden by the room's
-        # go2 assets meshdir; absolute paths bypass meshdir entirely).
+        # Absolute mesh paths survive to_xml() round-trip (room meshdir overrides relative).
         for mesh in g1_spec.meshes:
             if not os.path.isabs(mesh.file):
                 mesh.file = str(_G1_MESHES_DIR / mesh.file)
         g1_spec.meshdir = ""
 
-        # Add head camera to pelvis body (the only body with torso+head geometry
-        # in the 12dof model).  Position (0.04, 0, 0.42) from pelvis center puts
-        # the camera at ~head height (~1.2 m from floor when standing).
-        # xyaxes="0 -1 0 0 0 1": X_cam=−Y_world (right), Y_cam=+Z_world (up) →
-        # optical axis = −Z_cam = +X_world — looks forward when g1 faces +x.
+        # Add head camera: pos=(0.04,0,0.42) → ~head height; xyaxes → forward-facing.
         pelvis_body = None
         for b in g1_spec.bodies:
             if b.name == "pelvis":
@@ -230,17 +221,12 @@ def _build_g1_room_scene_xml() -> Path:
             xyaxes=[0, -1, 0, 0, 0, 1],
         )
 
-        # ------------------------------------------------------------------
-        # Step 3: attach g1 at spawn frame (pelvis freejoint at z=0 frame;
-        # connect() sets qpos[pelvis_qpos_adr+2] = 0.793 for standing height)
-        # ------------------------------------------------------------------
+        # Step 3: attach g1 at spawn frame; connect() sets standing z=0.793.
         frame = room_spec.worldbody.add_frame(pos=[_G1_SPAWN_X, _G1_SPAWN_Y, 0.0])
         room_spec.attach(g1_spec, prefix="g1_", frame=frame)
         room_spec.compile()
 
-        # ------------------------------------------------------------------
         # Step 4: write compiled scene
-        # ------------------------------------------------------------------
         _G1_SCENE_XML.parent.mkdir(parents=True, exist_ok=True)
         _G1_SCENE_XML.write_text(room_spec.to_xml())
         logger.info("G1-12dof room scene written to %s", _G1_SCENE_XML)
@@ -303,18 +289,33 @@ class _G1Offsets:
         self.robot_geom_ids: set[int] = _build_robot_geom_set(model)
 
         logger.debug(
-            "G1 offsets: pelvis_qpos_adr=%d pelvis_dof_adr=%d "
-            "leg_qpos=%d:%d leg_dof=%d:%d ctrl=%d:%d nu=%d",
-            self.pelvis_qpos_adr,
-            self.pelvis_dof_adr,
-            self.leg_qpos_start,
-            self.leg_qpos_start + _NUM_ACTIONS,
-            self.leg_dof_start,
-            self.leg_dof_start + _NUM_ACTIONS,
-            self.ctrl_start,
-            self.ctrl_end,
-            model.nu,
+            "G1 offsets: qpos=%d dof=%d leg_qpos=%d:%d ctrl=%d:%d nu=%d",
+            self.pelvis_qpos_adr, self.pelvis_dof_adr,
+            self.leg_qpos_start, self.leg_qpos_start + _NUM_ACTIONS,
+            self.ctrl_start, self.ctrl_end, model.nu,
         )
+
+
+# ---------------------------------------------------------------------------
+# Nav result type — honors the base navigate_to contract
+# ---------------------------------------------------------------------------
+
+
+class _G1NavResult(dict):
+    """Dict carrying nav telemetry whose truthiness reflects arrival.
+
+    Subclasses ``dict`` so existing ``.get("moved_m")`` / ``.get("reached")``
+    callers keep working unchanged.  Overrides ``__bool__`` so that
+    ``bool(result)`` is ``True`` only on arrival — honoring the go2 base-navigate
+    contract (plain ``bool``).  Without this, ``bool(non_empty_dict)`` is always
+    ``True``, mis-reporting falls and timeouts as successful arrivals.
+    """
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:  # noqa: D401
+        """True only when ``reached`` is truthy."""
+        return bool(self.get("reached", False))
 
 
 # ---------------------------------------------------------------------------
@@ -325,19 +326,10 @@ class _G1Offsets:
 class MuJoCoG1:
     """Simulated Unitree G1 humanoid in the go2 apartment room — R2 walking.
 
-    The robot is driven by a 12-DOF RL policy (motion.pt, 50 Hz) in a
-    single-threaded synchronous loop.  The probe calls walk() / navigate_to()
-    which internally step the policy the required number of batches.
-
-    Usage::
-
-        g1 = MuJoCoG1(gui=False)
-        g1.connect()
-        result = g1.walk(vx=0.5, duration=3.0)    # walk forward 3 s
-        nav = g1.navigate_to(12.0, 3.0)            # go to (12, 3)
-        scan = g1.get_lidar_scan()
-        frame = g1.get_camera_frame()
-        g1.close()
+    Driven by a 12-DOF RL policy (motion.pt, 50 Hz) in a single-threaded
+    synchronous loop.  Exposes walk(), navigate_to(), set_velocity(), stop(),
+    get_base_height(), get_heading(), get_lidar_scan(), get_camera_frame(),
+    get_camera_pose(), build_scene().
     """
 
     def __init__(self, gui: bool = False, room: bool = True) -> None:
@@ -404,16 +396,9 @@ class MuJoCoG1:
 
         off = self._offsets
         logger.info(
-            "MuJoCoG1 R2 connected: nbody=%d nu=%d nq=%d "
-            "pelvis_qpos_adr=%d leg_qpos=%d:%d ctrl=%d:%d",
-            self._model.nbody,
-            self._model.nu,
-            self._model.nq,
-            off.pelvis_qpos_adr,
-            off.leg_qpos_start,
-            off.leg_qpos_start + _NUM_ACTIONS,
-            off.ctrl_start,
-            off.ctrl_end,
+            "MuJoCoG1 R2 connected: nbody=%d nu=%d nq=%d qpos=%d ctrl=%d:%d",
+            self._model.nbody, self._model.nu, self._model.nq,
+            off.pelvis_qpos_adr, off.ctrl_start, off.ctrl_end,
         )
 
     def _reset_to_stance(self) -> None:
@@ -470,11 +455,7 @@ class MuJoCoG1:
     # ------------------------------------------------------------------
 
     def _step_batch(self) -> None:
-        """Advance one policy batch: _DECIMATION physics steps + one policy inference.
-
-        Matches spike_12dof_walk.py exactly, using computed offsets for the
-        combined room scene (not hardcoded [7:] / [6:] which assumed robot at qpos[0]).
-        """
+        """Advance one policy batch: _DECIMATION physics steps + one policy inference."""
         mj = _get_mujoco()
         torch = _get_torch()
         d = self._data
@@ -564,21 +545,15 @@ class MuJoCoG1:
         y: float,
         tol: float = 0.3,
         speed: float = _NAV_SPEED,
-    ) -> dict[str, Any]:
-        """Walk the robot to world position (x, y).
+        timeout: float | None = None,
+        **_ignored: Any,
+    ) -> "_G1NavResult":
+        """Walk to world position (x, y); honors the base navigate_to contract.
 
-        Uses a closed-loop face→walk→arrive controller.  The robot first pivots
-        to face the goal, then walks forward with a small heading correction.
-
-        Args:
-            x: goal x in world frame (metres)
-            y: goal y in world frame (metres)
-            tol: arrival tolerance (metres); clamped to _NAV_TOL_FLOOR
-            speed: forward speed command
-
-        Returns:
-            dict with keys: reached (bool), moved_m (float), net_m (float),
-            pos ([x,y,z]), reason (str).
+        ``bool(result)`` is ``True`` only on arrival.  ``timeout=None`` uses
+        ``_NAV_TIMEOUT_S``.  Extra kwargs (e.g. ``on_progress``) are ignored for
+        call-shape compatibility with go2.  Returns :class:`_G1NavResult` (dict
+        subclass) with keys: reached, moved_m, net_m, pos, reason.
         """
         self._require_connection()
         tol = max(tol, _NAV_TOL_FLOOR)
@@ -595,7 +570,8 @@ class MuJoCoG1:
         # Each tick = 5 policy batches ≈ 0.1 s
         _TICK_BATCHES = 5
         tick_s = _TICK_BATCHES * _SIM_DT * _DECIMATION
-        max_ticks = int(_NAV_TIMEOUT_S / tick_s) + 1
+        eff_timeout = float(timeout) if timeout is not None else _NAV_TIMEOUT_S
+        max_ticks = int(eff_timeout / tick_s) + 1
 
         for _tick in range(max_ticks):
             # Read current state
@@ -612,13 +588,13 @@ class MuJoCoG1:
             if cz < _NAV_FALL_Z:
                 self.stop()
                 net_m = math.hypot(cx - start_x, cy - start_y)
-                return {
+                return _G1NavResult({
                     "reached": False,
                     "moved_m": float(path_len),
                     "net_m": float(net_m),
                     "pos": [cx, cy, cz],
                     "reason": "fell",
-                }
+                })
 
             # Check arrival
             dx = x - cx
@@ -627,13 +603,13 @@ class MuJoCoG1:
             if dist < tol:
                 self.stop()
                 net_m = math.hypot(cx - start_x, cy - start_y)
-                return {
+                return _G1NavResult({
                     "reached": True,
                     "moved_m": float(path_len),
                     "net_m": float(net_m),
                     "pos": [cx, cy, cz],
                     "reason": "arrived",
-                }
+                })
 
             # Compute heading error
             desired_heading = math.atan2(dy, dx)
@@ -672,13 +648,13 @@ class MuJoCoG1:
         cy = float(self._data.qpos[qa + 1])
         cz = float(self._data.qpos[qa + 2])
         net_m = math.hypot(cx - start_x, cy - start_y)
-        return {
+        return _G1NavResult({
             "reached": False,
             "moved_m": float(path_len),
             "net_m": float(net_m),
             "pos": [cx, cy, cz],
             "reason": "timeout",
-        }
+        })
 
     # ------------------------------------------------------------------
     # Pose queries
@@ -715,14 +691,11 @@ class MuJoCoG1:
     def get_lidar_scan(self) -> Any:
         """Cast lidar rays from head height, return LaserScan + 3D points.
 
-        Mirrors R1 / mujoco_go2._update_lidar.  Lidar mounted at ~1.51 m
-        (pelvis_z + LIDAR_OFFSET_Z) — above all g1 leg geoms.
-        Uses the pelvis pose live (works while walking).
+        Thin wrapper around :func:`~vector_os_nano.hardware.sim.sensors.g1_lidar.g1_lidar_scan`.
+        Lidar mounted at ~1.51 m (pelvis_z + LIDAR_OFFSET_Z) — above all g1 leg
+        geoms.  Uses the live pelvis pose so the scan is valid while walking.
         """
         self._require_connection()
-        from vector_os_nano.core.types import LaserScan  # noqa: PLC0415
-
-        mj = _get_mujoco()
         d = self._data
         m = self._model
         off = self._offsets
@@ -743,109 +716,16 @@ class MuJoCoG1:
             dtype=np.float64,
         )
 
-        tilt_rad = math.radians(-10.0)
-        cos_tilt = math.cos(tilt_rad)
-        sin_tilt = math.sin(tilt_rad)
-
-        n_azimuth = 360
-        elevations = sorted(set([0] + list(range(-8, 30, 3))))
-        mid_ring_ranges: list[float] = []
-        points_3d: list[tuple[float, float, float, float]] = []
-        near_zero_hits: int = 0
-
-        for elev_deg in elevations:
-            elev_rad = math.radians(elev_deg)
-            cos_elev = math.cos(elev_rad)
-            sin_elev = math.sin(elev_rad)
-            azimuth_step = 360.0 / n_azimuth
-
-            for i in range(n_azimuth):
-                azimuth = heading + math.radians(i * azimuth_step - 180.0)
-
-                dx_w = cos_elev * math.cos(azimuth)
-                dy_w = cos_elev * math.sin(azimuth)
-                dz_w = sin_elev
-
-                dx_b = dx_w * cos_h + dy_w * sin_h
-                dy_b = -dx_w * sin_h + dy_w * cos_h
-                dz_b = dz_w
-
-                dx_bt = dx_b * cos_tilt - dz_b * sin_tilt
-                dz_bt = dx_b * sin_tilt + dz_b * cos_tilt
-
-                direction = np.array(
-                    [
-                        dx_bt * cos_h - dy_b * sin_h,
-                        dx_bt * sin_h + dy_b * cos_h,
-                        dz_bt,
-                    ],
-                    dtype=np.float64,
-                )
-
-                geom_id = np.zeros(1, dtype=np.int32)
-                dist = mj.mj_ray(
-                    m,
-                    d,
-                    pos_lidar,
-                    direction,
-                    None,
-                    1,
-                    off.pelvis_bid,
-                    geom_id,
-                )
-
-                is_self = int(geom_id[0]) in off.robot_geom_ids
-                hit_valid = dist > 0 and dist < 15.0 and not is_self
-
-                if hit_valid:
-                    px = pos_lidar[0] + dist * direction[0]
-                    py = pos_lidar[1] + dist * direction[1]
-                    pz = pos_lidar[2] + dist * direction[2]
-                    points_3d.append((float(px), float(py), float(pz), 0.0))
-
-                if elev_deg == 0:
-                    if is_self and dist > 0 and dist < 0.1:
-                        near_zero_hits += 1
-                    if hit_valid:
-                        mid_ring_ranges.append(float(dist))
-                    else:
-                        mid_ring_ranges.append(float("inf"))
-
-        valid_ranges = [r for r in mid_ring_ranges if r < 15.0]
-        scan = LaserScan(
-            timestamp=float(d.time),
-            angle_min=-math.pi,
-            angle_max=math.pi,
-            angle_increment=math.radians(360.0 / n_azimuth),
-            range_min=0.05,
-            range_max=15.0,
-            ranges=tuple(mid_ring_ranges),
+        result = g1_lidar_scan(
+            m,
+            d,
+            pelvis_bid=off.pelvis_bid,
+            robot_geom_ids=off.robot_geom_ids,
+            pos_lidar=pos_lidar,
+            heading=heading,
         )
-        diagnostics = {
-            "n_returns": len(valid_ranges),
-            "min_range": min(valid_ranges) if valid_ranges else float("inf"),
-            "median_range": (
-                float(np.median(valid_ranges)) if valid_ranges else float("inf")
-            ),
-            "points_3d": points_3d,
-            "near_zero_self_hits": near_zero_hits,
-        }
-
-        class _ScanWithDiag:  # noqa: N801
-            def __init__(self, s: LaserScan, diag: dict) -> None:
-                self._scan = s
-                self.__dict__.update(diag)
-                self.timestamp = s.timestamp
-                self.angle_min = s.angle_min
-                self.angle_max = s.angle_max
-                self.angle_increment = s.angle_increment
-                self.range_min = s.range_min
-                self.range_max = s.range_max
-                self.ranges = s.ranges
-
-        result = _ScanWithDiag(scan, diagnostics)
         self._last_scan = result
-        self._last_pointcloud = points_3d
+        self._last_pointcloud = result.points_3d
         return result
 
     # ------------------------------------------------------------------

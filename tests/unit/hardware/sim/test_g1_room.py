@@ -196,3 +196,35 @@ def test_walk_forward_displacement() -> None:
 
     finally:
         g1.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 6: _G1NavResult contract — import-only, no sim instantiation
+# ---------------------------------------------------------------------------
+
+
+def test_g1_nav_result_contract() -> None:
+    """_G1NavResult truthiness reflects 'reached'; .get() still works."""
+    import inspect
+
+    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1, _G1NavResult
+
+    # (a) bool reflects 'reached'
+    r_false = _G1NavResult({"reached": False, "moved_m": 1.5, "reason": "timeout"})
+    assert not r_false, "_G1NavResult({'reached': False}) must be falsy"
+
+    r_true = _G1NavResult({"reached": True, "moved_m": 2.0, "reason": "arrived"})
+    assert r_true, "_G1NavResult({'reached': True}) must be truthy"
+
+    r_missing = _G1NavResult({"moved_m": 0.0})
+    assert not r_missing, "_G1NavResult without 'reached' key must be falsy"
+
+    # (b) dict accessor still works
+    assert r_true.get("moved_m") == 2.0, ".get('moved_m') must return the stored value"
+    assert r_false.get("reached") is False, ".get('reached') must return False"
+
+    # (c) navigate_to signature contains 'timeout'
+    sig = inspect.signature(MuJoCoG1.navigate_to)
+    assert "timeout" in sig.parameters, (
+        f"'timeout' not in MuJoCoG1.navigate_to parameters; got {list(sig.parameters)}"
+    )
