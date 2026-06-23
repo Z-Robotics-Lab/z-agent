@@ -40,38 +40,27 @@ def _agent_has_camera(agent: Any) -> bool:
     return False
 
 
-def _make_perceived_detections(agent: Any) -> Any:
-    """Build ``detect_objects(query="")`` over the LEARNED detector's last observation.
-
-    The no-arm/camera-only verify anchor (R4): returns the boxes/labels the
-    grounding-dino route last localized on the live camera (stashed by the native
-    detect tool as ``agent._last_detection``), shaped like the arm oracle's
-    ``detect_objects`` output (a list of ``{"name", "score", "bbox"}`` dicts) so
-    ``len(detect_objects()) > 0`` reads truth-bearingly. A non-empty ``query``
-    substring-filters by label. Fails safe to ``[]`` (no detection yet / read error)
-    — it NEVER fabricates: an empty list when the model saw nothing, never a default
-    truthy stub. This reports the MEANS' real observation, and the step grades RAN
-    (read-only perception), never GROUNDED-by-causation — the moat is not loosened.
-    """
-
-    def detect_objects(query: str = "") -> list[dict[str, Any]]:
-        last = getattr(agent, "_last_detection", None)
-        if not isinstance(last, dict):
-            return []
-        boxes = last.get("boxes") or []
-        labels = last.get("labels") or []
-        scores = last.get("scores") or []
-        q = (query or "").strip().lower()
-        out: list[dict[str, Any]] = []
-        for i, box in enumerate(boxes):
-            label = str(labels[i]) if i < len(labels) else "object"
-            if q and q not in label.lower():
-                continue
-            score = float(scores[i]) if i < len(scores) else 0.0
-            out.append({"name": label, "score": score, "bbox": list(box)})
-        return out
-
-    return detect_objects
+# R5 CORRECTION (moat integrity): there is deliberately NO camera-no-arm
+# ``detect_objects`` verify oracle here. R4 added ``_make_perceived_detections``,
+# which built ``detect_objects()`` over ``agent._last_detection`` — the LEARNED
+# detector's OWN stashed boxes (the MEANS' output). Binding that into the verify
+# namespace made ``len(detect_objects()) > 0`` a *truth-bearing* oracle over the
+# means' own product, so the R1 evidence gate graded the g1 detect step GROUNDED:
+# the detector certifying ITSELF (a TAUTOLOGY — the actor's output verifying the
+# actor). That was a FALSE GREEN (red-team, D61). A detector running + localizing
+# is READ-ONLY perception: there is no actor-caused world change to ground, and
+# the verify must never read the means' own output as if it were an independent
+# oracle (rule 5: the sandbox only gets stricter; rule 4 #moat: GT anchors stay
+# invisible to the means). With NO ``detect_objects`` in the camera-no-arm
+# namespace, the native detect tool's ``verify(len(detect_objects()) > 0)`` finds
+# no oracle name in the live verify-namespace, so ``classify_verify_expr`` returns
+# RAN (no oracle call) — fail-closed to the honest D50 grade. The detector still
+# REGISTERS + ROUTES + localizes (the genuine cross-EMBODIMENT x cross-MODEL
+# achievement, kept); only the dishonest GROUNDED is removed.
+#
+# A legitimate FUTURE GROUNDED for detection (possible R6, NOT done) would require
+# a GT-backed spatial match — the detector's box back-projects to where the SIM GT
+# says the object is — i.e. an oracle INDEPENDENT of the means, not a self-read.
 
 
 class RobotWorld:
@@ -145,23 +134,16 @@ class RobotWorld:
                 "facing": make_facing(agent),
             })
 
-        # R4: a CAMERA-bearing agent WITHOUT an arm (g1: head camera, no manipulator)
-        # has no ground-truth ``get_object_positions`` to anchor ``detect_objects`` on,
-        # so the arm path above never supplied it. Bind a perception-fed
-        # ``detect_objects()`` that reports what the LEARNED detector last localized on
-        # the live camera (``agent._last_detection``, stashed by the native detect
-        # route). This makes ``verify(len(detect_objects()) > 0)`` truth-bearing on g1
-        # WITHOUT a manipulator — and it grades RAN (read-only perception, no actor
-        # causation), the honest D50 grade for a perceive-only step. World-agnostic: a
-        # capability-check (camera, no arm), never an embodiment special-case. NOT
-        # added when an arm already supplied the ground-truth ``detect_objects`` (the
-        # GT anchor stays the moat there; we never overwrite it with the means' output).
-        if (
-            "detect_objects" not in ns
-            and _agent_has_camera(agent)
-            and getattr(agent, "_arm", None) is None
-        ):
-            ns["detect_objects"] = _make_perceived_detections(agent)
+        # R5 CORRECTION: NO camera-no-arm ``detect_objects`` oracle is bound here.
+        # A camera-bearing agent WITHOUT an arm (g1: head camera, no manipulator) has
+        # no INDEPENDENT ground-truth to anchor ``detect_objects`` on — the only thing
+        # available is the LEARNED detector's own stashed output, and grounding the
+        # verify on that is self-certification (see module-level note + D61). So the
+        # g1 detect step grades RAN-honest: the detector runs + localizes (a real,
+        # useful, KEPT read-only action), but the moat does NOT green a self-read —
+        # ``classify_verify_expr`` sees no ``detect_objects`` oracle in this namespace
+        # and returns RAN. The arm path above keeps its GROUND-TRUTH ``detect_objects``
+        # (independent of the means) — that GT anchor remains the moat and is untouched.
 
         return ns
 

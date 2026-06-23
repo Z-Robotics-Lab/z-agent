@@ -1,16 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""R4 — route the learned grounding-dino DETECTOR to g1's HEAD camera (no-arm).
+"""R4/R5 — route the learned grounding-dino DETECTOR to g1's HEAD camera (no-arm).
 
 Covers the NON-cognitive wiring that lets a bare-cli detect command reach the
 SECOND model family on the SECOND embodiment (cross-EMBODIMENT x cross-MODEL):
 
-  1. ``RobotWorld.build_verify_namespace`` binds a perception-fed ``detect_objects``
-     oracle for a camera-only (no-arm) agent, reading the LEARNED detector's last
-     observation (``agent._last_detection``) — truth-bearing, RAN-honest.
+  1. ``RobotWorld.build_verify_namespace`` does NOT bind a ``detect_objects`` oracle
+     for a camera-only (no-arm) agent (R5 CORRECTION / D61): grounding the verify on
+     the detector's OWN stashed output (``agent._last_detection``) was a self-read
+     TAUTOLOGY that produced a FALSE GREEN (GROUNDED). With no such oracle, the g1
+     detect step grades RAN-honest — the moat never greens a self-read.
   2. The native ``_NativeDetectTool`` routes a query to the registered capability,
-     stashes the boxes on the agent, and reports them (no second model load).
+     stashes the boxes on the agent, and reports them (no second model load). KEPT:
+     this is the genuine cross-EMBODIMENT x cross-MODEL route.
   3. ``_registered_capability`` reaches the live CapabilityRegistry via the engine
      executor; ``_build_motor_tools`` surfaces ``detect`` only when registered.
 
@@ -108,46 +111,30 @@ class _Engine:
         self._registry = registry  # for code-tool discovery (None -> none)
 
 
-# --- 1. verify oracle: perception-fed detect_objects for g1 ----------------
-def test_g1_verify_namespace_has_perceived_detect_objects():
-    """A camera-only (no-arm) g1 gets a detect_objects oracle (the arm path never did)."""
+# --- 1. verify oracle: NO self-read detect_objects for g1 (R5 CORRECTION) ---
+def test_g1_verify_namespace_has_no_self_read_detect_objects():
+    """R5/D61: a camera-only (no-arm) g1 gets NO detect_objects oracle.
+
+    Grounding the verify on the detector's own stashed output is a self-read
+    tautology (the FALSE GREEN red-team caught in R4). The g1 detect step must
+    grade RAN-honest, so no such oracle is bound. Base predicates remain.
+    """
     ns = RobotWorld().build_verify_namespace(_G1Agent())
-    assert "detect_objects" in ns
-    assert "at_position" in ns  # base predicates still present
+    assert "detect_objects" not in ns  # self-read oracle removed
+    assert "at_position" in ns  # base predicates still present (independent GT)
 
 
-def test_perceived_detect_objects_reads_last_detection():
-    agent = _G1Agent()
-    ns = RobotWorld().build_verify_namespace(agent)
-    detect_objects = ns["detect_objects"]
-    # No detection yet -> empty (NEVER a truthy stub).
-    assert detect_objects() == []
-    # The learned route stashes its observation; the oracle reflects it.
-    agent._last_detection = {
-        "query": "red object",
-        "boxes": [[100.0, 120.0, 260.0, 380.0]],
-        "labels": ["a red object"],
-        "scores": [0.71],
-    }
-    got = detect_objects()
-    assert len(got) == 1 and got[0]["name"] == "a red object"
-    assert got[0]["score"] == 0.71
-    # len(detect_objects()) > 0 is now truth-bearing for the verify spine.
-    assert len(detect_objects()) > 0
+def test_g1_detect_verify_classifies_RAN_not_grounded():
+    """The moat-level proof: with no detect_objects oracle in the g1 namespace,
+    ``len(detect_objects()) > 0`` classifies RAN — fail-closed to the honest
+    D50 grade, NEVER a GROUNDED on a self-read."""
+    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
 
-
-def test_perceived_detect_objects_filters_by_query_and_fails_safe():
-    agent = _G1Agent()
-    detect_objects = RobotWorld().build_verify_namespace(agent)["detect_objects"]
-    agent._last_detection = {
-        "boxes": [[0, 0, 1, 1], [2, 2, 3, 3]],
-        "labels": ["a red stool", "a blue cup"],
-        "scores": [0.6, 0.5],
-    }
-    assert len(detect_objects("red")) == 1
-    assert detect_objects("nonexistent") == []
-    agent._last_detection = "garbage"  # malformed -> fail safe, never raise
-    assert detect_objects() == []
+    ns = RobotWorld().build_verify_namespace(_G1Agent())
+    oracle_names = frozenset(ns)  # single-sourced from the live verify-namespace
+    assert classify_verify_expr("len(detect_objects()) > 0", oracle_names) == "RAN"
+    # An INDEPENDENT base oracle (live GT, not the means) still grades GROUNDED.
+    assert classify_verify_expr("at_position(10.0, 3.0)", oracle_names) == "GROUNDED"
 
 
 def test_arm_agent_keeps_ground_truth_detect_objects():
