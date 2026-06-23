@@ -367,7 +367,16 @@ class SimStartTool:
 
         g1_sim = MuJoCoG1(gui=gui, room=True)
         g1_sim.connect()
-        return Agent(base=g1_sim)
+        agent = Agent(base=g1_sim)
+        # R4: bind g1's HEAD camera as the agent's RGB frame source so the learned
+        # grounding-dino DetectorCapability (registered for any camera-bearing agent,
+        # see RobotWorld.register_capabilities) can localize on the SECOND embodiment's
+        # sensor. Mirrors how _start_go2 binds Go2GraspPerception — same frame-source
+        # contract (get_color_frame), embodiment-agnostic detector. g1 has a camera but
+        # NO arm: this is read-only perception, NOT manipulation (no depth/IK adapter).
+        from vector_os_nano.perception.g1_head_perception import G1HeadPerception
+        agent._perception = G1HeadPerception(g1_sim, width=640, height=480)
+        return agent
 
     # ------------------------------------------------------------------
     # Pickable-object discovery: populate world_model from MJCF

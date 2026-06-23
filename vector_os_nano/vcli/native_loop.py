@@ -177,6 +177,99 @@ class _NativeBaseNavigateTool:
         )
 
 
+class _NativeDetectTool:
+    """Route a NAMED/COLOUR query to the learned grounding-dino DETECTOR capability.
+
+    R4 — composes the two North-Star axes on ONE turn: this surfaces the registered
+    ``DetectorCapability`` (the learned SECOND model family, grounding-dino-tiny) into
+    the native loop so a bare-cli detect command reaches it on whatever camera-bearing
+    embodiment is connected — go2+arm OR g1 (the humanoid, camera but NO arm). It does
+    NOT re-implement detection: ``execute`` pulls the SAME capability instance the world
+    registered into the engine's ``CapabilityRegistry`` (agent-bound for the live
+    perception) and invokes it — single-sourced, no second model load (rule 3).
+
+    Read-only PERCEPTION: the detector only localizes, it does not act on the world, so
+    a detect step grades RAN — the honest grade for a perceive-only route (mirrors D50;
+    actor-causation has no displacement to attribute). The capability never self-
+    certifies; the model-authored ``verify(len(detect_objects()) > 0)`` is the moat.
+
+    The detection result (boxes/labels/scores) is stashed on the agent so the world's
+    ``detect_objects()`` verify oracle reflects what the LEARNED MODEL actually saw on
+    the live camera (rule 4: the structured observation flows to the verify step, never
+    collapsed to (success, error)). Duck-typed like a ``Tool`` so ``dispatch_skill``
+    runs it uniformly. Only surfaced when a ``detect`` capability is registered AND the
+    agent has a camera (see ``_build_motor_tools``) — sensorless/dev paths never see it.
+    """
+
+    name = "detect"
+    description = (
+        "Localize a named or coloured object in the robot's CAMERA view using the "
+        "learned open-vocabulary detector (grounding-dino). Pass the target as 'query' "
+        "(e.g. 'red object', 'a red stool', '红色的东西'). Returns bounding box(es) + "
+        "label(s) + score(s). This is PERCEPTION only (read-only). After it returns, "
+        "call verify(len(detect_objects()) > 0) to confirm the model localized something."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Natural-language target to localize (named or coloured).",
+            },
+        },
+        "required": ["query"],
+    }
+
+    def __init__(self, capability: Any) -> None:
+        # The SAME registered DetectorCapability the world bound to the agent's live
+        # perception — never a fresh instance, never a second model load.
+        self._capability = capability
+
+    def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
+        query = str((params or {}).get("query", "")).strip()
+        if not query:
+            return ToolResult(content="detect requires a non-empty 'query'.", is_error=True)
+        try:
+            result = self._capability.invoke({"query": query}, context)
+        except Exception as exc:  # noqa: BLE001
+            return ToolResult(content=f"detect({query!r}) raised: {exc}", is_error=True)
+
+        output = dict(getattr(result, "output", {}) or {})
+        boxes = output.get("boxes") or []
+        labels = output.get("labels") or []
+        scores = output.get("scores") or []
+
+        # Stash on the agent so the world's detect_objects() oracle reflects the
+        # LEARNED model's actual observation on this camera (rule 4: the observation
+        # flows to verify). World-side state, never the cognitive seam.
+        agent = getattr(context, "agent", None)
+        if agent is not None:
+            try:
+                agent._last_detection = {
+                    "query": query, "boxes": boxes, "labels": labels, "scores": scores,
+                }
+            except Exception as exc:  # noqa: BLE001 — best-effort capture
+                logger.debug("native_loop: detect result stash failed: %s", exc)
+
+        if not getattr(result, "success", False) and not boxes:
+            err = getattr(result, "error", "") or "no detections"
+            return ToolResult(
+                content=f"detect({query!r}): the detector RAN but localized nothing ({err})."
+            )
+        first = (
+            f"label={labels[0]!r} box={[round(float(v), 1) for v in boxes[0]]} "
+            f"score={float(scores[0]):.2f}"
+            if boxes and labels and scores
+            else "(box)"
+        )
+        return ToolResult(
+            content=(
+                f"detect({query!r}): grounding-dino localized {len(boxes)} object(s); "
+                f"top {first}. Call verify(len(detect_objects()) > 0) to confirm."
+            )
+        )
+
+
 def _scene_object_names(agent: Any) -> tuple[str, ...]:
     """Return the world's graspable object NAMES, the canonical names the oracle matches.
 
@@ -686,6 +779,18 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
     # loosens). The arm/dev worlds (no base) do not get it.
     if agent is not None and getattr(agent, "_base", None) is not None:
         tools["navigate"] = _NativeBaseNavigateTool()
+    # Source 4 (R4): the learned grounding-dino DETECTOR capability, surfaced into the
+    # native loop so a bare-cli detect command reaches the SECOND model family on
+    # whatever camera-bearing embodiment is connected (go2+arm OR g1). Single-sourced
+    # from the engine's CapabilityRegistry — the SAME instance the world registered
+    # (agent-bound for the live perception), never a second model load. Only present
+    # when a 'detect' capability is registered (camera present + torch importable);
+    # a sensorless/dev path never sees it. Layered before the world skills so this
+    # learned route WINS over the classical DetectSkill if both share the 'detect' name
+    # (R4 intent: the bare-cli 'detect' is the MODEL route, not the keyword skill).
+    detect_cap = _registered_capability(engine, "detect")
+    if detect_cap is not None:
+        tools["detect"] = _NativeDetectTool(detect_cap)
     # Source 1: the world's skills (robot worlds only; dev world has no agent). The
     # world's own ``navigate`` skill (door-chain walk, NOT lidar avoidance) stays
     # excluded; our coordinate ``navigate`` above is the planner/avoidance route.
@@ -694,10 +799,36 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
             for skill_tool in wrap_skills(agent):
                 if skill_tool.name == "navigate":
                     continue  # world room-navigate is door-chain walk; ours is the avoidance route
+                if skill_tool.name == "detect" and "detect" in tools:
+                    continue  # the learned grounding-dino route (Source 4) wins over the classical DetectSkill
                 tools[skill_tool.name] = skill_tool
         except Exception as exc:  # noqa: BLE001
             logger.debug("native_loop: wrap_skills failed: %s", exc)
     return tools
+
+
+def _registered_capability(engine: Any, name: str) -> Any:
+    """The named Capability the world registered into the engine's CapabilityRegistry.
+
+    Reaches the LIVE registry through ``engine._goal_executor._capability_registry``
+    (the same registry the producer/StrategySelector route uses) so the native loop
+    surfaces the EXACT capability instance the world bound to the agent — never a fresh
+    construction, never a second model load (rule 3). Defensive: any missing link
+    (no executor, no registry, lookup failure) yields None and the capability simply
+    is not surfaced (the pre-R4 behaviour — native offered no detector).
+    """
+    executor = getattr(engine, "_goal_executor", None)
+    registry = getattr(executor, "_capability_registry", None) if executor is not None else None
+    if registry is None:
+        return None
+    getter = getattr(registry, "get", None)
+    if not callable(getter):
+        return None
+    try:
+        return getter(name)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("native_loop: capability lookup %r failed: %s", name, exc)
+        return None
 
 
 def _code_tools_from_registry(engine: Any) -> dict[str, Any]:

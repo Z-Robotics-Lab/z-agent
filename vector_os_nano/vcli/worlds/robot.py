@@ -19,6 +19,61 @@ from vector_os_nano.vcli.prompt import ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTION
 logger = logging.getLogger(__name__)
 
 
+def _agent_has_camera(agent: Any) -> bool:
+    """True iff *agent* can supply an RGB frame the detector can run on.
+
+    World-agnostic CAMERA-presence check (R4): a frame source is either a bound
+    ``_perception`` exposing ``get_color_frame()`` (go2+arm's Go2GraspPerception,
+    g1's G1HeadPerception) OR a base/arm exposing ``get_camera_frame()`` (the raw
+    MuJoCo camera, e.g. MuJoCoG1). Reaching the frame source through the SAME
+    duck-typed accessors the detector itself uses keeps this embodiment-agnostic —
+    the detector needs a camera, not an arm. Fails safe to False (no-agent / sensorless).
+    """
+    if agent is None:
+        return False
+    perception = getattr(agent, "_perception", None)
+    if perception is not None and callable(getattr(perception, "get_color_frame", None)):
+        return True
+    for member in (getattr(agent, "_base", None), getattr(agent, "_arm", None)):
+        if member is not None and callable(getattr(member, "get_camera_frame", None)):
+            return True
+    return False
+
+
+def _make_perceived_detections(agent: Any) -> Any:
+    """Build ``detect_objects(query="")`` over the LEARNED detector's last observation.
+
+    The no-arm/camera-only verify anchor (R4): returns the boxes/labels the
+    grounding-dino route last localized on the live camera (stashed by the native
+    detect tool as ``agent._last_detection``), shaped like the arm oracle's
+    ``detect_objects`` output (a list of ``{"name", "score", "bbox"}`` dicts) so
+    ``len(detect_objects()) > 0`` reads truth-bearingly. A non-empty ``query``
+    substring-filters by label. Fails safe to ``[]`` (no detection yet / read error)
+    — it NEVER fabricates: an empty list when the model saw nothing, never a default
+    truthy stub. This reports the MEANS' real observation, and the step grades RAN
+    (read-only perception), never GROUNDED-by-causation — the moat is not loosened.
+    """
+
+    def detect_objects(query: str = "") -> list[dict[str, Any]]:
+        last = getattr(agent, "_last_detection", None)
+        if not isinstance(last, dict):
+            return []
+        boxes = last.get("boxes") or []
+        labels = last.get("labels") or []
+        scores = last.get("scores") or []
+        q = (query or "").strip().lower()
+        out: list[dict[str, Any]] = []
+        for i, box in enumerate(boxes):
+            label = str(labels[i]) if i < len(labels) else "object"
+            if q and q not in label.lower():
+                continue
+            score = float(scores[i]) if i < len(scores) else 0.0
+            out.append({"name": label, "score": score, "bbox": list(box)})
+        return out
+
+    return detect_objects
+
+
 class RobotWorld:
     """Adapter for the robot domain (Go2 / SO-101 / Piper)."""
 
@@ -90,6 +145,24 @@ class RobotWorld:
                 "facing": make_facing(agent),
             })
 
+        # R4: a CAMERA-bearing agent WITHOUT an arm (g1: head camera, no manipulator)
+        # has no ground-truth ``get_object_positions`` to anchor ``detect_objects`` on,
+        # so the arm path above never supplied it. Bind a perception-fed
+        # ``detect_objects()`` that reports what the LEARNED detector last localized on
+        # the live camera (``agent._last_detection``, stashed by the native detect
+        # route). This makes ``verify(len(detect_objects()) > 0)`` truth-bearing on g1
+        # WITHOUT a manipulator — and it grades RAN (read-only perception, no actor
+        # causation), the honest D50 grade for a perceive-only step. World-agnostic: a
+        # capability-check (camera, no arm), never an embodiment special-case. NOT
+        # added when an arm already supplied the ground-truth ``detect_objects`` (the
+        # GT anchor stays the moat there; we never overwrite it with the means' output).
+        if (
+            "detect_objects" not in ns
+            and _agent_has_camera(agent)
+            and getattr(agent, "_arm", None) is None
+        ):
+            ns["detect_objects"] = _make_perceived_detections(agent)
+
         return ns
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
@@ -97,14 +170,17 @@ class RobotWorld:
         # routable second model family. Read-only — it only perceives; the verify
         # spine remains the sole grader (the capability never self-certifies).
         #
-        # Guarded two ways so dev / go2-only / CI without weights stay byte-identical:
+        # Guarded two ways so dev / sensorless / CI without weights stay byte-identical:
         #   1. torch/transformers must be importable (ImportError -> register nothing);
-        #   2. the agent must actually have an arm (the detector only drives the
-        #      manipulation route) — a base-only go2 or a no-agent probe registers
-        #      nothing. World-agnostic: an arm-presence CAPABILITY check, not an
-        #      embodiment special-case. The model itself is NOT loaded here — the
-        #      DetectorCapability/GroundingDinoDetector loads lazily on first detect.
-        if agent is None or getattr(agent, "_arm", None) is None:
+        #   2. the agent must actually have a CAMERA to detect on (a perception with
+        #      ``get_color_frame()`` OR a base/arm with ``get_camera_frame()``) — a
+        #      no-agent probe or a sensorless agent registers nothing. The detector
+        #      needs ONLY a camera, not an arm: a go2+arm grasps with it, a g1 (camera,
+        #      NO arm) localizes with it. So the gate is a CAMERA-presence CAPABILITY
+        #      check (R4), world-agnostic — NOT an arm/embodiment special-case (rule 7).
+        #      The model itself is NOT loaded here — the DetectorCapability /
+        #      GroundingDinoDetector loads lazily on first detect.
+        if agent is None or not _agent_has_camera(agent):
             return None
         try:
             import torch  # noqa: F401
