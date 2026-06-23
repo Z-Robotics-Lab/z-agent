@@ -1,35 +1,47 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Terminal dock — dead-reckon to a FIXED proven approach pose before a grasp.
+"""Terminal dock — a CLOSED-LOOP controller to a FIXED proven grasp pose, with a
+POSE-VERIFICATION GATE.
 
-THE R39 SEAM. FAR (``base.navigate_to``) is a COARSE long-range drive: it un-parks
-the dog and brings it to within ~0.8 m of a goal, but at an ARBITRARY terminal
-heading, often overshot/oblique (probe-confirmed: arrives ~169 deg off, framing the
-floor/wall). From that pose the d435 cannot frame the cans and perception
-mislocalizes the target (R38/D52: 0.4-0.87 m off → IK unreachable).
+THE R39/R40 SEAM. FAR (``base.navigate_to``) is a COARSE long-range drive: it un-parks
+the dog and brings it to within ~0.8 m of a goal, but with NO terminal-heading control —
+it drops the dog at an ARBITRARY pose (probe-observed: heading ~169 deg off, overshot,
+oblique). From that pose the d435 cannot frame the cans and perception mislocalizes the
+target (R38/D52). The PROVEN colour grasp (D47) GROUNDS only when the dog starts HEAD-ON
+from the room centerline facing the table.
 
-The fix is a deterministic TERMINAL DOCK that runs AFTER FAR's coarse arrival and
-BEFORE perceiving: dead-reckon the dog (using ``get_position``/``get_heading`` +
-the open-loop ``walk`` primitive — NOT FAR) to a FIXED, PROVEN table-approach pose
-``(x, y, heading)`` from which the proven colour grasp (D47) GROUNDS. The dock target
-is FIXED (the known scripted-from-spawn pose), NOT can-relative — so there is no
-chicken-and-egg: the dog does not need to perceive the can to dock to it.
+R40 root cause (D54): the dock was NOT repeatable (~1/3). The previous dock ran a FIXED
+SEQUENCE (drive-to-pre-dock -> drive-straight-in -> face -> recenter) and the quadruped
+GAIT DRIFTS, so the sequence ended at an arbitrary residual pose ~2/3 of the time (R39
+t3: heading 86 deg, x back from the table, camera off the cans). Six prior open-loop
+attempts (turn/drive sandwiches) all failed for the same reason.
 
-Geometry of a dock (open-loop, four phases, each a ``walk`` command):
-    1. TURN to the bearing toward (dock_x, dock_y)   — point at the dock point
-    2. WALK forward the planar distance to it        — translate onto it
-    3. TURN-in-place to ``dock_heading``             — face the cans (+X), tighter
-       deadband (≈6°) with up to 6 damped steps (CHANGE 3, R40: was 9°/4 steps)
-    4. LATERAL re-center — sidestep (body-frame vy) to put the dog's y back on the
-       dock_y centerline within ≈0.06 m (CHANGE 3, R40: closes the R39 t2 y=3.18
-       lateral residual that frames the wrong object at 22 cm inter-can spacing).
+THE FIX — a true CLOSED-LOOP controller + a strict GATE:
 
-Iterated a few times to close dead-reckoning error (the open-loop gait drifts).
-Benign / near no-op when the dog is ALREADY at the dock pose (e.g. the
-scripted-from-spawn path, where FAR is never run): all phases fall below their
-deadbands and issue no material motion — so the proven scripted grasp (D34-D51) does
-NOT regress.
+  - ``terminal_dock`` now ITERATES an outer loop. Each iteration MEASURES the live pose
+    (get_position/get_heading) and CORRECTS toward the FIXED proven grasp pose:
+        1. correct heading to FACE the target xy (turn-in-place, closed-loop damped)
+        2. drive to the target xy in closed-loop steered steps (re-measure each step)
+        3. final heading -> +X (toward the table), closed-loop damped
+        4. lateral re-center onto the dock_y centerline (closed-loop sidestep)
+    After each iteration it re-measures and tests TOLERANCE; it repeats up to an
+    iteration budget. Because every leg re-reads the live pose, accumulated gait drift
+    is corrected rather than compounded — the whole point the open-loop sequence missed.
+
+  - ``terminal_dock`` returns a structured :class:`DockResult` (converged bool + final
+    pose + the per-axis errors). ``dock_converged(result, ...)`` is the GATE the caller
+    uses: heading within ~±12 deg of +X (so the d435 frames the table), |y - centerline|
+    < ~8 cm, AND x in the perceive band. If the dock does NOT converge within the budget
+    the caller ABORTS the grasp cleanly ("dock_not_converged") — it NEVER perceives or
+    grasps from a bad pose. A reliable dock + a strict gate = either a head-on perceive
+    (-> likely GROUNDED) or an honest RAN, never a false/garbage grasp (the R39 t3
+    spurious-grounded class is structurally impossible).
+
+Benign / no-op when the dog is ALREADY at the dock pose (the scripted-from-spawn path,
+where FAR is never run): the first measurement is already within tolerance, the loop
+exits at iteration 0 issuing no motion — so the proven scripted grasp (D34-D51) does NOT
+regress, and a ``converged=True`` gate lets the grasp proceed unchanged.
 
 World-agnostic: uses only the base's duck-typed ``walk`` / ``get_position`` /
 ``get_heading`` surface. NON-cognitive — the verify spine (vcli/cognitive/) is never
@@ -39,61 +51,114 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# --- Dock convergence tuning ------------------------------------------------
-# Planar-position deadband: below this the dog is "at" the dock point and the
-# translate phase is skipped (benign no-op when already docked).
-_DOCK_POS_DEADBAND_M = 0.12
-# Heading deadband for the final facing-turn (~9 deg). A scripted-from-spawn dog
-# already faces +X within this, so no real facing turn fires.
-_DOCK_YAW_DEADBAND_RAD = 0.16
-# CLOSED-LOOP steered-step drive (the proven _approach_object pattern). The dog's
-# real gait curves and drifts heavily under a big open-loop turn-then-walk, so we
-# drive to the dock point in SHORT steered steps: each step re-reads the live pose,
-# steers vyaw proportional to the bearing error AND advances vx (reduced while badly
-# mis-headed), so heading + position errors close together instead of accumulating.
+# --- Dock convergence tolerances (the GATE) ---------------------------------
+# After the dock the final pose must satisfy ALL of these for the grasp to proceed.
+# Heading must be within ~±12 deg of the dock heading (+X), so the forward-mounted
+# d435 frames the table (not the wall/floor). Wider than the in-loop facing deadband
+# (the gate is the acceptance band; the loop drives TIGHTER than the gate so a
+# converged dock clears it with margin).
+_GATE_HEADING_TOL_RAD = math.radians(12.0)   # ±12 deg of +X
+# Lateral: |y - dock_y centerline| must be within 8 cm (inter-can spacing is 22 cm, so
+# 8 cm cannot frame a neighbour).
+_GATE_LATERAL_TOL_M = 0.08
+# Longitudinal (x) perceive band: the dog's x must sit in the proven afar-perceive
+# sweet spot around the dock_x. Generous half-width — FAR's arrival + the dock leave
+# the dog within this band; outside it (e.g. R39 t3 x=9.74, 0.26 m back) the camera
+# framing degrades. Measured against dock_x.
+_GATE_X_BAND_M = 0.30
+
+# --- Closed-loop control tuning ---------------------------------------------
+# Outer-loop iteration budget: how many MEASURE -> CORRECT passes before giving up and
+# returning converged=False (the gate then aborts the grasp honestly). 4 is generous —
+# a clean arrival converges in 1-2; a bad 86-deg/back-from-table arrival in 2-3.
+_DOCK_MAX_ITERS = 4
+# Planar-position deadband: below this the dog is "at" the dock point (drive leg done).
+_DOCK_POS_DEADBAND_M = 0.10
+# In-loop facing deadband (~6 deg) — TIGHTER than the gate's ±12 deg so a converged
+# dock clears the gate with margin. The public no-op gate (already-docked check) uses
+# the looser _DOCK_NOOP_YAW_RAD so a scripted-from-spawn dog triggers no motion.
+_DOCK_FACE_DEADBAND_RAD = math.radians(6.0)
+_DOCK_NOOP_YAW_RAD = 0.16        # ~9 deg — the benign already-docked yaw gate
+
+# Closed-loop steered drive to the target xy (the proven _approach_object pattern). The
+# gait curves and drifts under a big open-loop turn-then-walk, so we drive in SHORT
+# steered steps: each step re-reads the live pose, steers vyaw proportional to the
+# bearing error AND advances vx (zeroed while badly mis-headed), so heading + position
+# errors close together instead of accumulating.
 _DOCK_STEP_VX = 0.45           # m/s nominal forward speed per step
 _DOCK_STEP_VYAW_GAIN = 1.5     # proportional yaw correction
 _DOCK_STEP_VYAW_MAX = 0.6      # rad/s clamp on the per-step yaw correction
 _DOCK_STEP_MIN_S = 0.6         # min per-step duration
 _DOCK_STEP_MAX_S = 1.4         # max per-step duration
 _DOCK_BIG_YAW_RAD = 0.7        # above this bearing error, TURN IN PLACE (vx=0) — do
-                               # NOT creep, or the dog ORBITS a nearby mis-headed
-                               # point instead of reaching it (real-sim: it circled
-                               # the dock point at ~0.3-0.6 m and never converged).
-# Max steered steps to converge onto the dock point (each ~6-15 cm of progress).
-_DOCK_MAX_STEPS = 30
-# PRE-DOCK STRAIGHT-IN approach (the heading-without-a-facing-turn trick). A pure-yaw
-# turn-in-place to the dock heading DRIFTS the dog forward (the gait curves), and
-# alternating drive+face just thrashes (real-sim: oscillated, never converged). So
-# instead of turning in place at the dock point, APPROACH the dock point along the
-# dock heading: first drive to a PRE-DOCK point ``_DOCK_APPROACH_BACK`` metres BEHIND
-# the dock (opposite the dock heading), then drive STRAIGHT IN along +dock_heading to
-# the dock point. The steered drive aligns the dog's heading to its bearing each step,
-# so a straight-in leg ends the dog FACING the dock heading naturally — no separate
-# facing turn, no drift. The dog ends at the dock point facing the cans.
-_DOCK_APPROACH_BACK = 0.6      # m behind the dock to stage the straight-in leg
-# A small final facing nudge only (residual after the straight-in, usually tiny).
+                               # NOT creep, or the dog ORBITS a nearby mis-headed point
+                               # instead of reaching it.
+_DOCK_DRIVE_MAX_STEPS = 30     # max steered steps per drive leg
+
+# Closed-loop turn-in-place to a target heading: damped residual increments. A single
+# open-loop turn overshoots (the gait keeps yawing past the command), so turn a damped
+# fraction of the live residual each step until within the deadband.
 _DOCK_FACE_VYAW = 0.5          # rad/s turn-in-place
 _DOCK_FACE_GAIN = 0.6          # damp the residual to avoid overshoot
 _DOCK_FACE_MAX_S = 1.0
-# CHANGE 3 (R40): tighter facing convergence. Was 4 steps/~9° deadband; t2 left
-# a +29° residual that framed the wrong object. Raised to 6 steps so the damped
-# loop actually closes the residual, with a tighter 6° (~0.10 rad) effective
-# deadband. The tighter deadband applies only inside _face_heading (the public
-# yaw_deadband param for the no-op gate stays at 0.16 rad so scripted-from-spawn
-# still triggers no motion).
 _DOCK_FACE_MAX_STEPS = 6
-_DOCK_FACE_TIGHT_RAD = 0.10    # ≈ 6° — final facing deadband used by _face_heading
-# CHANGE 3 (R40): lateral re-center after facing. Sidestep (body-frame vy) to put
-# the dog's y onto the dock_y centerline. Closes the R39 t2 y=3.18 (vs target 3.0)
-# lateral residual that framed the wrong object at 22 cm inter-can spacing.
-_DOCK_LATERAL_DEADBAND_M = 0.06  # m; within this the lateral step is a no-op
+
+# Closed-loop lateral re-center onto the dock_y centerline (body-frame vy sidestep).
+_DOCK_LATERAL_DEADBAND_M = 0.05  # m; within this the lateral step is a no-op
 _DOCK_LATERAL_VY = 0.25          # m/s sidestep speed
-_DOCK_LATERAL_MAX_STEPS = 3      # max sidestep commands
+_DOCK_LATERAL_MAX_STEPS = 4      # max sidestep commands
+
+
+@dataclass(frozen=True)
+class DockResult:
+    """Structured outcome of a terminal dock — the input to the pose gate.
+
+    ``ran`` is False only when the base lacks the walk/pose surface (caller then
+    proceeds unchanged, no regression). ``converged`` is the gate verdict: True iff
+    the final pose is within ALL tolerances (heading within ±12 deg of +X, |y -
+    centerline| < 8 cm, x in the perceive band). ``final_pose`` is the measured
+    ``(x, y, heading)`` after the last correction; the ``*_err`` fields are the
+    per-axis residuals (radians / metres) for diagnostics.
+    """
+
+    ran: bool
+    converged: bool
+    final_pose: tuple[float, float, float] | None = None
+    heading_err: float = float("inf")   # |heading - dock_heading|, rad
+    lateral_err: float = float("inf")    # |y - dock_y|, m
+    x_err: float = float("inf")          # |x - dock_x|, m
+    iterations: int = 0
+
+
+def dock_converged(
+    result: DockResult,
+    *,
+    heading_tol: float = _GATE_HEADING_TOL_RAD,
+    lateral_tol: float = _GATE_LATERAL_TOL_M,
+    x_band: float = _GATE_X_BAND_M,
+) -> bool:
+    """The POSE-VERIFICATION GATE. True iff the dock landed a perceivable head-on pose.
+
+    A grasp may proceed ONLY when this returns True: heading within ``heading_tol`` of
+    the dock heading (+X), |y - centerline| < ``lateral_tol``, AND x within ``x_band``
+    of the dock x. If False the caller MUST abort the grasp cleanly ("dock_not_
+    converged") rather than perceive from a bad pose. A dock that did not ``ran`` (no
+    base surface) is treated as NOT a converged dock here, but the caller decides
+    whether to proceed (scripted-from-spawn passes no dock_pose and never reaches the
+    gate); when the dock ``ran`` and was a benign no-op, ``converged`` is already True.
+    """
+    if not result.ran:
+        return False
+    return (
+        result.heading_err <= heading_tol
+        and result.lateral_err <= lateral_tol
+        and result.x_err <= x_band
+    )
 
 
 def _wrap(a: float) -> float:
@@ -108,131 +173,180 @@ def _has_surface(base: Any) -> bool:
     return callable(walk) and callable(get_pos) and callable(get_hd)
 
 
+def _measure(base: Any) -> tuple[float, float, float] | None:
+    """Read the live ``(x, y, heading)``; None if the base cannot report a pose."""
+    try:
+        pos = base.get_position()
+        hd = float(base.get_heading())
+        return (float(pos[0]), float(pos[1]), hd)
+    except Exception as exc:  # noqa: BLE001 — no live pose -> caller skips, never fabricates
+        logger.debug("[DOCK] pose read failed (%s)", exc)
+        return None
+
+
+def _errors(
+    pose: tuple[float, float, float],
+    dock_xy: tuple[float, float],
+    dock_hd: float,
+) -> tuple[float, float, float]:
+    """Per-axis residuals ``(|heading-dock_hd|, |y-dock_y|, |x-dock_x|)``.
+
+    Lateral is the world-y offset projected perpendicular to the dock heading, so it is
+    correct at any dock heading; for a +X dock it collapses to ``|y - dock_y|``.
+    """
+    x, y, hd = pose
+    dx = dock_xy[0] - x
+    dy = dock_xy[1] - y
+    heading_err = abs(_wrap(dock_hd - hd))
+    lateral_err = abs(-dx * math.sin(dock_hd) + dy * math.cos(dock_hd))
+    x_err = abs(x - dock_xy[0])
+    return heading_err, lateral_err, x_err
+
+
 def terminal_dock(
     base: Any,
     dock_xy: tuple[float, float],
     dock_heading: float,
     *,
     pos_deadband: float = _DOCK_POS_DEADBAND_M,
-    yaw_deadband: float = _DOCK_YAW_DEADBAND_RAD,
-    max_steps: int = _DOCK_MAX_STEPS,
+    yaw_deadband: float = _DOCK_NOOP_YAW_RAD,
+    max_iters: int = _DOCK_MAX_ITERS,
+    heading_tol: float = _GATE_HEADING_TOL_RAD,
+    lateral_tol: float = _GATE_LATERAL_TOL_M,
+    x_band: float = _GATE_X_BAND_M,
     on_progress: Any = None,
-) -> bool:
-    """Drive the base to a FIXED ``(dock_xy, dock_heading)`` pose, then face it.
+) -> DockResult:
+    """CLOSED-LOOP drive the base to a FIXED ``(dock_xy, dock_heading)`` pose.
 
-    CLOSED-LOOP steered-step drive (the proven _approach_object pattern): the dog's
-    real gait curves and drifts heavily under a big open-loop turn-then-walk, so the
-    dock drives to the dock point in SHORT steered steps — each step re-reads the
-    live pose and issues ONE ``walk(vx, vyaw)`` whose yaw closes the bearing error
-    and whose forward speed advances toward the point (reduced while badly mis-
-    headed). Heading + position errors close together rather than accumulating. A
-    final turn-in-place faces ``dock_heading`` (the cans, +X).
+    Iterates an outer MEASURE -> CORRECT loop until the final pose is within ALL the
+    gate tolerances or ``max_iters`` is exhausted. Each iteration: face the target xy
+    -> closed-loop drive onto it -> face the dock heading (+X) -> lateral re-center.
+    Every leg re-reads the live pose, so accumulated quadruped gait drift is corrected,
+    not compounded (the open-loop sequence's failure mode).
 
     Args:
-        base: a base exposing ``walk(vx, vy, vyaw, duration)`` /
-            ``get_position()`` / ``get_heading()`` (duck-typed).
-        dock_xy: the FIXED proven table-approach point ``(x, y)`` in world frame
-            (NOT can-relative). For the go2+piper room this is the spawn standoff
-            on the centerline, back from the cans, from which the proven grasp
-            GROUNDS.
+        base: a base exposing ``walk(vx, vy, vyaw, duration)`` / ``get_position()`` /
+            ``get_heading()`` (duck-typed).
+        dock_xy: the FIXED proven table-approach point ``(x, y)`` in world frame (NOT
+            can-relative — the dog need not perceive the can to dock to it).
         dock_heading: the world yaw to face at the dock point (radians). Facing the
-            cans is +X → ``0.0``.
-        pos_deadband: stop driving once within this many metres of ``dock_xy``.
-        yaw_deadband: treat a final-facing yaw error below this (radians) as
-            "already facing" (no facing turn).
-        max_steps: max steered steps to converge onto the dock point.
+            cans is +X -> ``0.0``.
+        pos_deadband: stop a drive leg once within this many metres of ``dock_xy``.
+        yaw_deadband: the already-docked no-op gate (a scripted-from-spawn dog within
+            this faces no turn).
+        max_iters: outer MEASURE -> CORRECT iteration budget before giving up.
+        heading_tol / lateral_tol / x_band: the gate tolerances (see ``dock_converged``).
         on_progress: optional ``callable(str)`` for human-readable progress.
 
     Returns:
-        True if the dock ran (or was a benign no-op because the dog was already at
-        the pose); False if the base lacks the required surface (caller then
-        proceeds unchanged — no regression).
+        A :class:`DockResult`. ``ran=False`` iff the base lacks the surface (caller
+        proceeds unchanged). Otherwise ``converged`` is the gate verdict and the caller
+        MUST abort the grasp when it is False.
     """
     if not _has_surface(base):
         logger.debug("[DOCK] base lacks walk/get_position/get_heading — skip dock")
-        return False
+        return DockResult(ran=False, converged=False)
 
     dx_goal, dy_goal = float(dock_xy[0]), float(dock_xy[1])
     dock_hd = float(dock_heading)
 
-    try:
-        pos = base.get_position()
-        hd = float(base.get_heading())
-    except Exception as exc:  # noqa: BLE001 — no live pose → skip, never fabricate
-        logger.debug("[DOCK] no live pose/heading (%s) — skip dock", exc)
-        return False
+    pose = _measure(base)
+    if pose is None:
+        return DockResult(ran=False, converged=False)
 
-    # Already at the dock pose (scripted-from-spawn path)? Benign no-op.
-    gap0 = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
-    face0 = abs(_wrap(dock_hd - hd))
-    if gap0 <= pos_deadband and face0 <= yaw_deadband:
+    # Already at the dock pose (scripted-from-spawn path)? Benign no-op: measure,
+    # report converged, issue no motion. The proven grasp does not regress.
+    heading_err, lateral_err, x_err = _errors(pose, dock_xy, dock_hd)
+    gap0 = math.hypot(dx_goal - pose[0], dy_goal - pose[1])
+    if gap0 <= pos_deadband and heading_err <= yaw_deadband:
         logger.info("[DOCK] already docked (gap=%.2fm face=%.0fdeg) — no-op",
-                    gap0, math.degrees(face0))
-        return True
-
-    # PRE-DOCK point: _DOCK_APPROACH_BACK metres BEHIND the dock, opposite the dock
-    # heading. Driving from here STRAIGHT IN (+dock_heading) ends the dog facing the
-    # dock heading naturally (the steered drive aligns heading to bearing) — no
-    # separate facing turn that would drift the position.
-    pre_x = dx_goal - _DOCK_APPROACH_BACK * math.cos(dock_hd)
-    pre_y = dy_goal - _DOCK_APPROACH_BACK * math.sin(dock_hd)
+                    gap0, math.degrees(heading_err))
+        converged = (
+            heading_err <= heading_tol and lateral_err <= lateral_tol and x_err <= x_band
+        )
+        return DockResult(
+            ran=True, converged=converged, final_pose=pose,
+            heading_err=heading_err, lateral_err=lateral_err, x_err=x_err, iterations=0,
+        )
 
     if on_progress:
         on_progress(
-            f"dock: from ({pos[0]:.2f},{pos[1]:.2f}) hd={hd:.2f} -> pre-dock "
-            f"({pre_x:.2f},{pre_y:.2f}) -> dock ({dx_goal:.2f},{dy_goal:.2f}) hd={dock_hd:.2f}")
+            f"dock: closed-loop from ({pose[0]:.2f},{pose[1]:.2f}) hd={pose[2]:.2f} "
+            f"-> ({dx_goal:.2f},{dy_goal:.2f}) hd={dock_hd:.2f} (budget {max_iters})")
     logger.info(
-        "[DOCK] ( %.2f, %.2f ) hd=%.2f -> pre-dock ( %.2f, %.2f ) -> dock ( %.2f, %.2f ) hd=%.2f",
-        pos[0], pos[1], hd, pre_x, pre_y, dx_goal, dy_goal, dock_hd)
+        "[DOCK] closed-loop ( %.2f, %.2f ) hd=%.2f -> dock ( %.2f, %.2f ) hd=%.2f budget=%d",
+        pose[0], pose[1], pose[2], dx_goal, dy_goal, dock_hd, max_iters)
 
-    # 1. drive to the pre-dock point (any heading) ...
-    _drive_to_point(base, pre_x, pre_y, pos_deadband, max_steps, on_progress)
-    # 2. ... then drive STRAIGHT IN to the dock point — ends facing the dock heading.
-    _drive_to_point(base, dx_goal, dy_goal, pos_deadband, max_steps, on_progress)
-    # 3. final facing nudge for residual heading error after the straight-in.
-    #    CHANGE 3 (R40): uses the tighter _DOCK_FACE_TIGHT_RAD deadband (~6°) and
-    #    up to _DOCK_FACE_MAX_STEPS=6 steps so the R39 t2 +29° residual closes.
-    _face_heading(base, dock_hd, _DOCK_FACE_TIGHT_RAD, on_progress)
-    # 4. lateral re-center (CHANGE 3, R40): sidestep onto the dock_y centerline.
-    #    Closes the R39 t2 y=3.18 vs target y=3.0 offset that framed the wrong object.
-    _recenter_lateral(base, dock_xy, dock_hd, on_progress)
+    iters = 0
+    for it in range(max_iters):
+        iters = it + 1
+        # 1. face the target xy so the drive leg goes straight toward it (not orbit).
+        pose = _measure(base)
+        if pose is None:
+            break
+        bearing = math.atan2(dy_goal - pose[1], dx_goal - pose[0])
+        gap = math.hypot(dx_goal - pose[0], dy_goal - pose[1])
+        if gap > pos_deadband:
+            _face_heading(base, bearing, _DOCK_FACE_DEADBAND_RAD, on_progress)
+            # 2. closed-loop steered drive onto the target xy.
+            _drive_to_point(base, dx_goal, dy_goal, pos_deadband, on_progress)
+        # 3. final facing -> dock heading (+X), closed-loop damped.
+        _face_heading(base, dock_hd, _DOCK_FACE_DEADBAND_RAD, on_progress)
+        # 4. lateral re-center onto the dock_y centerline.
+        _recenter_lateral(base, dock_xy, dock_hd, on_progress)
 
-    try:
-        pos = base.get_position()
-        hd = float(base.get_heading())
-        gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
-        face_err = abs(_wrap(dock_hd - hd))
-        converged = gap <= pos_deadband + 0.20 and face_err <= yaw_deadband + math.radians(20)
-        logger.info("[DOCK] final pose ( %.2f, %.2f ) hd=%.2f (target %.2f,%.2f hd=%.2f) "
-                    "gap=%.2fm face=%.0fdeg converged=%s",
-                    pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd,
-                    gap, math.degrees(face_err), converged)
-    except Exception:  # noqa: BLE001
-        pass
-    return True
+        pose = _measure(base)
+        if pose is None:
+            break
+        heading_err, lateral_err, x_err = _errors(pose, dock_xy, dock_hd)
+        within = (
+            heading_err <= heading_tol and lateral_err <= lateral_tol and x_err <= x_band
+        )
+        if on_progress:
+            on_progress(
+                f"dock: iter {iters} pose ({pose[0]:.2f},{pose[1]:.2f}) hd={pose[2]:.2f} "
+                f"errs hd={math.degrees(heading_err):.0f}deg y={lateral_err:.3f}m "
+                f"x={x_err:.3f}m within={within}")
+        logger.info(
+            "[DOCK] iter %d pose ( %.2f, %.2f ) hd=%.2f err hd=%.0fdeg y=%.3fm x=%.3fm within=%s",
+            iters, pose[0], pose[1], pose[2], math.degrees(heading_err),
+            lateral_err, x_err, within)
+        if within:
+            break
+
+    converged = (
+        pose is not None
+        and heading_err <= heading_tol
+        and lateral_err <= lateral_tol
+        and x_err <= x_band
+    )
+    logger.info(
+        "[DOCK] FINAL converged=%s after %d iter(s) err hd=%.0fdeg y=%.3fm x=%.3fm",
+        converged, iters, math.degrees(heading_err), lateral_err, x_err)
+    return DockResult(
+        ran=True, converged=bool(converged), final_pose=pose,
+        heading_err=heading_err, lateral_err=lateral_err, x_err=x_err, iterations=iters,
+    )
 
 
 def _drive_to_point(base: Any, dx_goal: float, dy_goal: float,
-                    pos_deadband: float, max_steps: int, on_progress: Any) -> None:
+                    pos_deadband: float, on_progress: Any) -> None:
     """Closed-loop steered drive to (dx_goal, dy_goal): short combined vx+vyaw steps."""
-    for step in range(max_steps):
-        try:
-            pos = base.get_position()
-            hd = float(base.get_heading())
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("[DOCK] pose read failed mid-drive (%s)", exc)
+    for step in range(_DOCK_DRIVE_MAX_STEPS):
+        pose = _measure(base)
+        if pose is None:
             return
-        gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
+        gap = math.hypot(dx_goal - pose[0], dy_goal - pose[1])
         if gap <= pos_deadband:
-            logger.info("[DOCK] reached dock point step=%d gap=%.2fm", step, gap)
+            logger.debug("[DOCK] reached dock point step=%d gap=%.2fm", step, gap)
             return
-        bearing = math.atan2(dy_goal - pos[1], dx_goal - pos[0])
-        yaw_err = _wrap(bearing - hd)
+        bearing = math.atan2(dy_goal - pose[1], dx_goal - pose[0])
+        yaw_err = _wrap(bearing - pose[2])
         vyaw = max(-_DOCK_STEP_VYAW_MAX,
                    min(_DOCK_STEP_VYAW_MAX, yaw_err * _DOCK_STEP_VYAW_GAIN))
         if abs(yaw_err) >= _DOCK_BIG_YAW_RAD:
-            # Badly mis-headed: TURN IN PLACE (vx=0). Creeping here makes the dog
-            # orbit a nearby point it isn't facing instead of reaching it.
+            # Badly mis-headed: TURN IN PLACE (vx=0). Creeping here makes the dog orbit
+            # a nearby point it isn't facing instead of reaching it.
             vx = 0.0
             dur = min(_DOCK_STEP_MAX_S,
                       max(_DOCK_STEP_MIN_S, abs(yaw_err) / _DOCK_STEP_VYAW_MAX))
@@ -245,19 +359,18 @@ def _drive_to_point(base: Any, dx_goal: float, dy_goal: float,
         _safe_walk(base, vx=vx, vyaw=vyaw, duration=dur)
 
 
-def _face_heading(base: Any, dock_hd: float, yaw_deadband: float,
+def _face_heading(base: Any, target_hd: float, yaw_deadband: float,
                   on_progress: Any) -> None:
-    """Closed-loop turn-in-place to ``dock_hd``: damped residual increments.
+    """Closed-loop turn-in-place to ``target_hd``: damped residual increments.
 
     A single open-loop turn overshoots (the gait keeps yawing past the command), so
     turn a damped fraction of the live residual each step until within the deadband.
     """
     for _ in range(_DOCK_FACE_MAX_STEPS):
-        try:
-            hd = float(base.get_heading())
-        except Exception:  # noqa: BLE001
+        pose = _measure(base)
+        if pose is None:
             return
-        face_err = _wrap(dock_hd - hd)
+        face_err = _wrap(target_hd - pose[2])
         if abs(face_err) <= yaw_deadband:
             return
         turn = face_err * _DOCK_FACE_GAIN
@@ -276,38 +389,28 @@ def _recenter_lateral(
 ) -> None:
     """Sidestep (body-frame vy) to re-center the dog's y on the dock_y centerline.
 
-    CHANGE 3 (R40). After _face_heading the dog's lateral (perpendicular-to-heading)
-    offset from dock_y can still be ~0.15-0.20 m — enough to frame a neighbouring
-    object at 22 cm inter-can spacing (R39 t2: y=3.18 vs target 3.0). A short
-    closed-loop vy-only step closes it. World-agnostic, world-frame y is compared
-    against dock_y after projecting the offset perpendicular to dock_heading, so it
-    works at any dock heading.
-
-    Benign no-op: a dog already within _DOCK_LATERAL_DEADBAND_M of the centerline
-    issues no walk. Errors are swallowed via _safe_walk so a base glitch cannot
-    abort the dock.
+    Closes the perpendicular-to-heading offset from the dock centerline (R39 t2:
+    y=3.18 vs target 3.0 framed the wrong object at 22 cm inter-can spacing). The
+    world-y offset is projected perpendicular to the dock heading, so this is correct
+    at any dock heading. Benign no-op when already within the deadband; errors are
+    swallowed via _safe_walk so a base glitch cannot abort the dock.
     """
     dock_y = float(dock_xy[1])
     for _ in range(_DOCK_LATERAL_MAX_STEPS):
-        try:
-            pos = base.get_position()
-            hd = float(base.get_heading())
-        except Exception:  # noqa: BLE001
+        pose = _measure(base)
+        if pose is None:
             return
-        # Perpendicular (lateral) distance in the body frame: project the world-y
-        # offset onto the body's lateral axis (-sin(hd)*dx + cos(hd)*dy).
-        # For a dock facing +X (hd≈0) this collapses to dy = dock_y - pos[1].
-        dx = float(dock_xy[0]) - float(pos[0])
-        dy = dock_y - float(pos[1])
-        lateral = -dx * math.sin(hd) + dy * math.cos(hd)
+        dx = float(dock_xy[0]) - pose[0]
+        dy = dock_y - pose[1]
+        lateral = -dx * math.sin(pose[2]) + dy * math.cos(pose[2])
         if abs(lateral) <= _DOCK_LATERAL_DEADBAND_M:
             return  # already on centerline — benign no-op
         vy = _DOCK_LATERAL_VY if lateral > 0 else -_DOCK_LATERAL_VY
         dur = min(1.0, abs(lateral) / _DOCK_LATERAL_VY)
         if on_progress:
             on_progress(f"dock: lateral re-center {lateral:.3f}m (vy={vy:.2f})")
-        logger.info("[DOCK] lateral re-center lateral=%.3fm vy=%.2f dur=%.2fs",
-                    lateral, vy, dur)
+        logger.debug("[DOCK] lateral re-center lateral=%.3fm vy=%.2f dur=%.2fs",
+                     lateral, vy, dur)
         _safe_walk(base, vx=0.0, vy=vy, vyaw=0.0, duration=dur)
 
 

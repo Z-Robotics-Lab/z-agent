@@ -30,13 +30,14 @@ string, it never imports/evaluates the oracle or feeds the centroid into it.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
 from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
-from vector_os_nano.skills.utils.terminal_dock import terminal_dock
+from vector_os_nano.skills.utils.terminal_dock import dock_converged, terminal_dock
 
 logger = logging.getLogger(__name__)
 
@@ -549,14 +550,39 @@ class PerceptionGraspSkill:
         # THEN re-posed can-relative off a mislocalized point). Benign no-op on the
         # scripted-from-spawn path (no dock_pose passed → D34-D51 preserved). Uses
         # only the base's walk/get_position/get_heading surface (world-agnostic).
+        # R40 POSE-VERIFICATION GATE (D54): the dock is now a CLOSED-LOOP controller
+        # that returns a DockResult. We perceive/grasp ONLY when the dock CONVERGED to
+        # the proven head-on pose (heading within ±12° of +X, |y - centerline| < 8 cm,
+        # x in the perceive band). If it RAN but did NOT converge, ABORT the grasp
+        # cleanly ("dock_not_converged") — NEVER perceive from a bad pose. This converts
+        # the R39 t3 bad-dock (heading 86°, x back from the table) into an HONEST RAN
+        # instead of a spurious/garbage grasp. A dock that did not run (no base surface)
+        # is the scripted-from-spawn path and proceeds unchanged (no regression).
         dock_pose = self._resolve_dock_pose(params)
         if dock_pose is not None and context.base is not None:
             logger.info("[PGRASP] terminal dock to FIXED proven pose %s before perceive",
                         dock_pose)
-            terminal_dock(
+            dock = terminal_dock(
                 context.base, (dock_pose[0], dock_pose[1]), dock_pose[2],
                 on_progress=lambda m: logger.info("[PGRASP] %s", m),
             )
+            if dock.ran and not dock_converged(dock):
+                logger.warning(
+                    "[PGRASP] dock did NOT converge (hd_err=%.0f° y_err=%.3fm x_err=%.3fm "
+                    "after %d iters) — ABORT grasp (dock_not_converged), do NOT perceive "
+                    "from a bad pose",
+                    math.degrees(dock.heading_err), dock.lateral_err,
+                    dock.x_err, dock.iterations)
+                return _fail(
+                    "dock_not_converged",
+                    "Terminal dock did not converge to the proven head-on grasp pose "
+                    f"(heading_err={dock.heading_err:.3f}rad, lateral_err={dock.lateral_err:.3f}m, "
+                    f"x_err={dock.x_err:.3f}m after {dock.iterations} iterations). "
+                    "Aborting the grasp rather than perceiving/grasping from a bad pose — "
+                    "the camera would not frame the object. Honest RAN, not a false grasp.",
+                    dock_pose=list(dock_pose),
+                    dock_final_pose=list(dock.final_pose) if dock.final_pose else None,
+                )
 
         # --- stow the arm OUT of the camera FOV before perceiving (the arm at rest
         # occludes the forward head camera and corrupts the front-object mask) -----
@@ -644,7 +670,6 @@ class PerceptionGraspSkill:
         # so we do not drive into the table) AND the lateral error (vy toward the
         # object y-line, body-frame via heading).
         if base is not None and approached:
-            import math
             for _n in range(_POST_APPROACH_NUDGE_N):
                 if arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is not None:
                     break
