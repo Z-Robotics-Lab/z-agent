@@ -60,20 +60,21 @@ _DOCK_BIG_YAW_RAD = 0.5        # above this bearing error, creep slowly (turn fi
 _DOCK_CREEP_FACTOR = 0.25      # vx multiplier while badly mis-headed
 # Max steered steps to converge onto the dock point (each ~6-15 cm of progress).
 _DOCK_MAX_STEPS = 30
-# Final facing turn (face the cans): CLOSED-LOOP turn-in-place to the dock heading.
-# A single open-loop turn overshoots badly — the gait curves and keeps yawing past
-# the command (real-sim: a "face -144deg" command landed ~108 deg the wrong side).
-# So turn in short, re-measured increments: each iteration re-reads the live heading
-# and turns the RESIDUAL error (a fraction of it, capped) until within the deadband.
-_DOCK_FACE_VYAW = 0.6          # rad/s turn-in-place (gentle — less overshoot)
-_DOCK_FACE_GAIN = 0.6          # turn only this fraction of the residual per step
-_DOCK_FACE_MAX_S = 1.2         # cap a single facing-turn increment
-_DOCK_FACE_MAX_STEPS = 8       # iterations to converge the heading
-# A pure-yaw turn-in-place still DRIFTS the dog forward (the gait curves), so the
-# facing turn pushes the dog off the dock point (real-sim: facing drifted x 10.0→
-# 10.55, too close to the table → the d435 looks OVER the cans). So alternate:
-# drive to the point, then face, then RE-CHECK both and repeat until BOTH converge.
-_DOCK_OUTER_ITERS = 4
+# PRE-DOCK STRAIGHT-IN approach (the heading-without-a-facing-turn trick). A pure-yaw
+# turn-in-place to the dock heading DRIFTS the dog forward (the gait curves), and
+# alternating drive+face just thrashes (real-sim: oscillated, never converged). So
+# instead of turning in place at the dock point, APPROACH the dock point along the
+# dock heading: first drive to a PRE-DOCK point ``_DOCK_APPROACH_BACK`` metres BEHIND
+# the dock (opposite the dock heading), then drive STRAIGHT IN along +dock_heading to
+# the dock point. The steered drive aligns the dog's heading to its bearing each step,
+# so a straight-in leg ends the dog FACING the dock heading naturally — no separate
+# facing turn, no drift. The dog ends at the dock point facing the cans.
+_DOCK_APPROACH_BACK = 0.6      # m behind the dock to stage the straight-in leg
+# A small final facing nudge only (residual after the straight-in, usually tiny).
+_DOCK_FACE_VYAW = 0.5          # rad/s turn-in-place
+_DOCK_FACE_GAIN = 0.6          # damp the residual to avoid overshoot
+_DOCK_FACE_MAX_S = 1.0
+_DOCK_FACE_MAX_STEPS = 4
 
 
 def _wrap(a: float) -> float:
@@ -142,39 +143,46 @@ def terminal_dock(
         logger.debug("[DOCK] no live pose/heading (%s) — skip dock", exc)
         return False
 
+    # Already at the dock pose (scripted-from-spawn path)? Benign no-op.
+    gap0 = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
+    face0 = abs(_wrap(dock_hd - hd))
+    if gap0 <= pos_deadband and face0 <= yaw_deadband:
+        logger.info("[DOCK] already docked (gap=%.2fm face=%.0fdeg) — no-op",
+                    gap0, math.degrees(face0))
+        return True
+
+    # PRE-DOCK point: _DOCK_APPROACH_BACK metres BEHIND the dock, opposite the dock
+    # heading. Driving from here STRAIGHT IN (+dock_heading) ends the dog facing the
+    # dock heading naturally (the steered drive aligns heading to bearing) — no
+    # separate facing turn that would drift the position.
+    pre_x = dx_goal - _DOCK_APPROACH_BACK * math.cos(dock_hd)
+    pre_y = dy_goal - _DOCK_APPROACH_BACK * math.sin(dock_hd)
+
     if on_progress:
         on_progress(
-            f"dock: from ({pos[0]:.2f},{pos[1]:.2f}) hd={hd:.2f} "
-            f"-> ({dx_goal:.2f},{dy_goal:.2f}) hd={dock_hd:.2f}")
+            f"dock: from ({pos[0]:.2f},{pos[1]:.2f}) hd={hd:.2f} -> pre-dock "
+            f"({pre_x:.2f},{pre_y:.2f}) -> dock ({dx_goal:.2f},{dy_goal:.2f}) hd={dock_hd:.2f}")
     logger.info(
-        "[DOCK] steered drive ( %.2f, %.2f ) hd=%.2f -> dock ( %.2f, %.2f ) hd=%.2f",
-        pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd)
+        "[DOCK] ( %.2f, %.2f ) hd=%.2f -> pre-dock ( %.2f, %.2f ) -> dock ( %.2f, %.2f ) hd=%.2f",
+        pos[0], pos[1], hd, pre_x, pre_y, dx_goal, dy_goal, dock_hd)
 
-    # --- alternate drive-to-point + face-heading until BOTH converge ---------
-    # A pure-yaw facing turn drifts the dog forward off the dock point, so a single
-    # drive-then-face is not enough — face, then re-drive to undo the drift, repeat.
-    converged = False
-    for outer in range(_DOCK_OUTER_ITERS):
-        _drive_to_point(base, dx_goal, dy_goal, pos_deadband, max_steps, on_progress)
-        _face_heading(base, dock_hd, yaw_deadband, on_progress)
-        try:
-            pos = base.get_position()
-            hd = float(base.get_heading())
-        except Exception:  # noqa: BLE001
-            return True
-        gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
-        face_err = abs(_wrap(dock_hd - hd))
-        logger.info("[DOCK] outer %d: gap=%.2fm face_err=%.0fdeg",
-                    outer, gap, math.degrees(face_err))
-        if gap <= pos_deadband and face_err <= yaw_deadband:
-            converged = True
-            break
+    # 1. drive to the pre-dock point (any heading) ...
+    _drive_to_point(base, pre_x, pre_y, pos_deadband, max_steps, on_progress)
+    # 2. ... then drive STRAIGHT IN to the dock point — ends facing the dock heading.
+    _drive_to_point(base, dx_goal, dy_goal, pos_deadband, max_steps, on_progress)
+    # 3. tiny final facing nudge for any residual heading error after the straight-in.
+    _face_heading(base, dock_hd, yaw_deadband, on_progress)
 
     try:
         pos = base.get_position()
         hd = float(base.get_heading())
-        logger.info("[DOCK] final pose ( %.2f, %.2f ) hd=%.2f (target %.2f,%.2f hd=%.2f) converged=%s",
-                    pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd, converged)
+        gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
+        face_err = abs(_wrap(dock_hd - hd))
+        converged = gap <= pos_deadband + 0.20 and face_err <= yaw_deadband + math.radians(20)
+        logger.info("[DOCK] final pose ( %.2f, %.2f ) hd=%.2f (target %.2f,%.2f hd=%.2f) "
+                    "gap=%.2fm face=%.0fdeg converged=%s",
+                    pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd,
+                    gap, math.degrees(face_err), converged)
     except Exception:  # noqa: BLE001
         pass
     return True
