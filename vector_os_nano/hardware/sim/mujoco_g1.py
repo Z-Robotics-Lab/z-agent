@@ -1,16 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""MuJoCo-based simulated Unitree G1 humanoid — R2 floor.
+"""MuJoCo-based simulated Unitree G1 humanoid — R8 floor.
 
-R2 scope: WALK via the 12-DOF RL policy (motion.pt) in the go2 apartment room,
-plus sensors (lidar, head camera). The robot is the matched pair:
-  g1_12dof.xml + motion.pt  — proven to walk by the lead's spike (forward-0.5
-  cmd → 2.70 m in 6 s, base z 0.765-0.791, no fall).
+R8 scope: obstacle-aware navigate_to via visibility-graph planner (g1_vgraph),
+routing AROUND pick_table, walls, and furniture instead of straight-lining
+into them.  R2 scope retained: WALK via the 12-DOF RL policy (motion.pt) in
+the go2 apartment room, plus sensors (lidar, head camera).
 
 Architecture:
   _build_g1_room_scene_xml() — MjSpec attach of g1_12dof model into the go2
                                room scene (mirrors R1 approach, swaps robot).
+  obstacles_from_model()     — enumerates routing polygons from the compiled
+                               go2_room scene (group=3 furniture proxies +
+                               walls + pick_table, excluding g1_* robot,
+                               freejoint pickables, floor/ceiling).
   MuJoCoG1                  — loads scene, runs policy gait, exposes:
                                 walk(), navigate_to(), set_velocity(), stop(),
                                 get_base_height(), get_heading(),
@@ -116,6 +120,22 @@ _NAV_FALL_Z: float = 0.4          # m: pelvis below this = fallen
 _NAV_TIMEOUT_S: float = 30.0      # max seconds before timeout
 
 # ---------------------------------------------------------------------------
+# Obstacle-avoidance constants (R8)
+# ---------------------------------------------------------------------------
+
+# G1 is ~0.27 m wide; 0.30 m inflation is conservative (clears furniture
+# corners by the gait's natural COM oscillation margin).
+_G1_BODY_RADIUS: float = 0.30
+
+# Waypoint capture tolerance for intermediate waypoints (looser than goal
+# tolerance so the gait passes through without stalling).
+_NAV_WP_CAPTURE: float = 0.40
+
+# Obstacle filter thresholds
+_OBS_MIN_Z_TOP: float = 0.10   # m: geom top-z must exceed this (skip flat rugs)
+_OBS_MAX_HALF_EXTENT: float = 9.0  # m: skip room-spanning slabs
+
+# ---------------------------------------------------------------------------
 # Lazy mujoco / torch imports
 # ---------------------------------------------------------------------------
 
@@ -137,6 +157,126 @@ def _get_torch() -> Any:
         import torch  # noqa: PLC0415
         _torch = torch
     return _torch
+
+
+# ---------------------------------------------------------------------------
+# Obstacle extractor for the live go2-room g1 scene (R8)
+# ---------------------------------------------------------------------------
+
+# Names to skip unconditionally (floor, ceiling, visual-only art/rugs)
+_SKIP_NAME_PREFIXES: tuple[str, ...] = (
+    "floor", "ceiling", "ground", "art_", "rug_",
+    "bb_",   # baseboards — thin, flat, visual only
+    "df_",   # door frames — thin, visual only
+)
+
+
+def _should_skip_by_name(geom_name: str, body_name: str) -> bool:
+    """Return True if this geom/body should be skipped unconditionally."""
+    for pfx in _SKIP_NAME_PREFIXES:
+        if geom_name.startswith(pfx) or body_name.startswith(pfx):
+            return True
+    return False
+
+
+def obstacles_from_model(
+    model: Any,
+    data: Any,
+    robot_geom_ids: "set[int] | None" = None,
+) -> "list[list[tuple[float, float]]]":
+    """Enumerate routing polygons from the compiled go2-room+g1 scene.
+
+    Caller MUST call mj_forward(model, data) before invoking this function
+    so that geom_xpos / geom_xmat reflect the current physics state.
+
+    Inclusion rules (all must hold):
+      - geom type is BOX or CYLINDER
+      - geom contype > 0 (participates in collision)
+      - body is NOT a g1_* robot body (use robot_geom_ids or g1_ prefix)
+      - body has no freejoint (skip pickable bottles/cans)
+      - geom/body name does NOT start with a skip prefix (floor, ceiling, art_, rug_, bb_, df_)
+      - half-extents < _OBS_MAX_HALF_EXTENT (skip room-spanning slabs)
+      - geom world-z top > _OBS_MIN_Z_TOP (skip flat rugs/mats at floor level)
+
+    Returns list of convex polygons [(x, y), ...] in world frame.
+    """
+    mj = _get_mujoco()
+    from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
+
+    geom_box = int(mj.mjtGeom.mjGEOM_BOX)
+    geom_cyl = int(mj.mjtGeom.mjGEOM_CYLINDER)
+    jnt_free = int(mj.mjtJoint.mjJNT_FREE)
+    obj_body = int(mj.mjtObj.mjOBJ_BODY)
+
+    polys: list[list[tuple[float, float]]] = []
+    n_included = 0
+
+    for gid in range(int(model.ngeom)):
+        try:
+            gtype = int(model.geom_type[gid])
+            if gtype not in (geom_box, geom_cyl):
+                continue
+
+            # Skip if robot geom (by precomputed set or g1_ name prefix)
+            if robot_geom_ids is not None and gid in robot_geom_ids:
+                continue
+
+            bid = int(model.geom_bodyid[gid])
+            body_name: str = mj.mj_id2name(model, obj_body, bid) or ""
+            if body_name.startswith("g1_"):
+                continue
+
+            # Skip freejoint bodies (pickable bottles/cans)
+            jadr = int(model.body_jntadr[bid])
+            if jadr >= 0 and int(model.jnt_type[jadr]) == jnt_free:
+                continue
+
+            # Skip by name prefix
+            gname: str = mj.mj_id2name(model, mj.mjtObj.mjOBJ_GEOM, gid) or ""
+            if _should_skip_by_name(gname, body_name):
+                continue
+
+            # Must participate in collision (contype > 0)
+            if int(model.geom_contype[gid]) == 0:
+                continue
+
+            # World-frame position (requires forwarded data)
+            cx = float(data.geom_xpos[gid][0])
+            cy = float(data.geom_xpos[gid][1])
+            cz = float(data.geom_xpos[gid][2])
+            size = model.geom_size[gid]
+
+            # Half-extent cap: skip room-spanning SLABS (floor/ceiling) where
+            # BOTH x and y extents are huge. Walls are thin in one dimension
+            # (size[0] or size[1] is tiny) so they pass this test.
+            if float(size[0]) >= _OBS_MAX_HALF_EXTENT and float(size[1]) >= _OBS_MAX_HALF_EXTENT:
+                continue
+
+            # Must have meaningful height above floor (top = cz + size[2] for box,
+            # cz + size[1] for cylinder — size[2] for box, size[1] for cylinder).
+            if gtype == geom_box:
+                z_top = cz + float(size[2])
+            else:
+                z_top = cz + float(size[1])
+            if z_top < _OBS_MIN_Z_TOP:
+                continue
+
+            # Build polygon
+            if gtype == geom_box:
+                xm = data.geom_xmat[gid]
+                yaw = math.atan2(float(xm[3]), float(xm[0]))
+                poly = vg.box_polygon(cx, cy, float(size[0]), float(size[1]), yaw)
+            else:
+                poly = vg.cylinder_polygon(cx, cy, float(size[0]))
+
+            polys.append(poly)
+            n_included += 1
+
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("obstacles_from_model: skipped geom %d — %s", gid, exc)
+
+    logger.debug("obstacles_from_model: %d polygons enumerated", n_included)
+    return polys
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +491,8 @@ class MuJoCoG1:
         # Sensor cache
         self._last_scan: Any = None
         self._last_pointcloud: list[tuple[float, float, float, float]] = []
+        # Navigation plan cache (R8) — trajectory logging only
+        self._last_nav_plan: list[tuple[float, float]] | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -539,6 +681,84 @@ class MuJoCoG1:
             self._step_batch()
         self.stop()
 
+    # ------------------------------------------------------------------
+    # Obstacle-aware navigation helpers (R8)
+    # ------------------------------------------------------------------
+
+    def _walk_to_waypoint(
+        self,
+        wx: float,
+        wy: float,
+        tol: float,
+        ticks_remaining: int,
+        speed: float,
+        qa: int,
+        start_x: float,
+        start_y: float,
+        prev_xy: "list[float]",
+        path_len_acc: "list[float]",
+    ) -> "tuple[str, list[float]]":
+        """Step toward waypoint (wx, wy) until arrival, fall, or tick budget exhausted.
+
+        Mutates ``prev_xy`` and ``path_len_acc`` in place so the caller can
+        accumulate odometry across multiple waypoints.
+
+        Returns (status, [cx, cy, cz]) where status is one of:
+          "arrived"  — within tol of (wx, wy)
+          "fell"     — pelvis z below _NAV_FALL_Z
+          "timeout"  — ticks_remaining exhausted before arrival
+        """
+        _TICK_BATCHES = 5
+        ticks_done = 0
+
+        while ticks_done < ticks_remaining:
+            cx = float(self._data.qpos[qa])
+            cy = float(self._data.qpos[qa + 1])
+            cz = float(self._data.qpos[qa + 2])
+
+            # Accumulate odometry
+            step_m = math.hypot(cx - prev_xy[0], cy - prev_xy[1])
+            path_len_acc[0] += step_m
+            prev_xy[0], prev_xy[1] = cx, cy
+
+            if cz < _NAV_FALL_Z:
+                self.stop()
+                return "fell", [cx, cy, cz]
+
+            dx = wx - cx
+            dy = wy - cy
+            dist = math.hypot(dx, dy)
+            if dist < tol:
+                return "arrived", [cx, cy, cz]
+
+            desired_heading = math.atan2(dy, dx)
+            current_heading = self.get_heading()
+            yaw_err = desired_heading - current_heading
+            while yaw_err > math.pi:
+                yaw_err -= 2.0 * math.pi
+            while yaw_err < -math.pi:
+                yaw_err += 2.0 * math.pi
+
+            if abs(yaw_err) > _NAV_FACE_TOL and dist > _NAV_CAPTURE_R:
+                vyaw = float(max(-_NAV_VYAW_MAX, min(_NAV_VYAW_MAX, _NAV_K_YAW * yaw_err)))
+                self.set_velocity(0.0, 0.0, vyaw)
+            else:
+                if abs(yaw_err) < _NAV_YAW_DEADBAND or dist < _NAV_CAPTURE_R:
+                    vyaw = 0.0
+                else:
+                    vyaw = float(max(-_NAV_VYAW_MAX, min(_NAV_VYAW_MAX, _NAV_K_YAW * yaw_err)))
+                self.set_velocity(float(speed), 0.0, vyaw)
+
+            for _ in range(_TICK_BATCHES):
+                self._step_batch()
+            ticks_done += 1
+
+        # tick budget exhausted
+        cx = float(self._data.qpos[qa])
+        cy = float(self._data.qpos[qa + 1])
+        cz = float(self._data.qpos[qa + 2])
+        return "timeout", [cx, cy, cz]
+
     def navigate_to(
         self,
         x: float,
@@ -548,101 +768,137 @@ class MuJoCoG1:
         timeout: float | None = None,
         **_ignored: Any,
     ) -> "_G1NavResult":
-        """Walk to world position (x, y); honors the base navigate_to contract.
+        """Walk to world position (x, y) with obstacle avoidance (R8).
 
-        ``bool(result)`` is ``True`` only on arrival.  ``timeout=None`` uses
-        ``_NAV_TIMEOUT_S``.  Extra kwargs (e.g. ``on_progress``) are ignored for
-        call-shape compatibility with go2.  Returns :class:`_G1NavResult` (dict
-        subclass) with keys: reached, moved_m, net_m, pos, reason.
+        Uses the visibility-graph planner (g1_vgraph) to plan a path around
+        furniture, walls, and pick_table.  ``bool(result)`` is ``True`` only on
+        arrival.  ``timeout=None`` uses ``_NAV_TIMEOUT_S``.  Extra kwargs are
+        ignored for call-shape compatibility with go2.
+
+        Returns :class:`_G1NavResult` (dict subclass) with keys:
+          reached, moved_m, net_m, pos, reason.
+
+        ``reason`` values:
+          "arrived"     — reached goal within tol
+          "fell"        — pelvis z dropped below _NAV_FALL_Z
+          "timeout"     — tick budget exhausted before arrival
+          "unreachable" — planner returned (None, inf) — goal inside obstacle
+                          or completely boxed in; does NOT fall back to
+                          straight-line (fail-loud per spec).
         """
+        from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
+
         self._require_connection()
         tol = max(tol, _NAV_TOL_FLOOR)
 
-        # Track odometry
         off = self._offsets
         assert off is not None
         qa = off.pelvis_qpos_adr
+
+        # ---- Step 1: plan the path ----------------------------------------
+        mj = _get_mujoco()
+        mj.mj_forward(self._model, self._data)
+
         start_x = float(self._data.qpos[qa])
         start_y = float(self._data.qpos[qa + 1])
-        prev_x, prev_y = start_x, start_y
-        path_len: float = 0.0
+        start = (start_x, start_y)
+        goal = (float(x), float(y))
 
-        # Each tick = 5 policy batches ≈ 0.1 s
+        obstacles = obstacles_from_model(
+            self._model, self._data, robot_geom_ids=off.robot_geom_ids
+        )
+        waypoints, plan_length = vg.plan_path(start, goal, obstacles, _G1_BODY_RADIUS)
+
+        # Store for trajectory logging (not read by any verify oracle)
+        self._last_nav_plan = list(waypoints) if waypoints is not None else None
+
+        if waypoints is None:
+            cz = float(self._data.qpos[qa + 2])
+            logger.warning(
+                "navigate_to(%s, %s): UNREACHABLE — planner returned None "
+                "(goal inside inflated obstacle or boxed-in); NOT falling back "
+                "to straight-line.  n_obstacles=%d",
+                x, y, len(obstacles),
+            )
+            return _G1NavResult({
+                "reached": False,
+                "moved_m": 0.0,
+                "net_m": 0.0,
+                "pos": [start_x, start_y, cz],
+                "reason": "unreachable",
+            })
+
+        logger.debug(
+            "navigate_to(%s, %s): plan has %d waypoints, geodesic=%.2f m, "
+            "n_obstacles=%d",
+            x, y, len(waypoints), plan_length, len(obstacles),
+        )
+
+        # ---- Step 2: walk the waypoint chain --------------------------------
         _TICK_BATCHES = 5
         tick_s = _TICK_BATCHES * _SIM_DT * _DECIMATION
         eff_timeout = float(timeout) if timeout is not None else _NAV_TIMEOUT_S
-        max_ticks = int(eff_timeout / tick_s) + 1
+        total_ticks = int(eff_timeout / tick_s) + 1
 
-        for _tick in range(max_ticks):
-            # Read current state
-            cx = float(self._data.qpos[qa])
-            cy = float(self._data.qpos[qa + 1])
-            cz = float(self._data.qpos[qa + 2])
+        prev_xy: list[float] = [start_x, start_y]
+        path_len_acc: list[float] = [0.0]
+        ticks_used = 0
 
-            # Accumulate path length
-            step_m = math.hypot(cx - prev_x, cy - prev_y)
-            path_len += step_m
-            prev_x, prev_y = cx, cy
+        # Walk intermediate waypoints (skip index 0 = start)
+        for wp_idx in range(1, len(waypoints)):
+            wp = waypoints[wp_idx]
+            is_final = wp_idx == len(waypoints) - 1
+            wp_tol = tol if is_final else max(_NAV_TOL_FLOOR, _NAV_WP_CAPTURE)
+            budget = total_ticks - ticks_used
+            if budget <= 0:
+                break
 
-            # Fall detection
-            if cz < _NAV_FALL_Z:
-                self.stop()
-                net_m = math.hypot(cx - start_x, cy - start_y)
+            status, pos3 = self._walk_to_waypoint(
+                wx=wp[0], wy=wp[1],
+                tol=wp_tol,
+                ticks_remaining=budget,
+                speed=speed,
+                qa=qa,
+                start_x=start_x,
+                start_y=start_y,
+                prev_xy=prev_xy,
+                path_len_acc=path_len_acc,
+            )
+
+            if status == "fell":
+                net_m = math.hypot(pos3[0] - start_x, pos3[1] - start_y)
                 return _G1NavResult({
                     "reached": False,
-                    "moved_m": float(path_len),
+                    "moved_m": float(path_len_acc[0]),
                     "net_m": float(net_m),
-                    "pos": [cx, cy, cz],
+                    "pos": pos3,
                     "reason": "fell",
                 })
 
-            # Check arrival
-            dx = x - cx
-            dy = y - cy
-            dist = math.hypot(dx, dy)
-            if dist < tol:
+            if status == "timeout":
+                net_m = math.hypot(pos3[0] - start_x, pos3[1] - start_y)
+                return _G1NavResult({
+                    "reached": False,
+                    "moved_m": float(path_len_acc[0]),
+                    "net_m": float(net_m),
+                    "pos": pos3,
+                    "reason": "timeout",
+                })
+
+            # "arrived" at this waypoint — count ticks consumed (approximate)
+            if is_final:
                 self.stop()
+                cx, cy, cz = pos3[0], pos3[1], pos3[2]
                 net_m = math.hypot(cx - start_x, cy - start_y)
                 return _G1NavResult({
                     "reached": True,
-                    "moved_m": float(path_len),
+                    "moved_m": float(path_len_acc[0]),
                     "net_m": float(net_m),
-                    "pos": [cx, cy, cz],
+                    "pos": pos3,
                     "reason": "arrived",
                 })
 
-            # Compute heading error
-            desired_heading = math.atan2(dy, dx)
-            current_heading = self.get_heading()
-            yaw_err = desired_heading - current_heading
-            # Wrap to [-π, π]
-            while yaw_err > math.pi:
-                yaw_err -= 2.0 * math.pi
-            while yaw_err < -math.pi:
-                yaw_err += 2.0 * math.pi
-
-            # Choose control mode
-            if abs(yaw_err) > _NAV_FACE_TOL and dist > _NAV_CAPTURE_R:
-                # Pivot in place to face the goal
-                vyaw = float(
-                    max(-_NAV_VYAW_MAX, min(_NAV_VYAW_MAX, _NAV_K_YAW * yaw_err))
-                )
-                self.set_velocity(0.0, 0.0, vyaw)
-            else:
-                # Walk forward with optional small heading correction
-                if abs(yaw_err) < _NAV_YAW_DEADBAND or dist < _NAV_CAPTURE_R:
-                    vyaw = 0.0
-                else:
-                    vyaw = float(
-                        max(-_NAV_VYAW_MAX, min(_NAV_VYAW_MAX, _NAV_K_YAW * yaw_err))
-                    )
-                self.set_velocity(float(speed), 0.0, vyaw)
-
-            # Advance ~0.1 s
-            for _ in range(_TICK_BATCHES):
-                self._step_batch()
-
-        # Timeout
+        # Should not reach here (final waypoint always "arrived" or returned above)
         self.stop()
         cx = float(self._data.qpos[qa])
         cy = float(self._data.qpos[qa + 1])
@@ -650,7 +906,7 @@ class MuJoCoG1:
         net_m = math.hypot(cx - start_x, cy - start_y)
         return _G1NavResult({
             "reached": False,
-            "moved_m": float(path_len),
+            "moved_m": float(path_len_acc[0]),
             "net_m": float(net_m),
             "pos": [cx, cy, cz],
             "reason": "timeout",
