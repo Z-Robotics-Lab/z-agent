@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-23 · R39 — nav+grasp chain now COMPLETES end-to-end (nav→dock→perceive→approach→grasp→weld→lift) and GROUNDS when perception localizes the right object (GREEN real weld+lift, 2.3cm). 2 real perception fixes landed; remaining blocker = detection-selection reliability at the dock framing (GREEN 1/3, RED 0/3). Spine byte-unchanged across 52 decisions.
+updated: 2026-06-23 · R42 FINAL — nav+grasp BANKED after 6 rounds (D56). Dock convergence FIXED (bridge-verified, R42 d0528aa) + publisher bug was a phantom; chain mechanically complete + perception accurate (2.3cm) + dock converges — but the GRASP still misses (post-dock approach standoff x≈10.41 too far back vs green@10.86 → marginal Piper reach). NOT reliably landed; each round fixed a layer + exposed the next. Per Yusen hard-stop, banked as a documented intermittent demo (one layer from working). NEXT = CEO ship-vs-pivot. Spine byte-unchanged across 56 decisions.
 goal:    agent-orchestration runtime for physical AI — plan · route to the right MODEL/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT THRUST: prove the 3 under-proven North-Star axes (route-to-MODEL ✓ now at the ORCHESTRATION layer · cross-embodiment · live orchestration), using the moat to grade each.
