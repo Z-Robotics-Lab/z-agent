@@ -66,7 +66,6 @@ def _save_png(frame, path: str) -> bool:
 
 def _sensor_snapshot(g1: MuJoCoG1, label: str) -> dict:
     """Capture pose + lidar + camera at the current instant; save the cam PNG."""
-    pos = [g1.get_base_height()]  # placeholder; real pose below
     x, y, z = _base_xyz(g1)
     heading = g1.get_heading()
     scan = g1.get_lidar_scan()
@@ -108,18 +107,23 @@ def _sensor_snapshot(g1: MuJoCoG1, label: str) -> dict:
 
 
 def _base_xyz(g1: MuJoCoG1) -> tuple[float, float, float]:
-    qa = g1._mj.pelvis_qpos_adr  # type: ignore[union-attr]
-    q = g1._mj.data.qpos  # type: ignore[union-attr]
-    return float(q[qa]), float(q[qa + 1]), float(q[qa + 2])
+    p = g1.get_position()
+    return float(p[0]), float(p[1]), float(p[2])
 
 
 # --- target geometry --------------------------------------------------------
-# g1 spawns at (10, 3) facing +x. The pick_table is at ~(10.95, 3.0).
-# Leg 1: ~1.5m ahead (still in open room). Leg 2: toward the table standoff
-# at (10.6, 3.0) — close enough that the table enters lidar/camera range.
+# g1 spawns at (10, 3) facing +x.  The pick_table is at (10.95, 3.0) with its
+# near face at x~=10.80, DIRECTLY blocking the +x path (verified: a straight +x
+# walk stalls against the table at x~=10.73 — the gait churns in place, no fall).
+# So we walk g1 around the room to REACHABLE open points, ending at a table-side
+# standoff so the table enters lidar/camera range as g1 approaches.
+#   Clear space: south wall at y~=0, west doorway at x=6, table blocks +x.
+#   Leg 1: south to (10.0, 1.4) — ~1.6 m of clear floor.
+#   Leg 2: to a table-side standoff (10.45, 2.4) — ends ~0.7 m from the table
+#          corner with the table in the head-camera/lidar field.
 _SPAWN = (10.0, 3.0)
-_LEG1 = (11.5, 3.0)
-_TABLE_STANDOFF = (12.0, 3.0)
+_LEG1 = (10.0, 1.4)
+_TABLE_STANDOFF = (10.45, 2.4)
 _FALL_Z = 0.4
 _N_TRIALS = 2
 

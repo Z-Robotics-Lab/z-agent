@@ -97,6 +97,9 @@ Do NOT use start_simulation for Go2 -- use bash + launch_explore.sh instead.
 For SO-101 arm sim, use start_simulation(sim_type="arm"). This opens a viewer window by
 default. If 主人 says "headless" / "无窗口" / "no window" / "不要窗口", pass gui=false to
 start_simulation to suppress the window.
+For the Unitree G1 humanoid (a switchable embodiment in the apartment room), use
+start_simulation(sim_type="g1") -- e.g. "切换到 g1" / "启动 g1 仿真" / "start g1 sim".
+The G1 stands in the same go2 room and can WALK to a commanded point (policy-driven gait).
 
 Key files in this project:
 - scripts/go2_vnav_bridge.py: path follower, obstacle avoidance, terrain persistence

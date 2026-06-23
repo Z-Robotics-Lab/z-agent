@@ -203,8 +203,13 @@ def _build_g1_room_scene_xml() -> Path:
         room_spec = mj.MjSpec.from_file(room_tmp)
 
         g1_spec = mj.MjSpec.from_file(str(_G1_12DOF_XML))
-        # Set absolute meshdir so mesh files resolve correctly after attach
-        g1_spec.meshdir = str(_G1_MESHES_DIR)
+        # Rewrite mesh file paths to absolute so they survive the to_xml()
+        # round-trip (the compiled scene's meshdir is overridden by the room's
+        # go2 assets meshdir; absolute paths bypass meshdir entirely).
+        for mesh in g1_spec.meshes:
+            if not os.path.isabs(mesh.file):
+                mesh.file = str(_G1_MESHES_DIR / mesh.file)
+        g1_spec.meshdir = ""
 
         # Add head camera to pelvis body (the only body with torso+head geometry
         # in the 12dof model).  Position (0.04, 0, 0.42) from pelvis center puts
@@ -684,6 +689,13 @@ class MuJoCoG1:
         self._require_connection()
         qa = self._offsets.pelvis_qpos_adr  # type: ignore[union-attr]
         return float(self._data.qpos[qa + 2])
+
+    def get_position(self) -> list[float]:
+        """Return pelvis [x, y, z] in world frame (BaseProtocol accessor)."""
+        self._require_connection()
+        qa = self._offsets.pelvis_qpos_adr  # type: ignore[union-attr]
+        q = self._data.qpos
+        return [float(q[qa]), float(q[qa + 1]), float(q[qa + 2])]
 
     def get_heading(self) -> float:
         """Return yaw (radians) from pelvis quaternion (qw, qx, qy, qz)."""

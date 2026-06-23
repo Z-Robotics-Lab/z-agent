@@ -5,42 +5,39 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-23 · G1 R1 LANDED (cross-EMBODIMENT axis) — Unitree G1 stands stably IN the existing go2 apartment room (SAME walls/furniture/pick_table/cans), with a real lidar (360 returns, 15 distinct range buckets 3.0-11.4m, detects walls across the 20×14m apartment, 0 self-hits) and a real head camera (g1_head_rgb, renders the room — door frame + table + can + floor visible, I Read /tmp/r1_g1_cam.png). Built by MIRRORING the proven go2_piper MjSpec.attach pattern (D57): each model loaded as its own spec with absolute mesh paths + meshdir="" → attach g1 into a room-only spec at (10,3) facing +x. _start_g1 registered in sim_tool (in-process; NL-switch=R2). Foreground real-verified (probe scripts/probe_r1_g1_room.py), sim torn down. Commit 65bc6c7 (WIP floor) + docs. Spine vcli/cognitive/ BYTE-UNCHANGED. PRIOR thrust (nav+grasp) BANKED after 6 rounds (D56), intermittent demo, awaiting CEO ship-vs-pivot.
+updated: 2026-06-23 · G1 R2 LANDED + foreground real-verified (D58) — G1 humanoid WALKS to commanded points in the go2 apartment room via a 12-DOF RL policy (motion.pt, 50 Hz) WITHOUT FALLING, and lidar+camera UPDATE while moving. Replaced R1's stand-only 29-DOF menagerie model with the matched pair g1_12dof.xml + motion.pt (the only policy-walkable combo; lead spiked it first: 2.70m in 6s, z 0.765-0.791). VERDICT (probe scripts/probe_r2_g1_walk.py, MUJOCO_GL=egl, torn down): 2/2 trials reached (deterministic=1 real sample), base-z 0.770-0.793 throughout (no fall), net 1.04m/path 2.49m over two legs (pivot+walk, pivot+walk). Sensors change: lidar min 3.0->1.77->2.05m, near-pts(<2m) 194->1021->180; head camera VISIBLY distinct at start (kitchen-through-doorway) / mid (near-blank south wall) / arrival (doorway new angle, red object) — lead Read all 3 PNGs. NL-switch DONE (routing already supported g1; added prompt line; verified "启动 g1 仿真"->tool_use->sim_type=g1->_start_g1). 5/5 unit tests. Commit a7afaf9 (WIP floor). Spine vector_os_nano/vcli/cognitive/ BYTE-UNCHANGED.
 goal:    agent-orchestration runtime for physical AI — plan · route to the right MODEL/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT THRUST: prove the 3 under-proven North-Star axes (route-to-MODEL ✓ now at the ORCHESTRATION layer · cross-embodiment · live orchestration), using the moat to grade each.
 phase:   M3 cross-EMBODIMENT — G1 humanoid added as a 3rd embodiment (alongside go2 / go2+arm), standing in the SAME
          go2 room with working lidar+camera. The cross-embodiment North-Star axis now has its first real 2nd body-class
          beyond the quadruped. (M2 cross-model — learned detector routed-to BY THE PRODUCER, D48-D50 — remains proven.)
-owns:    hardware/sim/mjcf/g1/build_g1.py (g1 model + head camera, absolute meshes), hardware/sim/mjcf/g1/{g1,scene_g1_room}.xml
-         (generated), hardware/sim/mujoco_g1.py (_build_g1_room_scene_xml MjSpec attach + MuJoCoG1: stand-hold PD,
-         mj_ray lidar w/ g1 self-geom filter, g1_head_rgb camera), vcli/tools/sim_tool.py (_start_g1 + "g1" enum),
-         tests/unit/hardware/sim/test_g1_room.py, scripts/probe_r1_g1_room.py.
+owns:    hardware/sim/mujoco_g1.py (R2: 12-DOF gait + room scene + navigate_to + lidar + camera),
+         hardware/sim/mjcf/g1/scene_g1_12dof_room.xml (generated), tests/unit/hardware/sim/test_g1_room.py.
+         R1 artifacts preserved: build_g1.py, g1.xml, scene_g1_room.xml (29-DOF stand scene still on disk).
          (Moat vcli/cognitive/ BYTE-UNCHANGED across 57 decisions; g1 is sim/world-side only — no spine edit.)
-doing:   G1 R1 (cross-EMBODIMENT) — DONE + foreground real-verified. G1 placed in the EXISTING go2 apartment room (NOT a new
-         scene): MjSpec.attach pattern (mirrors hardware/sim/mjcf/go2_piper/build_go2_piper.py) — load room-only spec + g1
-         spec each with absolute mesh paths + meshdir="" (solves the dual-meshdir conflict: room has 95 furniture meshes on
-         go2's meshdir, g1's meshes on menagerie's; one top-level meshdir can't serve both), attach g1 at (10,3) facing +x.
-         g1.xml from mujoco_menagerie/unitree_g1 (it HAS a `stand` keyframe; in-repo g1_29dof.xml does NOT) + a g1_head_rgb
-         camera added on torso_link. MuJoCoG1: stand-hold (menagerie position actuators @ stand ctrl) + mj_ray lidar (g1
-         pelvis bodyexclude + g1 self-geom-id filter) + mj.Renderer camera. VERIFIED (scripts/probe_r1_g1_room.py, foreground,
-         MUJOCO_GL=egl): base-z stable 0.7912 over 2s (STANDS); lidar 360 returns, 15 distinct buckets 3.0-11.4m, 3D points
-         span the full 20×14m apartment (907 pts >6m = far walls), 0 near-zero self-hits; camera renders the room (door frame
-         + pick_table + can + tiled floor, /tmp/r1_g1_cam.png — Read + confirmed, optical axis +x). 4/4 unit tests green.
-         Sim torn down (rosm nuke + pkill mujoco). Spine vcli/cognitive/ BYTE-UNCHANGED (verified). Commit 65bc6c7.
+doing:   G1 R2 — DONE + foreground real-verified (D58). g1 WALKS to commanded points without falling + sensors update
+         while moving + NL-switch wired. 12-DOF g1_12dof.xml + motion.pt policy (only walkable combo) attached into the go2
+         room; single-threaded synchronous gait; absolute mesh paths (dual-meshdir fix, D57 lesson recurred). Combined-scene
+         offsets: pelvis_qpos_adr=21, leg_qpos=28:40, ctrl=0:12 (a _G1Offsets class — the flat-spike's qpos[7:]/qvel[6:]
+         would be WRONG in the room scene). Public API: connect/close/walk/navigate_to/set_velocity/stop/get_position/
+         get_base_height/get_heading/get_lidar_scan/get_camera_frame/get_camera_pose. probe_r2_g1_walk.py is the acceptance.
 
-blocked: none — not a CEO gate (sim asset + in-sim embodiment registration; no new ROS2 interface, no new external dep —
-         menagerie g1 + g1_gait assets + sensors/ already in repo). HONEST shakiness for R2: (1) lidar gets 0 returns on the
-         pick_table — g1 spawns just BEHIND a doorway frame, table is ~3m through the doorway, small + partly occluded at the
-         lidar's elevation rings (the 3.0m min ring is the door frame/near walls, not the table) → R2 should move g1 closer /
-         add a lower ring, OR accept the table is a camera-perception target not a lidar one. (2) Stand is a static PD hold,
-         NOT locomotion — g1 cannot yet WALK in the room. (3) _start_g1 is in-process only; NL embodiment-switch not wired.
-next:    R2 (cross-EMBODIMENT, evolve) — bundle: (a) NL embodiment-switch — "切换到 g1" / "启动 g1" through bare vector-cli
-         routes to _start_g1 (wire the IntentRouter/sim_tool enum end-to-end, demonstrate in the REPL); (b) g1 LOCOMOTION in
-         the room — adapt the recovered G1MuJoCoBase gait (/tmp/recovered_mujoco_g1.py, or git show 62ee0de:...mujoco_g1.py)
-         so g1 walks to a commanded point without falling; (c) verify the lidar/camera while MOVING (scan updates as g1 walks,
-         table comes into lidar range as it approaches). Then a cross-embodiment task graded by the moat: g1 navigates +
-         perceives the room via NL. Recover gait, don't rebuild. Real-verify in the sim + Read a moving render.
+blocked: none — not a CEO gate (sim asset + in-sim locomotion + a prompt-string add; no new ROS2 interface, no new external
+         dep). HONEST shakiness for R3: (1) navigate_to is OPEN-LOOP straight-line — NO obstacle avoidance (the recovered
+         _nav_controller/g1_vgraph were not in HEAD, not recovered). It walks STRAIGHT INTO the table/walls if commanded
+         through them — the probe HAD to route around the pick_table (which blocks +x at x~=10.80) to reachable open points.
+         R3: recover/inline the vgraph obstacle router. (2) Only 1 REAL sample (deterministic, no randomized start) — R3 add
+         randomized spawns for an honest success RATE. (3) Table doesn't enter close LIDAR range at the standoff (it's a camera
+         target here) — R3 approach the table front from the open south side. (4) mujoco_g1.py is 917 lines (>800) — extract
+         the lidar method. (5) Gait tested only on open floor — R3 walk a longer cross-room path over rugs/thresholds. (6) The
+         29-DOF menagerie model is set aside for locomotion (no matched policy) — a 29dof gait needs its own trained policy.
+next:    R3 (cross-EMBODIMENT, evolve) — bundle: (a) g1 OBSTACLE-AWARE navigate_to — recover/inline the vgraph router (or
+         enumerate obstacles + plan around them) so g1 walks to ANY commanded point incl. the pick_table front without
+         colliding/stalling; (b) randomized spawns → honest success RATE (say 3-5 starts); (c) a longer cross-room walk
+         (through the west doorway / over the hall rug) to stress gait on non-flat geometry; (d) then a cross-embodiment TASK
+         graded by the moat: g1 navigates to + PERCEIVES an object via bare vector-cli NL (close the orchestration loop on the
+         humanoid). Real-verify in the sim + Read a moving render every round.
          Gated leaps (CEO queue): re-plan strategy_params-preservation (SPINE — D52), cross-EMBODIMENT (g1), explore
          (TARE), VLN (SysNav), merge→master.
          ALSO record for reproducibility: `.venv` must have `timm` (uv pip install 'timm>=1.0'); EdgeTAM backbone
