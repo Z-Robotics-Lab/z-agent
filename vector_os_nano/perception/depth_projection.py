@@ -168,6 +168,55 @@ def camera_to_world(
     return (world_x, world_y, world_z)
 
 
+def world_to_pixel(
+    world_x: float,
+    world_y: float,
+    world_z: float,
+    intrinsics: CameraIntrinsics,
+    cam_xpos: Any,
+    cam_xmat: Any,
+) -> tuple[float, float, float] | None:
+    """Project a WORLD point onto the camera image plane → (u, v, depth).
+
+    The exact inverse of :func:`camera_to_world` (MuJoCo-pose mode): it takes the
+    EXACT camera world pose (``data.cam_xpos`` / ``data.cam_xmat``) — never an
+    approximation — so the projected pixel is the rigorous geometric image of the
+    world point on this camera.
+
+    Convention (matches ``camera_to_world`` / ``pixel_to_camera``):
+      - MuJoCo ``cam_xmat`` columns are (right, up, -forward) in world frame.
+      - Camera/OpenCV frame: x=right, y=down, z=forward(depth).
+      - Pinhole: ``u = cx + fx * x_cam / z``, ``v = cy + fy * y_cam / z``.
+
+    Args:
+        world_x/y/z: the world point (e.g. a SIM ground-truth body position).
+        intrinsics: the camera intrinsics (``mujoco_intrinsics`` for sim).
+        cam_xpos: (3,) camera world position (``data.cam_xpos[cam_id]``).
+        cam_xmat: (9,) row-major camera rotation (``data.cam_xmat[cam_id]``).
+
+    Returns:
+        ``(u, v, depth_m)`` in pixels + metres, or ``None`` if the point is BEHIND
+        the camera (depth <= 0) — i.e. not imageable. The returned (u, v) is NOT
+        clamped to the frame; the caller decides whether it lies within [0, W)×[0, H).
+    """
+    xmat = np.array(cam_xmat, dtype=np.float64).reshape(3, 3)
+    pos = np.array(cam_xpos, dtype=np.float64)
+    cam_right = xmat[:, 0]
+    cam_up = xmat[:, 1]
+    cam_forward = -xmat[:, 2]
+
+    rel = np.array([world_x, world_y, world_z], dtype=np.float64) - pos
+    z = float(rel @ cam_forward)  # depth along optical axis
+    if z <= 0.0:
+        return None  # behind the camera — not imageable
+    x_right = float(rel @ cam_right)
+    y_up = float(rel @ cam_up)
+    # pixel_to_camera used y_cam = down = -up; invert that here.
+    u = intrinsics.cx + intrinsics.fx * (x_right / z)
+    v = intrinsics.cy + intrinsics.fy * ((-y_up) / z)
+    return (u, v, z)
+
+
 def depth_to_world(
     depth_frame: np.ndarray,
     u: float,

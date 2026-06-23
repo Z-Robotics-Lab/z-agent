@@ -134,16 +134,36 @@ class RobotWorld:
                 "facing": make_facing(agent),
             })
 
-        # R5 CORRECTION: NO camera-no-arm ``detect_objects`` oracle is bound here.
-        # A camera-bearing agent WITHOUT an arm (g1: head camera, no manipulator) has
-        # no INDEPENDENT ground-truth to anchor ``detect_objects`` on — the only thing
-        # available is the LEARNED detector's own stashed output, and grounding the
-        # verify on that is self-certification (see module-level note + D61). So the
-        # g1 detect step grades RAN-honest: the detector runs + localizes (a real,
-        # useful, KEPT read-only action), but the moat does NOT green a self-read —
-        # ``classify_verify_expr`` sees no ``detect_objects`` oracle in this namespace
-        # and returns RAN. The arm path above keeps its GROUND-TRUTH ``detect_objects``
-        # (independent of the means) — that GT anchor remains the moat and is untouched.
+        # R7: the HONEST GROUNDED for a camera-only embodiment (g1: head camera, NO
+        # arm). R5 (D61) correctly REFUSED to bind a camera-no-arm ``detect_objects``
+        # oracle, because the only anchor THEN available was the detector's OWN output
+        # (a self-read → the R4 false green). R7 supplies what was missing: INDEPENDENT
+        # SIM GROUND TRUTH (``base.get_object_positions()`` — physics body xpos, never
+        # passed to the detector) and a SPATIAL-MATCH oracle, ``detection_matches_gt``,
+        # that PROJECTS that GT onto g1's camera and returns True IFF the detector's box
+        # CENTER lands within tol px of the GT projection. The TRUTH is the GT (the
+        # detector cannot author it); the detection is the CLAIM being judged. A wrong
+        # box (wall / wrong object / object out of view) → far from the projection →
+        # False → RAN. This is the GT-backed match the R5 note (above) anticipated as
+        # the legitimate future GROUNDED — NOT a ``len(detect_objects()) > 0`` self-read.
+        #
+        # Bound ONLY for a camera-bearing, ARM-LESS base that exposes GT object
+        # positions (the g1 shape). The go2+arm path already has its GT ``detect_objects``
+        # (above) and grasp weld-causation, so it does not need this; gating on
+        # arm-absence keeps the two paths from double-binding a detect oracle. The frozen
+        # ``vcli/cognitive/`` spine is UNTOUCHED — the model reaches GROUNDED via the
+        # existing state-oracle-vs-constant rule (``detection_matches_gt('red') == True``).
+        if (
+            arm is None
+            and base is not None
+            and _agent_has_camera(agent)
+            and callable(getattr(base, "get_object_positions", None))
+            and callable(getattr(base, "get_camera_pose", None))
+        ):
+            from vector_os_nano.vcli.worlds.g1_perception_oracle import (
+                make_detection_matches_gt,
+            )
+            ns["detection_matches_gt"] = make_detection_matches_gt(agent)
 
         return ns
 

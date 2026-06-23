@@ -207,7 +207,8 @@ class _NativeDetectTool:
         "learned open-vocabulary detector (grounding-dino). Pass the target as 'query' "
         "(e.g. 'red object', 'a red stool', '红色的东西'). Returns bounding box(es) + "
         "label(s) + score(s). This is PERCEPTION only (read-only). After it returns, "
-        "call verify(len(detect_objects()) > 0) to confirm the model localized something."
+        "call the verify expression the tool result tells you to use to confirm the "
+        "model localized the object (the exact verify depends on the embodiment)."
     )
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -225,10 +226,35 @@ class _NativeDetectTool:
         # perception — never a fresh instance, never a second model load.
         self._capability = capability
 
+    @staticmethod
+    def _verify_hint(agent: Any, query: str) -> str:
+        """The verify call the model should make AFTER detect, matched to the live oracle.
+
+        Two honest grades depending on the embodiment's verify namespace:
+          - g1-shape (camera + SIM GT base + NO arm): the GT-backed SPATIAL-MATCH
+            oracle ``detection_matches_gt`` is bound (R7), so the GROUNDED verify is
+            ``detection_matches_gt('<query>') == True`` — True iff the detector's box
+            matches where the INDEPENDENT GT object projects (not a self-read).
+          - go2+arm or anything with a GT ``detect_objects`` oracle: the existing
+            ``len(detect_objects()) > 0`` hint (its GROUND-TRUTH oracle, D62).
+        World-side hint only; the model still AUTHORS the verify and the spine grades it.
+        """
+        arm = getattr(agent, "_arm", None) if agent is not None else None
+        base = getattr(agent, "_base", None) if agent is not None else None
+        if (
+            arm is None
+            and base is not None
+            and callable(getattr(base, "get_object_positions", None))
+            and callable(getattr(base, "get_camera_pose", None))
+        ):
+            return f"verify(detection_matches_gt({query!r}) == True)"
+        return "verify(len(detect_objects()) > 0)"
+
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         query = str((params or {}).get("query", "")).strip()
         if not query:
             return ToolResult(content="detect requires a non-empty 'query'.", is_error=True)
+        hint = self._verify_hint(getattr(context, "agent", None), query)
         try:
             result = self._capability.invoke({"query": query}, context)
         except Exception as exc:  # noqa: BLE001
@@ -252,7 +278,10 @@ class _NativeDetectTool:
         if not getattr(result, "success", False) and not boxes:
             err = getattr(result, "error", "") or "no detections"
             return ToolResult(
-                content=f"detect({query!r}): the detector RAN but localized nothing ({err})."
+                content=(
+                    f"detect({query!r}): the detector RAN but localized nothing ({err}). "
+                    f"Call {hint} to confirm (it will be False — nothing matched the GT)."
+                )
             )
         first = (
             f"label={labels[0]!r} box={[round(float(v), 1) for v in boxes[0]]} "
@@ -263,7 +292,7 @@ class _NativeDetectTool:
         return ToolResult(
             content=(
                 f"detect({query!r}): grounding-dino localized {len(boxes)} object(s); "
-                f"top {first}. Call verify(len(detect_objects()) > 0) to confirm."
+                f"top {first}. Call {hint} to confirm."
             )
         )
 
