@@ -36,6 +36,7 @@ from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
 from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
+from vector_os_nano.skills.utils.terminal_dock import terminal_dock
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +325,16 @@ _REPOSE_TURN_MAX_S = 4.0        # cap a single turn command's duration
 _REPOSE_MOVE_DEADBAND = 0.12    # m
 _REPOSE_MOVE_VX = 0.4           # m/s
 _REPOSE_MOVE_MAX_S = 3.0        # cap a single move command's duration
+# TERMINAL DOCK (R39). After FAR's coarse arrival the dog stands ~0.8 m from the
+# goal at an arbitrary, oblique heading (probe: ~169 deg off) and the d435 frames
+# the floor/wall, so perception mislocalizes the can (R38/D52). The PROVEN colour
+# grasp (D47) GROUNDS when the dog starts HEAD-ON from the room centerline facing
+# the table (the scripted-from-spawn pose). So BEFORE perceiving, dead-reckon to a
+# FIXED proven table-approach pose — NOT can-relative (no chicken-and-egg) — then
+# run the proven colour grasp UNCHANGED. The pose is passed via the ``dock_pose``
+# param (world-agnostic); when absent the dock is a no-op (the scripted-from-spawn
+# path passes nothing, so D34-D51 is preserved byte-for-byte).
+_GRASP_DEFAULT_DOCK_POSE: tuple[float, float, float] | None = None
 # Pre-perceive orientation scan (R38). After a FAR navigate the dog can arrive
 # facing AWAY from the table; a single frame then localizes a far wall, not the
 # can. A PLAUSIBLE grasp target is a near-table object: its planar distance from
@@ -471,6 +482,18 @@ class PerceptionGraspSkill:
                 "consumed in place of re-perceiving (back-projected to 3D)."
             ),
         },
+        "dock_pose": {
+            "type": "array",
+            "required": False,
+            "description": (
+                "Optional [x, y, heading] FIXED proven table-approach pose (world "
+                "frame, heading radians). When present, the dog dead-reckons to it "
+                "BEFORE perceiving (the R39 terminal dock) so the camera frames the "
+                "object from the proven head-on pose. NOT can-relative — bridges a "
+                "coarse FAR arrival to the perceivable, reachable pose. Absent on "
+                "the scripted-from-spawn path (no-op, no regression)."
+            ),
+        },
     }
     preconditions: list[str] = ["gripper_empty"]
     postconditions: list[str] = []
@@ -509,6 +532,24 @@ class PerceptionGraspSkill:
             return _fail(
                 "no_camera",
                 f"Perception backend {type(perception).__name__} lacks RGB-D grasp surface: {missing}",
+            )
+
+        # --- R39 TERMINAL DOCK (before perceiving) ---------------------------
+        # If a FIXED proven table-approach pose is supplied (dock_pose=[x, y, hd]),
+        # dead-reckon the dog to it FIRST — so the d435 frames the object from the
+        # proven head-on pose, not from FAR's oblique coarse arrival. The dock target
+        # is FIXED (NOT can-relative): the dog does not need to perceive the can to
+        # dock, breaking the R38 chicken-and-egg (R38 perceived from the bad pose,
+        # THEN re-posed can-relative off a mislocalized point). Benign no-op on the
+        # scripted-from-spawn path (no dock_pose passed → D34-D51 preserved). Uses
+        # only the base's walk/get_position/get_heading surface (world-agnostic).
+        dock_pose = self._resolve_dock_pose(params)
+        if dock_pose is not None and context.base is not None:
+            logger.info("[PGRASP] terminal dock to FIXED proven pose %s before perceive",
+                        dock_pose)
+            terminal_dock(
+                context.base, (dock_pose[0], dock_pose[1]), dock_pose[2],
+                on_progress=lambda m: logger.info("[PGRASP] %s", m),
             )
 
         # --- stow the arm OUT of the camera FOV before perceiving (the arm at rest
@@ -695,6 +736,28 @@ class PerceptionGraspSkill:
             error_message=res.error_message,
             result_data=rd,
         )
+
+    @staticmethod
+    def _resolve_dock_pose(params: dict) -> tuple[float, float, float] | None:
+        """Extract a FIXED dock pose [x, y, heading] from params, or the default.
+
+        Accepts ``dock_pose=[x, y, heading]`` (heading radians) or
+        ``dock_pose=[x, y]`` (heading defaults to 0.0 = facing +X). Returns
+        ``_GRASP_DEFAULT_DOCK_POSE`` when no dock_pose param is present (None by
+        default → the dock is a no-op, preserving the scripted-from-spawn path).
+        Malformed input → the default (never crashes the grasp).
+        """
+        dp = params.get("dock_pose")
+        if dp is None:
+            return _GRASP_DEFAULT_DOCK_POSE
+        if isinstance(dp, (list, tuple)) and len(dp) >= 2:
+            try:
+                x, y = float(dp[0]), float(dp[1])
+                hd = float(dp[2]) if len(dp) >= 3 else 0.0
+                return (x, y, hd)
+            except (TypeError, ValueError):
+                return _GRASP_DEFAULT_DOCK_POSE
+        return _GRASP_DEFAULT_DOCK_POSE
 
     @staticmethod
     def _resolve_passed_box(params: dict, color: str | None):
