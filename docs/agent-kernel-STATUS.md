@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-22 · R38 — nav+grasp: FAR un-park CONFIRMED (drives the dog to the table 2/2) but end-to-end GROUNDED NOT landed (honest partial, D52); spine byte-unchanged across 52 decisions
+updated: 2026-06-23 · R39 — nav+grasp chain now COMPLETES end-to-end (nav→dock→perceive→approach→grasp→weld→lift) and GROUNDS when perception localizes the right object (GREEN real weld+lift, 2.3cm). 2 real perception fixes landed; remaining blocker = detection-selection reliability at the dock framing (GREEN 1/3, RED 0/3). Spine byte-unchanged across 52 decisions.
 goal:    agent-orchestration runtime for physical AI — plan · route to the right MODEL/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT THRUST: prove the 3 under-proven North-Star axes (route-to-MODEL ✓ now at the ORCHESTRATION layer · cross-embodiment · live orchestration), using the moat to grade each.
@@ -15,29 +15,38 @@ owns:    perception/grounding_dino.py, perception/detector_capability.py (now AG
          perception/go2_grasp_perception.py (detect→gdino), skills/perception_grasp.py (named→detector routing +
          CONSUMES a producer box), worlds/robot.py (register_capabilities binds the agent for the rebind).
          (Moat vcli/cognitive/ BYTE-UNCHANGED across 50 decisions; engine auto-threads the capability — no spine edit.)
-doing:   R38 DONE — HONEST PARTIAL (D52): nav+grasp cross-skill, Yusen-approved FAR un-park. FAR un-park CONFIRMED as a
-         capability: navigate (skills/navigate.py coordinate path → base.navigate_to → FAR) DROVE the dog to the table
-         2/2 (5.7m + 4.2m cross-room via /way_point). BUT end-to-end GROUNDED NOT landed: nav_ran 0/2 (FAR stops at its
-         0.8m arrival_radius > at_position tolerance → at_position(exact) False → failed-verify, NOT clean RAN — corrected
-         the build agent's optimistic "2/2 RAN" via the trace); grasp_GROUNDED 0/2 (from the offset/oblique FAR-arrival
-         pose the d435 frames floor/wall → perception mislocalizes the can: trial1 0.87m off at floor, trial2 0.42m off y
-         → IK unreachable; frame /tmp/r38_probe/trial2_after.png). Chain COMPOSES (2-step navigate→perception_grasp);
-         spine vcli/cognitive/ BYTE-UNCHANGED; NO regression (R37 scripted grasp still GROUNDS). Built (honest WIP,
-         committed 47c6591→ceac9da→cf495b9): coordinate navigate (stops+disarms nav flag on arrival), re-pose seam
-         (_grasp_ready_repose via approach_pose.py) + fail-loud _perceive_with_scan, deleted th=0.0 fallback. 55 tests green.
+doing:   R39 — nav+grasp now COMPLETES end-to-end and GROUNDS the right object intermittently (honest, not a landed
+         headline). ROOT CAUSE found via Debug Protocol (NOT the A/B-probe "off-axis lateral IK" theory): the grasp
+         never grounded because PERCEPTION was silently degraded. Two real, independent fixes (both verified):
+         (1) `timm` — ALREADY declared in pyproject (perception extra) but MISSING from .venv → EdgeTAM failed to LOAD →
+             coarse box-rect mask → depth centroid averaged can+table → z collapsed to ~0.13 → gripper closed below the
+             can → no weld. Synced timm==1.0.27 into .venv (env-sync of a declared dep, NOT a new dependency / not a gate).
+         (2) EdgeTAM scores-shape bug (perception/tracker.py:330): transformers>=5 returns object_score_logits (N,1), so
+             `float(scores[i])` on a (1,)-array raised TypeError → segment() fell back to box-rect EVERY time even with
+             timm present. Flatten scores to 1-D (commit 8f9851e). Verified in isolation: EdgeTAM now returns a real mask.
+         RESULT (real sim, decompose→vgg_execute, retries=0, 3 trials each): GREEN grasp_GROUNDED 1/3 (green t1: real
+         perceive 2.3cm @ y=3.00 z=0.322 → weld + shoulder lift + holding_object('pickable_bottle_green') TRUE); RED 0/3.
+         The chain mechanically completes (FAR→dock converges +X→perceive→_approach_object vy-track→PickTopDown weld→lift).
+         Spine vcli/cognitive/ BYTE-UNCHANGED (verified empty diff 7b220d9..HEAD). Probes: scripts/probe_r39_e2e_green_red.py
+         (acceptance), probe_r39_reperceive_after_seat.py (proved: do NOT re-perceive after approach — close framing looks
+         OVER the table → garbage), probe_r39_debug_floor_vs_cans.py. Artifacts /tmp/r39_e2e/*.png + e2e.json.
 
-blocked: none. KNOWN (spine, do-not-touch): when the grasp flakes (real-pick reach variance) the harness Layer-3
-         re-decompose re-emits the grasp with an EMPTY query (param loss on re-plan) → "Nothing localizable for ''".
-         This lives in vcli/cognitive/ (harness/decompose) — left untouched per the frozen-spine invariant; first-attempt
-         grasp succeeds, so the cold probe re-issues the cold turn up to 3x (each a genuine cold turn) to ride out pick
-         variance, not the empty-query bug. Flag for a future spine round (CEO): re-plan should preserve strategy_params.
-next:    R39 — CLOSE the nav+grasp end-to-end (D52 residuals, NON-cognitive): (a) precise terminal DOCK — after FAR's
-         rough ~0.8m arrival, drive the last leg to the PROVEN head-on grasp standoff on the can's y-line so the d435
-         FRAMES the can AND at_position grades RAN (recreate the scripted-from-spawn pose that GROUNDS); (b) perception-
-         from-arrival framing robustness. Then bare-cli "去桌子那里把红的拿起来" → nav RAN + grasp GROUNDED end-to-end.
-         Other no-gate cross-MODEL: route a 2nd capability KIND (segment); live-LLM producer routing. Gated leaps (CEO,
-         queue): re-plan strategy_params-preservation (SPINE — bit nav too, D52), cross-EMBODIMENT (g1), explore (TARE),
-         VLN (SysNav), merge→master.
+blocked: NOT a CEO gate — a perception-quality round. The remaining miss is DETECTION SELECTION at the dock framing:
+         the 3 pickable objects (blue y=2.78, green 3.00, red 3.22) are only 22cm apart and the dog perceives them ~0.85m
+         away and slightly off-center (the dock leaves a small per-trial pose residual), so grounding-dino's colour
+         grounding intermittently picks a NEIGHBOUR's box and the back-projected z sometimes still lands low (table). Per
+         trial the perceived xy tracks the dog's dock-residual: green t2 grabbed RED's y, red t1 grabbed BLUE's y, etc.
+         KNOWN (spine, do-not-touch): re-plan still drops strategy_params (empty query on retry) — retries pinned to 0.
+next:    R40 — perception RELIABILITY at the dock framing (NON-gated, non-spine), to lift GREEN→~3/3 and land RED honestly:
+         (a) tighten the dock so the perceive pose is repeatable head-on AND closer-but-not-over-table (a fixed perceive
+             standoff where the 3 cans subtend more pixels); (b) constrain detection to the near-table depth band + select
+             the box nearest the commanded colour's expected screen region, reject low-z (table) back-projections FAIL-LOUD;
+             (c) consider a colour-segmentation cross-check (front_object colour resolver) to disambiguate the 3 close cans.
+         Then bare-cli two-turn "启动 go2 带机械臂 → 去桌子那里把绿色的瓶子拿起来" → nav RAN + grasp GROUNDED end-to-end.
+         Gated leaps (CEO queue): re-plan strategy_params-preservation (SPINE — D52), cross-EMBODIMENT (g1), explore
+         (TARE), VLN (SysNav), merge→master.
+         ALSO record for reproducibility: `.venv` must have `timm` (uv pip install 'timm>=1.0'); EdgeTAM backbone
+         repvit_m1.dist_in1k fetches from HF on first load (network needed once, then cached).
          Bare vector-cli + NL = ONLY acceptance; spine only STRICTER; never trust skill.success / sub-agent claims.
 
 
