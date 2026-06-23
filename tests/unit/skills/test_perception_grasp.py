@@ -26,9 +26,19 @@ from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
 
 _W, _H = 64, 48
 _INTR = mujoco_intrinsics(_W, _H, vfov_deg=42.0)
-# A camera pose that puts a 1 m-forward point at a sensible, reachable world spot.
-_CAM_XPOS = np.array([0.5, 0.0, 0.5], dtype=np.float64)
-_CAM_XMAT = np.eye(3, dtype=np.float64).reshape(9)
+# A camera pose that puts a 1 m-forward point at a physically plausible world spot:
+# camera at (9.0, 3.0, 0.8), facing +X (forward). MuJoCo xmat convention:
+#   col0 = cam right = world +y
+#   col1 = cam up    = world -z (vertical)
+#   col2 = cam -fwd  = world -x  (so cam_forward = +x)
+# With depth=1.0 at center pixel this gives world z=0.8 (above the floor),
+# satisfying the _MIN_GRASP_Z guard without any special-casing.
+_CAM_XPOS = np.array([9.0, 3.0, 0.8], dtype=np.float64)
+_CAM_XMAT = np.array([
+    0, 1, 0,    # col0 = cam right = world +y
+    0, 0, -1,   # col1 = cam up   = world -z
+    -1, 0, 0,   # col2 = cam -fwd = world -x (cam forward = +x)
+], dtype=np.float64)
 
 
 def _depth_mask(depth_val: float = 1.0):
@@ -429,3 +439,126 @@ def test_malformed_passed_box_falls_back_to_reperceive():
     assert res.success is True
     assert res.result_data["consumed_bbox"] is False
     assert any(c.startswith("detect") for c in perc.calls)
+
+
+# ===== R40 CHANGE 1: colour+noun query routes to HSV front_object resolver =====
+
+def test_colour_noun_query_routes_to_front_hsv_not_detector():
+    """CHANGE 1 (R40): '绿色的瓶子' has both a colour AND a noun, but colour wins —
+    the skill must use front_object_mask(color='green') NOT detect().
+
+    The D47 HSV resolver had 100% selection among 3 close cans; grounding-dino is
+    intermittent. A colour target disambiguates by hue, reliably.
+    """
+    perc = FrontPerception()
+    arm = FakeArm()
+    res = PerceptionGraspSkill().execute({"query": "绿色的瓶子"}, _ctx(perc, arm=arm))
+    assert res.success is True
+    # HSV resolver was used with the correct colour
+    assert "front:green" in perc.calls, (
+        f"expected front_object_mask(color='green') but got calls: {perc.calls}")
+    # The learned detector was NOT called
+    assert not any(c.startswith("detect") for c in perc.calls), (
+        f"grounding-dino detect was called despite a colour query: {perc.calls}")
+    # Verify label maps to the colour's scene key
+    assert res.result_data["detection_label"] == "pickable_bottle_green"
+
+
+def test_colour_noun_query_red_routes_to_hsv():
+    """A red+noun query ('红色的罐子') also takes the HSV route (not just green)."""
+    perc = FrontPerception()
+    res = PerceptionGraspSkill().execute({"query": "红色的罐子"}, _ctx(perc, arm=FakeArm()))
+    assert res.success is True
+    assert "front:red" in perc.calls
+    assert not any(c.startswith("detect") for c in perc.calls)
+    assert res.result_data["detection_label"] == "pickable_can_red"
+
+
+def test_no_colour_noun_query_still_uses_detector():
+    """A named-no-colour query ('罐子', no colour) still uses the detector route.
+
+    CHANGE 1 must not regress the noun-only -> detector path.
+    """
+    perc = FrontPerception()
+    # FrontPerception has detections=["banana"] by default; "罐子" has no colour
+    res = PerceptionGraspSkill().execute({"query": "罐子"}, _ctx(perc, arm=FakeArm()))
+    # It may succeed or fail, but it MUST have called detect (not front_object_mask)
+    assert any(c.startswith("detect") for c in perc.calls), (
+        f"expected detect for noun-only query but got: {perc.calls}")
+    assert "front:green" not in perc.calls and "front:red" not in perc.calls
+
+
+# ===== R40 CHANGE 2: low-z back-projection guard =====
+
+def test_low_z_grasp_point_fails_loud():
+    """CHANGE 2 (R40): a back-projected grasp_point with z < _MIN_GRASP_Z must
+    FAIL LOUD with diagnosis='low_z_backprojection' and return gp=None.
+
+    Simulated by monkeypatching grasp_point_from_rgbd to return a floor-level z.
+    """
+    import unittest.mock as mock
+    from vector_os_nano.core.types import Pose3D
+    from vector_os_nano.skills.perception_grasp import _MIN_GRASP_Z
+
+    floor_pose = Pose3D(x=10.5, y=3.0, z=0.039)  # the R39 t3 bad value
+    perc = FrontPerception()
+    arm = FakeArm()
+
+    with mock.patch(
+        "vector_os_nano.skills.perception_grasp.grasp_point_from_rgbd",
+        return_value=floor_pose,
+    ):
+        res = PerceptionGraspSkill().execute({"query": "前面的东西"}, _ctx(perc, arm=arm))
+
+    assert res.success is False
+    rd = res.result_data
+    assert rd["diagnosis"] == "low_z_backprojection", (
+        f"expected low_z_backprojection, got {rd['diagnosis']}")
+    assert rd.get("actual_z", 1.0) < _MIN_GRASP_Z
+
+
+def test_normal_z_grasp_point_passes():
+    """A back-projected grasp point with z≈0.32 (real can top) must NOT be rejected."""
+    import unittest.mock as mock
+    from vector_os_nano.core.types import Pose3D
+
+    can_pose = Pose3D(x=10.5, y=3.0, z=0.32)  # typical can top height
+    perc = FrontPerception()
+    arm = FakeArm()
+
+    with mock.patch(
+        "vector_os_nano.skills.perception_grasp.grasp_point_from_rgbd",
+        return_value=can_pose,
+    ):
+        res = PerceptionGraspSkill().execute({"query": "前面的东西"}, _ctx(perc, arm=arm))
+
+    # Should succeed (IK returns a result from FakeArm)
+    assert res.success is True
+    assert res.result_data.get("grasp_world", [0, 0, 0])[2] == pytest.approx(0.32, abs=1e-6)
+
+
+def test_low_z_passed_box_fails_loud():
+    """CHANGE 2 (R40): the low-z guard also fires for the passed-box (consumed) path."""
+    import unittest.mock as mock
+    from vector_os_nano.core.types import Pose3D
+    from vector_os_nano.skills.perception_grasp import _MIN_GRASP_Z
+
+    floor_pose = Pose3D(x=10.5, y=3.0, z=0.039)
+    perc = FrontPerception()
+    arm = FakeArm()
+
+    with mock.patch(
+        "vector_os_nano.skills.perception_grasp.grasp_point_from_rgbd",
+        return_value=floor_pose,
+    ):
+        res = PerceptionGraspSkill().execute(
+            {"query": "绿色的瓶子", "bbox": _PRODUCER_BOX},
+            _ctx(perc, arm=arm),
+        )
+
+    assert res.success is False
+    rd = res.result_data
+    assert rd["diagnosis"] == "low_z_backprojection", (
+        f"expected low_z_backprojection at passed-box site, got {rd['diagnosis']}")
+    assert rd.get("consumed_bbox") is True
+    assert rd.get("actual_z", 1.0) < _MIN_GRASP_Z

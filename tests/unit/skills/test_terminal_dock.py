@@ -193,3 +193,61 @@ def test_grasp_execute_docks_before_perceiving():
     perceive_at = src.index("_perceive_with_scan")
     assert dock_at < perceive_at, (
         "the terminal dock must run BEFORE _perceive_with_scan (dock first, then perceive)")
+
+
+# ---------------------------------------------------------------------------
+# R40 CHANGE 3: tighter facing + lateral re-center
+# ---------------------------------------------------------------------------
+
+def test_dock_tighter_heading_convergence():
+    """CHANGE 3 (R40): starting at heading +0.5 rad and y=3.18 (the R39 t2 residual),
+    the dock must end within ~6° of the target heading AND within ~0.08 m of y=3.0.
+
+    The pre-change dock left heading +29° and y=3.18 — enough to frame the wrong
+    object at 22 cm inter-can spacing. Tightened face loop (6 steps, 0.10 rad) +
+    lateral re-center close both residuals.
+    """
+    dock_x, dock_y, dock_hd = 10.0, 3.0, 0.0
+
+    # R39 t2 residual: arrive close but with heading +0.5 rad and y=3.18
+    base = _KinematicBase(pose=(10.05, 3.18), heading=0.5)
+    ran = terminal_dock(base, (dock_x, dock_y), dock_hd)
+    assert ran is True
+
+    px, py, _ = base.get_position()
+    final_hd = base.get_heading()
+    face_err = abs(math.atan2(math.sin(dock_hd - final_hd), math.cos(dock_hd - final_hd)))
+    lateral_err = abs(py - dock_y)
+
+    assert face_err <= math.radians(6 + 2), (  # ≤8° tolerance to absorb integration error
+        f"heading residual too large: {math.degrees(face_err):.1f}° (target ≤8°)")
+    assert lateral_err <= 0.08, (
+        f"lateral residual too large: lateral_err={lateral_err:.3f}m (target ≤0.08m)")
+
+
+def test_dock_benign_when_already_centered():
+    """CHANGE 3 benign no-op: a dog already docked (gap<=deadband, face<=deadband)
+    issues no walk even with the new recenter step (it is within deadband)."""
+    base = _KinematicBase(pose=(10.0, 3.0), heading=0.0)
+    terminal_dock(base, (10.0, 3.0), 0.0)
+    assert base.walks == [], (
+        f"dock issued motion from already-docked pose: {base.walks}")
+
+
+def test_dock_lateral_recenter_fires_when_off_centerline():
+    """_recenter_lateral closes a lateral offset when the dog is on-heading but off-Y.
+
+    Start heading=0 (already facing) with y offset, so only the lateral re-center
+    needs to act. After the dock the y must be within _DOCK_LATERAL_DEADBAND_M.
+    """
+    from vector_os_nano.skills.utils.terminal_dock import _DOCK_LATERAL_DEADBAND_M
+
+    dock_x, dock_y, dock_hd = 10.0, 3.0, 0.0
+    # Dog is already AT the dock x,y,hd within the early-exit deadbands ... actually
+    # gap0 = 0.15 m (just outside pos_deadband=0.12) and y is off-center.
+    base = _KinematicBase(pose=(9.88, 3.18), heading=0.02)
+    terminal_dock(base, (dock_x, dock_y), dock_hd)
+
+    _, py, _ = base.get_position()
+    assert abs(py - dock_y) <= _DOCK_LATERAL_DEADBAND_M + 0.03, (
+        f"lateral re-center did not close y offset: py={py:.3f} dock_y={dock_y}")

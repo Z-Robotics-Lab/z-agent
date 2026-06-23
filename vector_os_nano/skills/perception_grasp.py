@@ -116,6 +116,12 @@ _COLOR_TO_SCENE: dict[str, str] = {
 # 0.18 m → sensor at (target.x − 0.18), body at (target.x − 0.48), EE within
 # 20-22 mm of the bottle (< 60 mm weld radius) across all tested body_z values.
 _GRASP_REACH_M = 0.05
+# Minimum plausible z for a back-projected grasp point (world frame, metres).
+# Real cans sit at z≈0.32; anything below this is the table-top/floor surface
+# (a degraded mask whose depth hits the table, not the object). FAIL LOUD rather
+# than accepting a floor-level grasp (the R39 t3 z=0.039 bug). Both back-projection
+# sites (_perceive_grasp_point and _grasp_point_from_passed_box) use this guard.
+_MIN_GRASP_Z = 0.12
 # Forward progress (m) below which the dog is treated as STALLED (jammed against
 # the pick-table edge) over one approach step — its closest stable standoff. The
 # gait advances ~6-12 cm per 0.8 s step when free, so 3 cm cleanly separates a
@@ -882,6 +888,17 @@ class PerceptionGraspSkill:
                 "ground-truth pose.",
                 detection_label=resolved, query=query, consumed_bbox=True,
             )
+        # CHANGE 2 (R40): low-z collapse guard (same rule as the self-detect site).
+        # A back-projected z below _MIN_GRASP_Z is the table/floor surface, not the
+        # object top. FAIL LOUD so the step grades RAN, never a false GROUNDED.
+        if gp.z < _MIN_GRASP_Z:
+            return None, resolved, _fail(
+                "low_z_backprojection",
+                f"Back-projected z={gp.z:.3f}m < _MIN_GRASP_Z={_MIN_GRASP_Z}m "
+                f"for producer box {box} ({resolved!r}); the mask hit the table/floor. "
+                "FAIL LOUD — rejecting a floor-level grasp point.",
+                detection_label=resolved, query=query, consumed_bbox=True, actual_z=gp.z,
+            )
         logger.info(
             "[PGRASP] consumed producer box %s -> grasp_world=(%.3f, %.3f, %.3f)",
             box, gp.x, gp.y, gp.z,
@@ -1021,23 +1038,30 @@ class PerceptionGraspSkill:
             return None, (query or "front object"), _fail("no_camera", f"Failed to read RGB-D frame: {exc}")
 
         # MODEL ROUTING (route each instruction to the right model+skill):
-        #   - NAMED object ("罐子"/"red can", _names_object) -> the LEARNED DETECTOR
-        #     (grounding-dino) via perception.detect(query). The new model-family route.
-        #   - pure COLOUR ("抓红色的", color set, no noun) -> classical front_object
-        #     colour/HSV resolver (cheap right tool; D47 must stay green).
-        #   - DEICTIC ("前面的东西"/generic) -> classical front_object resolver (geometry).
-        # A named query routes to the detector even when a colour is present; only a
-        # colour-WITHOUT-a-noun keeps the colour resolver. classical = front_object.
+        #   - COLOUR query ("绿色的瓶子"/pure "抓红色的", color is not None)
+        #     -> classical front_object HSV colour resolver (CHANGE 1, R40).
+        #     The D47 HSV resolver had 100% colour selection among 3 close cans;
+        #     grounding-dino is intermittent on a dense, close-packed scene.
+        #     A colour target disambiguates by hue — use the right cheap tool.
+        #   - DEICTIC ("前面的东西"/generic, no noun, no colour) -> classical
+        #     front_object resolver (geometry / depth).
+        #   - NAMED no-colour ("罐子") -> the LEARNED DETECTOR (grounding-dino).
+        # When both a noun AND a colour are present ("绿色的瓶子"), the colour wins:
+        # use_front_resolver=True so the HSV path is taken regardless of the noun.
         named = _names_object(query)
-        classical = not named  # deictic or pure-colour -> front_object resolver
-        deictic = classical
+        deictic = not named
         have_front = hasattr(perception, "front_object_mask")
+        # CHANGE 1 (R40): colour query forces the HSV resolver route even when a
+        # noun is also present — colour disambiguates better than text grounding on
+        # a dense, same-category scene. Keep the existing deictic path unchanged.
+        use_front_resolver = have_front and (deictic or color is not None)
+        classical = deictic  # kept for the mask-fallback and diagnostics below
         mask = None
         # A colour query's verify LABEL is the colour's scene name (the grasp POINT is
         # still perceived); a plain deictic query keeps the query text as its label.
         resolved = _COLOR_TO_SCENE.get(color, query or "front object") if color else (query or "front object")
         detection_found = False
-        if deictic and have_front:
+        if use_front_resolver:
             try:
                 # Save frames for diagnosis
                 try:
@@ -1128,5 +1152,17 @@ class PerceptionGraspSkill:
                 f"No valid depth points under the {resolved!r} mask; cannot localize a grasp point. "
                 "FAIL LOUD — not substituting a ground-truth pose.",
                 detection_label=resolved, query=query,
+            )
+        # CHANGE 2 (R40): low-z collapse guard. A back-projected z below _MIN_GRASP_Z
+        # is the table/floor surface, NOT the top of a can (cans sit at z≈0.32). A
+        # degraded mask whose depth hits the table produces this and must FAIL LOUD so
+        # the step grades RAN, never a false GROUNDED (R39 t3: z=0.039 accepted).
+        if gp.z < _MIN_GRASP_Z:
+            return None, resolved, _fail(
+                "low_z_backprojection",
+                f"Back-projected z={gp.z:.3f}m < _MIN_GRASP_Z={_MIN_GRASP_Z}m "
+                f"for {resolved!r}; the mask hit the table/floor, not the object top. "
+                "FAIL LOUD — rejecting a floor-level grasp point.",
+                detection_label=resolved, query=query, actual_z=gp.z,
             )
         return gp, resolved, None

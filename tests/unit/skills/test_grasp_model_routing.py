@@ -26,8 +26,15 @@ from vector_os_nano.perception.front_object import parse_color
 
 _W, _H = 64, 48
 _INTR = mujoco_intrinsics(_W, _H, vfov_deg=42.0)
-_CAM_XPOS = np.array([0.5, 0.0, 0.5], dtype=np.float64)
-_CAM_XMAT = np.eye(3, dtype=np.float64).reshape(9)
+# Camera facing +X from (9, 3, 0.8): depth=1 at centre pixel -> world z=0.8,
+# satisfying _MIN_GRASP_Z (0.12 m) so the routing tests succeed as intended.
+# MuJoCo xmat columns: right(+y), up(-z), -forward(-x) → cam_forward = +x.
+_CAM_XPOS = np.array([9.0, 3.0, 0.8], dtype=np.float64)
+_CAM_XMAT = np.array([
+    0, 1, 0,
+    0, 0, -1,
+    -1, 0, 0,
+], dtype=np.float64)
 
 
 def _depth_mask():
@@ -137,13 +144,19 @@ def test_named_query_routes_to_detector():
     assert not any(c.startswith("front") for c in perc.calls)
 
 
-def test_named_with_colour_routes_to_detector_but_grades_scene_name():
-    """'红色的罐子' -> detector route; verify LABEL maps to the colour scene key."""
+def test_named_with_colour_routes_to_hsv_not_detector():
+    """CHANGE 1 (R40): '红色的罐子' has a noun AND a colour — colour wins, routes to
+    front_object HSV resolver (NOT the detector). The HSV resolver reliably
+    disambiguates by hue; grounding-dino is intermittent at 22 cm inter-can spacing.
+    The verify LABEL still maps to the colour's scene key.
+    """
     perc = RoutingPerception()
     res = PerceptionGraspSkill().execute({"query": "红色的罐子"}, _ctx(perc))
     assert res.success is True
-    assert any(c.startswith("detect:") for c in perc.calls)
-    assert not any(c.startswith("front") for c in perc.calls)
+    assert "front:red" in perc.calls, (
+        f"expected front_object_mask(color='red') for colour+noun query, got: {perc.calls}")
+    assert not any(c.startswith("detect:") for c in perc.calls), (
+        f"grounding-dino detect was called despite a colour query: {perc.calls}")
     assert res.result_data["detection_label"] == "pickable_can_red"
 
 
@@ -169,15 +182,19 @@ def test_deictic_routes_to_front_object():
 # --- D48 caveat 1: PERCEPTUAL colour selection among detector boxes ----------
 
 
-def test_named_colour_query_routes_to_detector_and_sets_verify_label():
-    """'红色的罐子' contains a noun -> DETECTOR route; colour sets verify label."""
+def test_named_colour_query_routes_to_hsv_and_sets_verify_label():
+    """CHANGE 1 (R40): '红色的罐子' contains a noun AND a colour. parse_color finds
+    'red' and _names_object finds '罐子', but colour presence takes precedence:
+    use_front_resolver=True routes to front_object HSV, not the detector. The
+    verify LABEL still maps to the colour's scene key (pickable_can_red)."""
     assert parse_color("红色的罐子") == "red"
     assert _names_object("红色的罐子") is True
     perc = RoutingPerception()
     res = PerceptionGraspSkill().execute({"query": "红色的罐子"}, _ctx(perc))
     assert res.success is True
-    assert any(c.startswith("detect:") for c in perc.calls)
-    assert not any(c.startswith("front") for c in perc.calls)
+    assert "front:red" in perc.calls, (
+        f"expected HSV resolver for colour+noun query, got: {perc.calls}")
+    assert not any(c.startswith("detect:") for c in perc.calls)
     assert res.result_data["detection_label"] == "pickable_can_red"
 
 

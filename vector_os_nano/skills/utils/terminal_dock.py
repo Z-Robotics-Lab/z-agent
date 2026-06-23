@@ -16,14 +16,18 @@ the open-loop ``walk`` primitive — NOT FAR) to a FIXED, PROVEN table-approach 
 is FIXED (the known scripted-from-spawn pose), NOT can-relative — so there is no
 chicken-and-egg: the dog does not need to perceive the can to dock to it.
 
-Geometry of a dock (open-loop, three phases, each a ``walk`` command):
+Geometry of a dock (open-loop, four phases, each a ``walk`` command):
     1. TURN to the bearing toward (dock_x, dock_y)   — point at the dock point
     2. WALK forward the planar distance to it        — translate onto it
-    3. TURN-in-place to ``dock_heading``             — face the cans (+X)
+    3. TURN-in-place to ``dock_heading``             — face the cans (+X), tighter
+       deadband (≈6°) with up to 6 damped steps (CHANGE 3, R40: was 9°/4 steps)
+    4. LATERAL re-center — sidestep (body-frame vy) to put the dog's y back on the
+       dock_y centerline within ≈0.06 m (CHANGE 3, R40: closes the R39 t2 y=3.18
+       lateral residual that frames the wrong object at 22 cm inter-can spacing).
 
 Iterated a few times to close dead-reckoning error (the open-loop gait drifts).
 Benign / near no-op when the dog is ALREADY at the dock pose (e.g. the
-scripted-from-spawn path, where FAR is never run): all three phases fall below their
+scripted-from-spawn path, where FAR is never run): all phases fall below their
 deadbands and issue no material motion — so the proven scripted grasp (D34-D51) does
 NOT regress.
 
@@ -76,7 +80,20 @@ _DOCK_APPROACH_BACK = 0.6      # m behind the dock to stage the straight-in leg
 _DOCK_FACE_VYAW = 0.5          # rad/s turn-in-place
 _DOCK_FACE_GAIN = 0.6          # damp the residual to avoid overshoot
 _DOCK_FACE_MAX_S = 1.0
-_DOCK_FACE_MAX_STEPS = 4
+# CHANGE 3 (R40): tighter facing convergence. Was 4 steps/~9° deadband; t2 left
+# a +29° residual that framed the wrong object. Raised to 6 steps so the damped
+# loop actually closes the residual, with a tighter 6° (~0.10 rad) effective
+# deadband. The tighter deadband applies only inside _face_heading (the public
+# yaw_deadband param for the no-op gate stays at 0.16 rad so scripted-from-spawn
+# still triggers no motion).
+_DOCK_FACE_MAX_STEPS = 6
+_DOCK_FACE_TIGHT_RAD = 0.10    # ≈ 6° — final facing deadband used by _face_heading
+# CHANGE 3 (R40): lateral re-center after facing. Sidestep (body-frame vy) to put
+# the dog's y onto the dock_y centerline. Closes the R39 t2 y=3.18 (vs target 3.0)
+# lateral residual that framed the wrong object at 22 cm inter-can spacing.
+_DOCK_LATERAL_DEADBAND_M = 0.06  # m; within this the lateral step is a no-op
+_DOCK_LATERAL_VY = 0.25          # m/s sidestep speed
+_DOCK_LATERAL_MAX_STEPS = 3      # max sidestep commands
 
 
 def _wrap(a: float) -> float:
@@ -172,8 +189,13 @@ def terminal_dock(
     _drive_to_point(base, pre_x, pre_y, pos_deadband, max_steps, on_progress)
     # 2. ... then drive STRAIGHT IN to the dock point — ends facing the dock heading.
     _drive_to_point(base, dx_goal, dy_goal, pos_deadband, max_steps, on_progress)
-    # 3. tiny final facing nudge for any residual heading error after the straight-in.
-    _face_heading(base, dock_hd, yaw_deadband, on_progress)
+    # 3. final facing nudge for residual heading error after the straight-in.
+    #    CHANGE 3 (R40): uses the tighter _DOCK_FACE_TIGHT_RAD deadband (~6°) and
+    #    up to _DOCK_FACE_MAX_STEPS=6 steps so the R39 t2 +29° residual closes.
+    _face_heading(base, dock_hd, _DOCK_FACE_TIGHT_RAD, on_progress)
+    # 4. lateral re-center (CHANGE 3, R40): sidestep onto the dock_y centerline.
+    #    Closes the R39 t2 y=3.18 vs target y=3.0 offset that framed the wrong object.
+    _recenter_lateral(base, dock_xy, dock_hd, on_progress)
 
     try:
         pos = base.get_position()
@@ -244,6 +266,49 @@ def _face_heading(base: Any, dock_hd: float, yaw_deadband: float,
         if on_progress:
             on_progress(f"dock: face residual {math.degrees(face_err):.0f}deg")
         _safe_walk(base, vyaw=vyaw, duration=dur)
+
+
+def _recenter_lateral(
+    base: Any,
+    dock_xy: tuple[float, float],
+    dock_hd: float,
+    on_progress: Any,
+) -> None:
+    """Sidestep (body-frame vy) to re-center the dog's y on the dock_y centerline.
+
+    CHANGE 3 (R40). After _face_heading the dog's lateral (perpendicular-to-heading)
+    offset from dock_y can still be ~0.15-0.20 m — enough to frame a neighbouring
+    object at 22 cm inter-can spacing (R39 t2: y=3.18 vs target 3.0). A short
+    closed-loop vy-only step closes it. World-agnostic, world-frame y is compared
+    against dock_y after projecting the offset perpendicular to dock_heading, so it
+    works at any dock heading.
+
+    Benign no-op: a dog already within _DOCK_LATERAL_DEADBAND_M of the centerline
+    issues no walk. Errors are swallowed via _safe_walk so a base glitch cannot
+    abort the dock.
+    """
+    dock_y = float(dock_xy[1])
+    for _ in range(_DOCK_LATERAL_MAX_STEPS):
+        try:
+            pos = base.get_position()
+            hd = float(base.get_heading())
+        except Exception:  # noqa: BLE001
+            return
+        # Perpendicular (lateral) distance in the body frame: project the world-y
+        # offset onto the body's lateral axis (-sin(hd)*dx + cos(hd)*dy).
+        # For a dock facing +X (hd≈0) this collapses to dy = dock_y - pos[1].
+        dx = float(dock_xy[0]) - float(pos[0])
+        dy = dock_y - float(pos[1])
+        lateral = -dx * math.sin(hd) + dy * math.cos(hd)
+        if abs(lateral) <= _DOCK_LATERAL_DEADBAND_M:
+            return  # already on centerline — benign no-op
+        vy = _DOCK_LATERAL_VY if lateral > 0 else -_DOCK_LATERAL_VY
+        dur = min(1.0, abs(lateral) / _DOCK_LATERAL_VY)
+        if on_progress:
+            on_progress(f"dock: lateral re-center {lateral:.3f}m (vy={vy:.2f})")
+        logger.info("[DOCK] lateral re-center lateral=%.3fm vy=%.2f dur=%.2fs",
+                    lateral, vy, dur)
+        _safe_walk(base, vx=0.0, vy=vy, vyaw=0.0, duration=dur)
 
 
 def _safe_walk(base: Any, *, vx: float = 0.0, vy: float = 0.0,
