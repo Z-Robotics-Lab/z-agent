@@ -55,6 +55,14 @@ _GT = {
     "red": ("pickable_can_red", "红色的罐子", (10.90, 3.22, 0.320)),
 }
 
+# Spawn poses for ALL pickable free-body objects (from scene_room_piper.xml).
+# Each entry: body_name -> (x, y, z); identity quaternion (1,0,0,0) is assumed.
+_SPAWN_POSES: dict[str, tuple[float, float, float]] = {
+    "pickable_bottle_blue":  (10.90, 2.78, 0.320),
+    "pickable_bottle_green": (10.88, 3.00, 0.320),
+    "pickable_can_red":      (10.90, 3.22, 0.320),
+}
+
 
 def _log(m: str) -> None:
     print(f"[E2E] {m}", flush=True)
@@ -170,6 +178,77 @@ def _holding(world, agent, name):
         return False
 
 
+def _reset_scene_objects(agent) -> None:
+    """Release any active weld, reset _held_object, and teleport pickable free-body
+    objects back to their spawn poses so trial N cannot inherit trial N-1's state.
+
+    Pause physics around the qpos/qvel write (mirrors _try_grasp in
+    mujoco_piper_gripper.py). Degrades gracefully on any surface mismatch — logs
+    a WARNING but never crashes the trial.
+    """
+    # 1. Release the gripper weld + clear held-object.
+    try:
+        gripper = getattr(agent, "_gripper", None)
+        if gripper is not None and callable(getattr(gripper, "open", None)):
+            gripper.open()
+    except Exception as exc:  # noqa: BLE001
+        _log(f"WARNING: gripper.open() failed during reset: {exc}")
+
+    # 2. Teleport pickable free-body objects back to their spawn poses.
+    try:
+        gripper = getattr(agent, "_gripper", None)
+        if gripper is None:
+            _log("WARNING: _reset_scene_objects: no agent._gripper — skipping body reset")
+            return
+        go2 = getattr(gripper, "_go2", None)
+        if go2 is None:
+            _log("WARNING: _reset_scene_objects: no gripper._go2 — skipping body reset")
+            return
+        mj_handle = getattr(go2, "_mj", None)
+        if mj_handle is None:
+            _log("WARNING: _reset_scene_objects: no go2._mj — skipping body reset")
+            return
+
+        import mujoco as _mujoco_mod  # noqa: PLC0415
+        import numpy as _np  # noqa: PLC0415
+        model = mj_handle.model
+        data = mj_handle.data
+
+        pause = getattr(go2, "_pause_physics", None)
+        resume = getattr(go2, "_resume_physics", None)
+        if pause:
+            pause()
+        try:
+            for body_name, (sx, sy, sz) in _SPAWN_POSES.items():
+                bid = _mujoco_mod.mj_name2id(model, _mujoco_mod.mjtObj.mjOBJ_BODY, body_name)
+                if bid < 0:
+                    _log(f"WARNING: _reset_scene_objects: body '{body_name}' not in model")
+                    continue
+                jadr = int(model.body_jntadr[bid])
+                if jadr < 0:
+                    _log(f"WARNING: _reset_scene_objects: body '{body_name}' has no joint")
+                    continue
+                if model.jnt_type[jadr] != _mujoco_mod.mjtJoint.mjJNT_FREE:
+                    _log(f"WARNING: _reset_scene_objects: body '{body_name}' joint is not FREE")
+                    continue
+                qpos_adr = int(model.jnt_qposadr[jadr])
+                dof_adr = int(model.jnt_dofadr[jadr])
+                # 7-float free-joint qpos: x y z qw qx qy qz
+                data.qpos[qpos_adr:qpos_adr + 3] = [sx, sy, sz]
+                data.qpos[qpos_adr + 3] = 1.0  # qw
+                data.qpos[qpos_adr + 4] = 0.0  # qx
+                data.qpos[qpos_adr + 5] = 0.0  # qy
+                data.qpos[qpos_adr + 6] = 0.0  # qz
+                # 6-float free-joint qvel: vx vy vz wx wy wz
+                data.qvel[dof_adr:dof_adr + 6] = _np.zeros(6)
+                _log(f"reset '{body_name}' -> ({sx},{sy},{sz})")
+        finally:
+            if resume:
+                resume()
+    except Exception as exc:  # noqa: BLE001
+        _log(f"WARNING: _reset_scene_objects body reset failed: {exc}")
+
+
 def _pin_retries(engine):
     try:
         import dataclasses
@@ -188,6 +267,10 @@ def _run_once(engine, agent, world, spy, label: str, trial: int) -> dict:
     base = agent._base
     rec = {"label": label, "trial": trial, "query": query, "gt": list(gt)}
     spy.reset()
+
+    # TRIAL ISOLATION: release any weld + reset all pickable objects to spawn
+    # poses BEFORE the pre-drive so trial N cannot inherit trial N-1's hold.
+    _reset_scene_objects(agent)
 
     # pre-drive AWAY so FAR genuinely crosses back.
     try:
@@ -211,7 +294,7 @@ def _run_once(engine, agent, world, spy, label: str, trial: int) -> dict:
     trace = engine.vgg_execute(tree)
 
     nav_ran = _at_position(world, agent, _DOCK_X, _DOCK_Y, tol=0.5)
-    grounded = _holding(world, agent, scene_name)
+    holding_oracle = _holding(world, agent, scene_name)
     after_far = grasp_world = diagnosis = None
     for step in trace.steps:
         out = step.result_data.get("output", {}) if isinstance(step.result_data, dict) else {}
@@ -227,17 +310,25 @@ def _run_once(engine, agent, world, spy, label: str, trial: int) -> dict:
     after_dock = [round(float(end[0]), 2), round(float(end[1]), 2),
                   round(float(base.get_heading()), 2)]
 
+    # HONEST grounded: requires BOTH a real perceived grasp point THIS trial AND
+    # the oracle confirming weld+lift+near-EE.  grasp_world=None (no perception
+    # ran / failed) with a stale oracle=True is NOT grounded.
+    grounded = bool(grasp_world) and holding_oracle
+
     d = gz = None
     if grasp_world:
         d = round(math.hypot(grasp_world[0] - gt[0], grasp_world[1] - gt[1]), 3)
         gz = round(float(grasp_world[2]), 3)
-    rec.update({"nav_ran": nav_ran, "grasp_grounded": grounded,
+    rec.update({"nav_ran": nav_ran,
+                "holding_oracle": holding_oracle,
+                "grasp_grounded": grounded,
                 "after_far": after_far, "after_dock": after_dock,
                 "perceive_pose": spy.perceive_pose,
                 "perceive_frame": spy.perceive_rgb,
                 "grasp_world": grasp_world, "grasp_z": gz, "grasp_vs_gt_m": d,
                 "diagnosis": diagnosis, "overall": trace.success})
-    _log(f"{label} t{trial}: nav_RAN={nav_ran} grasp_GROUNDED={grounded} "
+    _log(f"{label} t{trial}: nav_RAN={nav_ran} holding_oracle={holding_oracle} "
+         f"grasp_GROUNDED={grounded} "
          f"after_dock(hd,y)={after_dock} perceive_pose={spy.perceive_pose} "
          f"grasp_world={grasp_world} z={gz} vs_gt={d}m diag={diagnosis}")
     return rec
@@ -306,9 +397,26 @@ def main() -> int:
                 import traceback
                 traceback.print_exc()
                 results.append({"label": label, "trial": t, "error": str(exc)})
+
+            # INCREMENTAL WRITE — flush completed-trial data immediately so a
+            # timeout never loses it.  Update the running fractions too.
+            ran_so_far = sum(1 for r in results if r.get("nav_ran"))
+            grd_so_far = sum(1 for r in results if r.get("grasp_grounded"))
+            report["trials"][label] = {
+                "results": results,
+                "nav_ran": f"{ran_so_far}/{trials}",
+                "grasp_grounded": f"{grd_so_far}/{trials}",
+            }
+            try:
+                with open(os.path.join(ART, "e2e.json"), "w") as _fh:
+                    json.dump(report, _fh, indent=2)
+            except Exception as _exc:  # noqa: BLE001
+                _log(f"WARNING: incremental e2e.json write failed: {_exc}")
+
             time.sleep(2.0)
         ran = sum(1 for r in results if r.get("nav_ran"))
         grd = sum(1 for r in results if r.get("grasp_grounded"))
+        # Final update for this label with the definitive fractions.
         report["trials"][label] = {
             "results": results, "nav_ran": f"{ran}/{trials}",
             "grasp_grounded": f"{grd}/{trials}"}
