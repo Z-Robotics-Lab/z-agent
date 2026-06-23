@@ -64,10 +64,9 @@ next:    R40 — perception RELIABILITY at the dock framing (NON-gated, non-spin
   UNCAUSED→RAN until actor-causation extends to cmd_vel (honest, spine byte-unchanged).
 
 ## Pending CEO gates (decision queue — do NOT cross autonomously)
-- **NEW DEP added (R39, needs retro-approval/notification): `timm>=1.0` (1.0.27)** added to pyproject + installed
-  into .venv to make EdgeTAM actually LOAD (it was the undeclared backbone; EdgeTAM never loaded across the whole
-  grasp campaign D17-D51 → masks were box-rect all along). Standard PyTorch-image-models lib, low risk; EdgeTAM
-  backbone repvit_m1.dist_in1k fetches from HF once then caches. Surfaced to Yusen — approve/deny.
+- **DEP `timm>=1.0` (1.0.27) — CEO-APPROVED 2026-06-23.** Added to pyproject + .venv to make EdgeTAM actually LOAD
+  (its undeclared backbone; EdgeTAM never loaded across the grasp campaign D17-D51 → masks were box-rect). Standard
+  PyTorch-image-models lib; EdgeTAM backbone repvit_m1.dist_in1k fetches from HF once then caches. No longer a gate.
 - Merge/release `feat/orchestrator-redesign` → master.
 - cross-EMBODIMENT (g1: removed, zero python — large rebuild) ; nav→FAR + explore→TARE (cmd_vel causation +
   nav-stack colcon bring-up, DQ-15) ; VLN→SysNav venv (DQ-16). New external deps / new-or-changed interfaces /
