@@ -17,6 +17,7 @@ Public surface:
 """
 from __future__ import annotations
 
+from vector_os_nano.hardware.sim.sensors.g1_lidar import g1_lidar_scan
 from vector_os_nano.hardware.sim.sensors.gt_odom import (
     GroundTruthOdomPublisher,
     OdomSample,
@@ -37,4 +38,5 @@ __all__ = [
     "MuJoCoPano360",
     "OdomSample",
     "PanoSample",
+    "g1_lidar_scan",
 ]
