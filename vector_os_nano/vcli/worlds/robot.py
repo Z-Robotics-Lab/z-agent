@@ -138,17 +138,22 @@ class RobotWorld:
         # arm). R5 (D61) correctly REFUSED to bind a camera-no-arm ``detect_objects``
         # oracle, because the only anchor THEN available was the detector's OWN output
         # (a self-read → the R4 false green). R7 supplies what was missing: INDEPENDENT
-        # SIM GROUND TRUTH (``base.get_object_positions()`` — physics body xpos, never
-        # passed to the detector) and a SPATIAL-MATCH oracle, ``detection_matches_gt``,
-        # that PROJECTS that GT onto g1's camera and returns True IFF the detector's box
-        # CENTER lands within tol px of the GT projection. The TRUTH is the GT (the
-        # detector cannot author it); the detection is the CLAIM being judged. A wrong
-        # box (wall / wrong object / object out of view) → far from the projection →
-        # False → RAN. This is the GT-backed match the R5 note (above) anticipated as
-        # the legitimate future GROUNDED — NOT a ``len(detect_objects()) > 0`` self-read.
+        # SIM GROUND TRUTH (a MuJoCo SEGMENTATION render — the renderer's own per-pixel
+        # geom-id image, never passed to the detector) and a SPATIAL-MATCH oracle,
+        # ``detection_matches_gt``, that returns True IFF the detector's box CENTER
+        # lands within tol px of the segmentation centroid of the matching-colour geoms.
+        # The TRUTH is the render (the detector cannot author it); the detection is the
+        # CLAIM being judged. A wrong box (wall / wrong object) or the object OUT OF VIEW
+        # (no matching-colour geom in the segmentation) → no match → False → RAN. This
+        # is the GT-backed match the R5 note (above) anticipated as the legitimate
+        # future GROUNDED — NOT a ``len(detect_objects()) > 0`` self-read. (R7 used the
+        # segmentation render rather than a hand-rolled world→pixel projection because
+        # the freejoint pickables are occluded in g1's view and the head-camera
+        # pose-vs-frame did not reconcile under a pinhole convention — segmentation is
+        # strictly more reliable + more independent; see the oracle module docstring.)
         #
-        # Bound ONLY for a camera-bearing, ARM-LESS base that exposes GT object
-        # positions (the g1 shape). The go2+arm path already has its GT ``detect_objects``
+        # Bound ONLY for a camera-bearing, ARM-LESS sim base exposing the live MuJoCo
+        # model/data (the g1 shape). The go2+arm path already has its GT ``detect_objects``
         # (above) and grasp weld-causation, so it does not need this; gating on
         # arm-absence keeps the two paths from double-binding a detect oracle. The frozen
         # ``vcli/cognitive/`` spine is UNTOUCHED — the model reaches GROUNDED via the
@@ -157,8 +162,8 @@ class RobotWorld:
             arm is None
             and base is not None
             and _agent_has_camera(agent)
-            and callable(getattr(base, "get_object_positions", None))
-            and callable(getattr(base, "get_camera_pose", None))
+            and getattr(base, "_model", None) is not None
+            and getattr(base, "_data", None) is not None
         ):
             from vector_os_nano.vcli.worlds.g1_perception_oracle import (
                 make_detection_matches_gt,

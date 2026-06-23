@@ -4,12 +4,12 @@
 """R7 — the HONEST GROUNDED for g1: GT-backed perception match (NOT a self-read).
 
 These tests lock in the honesty CONTRACT of ``detection_matches_gt`` at unit level
-(no real model / no sim) with a fake base + a stubbed detector:
+(no real model / no GL render) with a stubbed segmentation GT + a stubbed detector:
 
-  - CORRECT localization (box center on the GT projection)        -> True  (GROUNDED-eligible)
-  - WRONG box (box on a wall, far from the GT projection)         -> False (RAN)   [REFUTATION]
-  - object OUT OF VIEW (GT behind the camera / off-frame)         -> False (RAN)   [REFUTATION]
-  - the detector input is RGB ONLY — the GT is never handed to it (the firewall)
+  - CORRECT localization (box center on the seg centroid)         -> True  (GROUNDED-eligible)
+  - WRONG box (box on a wall, far from the seg centroid)          -> False (RAN)   [REFUTATION]
+  - object OUT OF VIEW (no matching-colour geom in segmentation)  -> False (RAN)   [REFUTATION]
+  - the detector input is RGB ONLY — the segmentation GT is never handed to it (firewall)
 
 and that the spine grades ``detection_matches_gt('red') == True`` GROUNDED while a
 bare call / a short-circuit stays RAN (the spine is byte-unchanged; this just pins it).
@@ -18,26 +18,12 @@ bare call / a short-circuit stays RAN (the spine is byte-unchanged; this just pi
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
-from vector_os_nano.perception.depth_projection import mujoco_intrinsics, world_to_pixel
-from vector_os_nano.vcli.worlds.g1_perception_oracle import (
-    _RENDER_H,
-    _RENDER_W,
-    make_detection_matches_gt,
-)
+import vector_os_nano.vcli.worlds.g1_perception_oracle as oracle_mod
+from vector_os_nano.vcli.worlds.g1_perception_oracle import make_detection_matches_gt
 
-
-# Camera at origin looking +X (the g1 head orientation): xmat columns are
-# (right=-Y, up=+Z, -forward=-X). A world point at +X projects to the image center.
-_CAM_XPOS = np.array([0.0, 0.0, 0.0])
-_CAM_XMAT = np.array([0, 0, -1, -1, 0, 0, 0, 1, 0], dtype=float)  # cols right/up/-fwd
-
-# GT red object 1 m straight ahead (+X) at the camera's own height (z=0 here) —
-# projects to the image center ~(320, 240). (In the real sim the camera sits at
-# head height and the object at z≈0.32, so the real projection lands lower in-frame;
-# the unit fixture keeps it dead-center for a clean contract assertion.)
-_GT_RED = [1.0, 0.0, 0.0]
+# The independent GT: the red object's segmentation centroid in the rendered frame.
+_SEG_CENTROID = (321.0, 260.0, 919)  # (u, v, px) — matches the real spawn-view stool
 
 
 class _Box:
@@ -48,8 +34,7 @@ class _Box:
 
 
 class _StubDetector:
-    """A detector whose boxes the test chooses; RECORDS what RGB it was handed and
-    asserts it is ONLY an array (never a GT pose) — the firewall proof."""
+    """Boxes the test chooses; RECORDS what it was handed — must be ONLY RGB (firewall)."""
 
     def __init__(self, boxes):
         self._boxes = boxes
@@ -59,81 +44,63 @@ class _StubDetector:
     def detect(self, rgb, query, *extra):
         assert isinstance(rgb, np.ndarray), "detector must receive an RGB array"
         self.seen_rgb_shapes.append(rgb.shape)
-        self.seen_extra_args.append(extra)  # must always be empty (no GT leaked)
+        self.seen_extra_args.append(extra)  # must be empty — no GT/seg leaked
         return list(self._boxes)
 
 
 class _FakeBase:
-    """Minimal g1-shape base: GT object positions + the exact camera pose."""
+    """Minimal g1-shape sim base: a live model/data + an RGB frame source."""
 
-    def __init__(self, gt, cam_xpos=_CAM_XPOS, cam_xmat=_CAM_XMAT):
-        self._gt = gt
-        self._cam_xpos = cam_xpos
-        self._cam_xmat = cam_xmat
+    def __init__(self):
+        self._model = object()
+        self._data = object()
 
-    def get_object_positions(self):
-        return dict(self._gt)
-
-    def get_camera_pose(self):
-        return self._cam_xpos.copy(), self._cam_xmat.copy()
-
-    def get_camera_frame(self, w=_RENDER_W, h=_RENDER_H):
+    def get_camera_frame(self, w=640, h=480):
         return np.zeros((h, w, 3), dtype=np.uint8)
 
 
 class _FakeAgent:
-    """g1 shape: a base with GT + camera, NO arm, NO bound perception adapter."""
-
     def __init__(self, base):
         self._base = base
         self._arm = None
         self._perception = None
 
 
-@pytest.fixture
-def gt_projection():
-    intr = mujoco_intrinsics(_RENDER_W, _RENDER_H, vfov_deg=45.0)
-    proj = world_to_pixel(*_GT_RED, intr, _CAM_XPOS, _CAM_XMAT)
-    assert proj is not None
-    return proj  # (u, v, depth)
-
-
-def _run(monkeypatch, boxes, gt=None):
-    """Wire a stub detector + fake g1 agent, return (oracle_result, stub)."""
-    gt = gt or {"pickable_can_red": _GT_RED, "pickable_bottle_green": [1.0, -0.5, 0.0]}
+def _run(monkeypatch, boxes, seg=_SEG_CENTROID):
+    """Wire a stub detector + stub segmentation GT + fake g1 agent."""
     stub = _StubDetector(boxes)
     monkeypatch.setattr(
         "vector_os_nano.perception.grounding_dino.get_shared_detector",
         lambda: stub,
     )
-    agent = _FakeAgent(_FakeBase(gt))
-    oracle = make_detection_matches_gt(agent)
-    return oracle, stub
+    # Stub the renderer-native segmentation GT (no GL in unit tests).
+    monkeypatch.setattr(oracle_mod, "_red_geom_seg_centroid", lambda base, token: seg)
+    agent = _FakeAgent(_FakeBase())
+    return make_detection_matches_gt(agent), stub
 
 
-def test_correct_box_on_gt_projection_matches(monkeypatch, gt_projection):
-    """A box centered on the GT projection -> True (the EARNED GROUNDED)."""
-    gu, gv, _ = gt_projection
-    boxes = [_Box(gu - 20, gv - 20, gu + 20, gv + 20)]  # center == (gu, gv)
+def test_correct_box_on_seg_centroid_matches(monkeypatch):
+    """A box centered on the segmentation centroid -> True (the EARNED GROUNDED)."""
+    gu, gv, _ = _SEG_CENTROID
+    boxes = [_Box(gu - 20, gv - 30, gu + 20, gv + 30)]  # center == (gu, gv)
     oracle, stub = _run(monkeypatch, boxes)
     assert oracle("red", tol=60.0) is True
-    # FIREWALL: the detector only ever saw an RGB array, never a GT pose.
+    # FIREWALL: the detector only ever saw an RGB array, never the seg/GT.
     assert all(extra == () for extra in stub.seen_extra_args)
     assert all(len(shape) == 3 for shape in stub.seen_rgb_shapes)
 
 
-def test_wrong_box_far_from_gt_is_refuted(monkeypatch, gt_projection):
-    """REFUTATION: a box on a wall (far from the GT projection) -> False -> RAN."""
+def test_wrong_box_far_from_seg_is_refuted(monkeypatch):
+    """REFUTATION: a box on a wall (far from the seg centroid) -> False -> RAN."""
     boxes = [_Box(5.0, 5.0, 25.0, 25.0)]  # center (15,15), hundreds of px from GT
     oracle, _ = _run(monkeypatch, boxes)
     assert oracle("red", tol=60.0) is False
 
 
 def test_object_out_of_view_is_refuted(monkeypatch):
-    """REFUTATION: GT object BEHIND the camera (g1 faces away) -> not imageable -> False."""
-    gt = {"pickable_can_red": [-1.0, 0.0, 0.0]}  # behind a +X-looking camera
-    boxes = [_Box(300, 220, 340, 260)]  # even a centered box can't match an unimageable GT
-    oracle, _ = _run(monkeypatch, boxes, gt=gt)
+    """REFUTATION: no matching-colour geom in the segmentation (g1 faces away) -> False."""
+    boxes = [_Box(300, 230, 340, 290)]  # even a centered box can't match an absent GT
+    oracle, _ = _run(monkeypatch, boxes, seg=None)  # seg GT returns None = not in view
     assert oracle("red", tol=60.0) is False
 
 
@@ -143,13 +110,26 @@ def test_no_detection_is_refuted(monkeypatch):
     assert oracle("red", tol=60.0) is False
 
 
-def test_missing_base_fails_safe(monkeypatch):
-    """No base -> False (never raises into the verifier sandbox)."""
+def test_no_colour_token_fails_safe(monkeypatch):
+    """A target with no colour word -> False (the oracle judges ONE coloured object)."""
+    oracle, _ = _run(monkeypatch, boxes=[_Box(300, 230, 340, 290)])
+    assert oracle("the thing over there", tol=60.0) is False
+
+
+def test_missing_base_fails_safe():
+    """No live sim base -> False (never raises into the verifier sandbox)."""
     class _Bare:
         _base = None
         _arm = None
     oracle = make_detection_matches_gt(_Bare())
     assert oracle("red") is False
+
+
+def test_chinese_colour_word_resolves(monkeypatch):
+    """'红色' maps to the red token so the NL command path grounds the same way."""
+    gu, gv, _ = _SEG_CENTROID
+    oracle, _ = _run(monkeypatch, [_Box(gu - 15, gv - 15, gu + 15, gv + 15)])
+    assert oracle("找前面的红色的东西", tol=60.0) is True
 
 
 def test_spine_grades_match_grounded_bare_ran():

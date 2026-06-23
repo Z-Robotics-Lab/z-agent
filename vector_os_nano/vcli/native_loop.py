@@ -244,8 +244,8 @@ class _NativeDetectTool:
         if (
             arm is None
             and base is not None
-            and callable(getattr(base, "get_object_positions", None))
-            and callable(getattr(base, "get_camera_pose", None))
+            and getattr(base, "_model", None) is not None
+            and getattr(base, "_data", None) is not None
         ):
             return f"verify(detection_matches_gt({query!r}) == True)"
         return "verify(len(detect_objects()) > 0)"
