@@ -5,7 +5,7 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-23 · R42 FINAL — nav+grasp BANKED after 6 rounds (D56). Dock convergence FIXED (bridge-verified, R42 d0528aa) + publisher bug was a phantom; chain mechanically complete + perception accurate (2.3cm) + dock converges — but the GRASP still misses (post-dock approach standoff x≈10.41 too far back vs green@10.86 → marginal Piper reach). NOT reliably landed; each round fixed a layer + exposed the next. Per Yusen hard-stop, banked as a documented intermittent demo (one layer from working). NEXT = CEO ship-vs-pivot. Spine byte-unchanged across 56 decisions.
+updated: 2026-06-23 · R42 FINAL + G1 R1 WIP floor — nav+grasp BANKED after 6 rounds (D56). Dock convergence FIXED (bridge-verified, R42 d0528aa) + publisher bug was a phantom; chain mechanically complete + perception accurate (2.3cm) + dock converges — but the GRASP still misses (post-dock approach standoff x≈10.41 too far back vs green@10.86 → marginal Piper reach). NOT reliably landed; each round fixed a layer + exposed the next. Per Yusen hard-stop, banked as a documented intermittent demo (one layer from working). NEXT = CEO ship-vs-pivot. Spine byte-unchanged across 56 decisions.
 goal:    agent-orchestration runtime for physical AI — plan · route to the right MODEL/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT THRUST: prove the 3 under-proven North-Star axes (route-to-MODEL ✓ now at the ORCHESTRATION layer · cross-embodiment · live orchestration), using the moat to grade each.
@@ -49,6 +49,19 @@ next:    R40 — perception RELIABILITY at the dock framing (NON-gated, non-spin
          repvit_m1.dist_in1k fetches from HF on first load (network needed once, then cached).
          Bare vector-cli + NL = ONLY acceptance; spine only STRICTER; never trust skill.success / sub-agent claims.
 
+
+## G1 R1 WIP floor (2026-06-23)
+G1 humanoid placed in the go2 apartment room via MjSpec attach (same pattern as go2_piper).
+- `vector_os_nano/hardware/sim/mjcf/g1/build_g1.py` — builds g1.xml: absolute mesh paths + head_rgb camera
+- `vector_os_nano/hardware/sim/mjcf/g1/g1.xml` — generated, include-safe
+- `vector_os_nano/hardware/sim/mujoco_g1.py` — MuJoCoG1: scene builder + stand + lidar + camera
+- `vector_os_nano/hardware/sim/mjcf/g1/scene_g1_room.xml` — generated combined scene
+- `vector_os_nano/vcli/tools/sim_tool.py` — `_start_g1` wired, "g1" in sim_type enum
+- `tests/unit/hardware/sim/test_g1_room.py` — 4/4 pass
+- `scripts/probe_r1_g1_room.py` — lead's foreground 2s verify probe
+Smoke: base_z=0.791m (stands), lidar n_returns=360 min=3.0m median=4.4m self_hits=0, cam mean=178.
+Textures: builtin (gradient/checker) render; PNG furniture textures — texturedir is set, verify visually in foreground.
+R2: NL embodiment-switch ("start g1 sim"), full bridge + ros2 topics, gait.
 
 ## Standing facts (durable)
 - **Branch `feat/orchestrator-redesign`** off master; `feat/playground-vln` is ABANDONED (never touch/delete).

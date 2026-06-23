@@ -72,8 +72,11 @@ class SimStartTool:
         "properties": {
             "sim_type": {
                 "type": "string",
-                "enum": ["arm", "go2"],
-                "description": "Which simulation to start: 'arm' (SO-101) or 'go2' (Unitree Go2)",
+                "enum": ["arm", "go2", "g1"],
+                "description": (
+                    "Which simulation to start: 'arm' (SO-101), 'go2' (Unitree Go2 "
+                    "quadruped), or 'g1' (Unitree G1 humanoid in apartment room)."
+                ),
             },
             "gui": {
                 "type": "boolean",
@@ -163,6 +166,8 @@ class SimStartTool:
                     agent = self._start_arm(gui=gui)
                 elif sim_type == "go2":
                     agent = self._start_go2(gui=gui, with_arm=with_arm)
+                elif sim_type == "g1":
+                    agent = self._start_g1(gui=gui)
                 else:
                     return ToolResult(content=f"Unknown sim type: {sim_type}", is_error=True)
         except Exception as exc:
@@ -349,6 +354,20 @@ class SimStartTool:
             perception=perception,
             config={"skills": {"pick": dict(SIM_PICK_CONFIG)}},
         )
+
+    @staticmethod
+    def _start_g1(gui: bool = True) -> Any:
+        """Start G1 humanoid sim in the go2 apartment room (R1: stand + sensors).
+
+        In-process (no ROS2 bridge) — R1 floor only.  NL-switch + bridge are R2.
+        Wraps MuJoCoG1 in a core.agent.Agent (base=g1_sim, arm=None).
+        """
+        from vector_os_nano.core.agent import Agent  # type: ignore[import]
+        from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1  # type: ignore[import]
+
+        g1_sim = MuJoCoG1(gui=gui, room=True)
+        g1_sim.connect()
+        return Agent(base=g1_sim)
 
     # ------------------------------------------------------------------
     # Pickable-object discovery: populate world_model from MJCF
