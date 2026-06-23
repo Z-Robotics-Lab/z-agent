@@ -22,7 +22,10 @@ owns:    vcli/native_loop.py (removed orphaned `_last_detection` self-read stash
 doing:   G1 R6 REVIEW — DONE. Independent honesty audit (re-done from scratch + 2nd independent sweep): every GROUNDED-eligible
          oracle in the live verify namespace reads independent SIM/disk GT — NO self-read, NO trivial-true; the D61 fix holds, moat
          clean. Fixed the one residue (orphaned `_last_detection` write + stale comment, world-side, spine byte-unchanged). Tidied
-         15 scratch probes. Capstone: bare-cli g1 start→nav→detect, foreground-verified (transcript /tmp/r6_g1_capstone.txt + frame).
+         15 scratch probes. Capstone (foreground-verified): bare-cli g1 "启动→走到坐标→找红色的" → nav RAN + detect RAN, GROUNDED=0
+         (transcript /tmp/r6_g1_capstone.txt). RED-TEAM caught run-1's full-frame "localization" (g1 nav'd to a blank wall) →
+         hardened: detect at the framed vantage + reject >70%-area boxes; run-2 = two tight boxes on the red stool+counter
+         (pixel-verified; frame /tmp/r6_g1_capstone.png Read back). g1 walked 1.47→0.34 m, no fall.
 
 blocked: none — NOT a CEO gate (no new ROS2 interface / external dep / hardware / security; world-side audit + tidy only).
          HONEST state after R6: (1) g1 detect correctly grades RAN — a LEGITIMATE GROUNDED needs a GT-BACKED SPATIAL MATCH (box

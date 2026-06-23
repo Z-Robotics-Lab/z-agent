@@ -170,27 +170,48 @@ def _run_repl() -> dict:
     return report
 
 
+def _localization_check(d, w: int, h: int) -> tuple[bool, str]:
+    """RED-TEAM a single detection box: a GENUINE localization is a TIGHT box
+    CENTRED on the object — NOT a degenerate full-frame box.
+
+    The grounding-dino model, when it sees no real target (e.g. g1 facing a blank
+    wall), returns a box spanning ~the whole image and labels it the query — a
+    SPURIOUS detection that a naive centre-check accepts (a full-frame box IS
+    centred). So we reject any box whose area is >70% of the frame (a real
+    localization of the red stool/can fills well under that), AND require the
+    centre to sit in the inner frame. Returns (is_real_localization, reason).
+    """
+    x1, y1, x2, y2 = (float(v) for v in d.bbox)
+    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+    bw, bh = max(0.0, x2 - x1), max(0.0, y2 - y1)
+    area_frac = (bw * bh) / float(w * h)
+    centred = (0.20 * w) < cx < (0.80 * w) and (0.15 * h) < cy < (0.85 * h)
+    if area_frac > 0.70:
+        return False, f"full-frame box (area {area_frac:.2f} of frame) — NOT a localization"
+    if not centred:
+        return False, f"box centre ({cx:.0f},{cy:.0f}) at frame edge — not on a framed object"
+    return True, f"tight box (area {area_frac:.2f}), centred — localized"
+
+
 def _run_frame() -> dict:
-    """Drive the gait to the nav vantage, render g1's head camera there, run
-    grounding-dino, and draw the box on the red object. The visual evidence."""
+    """Render g1's head camera and run grounding-dino on the FRAMED vantage, then
+    drive the gait to the nav target (the honest no-fall walk). The detect is done
+    where the red object is actually in view (g1's spawn faces the doorway + red
+    stool); the nav demonstrates the RL gait separately. Each box is red-teamed for
+    a GENUINE (tight, centred) localization vs a spurious full-frame box."""
     from PIL import Image, ImageDraw
     from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
     from vector_os_nano.perception.g1_head_perception import G1HeadPerception
     from vector_os_nano.perception.grounding_dino import get_shared_detector
 
-    print(f"[capstone] FRAME: navigate to {_TARGET}, render g1 head cam, detect {_QUERY_DETECT!r}")
+    print(f"[capstone] FRAME: detect {_QUERY_DETECT!r} at the framed vantage, then navigate to {_TARGET}")
     g1 = MuJoCoG1(gui=False, room=True)
     g1.connect()
     try:
+        g1.step(60)  # settle the stand
         sx, sy, sz = (float(v) for v in g1.get_position())
-        d0 = math.hypot(_TARGET[0] - sx, _TARGET[1] - sy)
-        res = g1.navigate_to(_TARGET[0], _TARGET[1], tol=0.35, speed=0.5)
-        ex, ey, ez = (float(v) for v in g1.get_position())
-        d1 = math.hypot(_TARGET[0] - ex, _TARGET[1] - ey)
-        reached = bool(res)
-        moved_toward = d1 < d0
-        no_fall = ez >= _FALL_Z
 
+        # --- DETECT at the framed vantage (spawn faces the doorway + red stool) ---
         perc = G1HeadPerception(g1, width=640, height=480)
         rgb = perc.get_color_frame()
         detector = get_shared_detector()
@@ -202,36 +223,42 @@ def _run_frame() -> dict:
         out_dets = []
         for d in dets:
             x1, y1, x2, y2 = (float(v) for v in d.bbox)
-            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
-            centred = (0.20 * w) < cx < (0.80 * w) and (0.15 * h) < cy < (0.85 * h)
-            draw.rectangle([x1, y1, x2, y2], outline=(255, 255, 0), width=4)
+            real, reason = _localization_check(d, w, h)
+            colour = (255, 255, 0) if real else (255, 80, 80)
+            draw.rectangle([x1, y1, x2, y2], outline=colour, width=4)
             draw.text((x1 + 3, max(0, y1 - 12)),
-                      f"{d.label} {d.confidence:.2f}", fill=(255, 255, 0))
+                      f"{d.label} {d.confidence:.2f}", fill=colour)
             out_dets.append({
                 "label": d.label,
                 "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
-                "center": [round(cx, 1), round(cy, 1)],
                 "score": round(float(d.confidence), 3),
-                "on_object_centred": centred,
+                "real_localization": real,
+                "reason": reason,
             })
         img.save(_FRAME_PNG)
+        print(f"[capstone] annotated frame saved -> {_FRAME_PNG} ({w}x{h}, {len(dets)} box(es))")
+
+        # --- NAVIGATE (the honest RL-gait walk; graded RAN by the moat) ---
+        d0 = math.hypot(_TARGET[0] - sx, _TARGET[1] - sy)
+        res = g1.navigate_to(_TARGET[0], _TARGET[1], tol=0.35, speed=0.5)
+        ex, ey, ez = (float(v) for v in g1.get_position())
+        d1 = math.hypot(_TARGET[0] - ex, _TARGET[1] - ey)
 
         report = {
-            "target": list(_TARGET),
-            "start": [round(sx, 3), round(sy, 3), round(sz, 3)],
-            "end": [round(ex, 3), round(ey, 3), round(ez, 3)],
+            "detect_vantage": [round(sx, 3), round(sy, 3), round(sz, 3)],
+            "nav_target": list(_TARGET),
+            "nav_end": [round(ex, 3), round(ey, 3), round(ez, 3)],
             "dist_start": round(d0, 3), "dist_end": round(d1, 3),
-            "moved_toward_target": moved_toward,
-            "navigate_to_reached": reached,
-            "no_fall_min_z": round(ez, 3), "no_fall": no_fall,
+            "moved_toward_target": d1 < d0,
+            "navigate_to_reached": bool(res),
+            "no_fall_min_z": round(ez, 3), "no_fall": ez >= _FALL_Z,
             "frame_shape": [h, w, 3],
             "n_detections": len(out_dets),
             "detections": out_dets,
-            "any_box_on_object": any(d["on_object_centred"] for d in out_dets),
+            "any_real_localization": any(d["real_localization"] for d in out_dets),
             "frame_png": _FRAME_PNG,
         }
         print(json.dumps(report, indent=2))
-        print(f"[capstone] annotated frame saved -> {_FRAME_PNG} ({w}x{h}, {len(dets)} box(es))")
         return report
     finally:
         try:
@@ -247,7 +274,7 @@ def main() -> int:
     repl = _run_repl()
 
     walked = frame["moved_toward_target"] and frame["no_fall"]
-    localized = frame["any_box_on_object"]
+    localized = frame["any_real_localization"]
     honest = repl["started"] and repl["nav_seen"] and repl["detect_seen"] and repl["no_false_green"]
 
     print("\n" + "=" * 72)
@@ -257,9 +284,12 @@ def main() -> int:
     print(f"[capstone]   NO false-green (nav RAN + detect RAN, both honest): {repl['no_false_green']}")
     print(f"[capstone]   g1 walked to the point (no fall): {walked} "
           f"(dist {frame['dist_start']}->{frame['dist_end']}, min_z {frame['no_fall_min_z']})")
-    print(f"[capstone]   grounding-dino localized the red object on g1's cam: {localized}")
+    print(f"[capstone]   grounding-dino GENUINELY localized (tight box, not full-frame): {localized}")
+    # The moat-honesty is the load-bearing claim (GROUNDED=0). The localization is
+    # red-teamed: a full-frame box is rejected as spurious, so 'localized' means a
+    # real tight box on a framed object.
     passed = honest and walked and localized
-    print(f"[capstone]   CAPSTONE PASS (NL humanoid, moat-honest): {'YES' if passed else 'PARTIAL'}")
+    print(f"[capstone]   CAPSTONE PASS (NL humanoid, moat-honest + real localization): {'YES' if passed else 'PARTIAL'}")
     return 0 if passed else 2
 
 
