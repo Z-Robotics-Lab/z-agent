@@ -5,39 +5,37 @@ One-page "where are we / what's next". Read this first; the GOAL is in [../CLAUD
 [DECISIONS.md](DECISIONS.md); hidden-bug lessons are [tricky-bugs.md](tricky-bugs.md). Per-round
 narrative + the campaign plan live in `~/.vector-nano-loop/{journal,campaign}.md`.
 
-updated: 2026-06-23 · G1 R2 LANDED + foreground real-verified (D58) — G1 humanoid WALKS to commanded points in the go2 apartment room via a 12-DOF RL policy (motion.pt, 50 Hz) WITHOUT FALLING, and lidar+camera UPDATE while moving. Replaced R1's stand-only 29-DOF menagerie model with the matched pair g1_12dof.xml + motion.pt (the only policy-walkable combo; lead spiked it first: 2.70m in 6s, z 0.765-0.791). VERDICT (probe scripts/probe_r2_g1_walk.py, MUJOCO_GL=egl, torn down): 2/2 trials reached (deterministic=1 real sample), base-z 0.770-0.793 throughout (no fall), net 1.04m/path 2.49m over two legs (pivot+walk, pivot+walk). Sensors change: lidar min 3.0->1.77->2.05m, near-pts(<2m) 194->1021->180; head camera VISIBLY distinct at start (kitchen-through-doorway) / mid (near-blank south wall) / arrival (doorway new angle, red object) — lead Read all 3 PNGs. NL-switch DONE (routing already supported g1; added prompt line; verified "启动 g1 仿真"->tool_use->sim_type=g1->_start_g1). 5/5 unit tests. Commit a7afaf9 (WIP floor). Spine vector_os_nano/vcli/cognitive/ BYTE-UNCHANGED.
+updated: 2026-06-23 · G1 R3 LANDED + foreground real-verified, BARE-CLI acceptance (D59) — g1 is now a MOAT-GRADED ROUTABLE EMBODIMENT (parity with go2). The SAME orchestration drives g1 via the literal bare cli.main REPL: two NL turns "启动 g1 仿真" (→ "▸ sim start g1 ok 0.9s", NL embodiment-switch) then "走到坐标 (10.0,1.5)" (→ "native navigate (x=10.0,y=1.5)" → g1.navigate_to RL gait → "▸ navigate → verify at_position(10.0,1.5) ✓ (actor=UNCAUSED)" → "verdict RAN verified=False (0/1 grounded)"). The `✓` = at_position PREDICATE TRUE = g1 PHYSICALLY ARRIVED (moat read g1's pelvis pose); RAN (not GROUNDED) is the CORRECT HONEST grade — base cmd_vel/gait is not actor-causation-gated (D14), identical to go2; SUCCESS not failure. Probe corroborates (/tmp/r3_g1_nav_probe.json): (10,3,z.793)→(10.03,1.83,z.773), dist 1.5→0.331m, no fall (z min .773), reason=arrived. THE REAL FINDING: the wiring was already body-agnostic (RobotWorld for any base; at_position reads get_position generically; navigate routes via getattr) — the ONLY gap was a return-contract mismatch (g1 navigate_to returned a dict→always-truthy vs go2's bool). FIX = _G1NavResult(dict) with __bool__==reached + timeout kwarg; NO world-wiring change needed. De-sloppify: lidar extracted to sensors/g1_lidar.py, mujoco_g1.py 917→797 (<800). Transcript /tmp/r3_g1_nav.txt. Commit f991e27. Spine vector_os_nano/vcli/cognitive/ BYTE-UNCHANGED.
 goal:    agent-orchestration runtime for physical AI — plan · route to the right MODEL/skill ·
          verify each step · recover. Sim-first; bare `vector-cli` + NL is the only acceptance interface.
          CURRENT THRUST: prove the 3 under-proven North-Star axes (route-to-MODEL ✓ now at the ORCHESTRATION layer · cross-embodiment · live orchestration), using the moat to grade each.
-phase:   M3 cross-EMBODIMENT — G1 humanoid added as a 3rd embodiment (alongside go2 / go2+arm), standing in the SAME
-         go2 room with working lidar+camera. The cross-embodiment North-Star axis now has its first real 2nd body-class
-         beyond the quadruped. (M2 cross-model — learned detector routed-to BY THE PRODUCER, D48-D50 — remains proven.)
-owns:    hardware/sim/mujoco_g1.py (R2: 12-DOF gait + room scene + navigate_to + lidar + camera),
-         hardware/sim/mjcf/g1/scene_g1_12dof_room.xml (generated), tests/unit/hardware/sim/test_g1_room.py.
-         R1 artifacts preserved: build_g1.py, g1.xml, scene_g1_room.xml (29-DOF stand scene still on disk).
-         (Moat vcli/cognitive/ BYTE-UNCHANGED across 57 decisions; g1 is sim/world-side only — no spine edit.)
-doing:   G1 R2 — DONE + foreground real-verified (D58). g1 WALKS to commanded points without falling + sensors update
-         while moving + NL-switch wired. 12-DOF g1_12dof.xml + motion.pt policy (only walkable combo) attached into the go2
-         room; single-threaded synchronous gait; absolute mesh paths (dual-meshdir fix, D57 lesson recurred). Combined-scene
-         offsets: pelvis_qpos_adr=21, leg_qpos=28:40, ctrl=0:12 (a _G1Offsets class — the flat-spike's qpos[7:]/qvel[6:]
-         would be WRONG in the room scene). Public API: connect/close/walk/navigate_to/set_velocity/stop/get_position/
-         get_base_height/get_heading/get_lidar_scan/get_camera_frame/get_camera_pose. probe_r2_g1_walk.py is the acceptance.
+phase:   M3 cross-EMBODIMENT — G1 humanoid PROVEN as a moat-graded routable embodiment THROUGH THE ACCEPTANCE INTERFACE
+         (bare cli + NL → switch → command → moat grades), parity with go2. The cross-embodiment North-Star axis is now
+         demonstrated end-to-end on a 2nd body-class. (M2 cross-model — learned detector routed-to BY THE PRODUCER, D48-D50 —
+         remains proven.)
+owns:    hardware/sim/mujoco_g1.py (797 ln: 12-DOF gait + room scene + navigate_to(contract-parity) + camera; lidar in
+         sensors/g1_lidar.py), hardware/sim/sensors/g1_lidar.py (extracted mj_ray scan), tests/unit/hardware/sim/test_g1_room.py
+         (6 tests incl. nav-result-contract), scripts/probe_r3_g1_nav.py (bare-cli + probe acceptance). R1/R2 artifacts on disk.
+         (Moat vcli/cognitive/ BYTE-UNCHANGED across 59 decisions; g1 is sim/world-side only — no spine edit.)
+doing:   G1 R3 — DONE + foreground real-verified via BARE cli.main REPL (D59). g1 is a moat-graded routable embodiment:
+         resolve_for_agent wraps any base in RobotWorld; at_position reads get_position generically; navigate routes via
+         getattr — all ALREADY body-agnostic. ONLY fix needed: navigate_to return-contract (g1's dict was always-truthy vs
+         go2's bool) → _G1NavResult(dict).__bool__==reached + timeout kwarg + **_ignored (absorbs go2's on_progress); existing
+         .get() callers unchanged. Lidar mj_ray extracted to sensors/g1_lidar.py (byte-identical); mujoco_g1.py 917→797.
+         Transcript /tmp/r3_g1_nav.txt: verdict RAN verified=False (honest D14 grade — at_position ✓ = arrived, UNCAUSED).
 
-blocked: none — not a CEO gate (sim asset + in-sim locomotion + a prompt-string add; no new ROS2 interface, no new external
-         dep). HONEST shakiness for R3: (1) navigate_to is OPEN-LOOP straight-line — NO obstacle avoidance (the recovered
-         _nav_controller/g1_vgraph were not in HEAD, not recovered). It walks STRAIGHT INTO the table/walls if commanded
-         through them — the probe HAD to route around the pick_table (which blocks +x at x~=10.80) to reachable open points.
-         R3: recover/inline the vgraph obstacle router. (2) Only 1 REAL sample (deterministic, no randomized start) — R3 add
-         randomized spawns for an honest success RATE. (3) Table doesn't enter close LIDAR range at the standoff (it's a camera
-         target here) — R3 approach the table front from the open south side. (4) mujoco_g1.py is 917 lines (>800) — extract
-         the lidar method. (5) Gait tested only on open floor — R3 walk a longer cross-room path over rugs/thresholds. (6) The
-         29-DOF menagerie model is set aside for locomotion (no matched policy) — a 29dof gait needs its own trained policy.
-next:    R3 (cross-EMBODIMENT, evolve) — bundle: (a) g1 OBSTACLE-AWARE navigate_to — recover/inline the vgraph router (or
+blocked: none — not a CEO gate (a return-contract fix + a code-move refactor; no new ROS2 interface, no new external dep).
+         HONEST shakiness for R4: (1) navigate_to still OPEN-LOOP straight-line — NO obstacle avoidance (target chosen in
+         clear south space). R4: recover/inline the vgraph obstacle router so g1 reaches ANY point incl. through-furniture.
+         (2) Deterministic single sample — R4 add randomized spawns for an honest success RATE (3-5 starts). (3) at_position
+         is RAN not GROUNDED — making g1 base-nav GROUNDED needs actor-causation extended to cmd_vel = a SPINE/CEO change
+         (D14, GATED — do NOT do autonomously). (4) Gait untested over rugs/thresholds — R4 walk a longer cross-room path.
+next:    R4 (cross-EMBODIMENT, evolve) — bundle: (a) g1 OBSTACLE-AWARE navigate_to — recover/inline the vgraph router (or
          enumerate obstacles + plan around them) so g1 walks to ANY commanded point incl. the pick_table front without
-         colliding/stalling; (b) randomized spawns → honest success RATE (say 3-5 starts); (c) a longer cross-room walk
-         (through the west doorway / over the hall rug) to stress gait on non-flat geometry; (d) then a cross-embodiment TASK
-         graded by the moat: g1 navigates to + PERCEIVES an object via bare vector-cli NL (close the orchestration loop on the
-         humanoid). Real-verify in the sim + Read a moving render every round.
+         colliding/stalling; (b) randomized spawns → honest success RATE (3-5 starts) via the bare cli; (c) a longer cross-room
+         walk (through the west doorway / over the hall rug) to stress gait on non-flat geometry; (d) a cross-embodiment
+         PERCEPTION task on g1 via bare cli NL: navigate-to + detect/describe an object (route the detector capability) —
+         close the orchestration loop further on the humanoid. Real-verify in the sim + Read a moving render every round.
          Gated leaps (CEO queue): re-plan strategy_params-preservation (SPINE — D52), cross-EMBODIMENT (g1), explore
          (TARE), VLN (SysNav), merge→master.
          ALSO record for reproducibility: `.venv` must have `timm` (uv pip install 'timm>=1.0'); EdgeTAM backbone
