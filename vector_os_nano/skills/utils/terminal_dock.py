@@ -69,6 +69,11 @@ _DOCK_FACE_VYAW = 0.6          # rad/s turn-in-place (gentle — less overshoot)
 _DOCK_FACE_GAIN = 0.6          # turn only this fraction of the residual per step
 _DOCK_FACE_MAX_S = 1.2         # cap a single facing-turn increment
 _DOCK_FACE_MAX_STEPS = 8       # iterations to converge the heading
+# A pure-yaw turn-in-place still DRIFTS the dog forward (the gait curves), so the
+# facing turn pushes the dog off the dock point (real-sim: facing drifted x 10.0→
+# 10.55, too close to the table → the d435 looks OVER the cans). So alternate:
+# drive to the point, then face, then RE-CHECK both and repeat until BOTH converge.
+_DOCK_OUTER_ITERS = 4
 
 
 def _wrap(a: float) -> float:
@@ -145,24 +150,52 @@ def terminal_dock(
         "[DOCK] steered drive ( %.2f, %.2f ) hd=%.2f -> dock ( %.2f, %.2f ) hd=%.2f",
         pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd)
 
-    # --- closed-loop steered drive to the dock point -------------------------
+    # --- alternate drive-to-point + face-heading until BOTH converge ---------
+    # A pure-yaw facing turn drifts the dog forward off the dock point, so a single
+    # drive-then-face is not enough — face, then re-drive to undo the drift, repeat.
+    converged = False
+    for outer in range(_DOCK_OUTER_ITERS):
+        _drive_to_point(base, dx_goal, dy_goal, pos_deadband, max_steps, on_progress)
+        _face_heading(base, dock_hd, yaw_deadband, on_progress)
+        try:
+            pos = base.get_position()
+            hd = float(base.get_heading())
+        except Exception:  # noqa: BLE001
+            return True
+        gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
+        face_err = abs(_wrap(dock_hd - hd))
+        logger.info("[DOCK] outer %d: gap=%.2fm face_err=%.0fdeg",
+                    outer, gap, math.degrees(face_err))
+        if gap <= pos_deadband and face_err <= yaw_deadband:
+            converged = True
+            break
+
+    try:
+        pos = base.get_position()
+        hd = float(base.get_heading())
+        logger.info("[DOCK] final pose ( %.2f, %.2f ) hd=%.2f (target %.2f,%.2f hd=%.2f) converged=%s",
+                    pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd, converged)
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
+def _drive_to_point(base: Any, dx_goal: float, dy_goal: float,
+                    pos_deadband: float, max_steps: int, on_progress: Any) -> None:
+    """Closed-loop steered drive to (dx_goal, dy_goal): short combined vx+vyaw steps."""
     for step in range(max_steps):
         try:
             pos = base.get_position()
             hd = float(base.get_heading())
         except Exception as exc:  # noqa: BLE001
-            logger.debug("[DOCK] pose read failed mid-dock (%s)", exc)
-            return True
-
+            logger.debug("[DOCK] pose read failed mid-drive (%s)", exc)
+            return
         gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
         if gap <= pos_deadband:
             logger.info("[DOCK] reached dock point step=%d gap=%.2fm", step, gap)
-            break
-
+            return
         bearing = math.atan2(dy_goal - pos[1], dx_goal - pos[0])
         yaw_err = _wrap(bearing - hd)
-        # Combined steered step: vyaw closes the bearing; vx advances (reduced while
-        # badly mis-headed so the dog turns toward the point before charging).
         vyaw = max(-_DOCK_STEP_VYAW_MAX,
                    min(_DOCK_STEP_VYAW_MAX, yaw_err * _DOCK_STEP_VYAW_GAIN))
         vx = (_DOCK_STEP_VX if abs(yaw_err) < _DOCK_BIG_YAW_RAD
@@ -172,34 +205,28 @@ def terminal_dock(
             on_progress(f"dock: drive {gap:.2f}m, yaw {math.degrees(yaw_err):.0f}deg")
         _safe_walk(base, vx=vx, vyaw=vyaw, duration=dur)
 
-    # --- final facing turn: CLOSED-LOOP turn to the dock heading (the cans) ---
-    # Turn the RESIDUAL error in short re-measured increments — a single open-loop
-    # turn overshoots because the gait keeps yawing past the command. Each step
-    # re-reads the heading and corrects a fraction of what remains until docked.
+
+def _face_heading(base: Any, dock_hd: float, yaw_deadband: float,
+                  on_progress: Any) -> None:
+    """Closed-loop turn-in-place to ``dock_hd``: damped residual increments.
+
+    A single open-loop turn overshoots (the gait keeps yawing past the command), so
+    turn a damped fraction of the live residual each step until within the deadband.
+    """
     for _ in range(_DOCK_FACE_MAX_STEPS):
         try:
             hd = float(base.get_heading())
         except Exception:  # noqa: BLE001
-            return True
+            return
         face_err = _wrap(dock_hd - hd)
         if abs(face_err) <= yaw_deadband:
-            break
-        # Turn a damped fraction of the residual (gentle, bounded) toward the heading.
+            return
         turn = face_err * _DOCK_FACE_GAIN
         dur = min(_DOCK_FACE_MAX_S, abs(turn) / _DOCK_FACE_VYAW)
         vyaw = _DOCK_FACE_VYAW if turn > 0 else -_DOCK_FACE_VYAW
         if on_progress:
             on_progress(f"dock: face residual {math.degrees(face_err):.0f}deg")
         _safe_walk(base, vyaw=vyaw, duration=dur)
-
-    try:
-        pos = base.get_position()
-        hd = float(base.get_heading())
-        logger.info("[DOCK] final pose ( %.2f, %.2f ) hd=%.2f (target %.2f,%.2f hd=%.2f)",
-                    pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd)
-    except Exception:  # noqa: BLE001
-        pass
-    return True
 
 
 def _safe_walk(base: Any, *, vx: float = 0.0, vy: float = 0.0,
