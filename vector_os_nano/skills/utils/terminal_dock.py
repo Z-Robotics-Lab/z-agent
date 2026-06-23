@@ -56,8 +56,10 @@ _DOCK_STEP_VYAW_GAIN = 1.5     # proportional yaw correction
 _DOCK_STEP_VYAW_MAX = 0.6      # rad/s clamp on the per-step yaw correction
 _DOCK_STEP_MIN_S = 0.6         # min per-step duration
 _DOCK_STEP_MAX_S = 1.4         # max per-step duration
-_DOCK_BIG_YAW_RAD = 0.5        # above this bearing error, creep slowly (turn first)
-_DOCK_CREEP_FACTOR = 0.25      # vx multiplier while badly mis-headed
+_DOCK_BIG_YAW_RAD = 0.7        # above this bearing error, TURN IN PLACE (vx=0) — do
+                               # NOT creep, or the dog ORBITS a nearby mis-headed
+                               # point instead of reaching it (real-sim: it circled
+                               # the dock point at ~0.3-0.6 m and never converged).
 # Max steered steps to converge onto the dock point (each ~6-15 cm of progress).
 _DOCK_MAX_STEPS = 30
 # PRE-DOCK STRAIGHT-IN approach (the heading-without-a-facing-turn trick). A pure-yaw
@@ -206,11 +208,18 @@ def _drive_to_point(base: Any, dx_goal: float, dy_goal: float,
         yaw_err = _wrap(bearing - hd)
         vyaw = max(-_DOCK_STEP_VYAW_MAX,
                    min(_DOCK_STEP_VYAW_MAX, yaw_err * _DOCK_STEP_VYAW_GAIN))
-        vx = (_DOCK_STEP_VX if abs(yaw_err) < _DOCK_BIG_YAW_RAD
-              else _DOCK_STEP_VX * _DOCK_CREEP_FACTOR)
-        dur = max(_DOCK_STEP_MIN_S, min(_DOCK_STEP_MAX_S, gap / max(vx, 1e-3)))
+        if abs(yaw_err) >= _DOCK_BIG_YAW_RAD:
+            # Badly mis-headed: TURN IN PLACE (vx=0). Creeping here makes the dog
+            # orbit a nearby point it isn't facing instead of reaching it.
+            vx = 0.0
+            dur = min(_DOCK_STEP_MAX_S,
+                      max(_DOCK_STEP_MIN_S, abs(yaw_err) / _DOCK_STEP_VYAW_MAX))
+        else:
+            vx = _DOCK_STEP_VX
+            dur = max(_DOCK_STEP_MIN_S, min(_DOCK_STEP_MAX_S, gap / max(vx, 1e-3)))
         if on_progress:
-            on_progress(f"dock: drive {gap:.2f}m, yaw {math.degrees(yaw_err):.0f}deg")
+            on_progress(f"dock: drive {gap:.2f}m, yaw {math.degrees(yaw_err):.0f}deg "
+                        f"({'turn' if vx == 0.0 else 'fwd'})")
         _safe_walk(base, vx=vx, vyaw=vyaw, duration=dur)
 
 
