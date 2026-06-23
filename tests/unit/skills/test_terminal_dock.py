@@ -39,9 +39,11 @@ from vector_os_nano.skills.utils.terminal_dock import (
 class _KinematicBase:
     """Integrates walk(vx, vy, vyaw, duration) into a world (x, y, yaw) pose.
 
-    Models the open-loop gait closely enough to verify the dock CONVERGES: a yaw
-    command rotates the heading; a vx command translates along the heading. A small
-    optional per-step drift can be injected to prove the dock's iteration closes it.
+    Models the gait under a COMBINED ``walk(vx, vyaw)`` (the steered-step the dock
+    uses): the heading and the position both advance over the step, integrated in a
+    few substeps so a curved step is followed. A small optional per-step drift can
+    be injected to prove the dock's closed loop still converges (it re-reads the live
+    pose each step). High enough fidelity to verify CONVERGENCE, not gait realism.
     """
 
     def __init__(self, *, pose=(10.0, 3.0), heading=0.0, drift=0.0):
@@ -58,17 +60,15 @@ class _KinematicBase:
 
     def walk(self, vx=0.0, vy=0.0, vyaw=0.0, duration=1.0):
         self.walks.append((float(vx), float(vy), float(vyaw), float(duration)))
-        # Rotate first (turn-in-place), then translate along the new heading.
-        self._yaw = math.atan2(
-            math.sin(self._yaw + vyaw * duration),
-            math.cos(self._yaw + vyaw * duration),
-        )
-        step = vx * duration
-        self._x += step * math.cos(self._yaw) + self._drift
-        self._y += step * math.sin(self._yaw)
-        # Lateral (vy) — body +y; rarely used by the dock but integrate for fidelity.
-        self._x += -vy * duration * math.sin(self._yaw)
-        self._y += vy * duration * math.cos(self._yaw)
+        # Integrate a curved step (vx + vyaw applied together) in substeps.
+        n = 8
+        dt = duration / n
+        for _ in range(n):
+            self._yaw = math.atan2(
+                math.sin(self._yaw + vyaw * dt), math.cos(self._yaw + vyaw * dt))
+            self._x += vx * dt * math.cos(self._yaw) - vy * dt * math.sin(self._yaw)
+            self._y += vx * dt * math.sin(self._yaw) + vy * dt * math.cos(self._yaw)
+        self._x += self._drift
         return True
 
 
@@ -114,29 +114,23 @@ def test_dock_reaches_fixed_pose_with_open_loop_drift():
 
 def test_dock_is_benign_when_already_at_pose():
     """When the dog is already at the dock pose (the scripted-from-spawn path),
-    the dock issues NO material motion — so the proven grasp does not regress."""
+    the dock issues NO walk at all — so the proven grasp does not regress (the
+    drive loop breaks at step 0 with gap<=deadband, and the facing turn is within
+    the yaw deadband)."""
     base = _KinematicBase(pose=(10.0, 3.0), heading=0.0)
     terminal_dock(base, (10.0, 3.0), 0.0)
 
-    # No walk command should carry a meaningful translation or rotation.
-    moved = any(
-        abs(w[0] * w[3]) > _DOCK_POS_DEADBAND_M or abs(w[2] * w[3]) > _DOCK_YAW_DEADBAND_RAD
-        for w in base.walks
-    )
-    assert not moved, f"dock issued material motion from the docked pose: {base.walks}"
+    assert base.walks == [], (
+        f"dock issued motion from the already-docked pose: {base.walks}")
     px, py, _ = base.get_position()
-    assert math.hypot(px - 10.0, py - 3.0) < 1e-6
+    assert math.hypot(px - 10.0, py - 3.0) < 1e-9
 
 
 def test_dock_benign_within_deadband():
-    """A dog just inside the deadbands of the dock pose triggers no material move."""
+    """A dog just inside both deadbands of the dock pose triggers no walk."""
     base = _KinematicBase(pose=(10.05, 3.03), heading=0.05)
     terminal_dock(base, (10.0, 3.0), 0.0)
-    moved = any(
-        abs(w[0] * w[3]) > _DOCK_POS_DEADBAND_M or abs(w[2] * w[3]) > _DOCK_YAW_DEADBAND_RAD
-        for w in base.walks
-    )
-    assert not moved, f"dock moved within-deadband dog: {base.walks}"
+    assert base.walks == [], f"dock moved a within-deadband dog: {base.walks}"
 
 
 # ---------------------------------------------------------------------------

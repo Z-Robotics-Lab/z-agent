@@ -41,21 +41,28 @@ logger = logging.getLogger(__name__)
 
 # --- Dock convergence tuning ------------------------------------------------
 # Planar-position deadband: below this the dog is "at" the dock point and the
-# turn+walk translate phases are skipped (benign no-op when already docked).
+# translate phase is skipped (benign no-op when already docked).
 _DOCK_POS_DEADBAND_M = 0.12
-# Heading deadband for the bearing-turn and the final facing-turn (~9 deg). A
-# scripted-from-spawn dog already faces +X within this, so no real turn fires.
+# Heading deadband for the final facing-turn (~9 deg). A scripted-from-spawn dog
+# already faces +X within this, so no real facing turn fires.
 _DOCK_YAW_DEADBAND_RAD = 0.16
-# Velocities for the three phases.
+# CLOSED-LOOP steered-step drive (the proven _approach_object pattern). The dog's
+# real gait curves and drifts heavily under a big open-loop turn-then-walk, so we
+# drive to the dock point in SHORT steered steps: each step re-reads the live pose,
+# steers vyaw proportional to the bearing error AND advances vx (reduced while badly
+# mis-headed), so heading + position errors close together instead of accumulating.
+_DOCK_STEP_VX = 0.45           # m/s nominal forward speed per step
+_DOCK_STEP_VYAW_GAIN = 1.5     # proportional yaw correction
+_DOCK_STEP_VYAW_MAX = 0.6      # rad/s clamp on the per-step yaw correction
+_DOCK_STEP_MIN_S = 0.6         # min per-step duration
+_DOCK_STEP_MAX_S = 1.4         # max per-step duration
+_DOCK_BIG_YAW_RAD = 0.5        # above this bearing error, creep slowly (turn first)
+_DOCK_CREEP_FACTOR = 0.25      # vx multiplier while badly mis-headed
+# Max steered steps to converge onto the dock point (each ~6-15 cm of progress).
+_DOCK_MAX_STEPS = 30
+# Final facing turn (face the cans): turn-in-place to the dock heading.
 _DOCK_TURN_VYAW = 0.8     # rad/s turn-in-place
-_DOCK_WALK_VX = 0.5       # m/s forward translate
-# Duration caps per single walk command (keep each leg bounded).
 _DOCK_TURN_MAX_S = 4.0
-_DOCK_WALK_MAX_S = 4.0
-# Dead-reckoning is open-loop and drifts; iterate the turn→walk→face cycle a few
-# times to converge onto the dock point. Stops early once within the position
-# deadband AND facing within the yaw deadband.
-_DOCK_MAX_ITERS = 4
 
 
 def _wrap(a: float) -> float:
@@ -77,10 +84,18 @@ def terminal_dock(
     *,
     pos_deadband: float = _DOCK_POS_DEADBAND_M,
     yaw_deadband: float = _DOCK_YAW_DEADBAND_RAD,
-    max_iters: int = _DOCK_MAX_ITERS,
+    max_steps: int = _DOCK_MAX_STEPS,
     on_progress: Any = None,
 ) -> bool:
-    """Dead-reckon the base to a FIXED ``(dock_xy, dock_heading)`` pose.
+    """Drive the base to a FIXED ``(dock_xy, dock_heading)`` pose, then face it.
+
+    CLOSED-LOOP steered-step drive (the proven _approach_object pattern): the dog's
+    real gait curves and drifts heavily under a big open-loop turn-then-walk, so the
+    dock drives to the dock point in SHORT steered steps — each step re-reads the
+    live pose and issues ONE ``walk(vx, vyaw)`` whose yaw closes the bearing error
+    and whose forward speed advances toward the point (reduced while badly mis-
+    headed). Heading + position errors close together rather than accumulating. A
+    final turn-in-place faces ``dock_heading`` (the cans, +X).
 
     Args:
         base: a base exposing ``walk(vx, vy, vyaw, duration)`` /
@@ -91,9 +106,10 @@ def terminal_dock(
             GROUNDS.
         dock_heading: the world yaw to face at the dock point (radians). Facing the
             cans is +X → ``0.0``.
-        pos_deadband: stop translating once within this many metres of ``dock_xy``.
-        yaw_deadband: treat a yaw error below this (radians) as "already facing".
-        max_iters: how many turn→walk→face cycles to close open-loop drift.
+        pos_deadband: stop driving once within this many metres of ``dock_xy``.
+        yaw_deadband: treat a final-facing yaw error below this (radians) as
+            "already facing" (no facing turn).
+        max_steps: max steered steps to converge onto the dock point.
         on_progress: optional ``callable(str)`` for human-readable progress.
 
     Returns:
@@ -120,10 +136,11 @@ def terminal_dock(
             f"dock: from ({pos[0]:.2f},{pos[1]:.2f}) hd={hd:.2f} "
             f"-> ({dx_goal:.2f},{dy_goal:.2f}) hd={dock_hd:.2f}")
     logger.info(
-        "[DOCK] dead-reckon ( %.2f, %.2f ) hd=%.2f -> dock ( %.2f, %.2f ) hd=%.2f",
+        "[DOCK] steered drive ( %.2f, %.2f ) hd=%.2f -> dock ( %.2f, %.2f ) hd=%.2f",
         pos[0], pos[1], hd, dx_goal, dy_goal, dock_hd)
 
-    for it in range(max_iters):
+    # --- closed-loop steered drive to the dock point -------------------------
+    for step in range(max_steps):
         try:
             pos = base.get_position()
             hd = float(base.get_heading())
@@ -132,52 +149,35 @@ def terminal_dock(
             return True
 
         gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
-        face_err = _wrap(dock_hd - hd)
-
-        # Converged: at the dock point AND facing the dock heading.
-        if gap <= pos_deadband and abs(face_err) <= yaw_deadband:
-            logger.info("[DOCK] converged iter=%d gap=%.2fm face_err=%.2frad", it, gap, face_err)
+        if gap <= pos_deadband:
+            logger.info("[DOCK] reached dock point step=%d gap=%.2fm", step, gap)
             break
 
-        # --- phase 1+2: translate onto the dock point (only if materially off) ---
-        if gap > pos_deadband:
-            bearing = math.atan2(dy_goal - pos[1], dx_goal - pos[0])
-            turn = _wrap(bearing - hd)
-            # phase 1: turn to the bearing toward the dock point
-            if abs(turn) > yaw_deadband:
-                dur = min(_DOCK_TURN_MAX_S, abs(turn) / _DOCK_TURN_VYAW)
-                vyaw = _DOCK_TURN_VYAW if turn > 0 else -_DOCK_TURN_VYAW
-                if on_progress:
-                    on_progress(f"dock: turn {math.degrees(turn):.0f}deg to bearing")
-                _safe_walk(base, vyaw=vyaw, duration=dur)
-                try:
-                    hd = float(base.get_heading())
-                except Exception:  # noqa: BLE001
-                    pass
-            # phase 2: walk forward the planar gap (re-read pose after the turn)
-            try:
-                pos = base.get_position()
-            except Exception:  # noqa: BLE001
-                return True
-            gap = math.hypot(dx_goal - pos[0], dy_goal - pos[1])
-            if gap > pos_deadband:
-                dur = min(_DOCK_WALK_MAX_S, gap / max(_DOCK_WALK_VX, 1e-3))
-                if on_progress:
-                    on_progress(f"dock: walk {gap:.2f}m to dock point")
-                _safe_walk(base, vx=_DOCK_WALK_VX, duration=dur)
+        bearing = math.atan2(dy_goal - pos[1], dx_goal - pos[0])
+        yaw_err = _wrap(bearing - hd)
+        # Combined steered step: vyaw closes the bearing; vx advances (reduced while
+        # badly mis-headed so the dog turns toward the point before charging).
+        vyaw = max(-_DOCK_STEP_VYAW_MAX,
+                   min(_DOCK_STEP_VYAW_MAX, yaw_err * _DOCK_STEP_VYAW_GAIN))
+        vx = (_DOCK_STEP_VX if abs(yaw_err) < _DOCK_BIG_YAW_RAD
+              else _DOCK_STEP_VX * _DOCK_CREEP_FACTOR)
+        dur = max(_DOCK_STEP_MIN_S, min(_DOCK_STEP_MAX_S, gap / max(vx, 1e-3)))
+        if on_progress:
+            on_progress(f"dock: drive {gap:.2f}m, yaw {math.degrees(yaw_err):.0f}deg")
+        _safe_walk(base, vx=vx, vyaw=vyaw, duration=dur)
 
-        # --- phase 3: turn-in-place to the dock heading (face the cans) ----------
-        try:
-            hd = float(base.get_heading())
-        except Exception:  # noqa: BLE001
-            return True
-        face_err = _wrap(dock_hd - hd)
-        if abs(face_err) > yaw_deadband:
-            dur = min(_DOCK_TURN_MAX_S, abs(face_err) / _DOCK_TURN_VYAW)
-            vyaw = _DOCK_TURN_VYAW if face_err > 0 else -_DOCK_TURN_VYAW
-            if on_progress:
-                on_progress(f"dock: face {math.degrees(face_err):.0f}deg to heading")
-            _safe_walk(base, vyaw=vyaw, duration=dur)
+    # --- final facing turn: face the dock heading (the cans) -----------------
+    try:
+        hd = float(base.get_heading())
+    except Exception:  # noqa: BLE001
+        return True
+    face_err = _wrap(dock_hd - hd)
+    if abs(face_err) > yaw_deadband:
+        dur = min(_DOCK_TURN_MAX_S, abs(face_err) / _DOCK_TURN_VYAW)
+        vyaw = _DOCK_TURN_VYAW if face_err > 0 else -_DOCK_TURN_VYAW
+        if on_progress:
+            on_progress(f"dock: face {math.degrees(face_err):.0f}deg to heading")
+        _safe_walk(base, vyaw=vyaw, duration=dur)
 
     try:
         pos = base.get_position()
