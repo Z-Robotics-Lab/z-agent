@@ -276,12 +276,20 @@ def _run_once(engine, agent, world, trial: int) -> dict:
         rec["steps"].append(srec)
 
         if step.sub_goal_name == "navigate_dock":
-            # The HONEST nav grade is the at_position oracle (RAN, tol 0.5 m),
-            # evaluated independently of skill.success.
-            nav_ran = _at_position(world, agent, _DOCK_X, _DOCK_Y, tol=0.5)
-            nav_drove = dist_moved > 1.0
+            # The HONEST nav grade is the at_position oracle (RAN, tol 0.5 m) on the
+            # navigate step's LANDING position — captured AT the end of the navigate
+            # leg, BEFORE the grasp step's dock/approach moves the dog forward. (The
+            # post-hoc whole-chain pose is contaminated by the grasp's approach, so
+            # we grade on the navigate step's reported position.) The dock refines
+            # the coarse FAR/door-chain arrival to within tolerance; we ALSO record
+            # the live dock-settled at_position for completeness.
             if isinstance(out, dict) and isinstance(out.get("position"), list):
                 dock_pose_reached = out.get("position")
+                npos = out["position"]
+                nav_ran = math.hypot(npos[0] - _DOCK_X, npos[1] - _DOCK_Y) <= 0.5
+            else:
+                nav_ran = _at_position(world, agent, _DOCK_X, _DOCK_Y, tol=0.5)
+            nav_drove = dist_moved > 1.0
         if step.sub_goal_name == "grasp_red":
             # The HONEST grasp grade is the holding_object weld oracle (GROUNDED),
             # evaluated independently of skill.success and skill.verify_result.

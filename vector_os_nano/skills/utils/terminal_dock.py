@@ -60,9 +60,15 @@ _DOCK_BIG_YAW_RAD = 0.5        # above this bearing error, creep slowly (turn fi
 _DOCK_CREEP_FACTOR = 0.25      # vx multiplier while badly mis-headed
 # Max steered steps to converge onto the dock point (each ~6-15 cm of progress).
 _DOCK_MAX_STEPS = 30
-# Final facing turn (face the cans): turn-in-place to the dock heading.
-_DOCK_TURN_VYAW = 0.8     # rad/s turn-in-place
-_DOCK_TURN_MAX_S = 4.0
+# Final facing turn (face the cans): CLOSED-LOOP turn-in-place to the dock heading.
+# A single open-loop turn overshoots badly — the gait curves and keeps yawing past
+# the command (real-sim: a "face -144deg" command landed ~108 deg the wrong side).
+# So turn in short, re-measured increments: each iteration re-reads the live heading
+# and turns the RESIDUAL error (a fraction of it, capped) until within the deadband.
+_DOCK_FACE_VYAW = 0.6          # rad/s turn-in-place (gentle — less overshoot)
+_DOCK_FACE_GAIN = 0.6          # turn only this fraction of the residual per step
+_DOCK_FACE_MAX_S = 1.2         # cap a single facing-turn increment
+_DOCK_FACE_MAX_STEPS = 8       # iterations to converge the heading
 
 
 def _wrap(a: float) -> float:
@@ -166,17 +172,24 @@ def terminal_dock(
             on_progress(f"dock: drive {gap:.2f}m, yaw {math.degrees(yaw_err):.0f}deg")
         _safe_walk(base, vx=vx, vyaw=vyaw, duration=dur)
 
-    # --- final facing turn: face the dock heading (the cans) -----------------
-    try:
-        hd = float(base.get_heading())
-    except Exception:  # noqa: BLE001
-        return True
-    face_err = _wrap(dock_hd - hd)
-    if abs(face_err) > yaw_deadband:
-        dur = min(_DOCK_TURN_MAX_S, abs(face_err) / _DOCK_TURN_VYAW)
-        vyaw = _DOCK_TURN_VYAW if face_err > 0 else -_DOCK_TURN_VYAW
+    # --- final facing turn: CLOSED-LOOP turn to the dock heading (the cans) ---
+    # Turn the RESIDUAL error in short re-measured increments — a single open-loop
+    # turn overshoots because the gait keeps yawing past the command. Each step
+    # re-reads the heading and corrects a fraction of what remains until docked.
+    for _ in range(_DOCK_FACE_MAX_STEPS):
+        try:
+            hd = float(base.get_heading())
+        except Exception:  # noqa: BLE001
+            return True
+        face_err = _wrap(dock_hd - hd)
+        if abs(face_err) <= yaw_deadband:
+            break
+        # Turn a damped fraction of the residual (gentle, bounded) toward the heading.
+        turn = face_err * _DOCK_FACE_GAIN
+        dur = min(_DOCK_FACE_MAX_S, abs(turn) / _DOCK_FACE_VYAW)
+        vyaw = _DOCK_FACE_VYAW if turn > 0 else -_DOCK_FACE_VYAW
         if on_progress:
-            on_progress(f"dock: face {math.degrees(face_err):.0f}deg to heading")
+            on_progress(f"dock: face residual {math.degrees(face_err):.0f}deg")
         _safe_walk(base, vyaw=vyaw, duration=dur)
 
     try:
