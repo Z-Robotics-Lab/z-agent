@@ -307,7 +307,20 @@ class EdgeTAMTracker:
         scores = None
         score_logits = getattr(model_output, "object_score_logits", None)
         if score_logits is not None:
-            scores = torch.sigmoid(score_logits.float()).detach().cpu().numpy()
+            # transformers >=5.x returns object_score_logits shaped (N, 1) (a
+            # per-object logit), so the raw numpy array's row ``scores[i]`` is a
+            # (1,)-array, not a scalar — float() on it raises "only 0-dimensional
+            # arrays can be converted to Python scalars" and the whole segment()
+            # call falls back to a coarse box-rect mask (the z-mislocalization
+            # bug). Flatten to 1-D so ``scores[i]`` is always a Python-coercible
+            # scalar regardless of the transformers version's logit shape.
+            scores = (
+                torch.sigmoid(score_logits.float())
+                .detach()
+                .cpu()
+                .numpy()
+                .reshape(-1)
+            )
 
         for i, obj_id in enumerate(obj_ids):
             if i >= masks.shape[0]:
@@ -327,7 +340,11 @@ class EdgeTAMTracker:
                 "track_id": int(obj_id),
                 "mask": mask,
                 "bbox": [x_min, y_min, x_max, y_max],
-                "score": float(scores[i]) if scores is not None and i < len(scores) else 1.0,
+                "score": (
+                    float(scores[i])
+                    if scores is not None and i < len(scores)
+                    else 1.0
+                ),
             })
 
         return detections
