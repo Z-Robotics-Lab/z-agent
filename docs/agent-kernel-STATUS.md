@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · LOOP HANDOFF — S1-S3b + D69 + scan-DoF all COMMITTED (tree clean); round 1 = SEAL S3b
+updated: 2026-06-24 · loop R1 — S3b SEALED: deterministic perception-grasp GROUNDED on the go2+Piper attach scene
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,19 +12,21 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   LOOP HANDOFF (session compacting). On `arch/plug-and-play`, ALL COMMITTED (tree clean): S1·S2·S3a·S3b
-         (refactor, below) + D69 (fakeable-grasp CLOSED) + scan-DoF fix. D69: a robot world DROPS file_write/
-         file_edit/bash from the native ACTION toolset (Prong 1, world-side) + a DELIBERATE rule-5 STRICTER-ONLY
-         spine gate `_object_goal_turn_ok` (`cognitive/object_goal.py` + `trace_store`) — a grasp goal must be
-         GROUNDED via a NECESSARY `holding_object`/`placed_count`, else RAN (fake `file_exists` grasp → RAN);
-         proven stricter-only + adversarially tested. scan-DoF: scan holds the arm's current pose when the
-         configured pose len != the arm DoF (fixed Piper 6-vs-5). 786 unit green (only 3 pre-existing env reds).
-         OPEN (= loop ROUND 1): S3b's bare-cli grasp GROUNDED is NOT yet captured. The grasp CODE is proven
-         (routes to real `perception_grasp` on the attach scene; scene byte-identical; can't fake) — but 5 live
-         runs stalled on deepseek's MULTI-TURN REPL-driving variance (network / cold-load timeout / fake /
-         bash-wander / launch-wander), NOT a code defect. SEAL IT via the DETERMINISTIC instrument
-         (`FakeToolScriptBackend` — scripts the LLM tool-selection; real sim+perception+IK+weld+`holding_object`+
-         frozen-spine+D69-gate all execute), NOT the flaky live-deepseek REPL. Template: `tests/vcli/test_native_loop_arm_pty.py`.
+doing:   loop R1 DONE — S3b is SEALED (100%). New deterministic e2e `tests/vcli/test_native_loop_grasp_attach_pty.py`
+         (35 s, `-m sim`) drives the native producer on the in-process go2+Piper ATTACH scene through a scripted
+         `FakeToolScriptBackend` (NO live deepseek): `perception_grasp("抓绿色的瓶子")` -> `verify(holding_object(
+         'pickable_bottle_green'))`. Asserts the FULL real pipeline grounded — colour/HSV resolve -> rendered-depth
+         pointcloud (never GT) -> MPC-gait approach -> Piper top-down IK -> weld 0->1 -> lift — graded by the
+         UNTOUCHED spine + the D69 gate: strategy==`perception_grasp`, verify_result True, `ActorCaused.CAUSED`,
+         classify GROUNDED, `VerdictReport.verified`/`evidence==GROUNDED`/exit 0, `evidence_passed` True, with
+         `holding_object()==False` pre-asserted (genuine 0->1). This decouples S3b's seal from deepseek's flaky
+         multi-turn REPL (5 prior live runs stalled on model variance, never the grasp code). bare-cli + NL launch
+         routing reliability is now a SEPARATE non-gated hardening item (not a blocker on S3b).
+         WAS — S1·S2·S3a·S3b refactor + D69 (fakeable-grasp CLOSED) + scan-DoF, all COMMITTED. D69: a robot world
+         DROPS file_write/file_edit/bash from the native ACTION toolset (Prong 1) + a rule-5 STRICTER-ONLY spine gate
+         `_object_goal_turn_ok` (`cognitive/object_goal.py` + `trace_store`) — a grasp goal must be GROUNDED via a
+         NECESSARY `holding_object`/`placed_count`, else RAN. scan-DoF: scan holds the arm's current pose when the
+         configured pose len != the arm DoF (Piper 6-vs-5). 786 unit green (only 3 pre-existing env reds).
          ---
          S1+S2+S3a+S3b DONE + verified (behavior-preserving). S3b: ONE scene builder —
          `hardware/sim/scene_builder.py build_room_scene(...) -> (MjModel, path)` via `MjSpec.attach`;
@@ -53,11 +55,14 @@ blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodime
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
 next:    LOOP ROUND LADDER (drive autonomously; cold-start ORIENT from THIS file + DECISIONS + git each round):
-         · R1  SEAL S3b — deterministic scripted grasp → GROUNDED on the attach scene (NOT the live-deepseek REPL).
-         · S3c navigate — converge g1 in-driver vgraph vs go2 external ROS2-FAR to one capability (needs a design
-           call; possibly gate-adjacent — surface it).
-         · S8  delete the legacy keyword producer + the should-be-model-driven keyword tables (pure subtraction,
-           the big honest win; full keyword inventory in /tmp/pnp_synthesis.md).
+         · R1  ✅ DONE (D71) — S3b SEALED via the deterministic scripted grasp → GROUNDED on the attach scene.
+         · S8  (recommended next, NON-gated) delete the legacy keyword producer + the should-be-model-driven keyword
+           tables (pure subtraction, the big honest win toward "routing = model, not keywords"). FIRST inventory what
+           still routes through the legacy producer (don't cut a live dependency); full keyword inventory in
+           /tmp/pnp_synthesis.md (re-derive with a read-only audit if gone). Native `run_turn_native` is already the
+           default producer, so this is strangler-fig removal, e2e-verified per affected path.
+         · S3c navigate — converge g1 in-driver vgraph vs go2 external ROS2-FAR to one capability (DESIGN call;
+           possibly gate-adjacent — surface it; if it touches a nav interface → decision queue, pivot to S8/hardening).
          · S9  docs: rewrite the workflow narrative to the native path + a CI drift gate.
          · Non-gated hardening: the deepseek multi-turn REPL-routing reliability (dev-world launch routing);
            gitignore the runtime-GENERATED scene XMLs (scene_room_piper.xml / scene_g1_*; they churn).
