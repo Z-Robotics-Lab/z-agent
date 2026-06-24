@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R3 — S5b: native is the DEFAULT producer on the -p path (print cutover, additive+reversible) + stale repl-cutover test fixed
+updated: 2026-06-24 · loop R4 — S5c: registry-driven should_attempt_native hint (shadow, safe superset). ALL S8 preconditions met → S8 is now GATE-PENDING (CEO)
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,22 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R3 DONE — S5b (S8 precondition #2): native is the DEFAULT producer on the `-p` acceptance path.
+doing:   loop R4 DONE — S5c (S8 precondition #3, the LAST). New `should_attempt_native(user_input, *, agent, engine)`
+         (native_loop.py): the REGISTRY-DRIVEN native-attempt hint that replaces the keyword `should_use_vgg`. The
+         native producer routes by the MODEL reading tool descriptions, so the only pre-gate question collapses to
+         "does this world expose any actionable tool?" — derived SINGLE-SOURCE from `_build_motor_tools` (Rule 3, NO
+         keyword table), fail-open. PROVEN a SAFE SUPERSET of `should_use_vgg`: for every input the keyword router
+         routes to VGG, this also attempts → S8 can rewire the 4 gate sites off `should_use_vgg` with NO missed
+         routing; its extra attempts (chat/questions) are fail-open fallbacks (a wasted LLM call, never a missed/wrong
+         command). VERIFIED: 29 tests (parity/superset corpus + purity + fail-open + a REAL-derivation test against the
+         live _build_motor_tools — a 10-skill agent → attempt True, trivial → False, empty toolset → False). SHADOW:
+         NOT wired into live routing yet (zero behavior change — the rewiring is part of S8). Committed a563c62.
+         >>> MILESTONE: S5a✅ + S5b✅ + S5c✅ = ALL S8 preconditions MET. S8 (retire the legacy keyword producer +
+         tables) is now UNBLOCKED but is a CEO GATE (routing-contract + -p acceptance entrypoint + flag-default
+         changes + big deletion). Per loop discipline: do NOT cross — an executive summary is queued (see Pending CEO
+         gates) and the loop PIVOTS to non-gated work (S3c-design, hardening) until Yusen approves S8.
+         ---
+         loop R3 DONE — S5b (S8 precondition #2): native is the DEFAULT producer on the `-p` acceptance path.
          New `_print_native_enabled()` (cli.py, DEFAULT ON, escape hatch VECTOR_PRINT_NATIVE in {0,false,off,no})
          mirrors the owner-approved REPL cutover (`_repl_native_enabled`) on the non-interactive entrypoint:
          run_one_turn ATTEMPTS native first then FALLS THROUGH to legacy on no-action (strictly additive). Fires on
@@ -89,14 +104,14 @@ blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodime
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
 next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was premature). Cold-ORIENT each round:
-         · R1 ✅ (D71) S3b SEALED.  · R2 ✅ (D72) S5a capability-gating single-sourced.  · R3 ✅ (D73) S5b native = -p default.
-         · S5c (NON-gated, next): a registry-driven should_attempt_native(...) routing HINT (Rule 3 single-source) run
-           ALONGSIDE classify_intent().use_vgg (shadow/parity, not replacing) — proves a model-driven replacement
-           exists with zero behavior change, so the 4 keyword-gate sites can later be rewired off should_use_vgg.
-         · S3c-design (NON-gated DESIGN only): navigate convergence (g1 in-driver vgraph vs go2 external ROS2-FAR →
+         · R1 ✅ (D71) S3b SEALED. · R2 ✅ (D72) S5a cap-gating single-sourced. · R3 ✅ (D73) S5b native=-p default.
+           · R4 ✅ (D74) S5c registry-driven should_attempt_native (shadow superset). ALL S8 preconditions now MET.
+         · S3c-design (NON-gated DESIGN only, NEXT): navigate convergence (g1 in-driver vgraph vs go2 external ROS2-FAR →
            one config-parameterized capability). Pure design/ADR; the moment it proposes touching a nav INTERFACE →
-           decision queue, do NOT implement.
-         · S8 (GATED + cuts live deps — REQUIRES S5a✅+S5b✅+S5c green): retire classify_intent/should_use_vgg +
+           decision queue, do NOT implement. (Also available non-gated: the hardening micro-tasks — git rm --cached the
+           tracked generated scene XMLs + the stale-docstring cleanup.)
+         · S8 (GATED — preconditions S5a✅+S5b✅+S5c✅ ALL MET; awaiting CEO approval, see Pending CEO gates):
+           retire classify_intent/should_use_vgg +
            IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor legacy producer. Routing-contract +
            -p acceptance entrypoint + escape-hatch flag defaults → executive summary to the decision queue first.
          · Hardening (NON-gated filler): generated-scene-XML gitignore is PARTIAL (the R2 judge's "already done" was
@@ -142,6 +157,17 @@ next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was pre
 - cross-MODEL (D48-D50) + the moat are LIVE on master (origin/master cd7029a).
 
 ## Pending CEO gates (decision queue — do NOT cross autonomously)
+- **S8 — retire the legacy keyword producer (READY for approval; all preconditions S5a/S5b/S5c done).**
+  One-liner: delete the keyword routing layer so routing is model + declared-metadata only (North Star).
+  Remove: `IntentRouter` (`_RULES`/`should_use_vgg`/`is_complex`/`_MOTOR_*` keyword sets) + `StrategySelector`
+  keyword ladder + `engine._DIR_MAP`/`_VERIFY_MAP`/`_ROOM_ALIASES` + the legacy `GoalDecomposer`/`GoalExecutor`
+  producer; rewire the 4 `should_use_vgg` gate sites (cli.py:414/2445, engine.py:1090/1707) onto the proven
+  `should_attempt_native` (D74). Keep `legit-config` rows (stop-words, `_TOOL_CATEGORIES`, `_COLOR_TO_SCENE` until a
+  scene-name binder lands). WHY GATED: changes the routing CONTRACT + the `-p`/REPL acceptance entrypoints + retires
+  a producer; a big, owner-visible behavior-contract change. RISK: a goal the model can't route loses the legacy
+  fallback (mitigation: keep `VECTOR_LEGACY_TURN`/`VECTOR_PRINT_NATIVE` escape hatches one milestone). VERIFY: full
+  S0 regression + a novel 3rd-language phrasing all route with ZERO keyword tables; `red-team` before sealing.
+  → Needs Yusen's go/no-go before the deletion. Until then the loop does S3c-design + hardening.
 - Plug-and-play stage gates: S4 embodiment-registration interface · S5 `ControlPolicy` interface + convex_mpc dep
   · S6 side-effecting-capability permission/security. Plus: nav→FAR cmd_vel causation (SPINE D14) · strategy_params
   preservation (SPINE D52) · explore TARE · VLN SysNav. New deps / interfaces / hardware / security route here.
