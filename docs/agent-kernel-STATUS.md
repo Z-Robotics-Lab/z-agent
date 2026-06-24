@@ -85,8 +85,12 @@ next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was pre
          · S8 (GATED + cuts live deps — REQUIRES S5a✅+S5b+S5c green): retire classify_intent/should_use_vgg +
            IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor legacy producer. Routing-contract +
            -p acceptance entrypoint + escape-hatch flag defaults → executive summary to the decision queue first.
-         · Hardening (NON-gated filler): generated-scene-XML gitignore ALREADY done (.gitignore:17-18,49-51); remaining
-           = stale docstrings (engine.py:1637/1677-1680, cli.py native-loop help) — doc-only, byte-safe.
+         · Hardening (NON-gated filler): generated-scene-XML gitignore is PARTIAL (the R2 judge's "already done" was
+           WRONG — verified via git check-ignore): .gitignore covers go2 scene_flat/scene_room (L17-18) + the OLD
+           hardware/sim/ location (L49-51), but mjcf/go2/scene_room_piper.xml AND mjcf/g1/scene_g1_*.xml are STILL
+           TRACKED and churn on every connect. Fix = add those paths + `git rm --cached` them (FIRST confirm no
+           scene-builder byte-identical test reads the committed XML as a reference). Plus stale docstrings
+           (engine.py:1637/1677-1680, cli.py native-loop help) — doc-only, byte-safe.
          · S9  docs: rewrite the workflow narrative to the native path + a CI drift gate.
          · Non-gated hardening: the deepseek multi-turn REPL-routing reliability (dev-world launch routing);
            gitignore the runtime-GENERATED scene XMLs (scene_room_piper.xml / scene_g1_*; they churn).
