@@ -247,11 +247,13 @@ def test_native_first_uses_native_when_native_acted(monkeypatch) -> None:
     assert code == 0, f"native grounded must exit 0; got {code}"
 
 
-def test_native_first_off_never_attempts_native(monkeypatch) -> None:
-    # Flag OFF (default): run_one_turn must NOT call run_turn_native at all — the
-    # legacy path is byte-identical.
+def test_print_native_escape_hatch_never_attempts_native(monkeypatch) -> None:
+    # S5b: the -p path now DEFAULTS to native-first (the print cutover). The reversible
+    # escape hatch VECTOR_PRINT_NATIVE=0 forces the pure-legacy path — byte-identical to
+    # the pre-cutover behavior (NO native attempt; legacy decompose+execute runs).
     monkeypatch.delenv("VECTOR_NATIVE_LOOP", raising=False)
     monkeypatch.delenv("VECTOR_NATIVE_FIRST", raising=False)
+    monkeypatch.setenv("VECTOR_PRINT_NATIVE", "0")
     native = _acted_trace("g", strategy="walk", verify="at_position(1,1)", verified_pose=True)
     legacy = _acted_trace("g", strategy="walk", verify="at_position(2.0, 0.0)", verified_pose=True)
     engine = _SpyEngine(native_trace=native, legacy_trace=legacy)
@@ -260,8 +262,47 @@ def test_native_first_off_never_attempts_native(monkeypatch) -> None:
     args = SimpleNamespace(print_prompt="g", json=False, native_first=None, native_loop=None)
     code = cli.run_one_turn(args)
 
-    assert engine.native_calls == 0, "flag OFF must NEVER attempt native"
-    assert engine.decompose_calls == 1, "flag OFF runs the legacy path"
+    assert engine.native_calls == 0, "VECTOR_PRINT_NATIVE=0 must NEVER attempt native"
+    assert engine.decompose_calls == 1, "the escape hatch runs the legacy path"
+    assert code == 0
+
+
+def test_print_native_default_attempts_native_then_falls_back(monkeypatch) -> None:
+    # S5b: with NO flags and NO escape hatch, the -p path DEFAULTS to native-first —
+    # native is attempted; a no-action native trace falls THROUGH to legacy (additive).
+    monkeypatch.delenv("VECTOR_NATIVE_LOOP", raising=False)
+    monkeypatch.delenv("VECTOR_NATIVE_FIRST", raising=False)
+    monkeypatch.delenv("VECTOR_PRINT_NATIVE", raising=False)
+    native = _noaction_trace("g")  # native could not route -> falls back to legacy
+    legacy = _acted_trace("g", strategy="walk", verify="at_position(2.0, 0.0)", verified_pose=True)
+    engine = _SpyEngine(native_trace=native, legacy_trace=legacy)
+    _wire_stub_engine(monkeypatch, engine)
+
+    args = SimpleNamespace(print_prompt="g", json=False, native_first=None, native_loop=None)
+    code = cli.run_one_turn(args)
+
+    assert engine.native_calls == 1, "default (no escape hatch) must ATTEMPT native"
+    assert engine.decompose_calls == 1, "native no-action falls THROUGH to legacy"
+    assert code == 0
+
+
+def test_print_native_default_does_not_preempt_explicit_native_loop(monkeypatch) -> None:
+    # The default-ON print cutover must NOT pre-empt an EXPLICIT --native-loop (pure
+    # native, no fallback) — block 1 is skipped so the --native-loop block owns the turn.
+    monkeypatch.delenv("VECTOR_NATIVE_LOOP", raising=False)
+    monkeypatch.delenv("VECTOR_NATIVE_FIRST", raising=False)
+    monkeypatch.delenv("VECTOR_PRINT_NATIVE", raising=False)
+    native = _acted_trace("g", strategy="walk", verify="at_position(11.0, 3.0)", verified_pose=True)
+    legacy = _acted_trace("g", strategy="walk", verify="at_position(2.0, 0.0)", verified_pose=False)
+    engine = _SpyEngine(native_trace=native, legacy_trace=legacy)
+    _wire_stub_engine(monkeypatch, engine)
+
+    args = SimpleNamespace(print_prompt="g", json=False, native_first=None, native_loop=True)
+    code = cli.run_one_turn(args)
+
+    # --native-loop owns it (pure native, no fallback): native ran, legacy never did.
+    assert engine.native_calls == 1
+    assert engine.decompose_calls == 0, "explicit --native-loop must run the pure-native block"
     assert code == 0
 
 
@@ -334,3 +375,32 @@ def test_native_first_covered_go2_routes_to_native(sim_cleanup) -> None:
     # ROUTING: native acted with the walk skill (proves native, not legacy, handled it).
     assert step["strategy"] == "walk", f"per-step strategy must be walk; got {step['strategy']}"
     assert step["verify"].startswith("at_position"), f"got verify={step['verify']}"
+
+
+@pytest.mark.sim
+@pytest.mark.cli_main
+@pytest.mark.capability
+def test_print_native_default_routes_to_native_no_flag(sim_cleanup) -> None:
+    """S5b SEAL — the -p path DEFAULTS to native (NO --native-first flag) on the REAL sim.
+
+    Same honest-walk case as test (c), but with NO native flag at all — relying on the
+    S5b print cutover (_print_native_enabled default ON). Native owns the covered walk
+    goal -> native verdict GROUNDED / verified True / exit 0. This proves the DEFAULT
+    -p acceptance path now exercises the redesign (not just under an explicit flag).
+    """
+    pytest.importorskip("mujoco")
+    from tests.harness.pty_cli import run_cli_turn
+
+    r = run_cli_turn(
+        "走到坐标 (11.0,3.0)",
+        sim_go2=True,
+        timeout_sec=_SIM_TIMEOUT_SEC,
+        extra_args=["--headless"],  # NO --native-first / --native-loop: rely on the default cutover
+        tool_script=_HONEST_SCRIPT,
+    )
+    assert r.verified is True, f"default -p cutover covered walk should verify; got {r.verdict}"
+    assert r.exit_code == 0, f"verified covered walk must exit 0; got {r.exit_code}"
+    assert r.evidence == "GROUNDED", f"got evidence={r.evidence}"
+    step = r.verdict["per_step"][0]
+    assert step["evidence"] == "GROUNDED"
+    assert step["strategy"] == "walk", f"native must own it (strategy walk); got {step['strategy']}"

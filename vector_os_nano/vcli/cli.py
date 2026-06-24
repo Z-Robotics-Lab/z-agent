@@ -366,6 +366,29 @@ def _native_first_enabled(args: Any) -> bool:
     return os.environ.get("VECTOR_NATIVE_FIRST", "").strip() in ("1", "true", "True")
 
 
+def _print_native_enabled() -> bool:
+    """PRINT-PATH CUTOVER (S5b): native is the DEFAULT producer on the ``-p`` path.
+
+    Mirrors the owner-approved REPL cutover (``_repl_native_enabled``) on the
+    NON-interactive acceptance entrypoint: ``run_one_turn`` ATTEMPTS the native
+    tool-use producer first, then FALLS BACK to the legacy decompose+execute when
+    native took NO action — so bare ``vector-cli -p`` + natural language exercises the
+    redesign by default (CLAUDE.md North Star "Acceptance interface"), the same way
+    the interactive REPL already does. Default ON; ``VECTOR_PRINT_NATIVE`` in
+    {0, false, off, no} forces the pure-legacy ``-p`` path (byte-identical to the
+    pre-cutover behavior) — a reversible escape hatch. The explicit ``--native-first``
+    flag / ``VECTOR_NATIVE_FIRST`` stays an INDEPENDENT force-on reader (default OFF,
+    unchanged) so its documented semantics are preserved; this is the additional
+    default-ON knob, NOT a change to that flag's default.
+    """
+    return os.environ.get("VECTOR_PRINT_NATIVE", "").strip().lower() not in (
+        "0",
+        "false",
+        "off",
+        "no",
+    )
+
+
 def _native_trace_acted(trace: Any) -> bool:
     """True iff the native trace DISPATCHED at least one action skill.
 
@@ -1791,16 +1814,24 @@ def run_one_turn(args: Any) -> int:
         console.print("[yellow]No API key. Use /login to authenticate first.[/]")
         return _emit(VerdictReport.no_trace(goal=prompt or "", error="no engine (no API key)"))
 
-    # STEP 5 native-attempt-then-fallback (flag-gated, default OFF): ATTEMPT the
-    # native producer first; if it DISPATCHED an action skill (routed the goal) emit
-    # its verdict — otherwise it took NO action (zero skills dispatched -> no
-    # half-action side-effects) and we FALL THROUGH to the EXISTING legacy
-    # decompose+execute+verdict block below. This is a SEPARATE, additive mode from
-    # --native-loop; when neither flag is set this whole block is skipped and every
-    # existing path is byte-identical. The legacy fallback's vgg_decompose(prompt)
-    # uses the RAW prompt, independent of any session text the native attempt may have
-    # appended, so the fallback decompose is uncorrupted.
-    if _native_first_enabled(args):
+    # S5b PRINT-PATH CUTOVER native-attempt-then-fallback (DEFAULT ON via
+    # _print_native_enabled; also forced by --native-first / VECTOR_NATIVE_FIRST):
+    # ATTEMPT the native producer first; if it DISPATCHED an action skill (routed the
+    # goal) emit its verdict — otherwise it took NO action (zero skills dispatched ->
+    # no half-action side-effects) and we FALL THROUGH to the EXISTING legacy
+    # decompose+execute+verdict block below. Strictly ADDITIVE: a goal native cannot
+    # route (e.g. the VECTOR_FAKE_LLM decompose-plan seam yields no tool_calls) falls
+    # through to the byte-identical legacy verdict, so only goals native CAN route
+    # change producer. VECTOR_PRINT_NATIVE in {0,false,off,no} forces the pure-legacy
+    # -p path (reversible escape hatch). The fallback's vgg_decompose(prompt) uses the
+    # RAW prompt, independent of any session text the native attempt may have appended.
+    # The DEFAULT-ON print cutover must NOT pre-empt an EXPLICIT --native-loop (pure
+    # native, no fallback) — defer to block 2 in that case; an explicit --native-first
+    # still wins (preserving every prior flag behavior). So block 1 fires on: explicit
+    # --native-first, OR the default cutover when --native-loop is NOT explicitly set.
+    if _native_first_enabled(args) or (
+        _print_native_enabled() and not _native_loop_enabled(args)
+    ):
         try:
             trace = engine.run_turn_native(
                 prompt, agent=getattr(engine, "_vgg_agent", None), session=ctx.session
