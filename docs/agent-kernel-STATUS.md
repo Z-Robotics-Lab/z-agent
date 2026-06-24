@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-23 · arch/plug-and-play S1 done (embodiment config + g1 BaseProtocol)
+updated: 2026-06-24 · arch/plug-and-play S2 done (drivers READ config + generic DofLayout)
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,13 +12,14 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   S1 DONE + e2e-verified (additive, spine BYTE-UNCHANGED): `embodiments/config.py` (frozen
-         `EmbodimentConfig` + fail-loud loader) + `embodiments/{go2,g1}/robot.yaml` (faithfully capture the
-         current driver constants) + MuJoCoG1 made BaseProtocol-uniform (fixed a latent g1 `disconnect`
-         OOM leak). 67 unit green; g1 real-sim e2e (connect / methods / teardown). Config NOT yet read by
-         the driver (that is S2). Also this session: North Star expanded (5 contracts + moat), Rules 11/12
-         added, 5 dead files removed, DECISIONS compacted 494→250, ARCHITECTURE high-level rewrite +
-         getting-started.md in flight.
+doing:   S1+S2 DONE + e2e-verified (behavior-preserving, spine BYTE-UNCHANGED). S2: the two MuJoCo drivers
+         now READ `robot.yaml` (spawn + nominal stance) and use a generic `embodiments/dof_layout.py`
+         `DofLayout` (root-freejoint qpos/qvel introspection) — go2's ~14 hardcoded `qpos[7:19]`/`qpos[0:3]`
+         literals + g1's bespoke `_G1Offsets` are GONE; byte-identical (config == old constants). e2e go2
+         (connect/stand/walk/turn/sit) + g1 (RL-gait walk-forward) green. S1: `embodiments/config.py` (frozen
+         `EmbodimentConfig` + fail-loud loader) + `embodiments/{go2,g1}/robot.yaml` + MuJoCoG1 BaseProtocol
+         uniformity (fixed a latent g1 `disconnect` OOM leak). Also: North Star expanded (5 contracts + moat),
+         Rules 11/12 added, 5 dead files removed, DECISIONS compacted 494→250, ARCHITECTURE rewrite + getting-started.md.
 
 owns:    `embodiments/**` (NEW), `hardware/sim/mujoco_g1.py` (+BaseProtocol, additive), `docs/*`. Spine
          `vcli/cognitive/` BYTE-UNCHANGED since 7b220d9.
@@ -27,15 +28,14 @@ blocked: none for S1. Later stages carry CEO gates (surface, do NOT cross): S4 e
          interface (replace the `sim_tool` enum); S5 `ControlPolicy` interface + convex_mpc as an explicit
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
-next:    S2 — the GENERIC driver READS the config (delete hardcoded spawn/qpos/stance/sensor constants; DoF
-         self-introspect from `root_body`, generalizing `_G1Offsets`); migrate go2 then g1, each bare-cli
-         e2e. Then S3 (ONE shared impl per capability — navigate / lidar / scene-build, killing the go2-vs-g1
-         forks), S4 (embodiment registry), S5 (ControlPolicy plugin), S6 (capability planner-exposure +
-         permission path), S8 (delete the legacy keyword producer + tables), S9 (doc CI drift gate).
+next:    S3 — ONE shared impl per capability: collapse the go2-vs-g1 forks (navigate / lidar / scene-build).
+         Then S4 (embodiment registry — replace the `sim_tool` enum, CEO gate), S5 (ControlPolicy plugin +
+         convex_mpc dep, CEO gate), S6 (capability planner-exposure + side-effecting permission path, CEO
+         gate), S8 (delete the legacy keyword producer + tables), S9 (doc CI drift gate).
          Repro: MUJOCO_GL=egl; serialize sims + `rosm nuke` after; spine only ever STRICTER.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
-- **Embodiment**: urdf+mesh+`robot.yaml` → ONE generic driver (S1 schema done; S2 wires it).
+- **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
 - **Policy**: gait/control plugged separately by an obs/action spec (S5).
 - **Skill**: `@skill` declaring `requires` arm|base|camera; may wrap an external VLA/VLM or a classical stack.
 - **Capability**: register an external model/stack (detector/planner/VLA) as a routable unit (S6 planner-exposure).

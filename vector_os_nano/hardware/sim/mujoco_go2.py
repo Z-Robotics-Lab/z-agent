@@ -35,6 +35,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from vector_os_nano.embodiments.config import load_embodiment_config
+from vector_os_nano.embodiments.dof_layout import DofLayout
 
 # TEMP DIAGNOSTIC (off unless VECTOR_MPC_LOG set): count/log swallowed MPC solver
 # failures so the explore "float" can be checked for silently-failing QP solves
@@ -201,16 +203,19 @@ class _Go2Model:
     Caches actuator IDs so set_joint_torque() is fast.
     """
 
-    __slots__ = ("model", "data", "base_bid", "_act_ids", "_robot_geom_ids", "viewer")
+    __slots__ = ("model", "data", "base_bid", "_act_ids", "_robot_geom_ids", "viewer", "layout")
 
     def __init__(self, model: Any, data: Any) -> None:
         mj = _get_mujoco()
         self.model = model
         self.data = data
         self.viewer = None
-        self.base_bid: int = mj.mj_name2id(
-            model, mj.mjtObj.mjOBJ_BODY, "base_link"
-        )
+        # Generic DoF-layout introspection (Rule 11): the base freejoint's qpos/
+        # qvel slice addresses come from DofLayout, not hardcoded literals. For
+        # base_link (the first freejoint in the room scene) this yields
+        # root_qpos_adr=0 / joint_qpos_start=7 — identical to the old literals.
+        self.layout: DofLayout = DofLayout(model, "base_link", 12)
+        self.base_bid: int = self.layout.root_bid
         # Cache actuator IDs: FL_hip, FL_thigh, FL_calf, FR..., RL..., RR...
         self._act_ids: list[int] = []
         for leg in ("FL", "FR", "RL", "RR"):
@@ -220,20 +225,11 @@ class _Go2Model:
                         model, mj.mjtObj.mjOBJ_ACTUATOR, f"{leg}_{joint}"
                     )
                 )
-        # Collect ALL geom IDs belonging to the robot body tree.
-        # mj_ray bodyexclude only filters ONE body. We need to filter all
-        # robot geoms (trunk + 4 legs × 3 segments = 13+ bodies) to avoid
-        # the lidar detecting Go2's own legs as obstacles.
-        self._robot_geom_ids: set[int] = set()
-        for gid in range(model.ngeom):
-            bid = model.geom_bodyid[gid]
-            # Walk up the body tree to check if this geom belongs to robot
-            check_bid = bid
-            while check_bid > 0:
-                if check_bid == self.base_bid:
-                    self._robot_geom_ids.add(gid)
-                    break
-                check_bid = model.body_parentid[check_bid]
+        # ALL geom IDs in the robot body tree (lidar self-filter): mj_ray's
+        # bodyexclude filters only ONE body, so we need the whole subtree.
+        # DofLayout.robot_geom_ids is the same subtree walk that used to be
+        # inlined here.
+        self._robot_geom_ids: set[int] = self.layout.robot_geom_ids
 
     def set_joint_torque(self, torque: np.ndarray) -> None:
         """Apply 12 joint torques in canonical order."""
@@ -428,6 +424,13 @@ class MuJoCoGo2:
         self._viewer: Any = None
         self._connected: bool = False
 
+        # Embodiment manifest (Rule 11): spawn pose + nominal stance read from
+        # embodiments/go2/robot.yaml instead of hardcoded literals. The stance
+        # qpos vector is built in connect() (model-dependent joint order) and
+        # equals _STAND_JOINTS (asserted in test_dof_layout).
+        self._config = load_embodiment_config("go2")
+        self._stance_qpos: np.ndarray | None = None
+
         # MPC stack (None when using sinusoidal backend)
         self._use_mpc: bool = False
         self._pin: Any = None
@@ -518,12 +521,20 @@ class MuJoCoGo2:
             # MjModel from the same MJCF (e.g. MuJoCoPiper's IK).
             self._scene_xml_path = str(scene_path)
 
-            # Place Go2 in the entry hall (center of house)
-            data.qpos[0] = 10.0
-            data.qpos[1] = 3.0
-            data.qpos[2] = 0.35
+            # Build the nominal-stance qpos vector from the manifest, in the
+            # model's leg-qpos order (byte-identical to _STAND_JOINTS).
+            layout = self._mj.layout
+            self._stance_qpos = layout.build_stance_vector(model, self._config.stance)
+
+            # Place Go2 in the entry hall (center of house) — spawn from manifest.
+            spawn = self._config.spawn
+            rq = layout.root_qpos_adr
+            jq = layout.joint_qpos_start
+            data.qpos[rq + 0] = spawn.xy[0]
+            data.qpos[rq + 1] = spawn.xy[1]
+            data.qpos[rq + 2] = spawn.base_height
             # Set standing joint angles
-            data.qpos[7:19] = _STAND_JOINTS
+            data.qpos[jq : jq + 12] = self._stance_qpos
             # If Piper arm is mounted (nq=27 vs 19), stow it folded upright;
             # otherwise joint2 defaults to 0 and the arm extends horizontally,
             # shifting 1.2kg of link6+ mass forward and tipping the dog.
@@ -635,6 +646,7 @@ class MuJoCoGo2:
                 pass
             self._viewer = None
         self._mj = None
+        self._stance_qpos = None
         self._pin = None
         self._gait = None
         self._traj = None
@@ -812,8 +824,10 @@ class MuJoCoGo2:
         is_moving = (vx != 0.0 or vy != 0.0 or vyaw != 0.0)
 
         if self._sim_step % _CTRL_DECIM == 0:
-            q_cur = np.array(self._mj.data.qpos[7:19], dtype=np.float64)
-            dq_cur = np.array(self._mj.data.qvel[6:18], dtype=np.float64)
+            jq = self._mj.layout.joint_qpos_start
+            jd = self._mj.layout.joint_dof_start
+            q_cur = np.array(self._mj.data.qpos[jq : jq + 12], dtype=np.float64)
+            dq_cur = np.array(self._mj.data.qvel[jd : jd + 12], dtype=np.float64)
 
             if is_moving:
                 q_target = _compute_gait_targets(time_now, vx, vy, vyaw)
@@ -837,7 +851,8 @@ class MuJoCoGo2:
 
         if self._viewer is not None and self._sim_step % _VIEWER_SYNC_EVERY == 0:
             if self._viewer_track:
-                pos = self._mj.data.qpos[0:3]
+                rq = self._mj.layout.root_qpos_adr
+                pos = self._mj.data.qpos[rq : rq + 3]
                 self._viewer.cam.lookat[:] = [float(pos[0]), float(pos[1]), 0.3]
             self._viewer.sync()
 
@@ -915,8 +930,10 @@ class MuJoCoGo2:
                         _mpc_diag("tau_fail", _exc)
             else:
                 # Idle: PD hold standing posture
-                q_cur = np.array(self._mj.data.qpos[7:19], dtype=np.float64)
-                dq_cur = np.array(self._mj.data.qvel[6:18], dtype=np.float64)
+                jq = self._mj.layout.joint_qpos_start
+                jd = self._mj.layout.joint_dof_start
+                q_cur = np.array(self._mj.data.qpos[jq : jq + 12], dtype=np.float64)
+                dq_cur = np.array(self._mj.data.qvel[jd : jd + 12], dtype=np.float64)
                 q_stand = np.array(_STAND_JOINTS, dtype=np.float64)
                 tau = _KP * (q_stand - q_cur) - _KD * dq_cur
                 tau = np.clip(tau, -_TAU_LIMITS, _TAU_LIMITS)
@@ -937,7 +954,8 @@ class MuJoCoGo2:
 
         if self._viewer is not None and self._sim_step % _VIEWER_SYNC_EVERY == 0:
             if self._viewer_track:
-                pos = self._mj.data.qpos[0:3]
+                rq = self._mj.layout.root_qpos_adr
+                pos = self._mj.data.qpos[rq : rq + 3]
                 self._viewer.cam.lookat[:] = [float(pos[0]), float(pos[1]), 0.3]
             self._viewer.sync()
 
@@ -1042,13 +1060,16 @@ class MuJoCoGo2:
         self._require_connection()
         import mujoco as mj
         data = self._mj.data
+        layout = self._mj.layout
+        rq = layout.root_qpos_adr
+        jq = layout.joint_qpos_start
         # Keep current XY, reset everything else
-        cur_x, cur_y = float(data.qpos[0]), float(data.qpos[1])
-        data.qpos[0] = cur_x
-        data.qpos[1] = cur_y
-        data.qpos[2] = 0.35                    # standing height
-        data.qpos[3:7] = [1, 0, 0, 0]          # upright quaternion (w,x,y,z)
-        data.qpos[7:19] = _STAND_JOINTS         # standing joint angles
+        cur_x, cur_y = float(data.qpos[rq + 0]), float(data.qpos[rq + 1])
+        data.qpos[rq + 0] = cur_x
+        data.qpos[rq + 1] = cur_y
+        data.qpos[rq + 2] = 0.35                    # standing height
+        data.qpos[rq + 3 : rq + 7] = [1, 0, 0, 0]   # upright quaternion (w,x,y,z)
+        data.qpos[jq : jq + 12] = _STAND_JOINTS      # standing joint angles
         # If Piper arm is mounted, set it to the stow pose too (nq=27 vs 19)
         if self._mj.model.nq >= 27:
             data.qpos[19:27] = _PIPER_STOW_QPOS
@@ -1075,29 +1096,34 @@ class MuJoCoGo2:
     def get_position(self) -> list[float]:
         """Return base position [x, y, z] in world frame."""
         self._require_connection()
-        return list(self._mj.data.qpos[0:3].astype(float))
+        rq = self._mj.layout.root_qpos_adr
+        return list(self._mj.data.qpos[rq : rq + 3].astype(float))
 
     def get_velocity(self) -> list[float]:
         """Return base linear velocity [vx, vy, vz] in world frame."""
         self._require_connection()
-        return list(self._mj.data.qvel[0:3].astype(float))
+        rd = self._mj.layout.root_dof_adr
+        return list(self._mj.data.qvel[rd : rd + 3].astype(float))
 
     def get_heading(self) -> float:
         """Return yaw angle (radians) from base quaternion."""
         self._require_connection()
-        w, x, y, z = self._mj.data.qpos[3:7]
+        qs = self._mj.layout.quat_start
+        w, x, y, z = self._mj.data.qpos[qs : qs + 4]
         yaw = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
         return float(yaw)
 
     def get_joint_positions(self) -> list[float]:
         """Return all 12 joint positions (radians), ordered FL/FR/RL/RR."""
         self._require_connection()
-        return list(self._mj.data.qpos[7:19].astype(float))
+        jq = self._mj.layout.joint_qpos_start
+        return list(self._mj.data.qpos[jq : jq + 12].astype(float))
 
     def get_joint_velocities(self) -> list[float]:
         """Return all 12 joint velocities (rad/s), ordered FL/FR/RL/RR."""
         self._require_connection()
-        return list(self._mj.data.qvel[6:18].astype(float))
+        jd = self._mj.layout.joint_dof_start
+        return list(self._mj.data.qvel[jd : jd + 12].astype(float))
 
     def get_odometry(self) -> Any:
         """Return full odometry snapshot as Odometry dataclass."""
@@ -1254,19 +1280,21 @@ class MuJoCoGo2:
         from vector_os_nano.core.types import Odometry  # noqa: PLC0415
         q = self._mj.data.qpos
         v = self._mj.data.qvel
+        rq = self._mj.layout.root_qpos_adr
+        rd = self._mj.layout.root_dof_adr
         self._last_odom = Odometry(
             timestamp=float(self._mj.data.time),
-            x=float(q[0]),
-            y=float(q[1]),
-            z=float(q[2]),
-            qx=float(q[4]),
-            qy=float(q[5]),
-            qz=float(q[6]),
-            qw=float(q[3]),
-            vx=float(v[0]),
-            vy=float(v[1]),
-            vz=float(v[2]),
-            vyaw=float(v[5]),
+            x=float(q[rq + 0]),
+            y=float(q[rq + 1]),
+            z=float(q[rq + 2]),
+            qx=float(q[rq + 4]),
+            qy=float(q[rq + 5]),
+            qz=float(q[rq + 6]),
+            qw=float(q[rq + 3]),
+            vx=float(v[rd + 0]),
+            vy=float(v[rd + 1]),
+            vz=float(v[rd + 2]),
+            vyaw=float(v[rd + 5]),
         )
 
     def _update_lidar(self) -> None:
@@ -1287,7 +1315,8 @@ class MuJoCoGo2:
         _LIDAR_OFFSET_X = 0.3
         _LIDAR_OFFSET_Z = 0.2
 
-        pos = self._mj.data.qpos[0:3].copy().astype(np.float64)
+        rq = self._mj.layout.root_qpos_adr
+        pos = self._mj.data.qpos[rq : rq + 3].copy().astype(np.float64)
         heading = self.get_heading()
         cos_h = math.cos(heading)
         sin_h = math.sin(heading)
@@ -1405,7 +1434,9 @@ class MuJoCoGo2:
         dt = model.opt.timestep
         total_steps = max(1, int(duration / dt))
 
-        q_start = np.array(data.qpos[7:19], dtype=np.float64)
+        jq = self._mj.layout.joint_qpos_start
+        jd = self._mj.layout.joint_dof_start
+        q_start = np.array(data.qpos[jq : jq + 12], dtype=np.float64)
         q_target = np.asarray(target_joints, dtype=np.float64)
 
         hold_steps = max(0, int(0.5 / dt))
@@ -1419,8 +1450,8 @@ class MuJoCoGo2:
             else:
                 q_des = q_target
 
-            q_cur = np.array(data.qpos[7:19], dtype=np.float64)
-            dq_cur = np.array(data.qvel[6:18], dtype=np.float64)
+            q_cur = np.array(data.qpos[jq : jq + 12], dtype=np.float64)
+            dq_cur = np.array(data.qvel[jd : jd + 12], dtype=np.float64)
 
             tau = _KP * (q_des - q_cur) - _KD * dq_cur
             tau = np.clip(tau, -_TAU_LIMITS, _TAU_LIMITS)

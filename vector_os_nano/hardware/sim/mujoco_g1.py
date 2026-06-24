@@ -51,6 +51,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from vector_os_nano.embodiments.config import load_embodiment_config
+from vector_os_nano.embodiments.dof_layout import DofLayout
 from vector_os_nano.hardware.sim.sensors.g1_lidar import g1_lidar_scan
 
 logger = logging.getLogger(__name__)
@@ -402,30 +404,36 @@ def _build_robot_geom_set(model: Any) -> set[int]:
 # ---------------------------------------------------------------------------
 
 
-class _G1Offsets:
-    """Pre-computed qpos/qvel/ctrl offsets for the g1 in the combined scene."""
+# g1 ctrl slice: all 12 actuators are the ONLY actuators in the room scene
+# (verified: nu=12 and all are g1_ leg actuators). This is the ACTUATOR control
+# array slice, not a DoF-layout (qpos/qvel) concept, so it stays a driver const.
+_G1_CTRL_START: int = 0
+_G1_CTRL_END: int = _NUM_ACTIONS
+
+
+class _G1Offsets(DofLayout):
+    """Backward-compatible adapter over the generic ``DofLayout`` (Rule 11).
+
+    The qpos/qvel slice addresses are now introspected by the shared
+    ``DofLayout`` (root_body="g1_pelvis", num_actuated=12) — there is no g1-only
+    layout math any more. This subclass only re-exposes the legacy field names
+    (``pelvis_*`` / ``leg_*`` / ``ctrl_*``) the existing g1 call sites read, so
+    behavior is byte-identical with zero call-site churn. ``robot_geom_ids`` is
+    kept as the original g1_-name-prefix set (equal to the subtree set, asserted
+    in tests) for exactness.
+    """
 
     def __init__(self, model: Any) -> None:
-        mj = _get_mujoco()
-        # Pelvis (root) freejoint
-        pelvis_bid = model.body("g1_pelvis").id
-        jnt_adr = model.body_jntadr[pelvis_bid]
-        self.pelvis_qpos_adr: int = int(model.jnt_qposadr[jnt_adr])
-        self.pelvis_dof_adr: int = int(model.jnt_dofadr[jnt_adr])
-        # Derived: leg joints start right after the 7-float root (pos+quat)
-        self.leg_qpos_start: int = self.pelvis_qpos_adr + 7
-        self.leg_dof_start: int = self.pelvis_dof_adr + 6
-        # Angular velocity slice (dof_adr + 3 → 3 floats)
-        self.angvel_start: int = self.pelvis_dof_adr + 3
-        # Gravity orientation quaternion slice (qpos_adr + 3 → 4 floats)
-        self.quat_start: int = self.pelvis_qpos_adr + 3
-        # Ctrl: all 12 actuators are the ONLY actuators in the room scene
-        # (verified: nu=12 and all are g1_ leg actuators)
-        self.ctrl_start: int = 0
-        self.ctrl_end: int = _NUM_ACTIONS
-        # Pelvis body id (for mj_ray bodyexclude)
-        self.pelvis_bid: int = pelvis_bid
-        # Pre-build robot geom set
+        super().__init__(model, "g1_pelvis", _NUM_ACTIONS)
+        # Legacy aliases (identical values, old names).
+        self.pelvis_qpos_adr: int = self.root_qpos_adr
+        self.pelvis_dof_adr: int = self.root_dof_adr
+        self.leg_qpos_start: int = self.joint_qpos_start
+        self.leg_dof_start: int = self.joint_dof_start
+        self.pelvis_bid: int = self.root_bid
+        self.ctrl_start: int = _G1_CTRL_START
+        self.ctrl_end: int = _G1_CTRL_END
+        # Keep the original g1_-name-prefix geom set (not the subtree set).
         self.robot_geom_ids: set[int] = _build_robot_geom_set(model)
 
         logger.debug(
@@ -481,6 +489,12 @@ class MuJoCoG1:
         self._offsets: _G1Offsets | None = None
         self._viewer: Any = None
         self._cam_renderer: Any = None
+        # Embodiment manifest (Rule 11): spawn pose + nominal stance read from
+        # embodiments/g1/robot.yaml instead of the _G1_SPAWN_*/_DEFAULT_ANGLES
+        # constants. Loaded once at connect(); stance vector built in the model's
+        # leg-qpos order (== _DEFAULT_ANGLES, asserted in test_dof_layout).
+        self._config = load_embodiment_config("g1")
+        self._stance_qpos: np.ndarray | None = None
         # Policy per-batch state
         self._action = np.zeros(_NUM_ACTIONS, dtype=np.float32)
         self._target = _DEFAULT_ANGLES.copy()
@@ -529,6 +543,11 @@ class MuJoCoG1:
         self._model.opt.timestep = _SIM_DT
         self._data = mj.MjData(self._model)
         self._offsets = _G1Offsets(self._model)
+        # Build the nominal-stance qpos vector from the manifest, in the model's
+        # leg-qpos order (byte-identical to _DEFAULT_ANGLES — see test_dof_layout).
+        self._stance_qpos = self._offsets.build_stance_vector(
+            self._model, self._config.stance
+        )
 
         # Load policy
         policy_path = _ASSET_DIR / "motion.pt"
@@ -572,15 +591,20 @@ class MuJoCoG1:
 
         mj.mj_resetData(m, d)
 
-        # Set leg joints to default stance angles
+        # Set leg joints to nominal stance angles (from the manifest; byte-
+        # identical to _DEFAULT_ANGLES — built in connect()).
+        stance = self._stance_qpos
+        assert stance is not None
         lq = off.leg_qpos_start
-        d.qpos[lq : lq + _NUM_ACTIONS] = _DEFAULT_ANGLES
+        d.qpos[lq : lq + _NUM_ACTIONS] = stance
 
-        # Place pelvis freejoint at world spawn
+        # Place pelvis freejoint at world spawn (from the manifest spawn pose;
+        # equals _G1_SPAWN_X/_G1_SPAWN_Y/_G1_PELVIS_Z).
+        spawn = self._config.spawn
         qa = off.pelvis_qpos_adr
-        d.qpos[qa + 0] = _G1_SPAWN_X
-        d.qpos[qa + 1] = _G1_SPAWN_Y
-        d.qpos[qa + 2] = _G1_PELVIS_Z
+        d.qpos[qa + 0] = spawn.xy[0]
+        d.qpos[qa + 1] = spawn.xy[1]
+        d.qpos[qa + 2] = spawn.base_height
         d.qpos[qa + 3] = 1.0  # qw
         d.qpos[qa + 4] = 0.0  # qx
         d.qpos[qa + 5] = 0.0  # qy
@@ -606,6 +630,7 @@ class MuJoCoG1:
         self._data = None
         self._policy = None
         self._offsets = None
+        self._stance_qpos = None
 
     def disconnect(self) -> None:
         """BaseProtocol teardown — alias of :meth:`close` (idempotent).
