@@ -862,6 +862,33 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
     return tools
 
 
+def should_attempt_native(user_input: str, *, agent: Any, engine: Any) -> bool:
+    """REGISTRY-DRIVEN native-attempt hint (S5c) — the replacement for the keyword router.
+
+    The native producer routes by the MODEL reading tool DESCRIPTIONS, not a keyword
+    table — so the only PRE-gate question ("is it worth attempting native?") collapses
+    to "does this world expose any actionable tool the model could dispatch?". That is
+    derived SINGLE-SOURCE from ``_build_motor_tools`` (the EXACT toolset the native loop
+    offers; Rule 3), never from ``IntentRouter._RULES`` / ``should_use_vgg`` keyword sets.
+
+    FAIL-OPEN by design: when the world is actionable, attempt native and let the model
+    decide routing — a goal it cannot route falls back to legacy on no-action (a wasted
+    LLM call, NEVER a missed command). This makes the hint a SAFE SUPERSET of the keyword
+    ``should_use_vgg`` (proven in tests/vcli/test_native_routing_hint.py): for every input
+    the keyword router routes to VGG, this also attempts — so S8 can rewire the gate sites
+    off ``should_use_vgg`` onto this with no missed routing. Trivial input (< 2 non-space
+    chars) never attempts; a toolset-build error fails OPEN to native (never silently skip
+    the redesign). SHADOW for now: not yet wired into the live routing (zero behavior change).
+    """
+    if not user_input or len(user_input.strip()) < 2:
+        return False
+    try:
+        tools = _build_motor_tools(agent, engine)
+    except Exception:  # noqa: BLE001 — fail OPEN to native; never silently skip the redesign
+        return True
+    return len(tools) >= 1
+
+
 def _registered_capability(engine: Any, name: str) -> Any:
     """The named Capability the world registered into the engine's CapabilityRegistry.
 
