@@ -412,7 +412,13 @@ class VectorEngine:
         # the params-help are single-sourced and can never drift. Otherwise the
         # decomposer keeps its class defaults.
         _vocab_kwargs: dict = {}
-        _has_base = getattr(agent, "_base", None) is not None
+        # Single-source the base-capability gate (Rule 11) — the one resolver over the
+        # declared CapabilityProfile, byte-identical to the prior ``_base is not None``.
+        from vector_os_nano.embodiments.capability_profile import (
+            resolve_capability_profile,
+        )
+
+        _has_base = resolve_capability_profile(agent).has_base
         try:
             _requires_registry_vocab = bool(
                 world is not None

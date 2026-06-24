@@ -826,8 +826,13 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
     # base (go2). ``publish_goal`` -> FAR/local planner/lidar, so "go to a place/
     # coordinate" AVOIDS obstacles instead of blind-walking into them. cmd_vel is gated
     # out of actor-causation -> a navigate step honestly grades RAN (the moat never
-    # loosens). The arm/dev worlds (no base) do not get it.
-    if agent is not None and getattr(agent, "_base", None) is not None:
+    # loosens). The arm/dev worlds (no base) do not get it. The base gate is single-
+    # sourced (Rule 11) onto the capability resolver — byte-identical to the prior
+    # ``agent is not None and agent._base is not None`` (resolver -> has_base False for
+    # a None agent), so the navigate/base/camera gates can never drift apart.
+    from vector_os_nano.embodiments.capability_profile import resolve_capability_profile
+
+    if resolve_capability_profile(agent).has_base:
         tools["navigate"] = _NativeBaseNavigateTool()
     # Source 4 (R4): the learned grounding-dino DETECTOR capability, surfaced into the
     # native loop so a bare-cli detect command reaches the SECOND model family on

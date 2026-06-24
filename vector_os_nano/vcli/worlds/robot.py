@@ -22,22 +22,16 @@ logger = logging.getLogger(__name__)
 def _agent_has_camera(agent: Any) -> bool:
     """True iff *agent* can supply an RGB frame the detector can run on.
 
-    World-agnostic CAMERA-presence check (R4): a frame source is either a bound
-    ``_perception`` exposing ``get_color_frame()`` (go2+arm's Go2GraspPerception,
-    g1's G1HeadPerception) OR a base/arm exposing ``get_camera_frame()`` (the raw
-    MuJoCo camera, e.g. MuJoCoG1). Reaching the frame source through the SAME
-    duck-typed accessors the detector itself uses keeps this embodiment-agnostic —
-    the detector needs a camera, not an arm. Fails safe to False (no-agent / sensorless).
+    Single-sourced (Rule 11) onto the capability resolver — the ``camera`` flag of the
+    one declared ``CapabilityProfile`` — so the detector's camera gate can never drift
+    from the navigate/base gate. The resolver's ``camera`` is the SAME world-agnostic
+    duck-typed check this used to inline (a bound ``_perception`` exposing
+    ``get_color_frame()`` OR a base/arm exposing ``get_camera_frame()``), so the
+    behavior is byte-identical; fails safe to False (no-agent / sensorless).
     """
-    if agent is None:
-        return False
-    perception = getattr(agent, "_perception", None)
-    if perception is not None and callable(getattr(perception, "get_color_frame", None)):
-        return True
-    for member in (getattr(agent, "_base", None), getattr(agent, "_arm", None)):
-        if member is not None and callable(getattr(member, "get_camera_frame", None)):
-            return True
-    return False
+    from vector_os_nano.embodiments.capability_profile import resolve_capability_profile
+
+    return resolve_capability_profile(agent).camera
 
 
 # R5 CORRECTION (moat integrity): there is deliberately NO camera-no-arm
