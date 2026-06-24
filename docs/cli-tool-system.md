@@ -23,7 +23,32 @@ AI Agent (VectorEngine)
   └── 回复: "改了转弯速度，重新探索中"
 ```
 
-## 系统架构
+## 当前 producer 架构（2026-06 cutover 后 — 权威；本节覆盖下方任何冲突的旧叙事）
+
+<!-- doc-drift-gate: default_producer=run_turn_native -->
+
+路由不再靠关键词。**`native_loop.run_turn_native`(模型驱动的 tool-use producer)是默认 producer** ——
+模型读工具描述自行路由，无关键词表。旧的 `IntentRouter` 关键词层(`should_use_vgg`/`_RULES`/…)+ 旧的
+`vgg_decompose`/`vgg_execute` producer 正在被 strangle,**S8(CEO 闸门)退役**;`native_loop.should_attempt_native`
+(注册表驱动,D74)是 `should_use_vgg` 的已验证替代(安全超集)。本节是权威;下方"系统架构""Tool Call 完整流程"
+"IntentRouter""VGG 层"等描述的是**遗留 tool_use / 回退路径**,保留作参考。
+
+**producer-per-path(当前默认):**
+
+| 入口 | 默认 producer | 说明 |
+|------|--------------|------|
+| 交互 REPL 的动作轮 | `run_turn_native`(native) | 默认 ON via `_repl_native_enabled`;无动作→回退 legacy。`VECTOR_REPL_NATIVE=0` 关 |
+| 交互 REPL 的闲聊/tool_use 轮 | `run_turn_unified` | 非-VGG 答复路径(LIVE,cli.py:2601) |
+| `-p` / `--print`(机器验收面) | `run_turn_native`(native) | 默认 ON via `_print_native_enabled`(S5b/D73);无动作→回退 legacy。`VECTOR_PRINT_NATIVE=0` 关 |
+| `--native-loop` | `run_turn_native`(纯 native,无回退) | 显式 force |
+| legacy 回退 / `VECTOR_LEGACY_TURN=1` | `vgg_decompose`+`vgg_execute`(IntentRouter 关键词门) | 被 strangle;S8 删除 |
+
+所有 producer 把同一形状的 `ExecutionTrace` 交给**未改动的诚实验证脊柱**(`VerdictReport.from_trace` /
+`evidence_passed`)——producer 永不自算 `verified`。**plug-and-play 5 契约**(Embodiment/Policy/Skill/Capability/Verify)
+详见 [docs/ARCHITECTURE.md](ARCHITECTURE.md)。CI 文档漂移闸:`tests/unit/vcli/test_doc_drift_gate.py` 断言上面的
+`default_producer` 标记与实际默认(`_repl_native_enabled`/`_print_native_enabled` 默认 ON)一致,文档与代码不可再背离。
+
+## 系统架构（LEGACY tool_use / 回退路径 — 默认路径见上方"当前 producer 架构"）
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -60,7 +85,7 @@ AI Agent (VectorEngine)
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Tool Call 完整流程
+## Tool Call 完整流程（LEGACY tool_use 路径 — native producer 见"当前 producer 架构")
 
 ```
 1. 用户输入自然语言
@@ -143,7 +168,9 @@ class MyTool:
 # 完成。不需要改引擎、后端、权限、或任何其他文件。
 ```
 
-## IntentRouter — 意图路由器
+## IntentRouter — 意图路由器（LEGACY — 被 strangle,S8 退役;替代见 `should_attempt_native` D74)
+
+> 旧的零成本关键词层。仍存在于 legacy/回退路径,但不再是默认路由;模型驱动的 native producer 取而代之。
 
 零成本关键词匹配，在 LLM 调用前选择相关工具类别：
 
@@ -235,7 +262,9 @@ vcli/cognitive/
 └── worlds/               # 世界模型适配（sim / real / ros2）
 ```
 
-该层实现 **decompose → plan → execute → verify** 循环，是"自然语言控制一切"北极星目标的核心执行路径。详见 [docs/ARCHITECTURE.md](ARCHITECTURE.md)。
+该层实现 **decompose → plan → execute → verify** 循环。**注意(cutover 后)**:这是 LEGACY 的 producer 路径,
+正在被 strangle(S8 退役);默认路径现在是 `native_loop.run_turn_native`(模型驱动,见"当前 producer 架构")。
+`goal_verifier` / 诚实验证脊柱不属于此层、未改动,仍是所有 producer 的共用验收面。详见 [docs/ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 非交互验收契约 — `-p / --json / VECTOR_VERDICT` (R2a acceptance instrument)
 

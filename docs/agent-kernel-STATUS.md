@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R6 — S3c-design DONE (ADR-001 navigate-convergence: tool layer already converged; planner-plugin GATED+deferred). S8 still gate-pending
+updated: 2026-06-24 · loop R7 — S9 DONE (cli-tool-system.md rewritten to the native path + CI doc-drift gate). Non-gated ladder nearly exhausted; S8/S3c/S4/S5/S6 await CEO
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,21 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R6 DONE — S3c-design (navigate convergence, design-only). FINDING (verified by reading the code): the
+doing:   loop R7 DONE — S9 (docs rewrite + CI doc-drift gate; non-gated). docs/cli-tool-system.md was STALE (the audit
+         flag): it described IntentRouter + `VectorEngine.run_turn()` + VGG decompose as the canonical flow, with
+         native_loop mentioned once. REWRITE: added an authoritative "当前 producer 架构" section at the top — a
+         producer-per-path table (REPL action→native, REPL chat→run_turn_unified, -p→native via _print_native_enabled,
+         --native-loop→pure native, legacy/VECTOR_LEGACY_TURN→vgg_decompose) + the truth (native is the DEFAULT
+         producer, routes by the model not keywords; IntentRouter/should_use_vgg is LEGACY being strangled→S8;
+         should_attempt_native (D74) is the registry-driven replacement) + a 5-contracts pointer. Marked the stale
+         sections (系统架构/Tool Call 流程/IntentRouter/VGG 层) as LEGACY. Added a CI DOC-DRIFT GATE
+         (tests/unit/vcli/test_doc_drift_gate.py, green): parses the `<!-- doc-drift-gate: default_producer=run_turn_native -->`
+         marker + asserts the LIVE default agrees (_repl_native_enabled & _print_native_enabled default ON) — the doc
+         can never silently diverge from the code again. Doc count = 8 (≤8 hygiene OK). No source/behavior change.
+         Committed this RECORD. NON-GATED LADDER NOW NEARLY EXHAUSTED — remaining non-gated = the deferred scene-XML
+         untrack hardening (fiddly); everything else substantial (S8, S3c-impl, S4, S5, S6) is CEO-GATED.
+         ---
+         loop R6 DONE — S3c-design (navigate convergence, design-only). FINDING (verified by reading the code): the
          navigate capability is ALREADY converged at the TOOL layer — `_NativeBaseNavigateTool` calls
          `base.navigate_to(x,y,timeout=…)` POLYMORPHICALLY, no go2/g1 branch (Rule 11 met there). The "fork" is two
          PLANNER BACKENDS behind one interface: go2→`Go2ROS2Proxy.navigate_to` (external ROS2 CMU-FAR) and
@@ -128,10 +142,12 @@ next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was pre
            · R4 ✅ (D74) S5c registry-driven should_attempt_native (shadow superset). ALL S8 preconditions now MET.
            · R5 ✅ (D75) tidy/de-slop: fixed 2 stale producer docstrings; gitignore-untrack found entangled (deferred).
            · R6 ✅ (D76) S3c-design: navigate already converged at the tool layer; planner-plugin GATED+deferred (ADR-001).
-         · S9 (NON-gated, NEXT): docs — rewrite the workflow narrative (docs/cli-tool-system.md) to the NATIVE
-           model-driven path + the 5 plug-and-play contracts (the audit flagged it stale: it still calls IntentRouter
-           "the routing brain" / the legacy producer canonical) + add a CI doc-drift gate (fail if the documented
-           default producer ≠ the live default). Substantial + non-gated; the natural next while S8 etc. await CEO.
+           · R7 ✅ (D77) S9: cli-tool-system.md rewritten to the native path + CI doc-drift gate (test_doc_drift_gate.py).
+         · R8 (NON-gated, NEXT — the LAST non-gated substantial item): the deferred scene-XML untrack hardening.
+           Make test_scene_builder.py generate a FRESH byte-identical reference in-test (not read the committed XML)
+           + drop the ~10 @sim fixtures' `git checkout` restore, THEN `git rm --cached` mjcf/go2/scene_room_piper.xml +
+           mjcf/g1/scene_g1_*.xml + add to .gitignore — so a sim connect stops dirtying the tree. Verify the byte-id
+           test + a sim e2e still pass. After R8 the non-gated ladder is EXHAUSTED → milestone report + await-CEO cadence.
          · S8 (GATED — preconditions S5a✅+S5b✅+S5c✅ ALL MET; awaiting CEO approval, see Pending CEO gates):
            retire classify_intent/should_use_vgg + IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor
            legacy producer. Routing-contract + -p acceptance entrypoint + escape-hatch flag defaults → exec summary first.
