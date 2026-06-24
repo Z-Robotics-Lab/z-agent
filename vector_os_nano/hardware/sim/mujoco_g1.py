@@ -495,6 +495,25 @@ class MuJoCoG1:
         self._last_nav_plan: list[tuple[float, float]] | None = None
 
     # ------------------------------------------------------------------
+    # Capability properties (BaseProtocol) — uniform with MuJoCoGo2
+    # ------------------------------------------------------------------
+
+    @property
+    def name(self) -> str:
+        """BaseProtocol identifier (mirrors MuJoCoGo2.name = 'mujoco_go2')."""
+        return "mujoco_g1"
+
+    @property
+    def supports_holonomic(self) -> bool:
+        """G1 is a biped — not omnidirectional (cannot true-strafe)."""
+        return False
+
+    @property
+    def supports_lidar(self) -> bool:
+        """get_lidar_scan() returns data (g1_lidar_scan), so True (matches go2)."""
+        return True
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
@@ -587,6 +606,17 @@ class MuJoCoG1:
         self._data = None
         self._policy = None
         self._offsets = None
+
+    def disconnect(self) -> None:
+        """BaseProtocol teardown — alias of :meth:`close` (idempotent).
+
+        Uniform with MuJoCoGo2.disconnect(). sim_tool.SimTool.stop() calls
+        ``base.disconnect()`` on the wrapped base; before this alias existed that
+        call silently failed for G1 (only ``close()`` was defined), so the G1 sim
+        was never actually torn down on stop. ``close()`` is retained — this is an
+        additive alias, NOT a rename. Behavior of close() is unchanged.
+        """
+        self.close()
 
     def _require_connection(self) -> None:
         if self._model is None or self._data is None:
@@ -939,6 +969,51 @@ class MuJoCoG1:
         siny_cosp = 2.0 * (qw * qz + qx * qy)
         cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
         return math.atan2(siny_cosp, cosy_cosp)
+
+    def get_velocity(self) -> list[float]:
+        """Return pelvis linear velocity [vx, vy, vz] in world frame.
+
+        BaseProtocol accessor, uniform with MuJoCoGo2.get_velocity() (which reads
+        qvel[0:3]). The pelvis freejoint linear DoFs sit at qvel[pelvis_dof_adr:+3]
+        in the combined scene.
+        """
+        self._require_connection()
+        off = self._offsets
+        assert off is not None
+        dof = off.pelvis_dof_adr
+        v = self._data.qvel
+        return [float(v[dof]), float(v[dof + 1]), float(v[dof + 2])]
+
+    def get_odometry(self) -> Any:
+        """Return full odometry snapshot as Odometry dataclass.
+
+        BaseProtocol accessor, uniform with MuJoCoGo2.get_odometry(). Pose comes
+        from the pelvis freejoint qpos (x,y,z + wxyz quat), velocity from its qvel
+        (linear xyz + angular; vyaw is the world-z angular rate). Quaternion is
+        MuJoCo (w,x,y,z); Odometry stores qx/qy/qz/qw like the go2 path.
+        """
+        self._require_connection()
+        from vector_os_nano.core.types import Odometry  # noqa: PLC0415
+        off = self._offsets
+        assert off is not None
+        qa = off.pelvis_qpos_adr
+        dof = off.pelvis_dof_adr
+        q = self._data.qpos
+        v = self._data.qvel
+        return Odometry(
+            timestamp=float(self._data.time),
+            x=float(q[qa]),
+            y=float(q[qa + 1]),
+            z=float(q[qa + 2]),
+            qw=float(q[qa + 3]),
+            qx=float(q[qa + 4]),
+            qy=float(q[qa + 5]),
+            qz=float(q[qa + 6]),
+            vx=float(v[dof]),
+            vy=float(v[dof + 1]),
+            vz=float(v[dof + 2]),
+            vyaw=float(v[dof + 5]),
+        )
 
     # ------------------------------------------------------------------
     # Lidar
