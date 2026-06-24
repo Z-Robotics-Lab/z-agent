@@ -81,10 +81,13 @@ generically on the right**.
   *system does:* stands the body up through ONE generic driver — no per-robot driver class,
   no morphology constants in Python. The schema is `embodiments/config.py`
   (`EmbodimentConfig` + frozen sub-specs, fail-loud loader); every body conforms **uniformly**
-  to `hardware/base.py` `BaseProtocol` (no per-robot method drift). **Honest status:** the
-  config foundation + BaseProtocol uniformity just landed (S1, branch `arch/plug-and-play`);
-  `go2` and `g1` ship as `robot.yaml` configs today, and **S2 wires the generic driver to
-  read them** (the drivers still hold the constants until then).
+  to `hardware/base.py` `BaseProtocol` (no per-robot method drift). **Honest status**
+  (branch `arch/plug-and-play`): S1 (config schema + BaseProtocol uniformity), S2 (drivers
+  READ `robot.yaml` + generic `DofLayout` — no hardcoded qpos), S3a/S3b (one shared lidar +
+  ONE `MjSpec.attach` scene builder) and S5a (capability gating single-sourced onto
+  `resolve_capability_profile`) have landed; `go2`/`g1` ship as `robot.yaml` configs. STILL
+  per-driver classes (one generic driver class is S4, a CEO-gated stage); the remaining work
+  is the embodiment registry (S4) + policy plugin (S5) + capability planner-exposure (S6).
 - **Policy** — *user provides:* a gait / control policy (RL / MPC / scripted) plus an
   obs/action spec. *system does:* drives the body with it; the policy lives separately,
   plugged in by spec (referenced from `policy.ref` in the manifest), not fused into the body.
@@ -211,9 +214,13 @@ One terse line per package. No line numbers (they rot — read the file). Paths 
 - `vcli/worlds/` — `base.py` (the four-thing `World` protocol), `dev.py`, `robot.py`,
   `registry.py` (`WorldRegistry` resolution), and the single-sourced sim-oracle predicate
   modules (`arm_sim_oracle` / `go2_sim_oracle` / `g1_perception_oracle`).
-- `embodiments/` — **embodiment-as-config**: `config.py` (`EmbodimentConfig` schema +
-  fail-loud loader) and per-robot `<id>/robot.yaml` manifests (`go2`, `g1`). The generic
-  driver that reads them is S2 (`arch/plug-and-play`).
+- `embodiments/` — **embodiment-as-config**: `config.py` (`EmbodimentConfig` +
+  `CapabilityProfile` schema + fail-loud loader), per-robot `<id>/robot.yaml` manifests
+  (`go2`, `g1`), and `capability_profile.py` — the ONE resolver (`resolve_capability_profile(agent)`)
+  every "what can this body do" gate consults (Rule 11, no capability-by-code drift): the
+  native producer's navigate gate, `worlds/robot._agent_has_camera`, and `engine._has_base`
+  all single-source through it (gated flags runtime-authoritative; enrichment flags reconcile
+  runtime-OR-declared for the runtime-attach, e.g. go2+Piper).
 - `perception/` — perception backends incl. `detector_capability.py` (the grounding-dino
   open-vocabulary `detect`, registered by `RobotWorld` onto a camera embodiment).
 - `skills/` — the `@skill` library (declares `requires` arm|base|camera) + SkillFlow routing.

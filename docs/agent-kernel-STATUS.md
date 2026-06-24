@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R1 — S3b SEALED: deterministic perception-grasp GROUNDED on the go2+Piper attach scene
+updated: 2026-06-24 · loop R2 — S5a: capability gating single-sourced onto resolve_capability_profile (byte-identical); S8 deferred (premature)
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,23 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R1 DONE — S3b is SEALED (100%). New deterministic e2e `tests/vcli/test_native_loop_grasp_attach_pty.py`
+doing:   loop R2 DONE — S5a (S8's precondition). A Decision Workflow (3 read-only recon agents + Opus judge)
+         REFUTED the optimistic "native is already the default producer": truth = run_turn_native is default ONLY
+         for REPL ACTION turns; chat/sim/switch still fall to legacy run_turn_unified, -p is native-OFF, and
+         classify_intent/should_use_vgg is a LIVE gate at 4 sites — so S8 (delete legacy producer) CUTS a live
+         dependency + touches a routing-contract interface = DEFERRED (gated). Chosen instead: S5a — single-source
+         the 3 scattered ad-hoc capability gates (native_loop navigate gate, worlds/robot._agent_has_camera,
+         engine._has_base) onto ONE `resolve_capability_profile(agent)` over the already-declared CapabilityProfile
+         (embodiments/capability_profile.py NEW). Gated flags (has_base, camera) are runtime-authoritative =
+         BYTE-IDENTICAL; enrichment flags (has_arm/has_gripper/lidar) reconcile runtime-OR-declared (handles the
+         go2+Piper runtime-attach: bare go2 manifest says has_arm:false but a Piper binds at runtime → runtime wins).
+         Rule 11 (no capability-by-code drift) + S8's precondition. VERIFIED: 13 new parity unit tests + full vcli
+         suite 1435 passed ZERO assertion edits (byte-identical); e2e = the R1 grasp STILL GROUNDS on the real
+         go2+Piper sim through the rewired _build_motor_tools (32s). Pre-existing reds (NOT mine, fail on clean HEAD):
+         3 deepseek-config env + 3 tests/vcli/test_repl_native_cutover.py::test_repl_attempt_native_* (the REPL
+         native-cutover path — investigate in S5b). Committed: c31c6d3 (code) + this RECORD.
+         ---
+         loop R1 DONE — S3b is SEALED (100%). New deterministic e2e `tests/vcli/test_native_loop_grasp_attach_pty.py`
          (35 s, `-m sim`) drives the native producer on the in-process go2+Piper ATTACH scene through a scripted
          `FakeToolScriptBackend` (NO live deepseek): `perception_grasp("抓绿色的瓶子")` -> `verify(holding_object(
          'pickable_bottle_green'))`. Asserts the FULL real pipeline grounded — colour/HSV resolve -> rendered-depth
@@ -54,15 +70,23 @@ blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodime
          interface (replace the `sim_tool` enum); S5 `ControlPolicy` interface + convex_mpc as an explicit
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
-next:    LOOP ROUND LADDER (drive autonomously; cold-start ORIENT from THIS file + DECISIONS + git each round):
-         · R1  ✅ DONE (D71) — S3b SEALED via the deterministic scripted grasp → GROUNDED on the attach scene.
-         · S8  (recommended next, NON-gated) delete the legacy keyword producer + the should-be-model-driven keyword
-           tables (pure subtraction, the big honest win toward "routing = model, not keywords"). FIRST inventory what
-           still routes through the legacy producer (don't cut a live dependency); full keyword inventory in
-           /tmp/pnp_synthesis.md (re-derive with a read-only audit if gone). Native `run_turn_native` is already the
-           default producer, so this is strangler-fig removal, e2e-verified per affected path.
-         · S3c navigate — converge g1 in-driver vgraph vs go2 external ROS2-FAR to one capability (DESIGN call;
-           possibly gate-adjacent — surface it; if it touches a nav interface → decision queue, pivot to S8/hardening).
+next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was premature). Cold-ORIENT each round:
+         · R1 ✅ (D71) S3b SEALED.  · R2 ✅ (D72) S5a capability-gating single-sourced.
+         · S5b (NON-gated, next): make run_turn_native the default on the -p path (run_one_turn, cli.py:1751-1848)
+           via an ADDITIVE native-attempt-then-fall-through (mirrors the REPL cutover), KEEPING the legacy flags at
+           their current defaults (changing a user-facing flag DEFAULT is an interface gate → NOT here). NB: fix /
+           understand the 3 pre-existing test_repl_native_cutover reds here (the cutover-attempt path).
+         · S5c (NON-gated): a registry-driven should_attempt_native(...) routing HINT (Rule 3 single-source) run
+           ALONGSIDE classify_intent().use_vgg (shadow/parity, not replacing) — proves a model-driven replacement
+           exists with zero behavior change, so the 4 keyword-gate sites can later be rewired off should_use_vgg.
+         · S3c-design (NON-gated DESIGN only): navigate convergence (g1 in-driver vgraph vs go2 external ROS2-FAR →
+           one config-parameterized capability). Pure design/ADR; the moment it proposes touching a nav INTERFACE →
+           decision queue, do NOT implement.
+         · S8 (GATED + cuts live deps — REQUIRES S5a✅+S5b+S5c green): retire classify_intent/should_use_vgg +
+           IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor legacy producer. Routing-contract +
+           -p acceptance entrypoint + escape-hatch flag defaults → executive summary to the decision queue first.
+         · Hardening (NON-gated filler): generated-scene-XML gitignore ALREADY done (.gitignore:17-18,49-51); remaining
+           = stale docstrings (engine.py:1637/1677-1680, cli.py native-loop help) — doc-only, byte-safe.
          · S9  docs: rewrite the workflow narrative to the native path + a CI drift gate.
          · Non-gated hardening: the deepseek multi-turn REPL-routing reliability (dev-world launch routing);
            gitignore the runtime-GENERATED scene XMLs (scene_room_piper.xml / scene_g1_*; they churn).
