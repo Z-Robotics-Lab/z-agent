@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R5 — tidy/de-slop: fixed 2 stale producer docstrings (post-S5b accuracy); gitignore-hardening found entangled (deferred). S8 still gate-pending
+updated: 2026-06-24 · loop R6 — S3c-design DONE (ADR-001 navigate-convergence: tool layer already converged; planner-plugin GATED+deferred). S8 still gate-pending
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,18 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R5 DONE — tidy/de-slop (milestone cleanup; docs-hygiene). Fixed 2 ACTIVELY-MISLEADING producer
+doing:   loop R6 DONE — S3c-design (navigate convergence, design-only). FINDING (verified by reading the code): the
+         navigate capability is ALREADY converged at the TOOL layer — `_NativeBaseNavigateTool` calls
+         `base.navigate_to(x,y,timeout=…)` POLYMORPHICALLY, no go2/g1 branch (Rule 11 met there). The "fork" is two
+         PLANNER BACKENDS behind one interface: go2→`Go2ROS2Proxy.navigate_to` (external ROS2 CMU-FAR) and
+         g1→`MuJoCoG1.navigate_to` (in-driver vgraph), both honoring (x,y,timeout)→truthy. The Rule-11 convergence =
+         a PLUGGABLE planner Capability declared in robot.yaml (planner: far|vgraph) — GATED (new Planner interface +
+         a `nav` robot.yaml field + FAR external-dep) → queued (Pending CEO gates) + recommend DEFER until N≥3 planners
+         (YAGNI at N=2; ADR-001). DELIVERED: docs/ADR-001-navigate-convergence.md + a contract test
+         (tests/unit/embodiments/test_navigate_contract.py, 2 green) pinning the polymorphic invariant. No
+         behavior/interface change this round. Committed this RECORD.
+         ---
+         loop R5 DONE — tidy/de-slop (milestone cleanup; docs-hygiene). Fixed 2 ACTIVELY-MISLEADING producer
          docstrings invalidated by S5b: `engine.run_turn_native` "(M1, flag-gated OFF)…behind --native-loop" →
          it is now the DEFAULT producer (REPL `_repl_native_enabled` + `-p` `_print_native_enabled`); the flags are
          explicit forces. `engine.run_turn_unified` "DARK-LAUNCHED — nothing calls this yet" → it is LIVE on the REPL
@@ -116,25 +127,17 @@ next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was pre
          · R1 ✅ (D71) S3b SEALED. · R2 ✅ (D72) S5a cap-gating single-sourced. · R3 ✅ (D73) S5b native=-p default.
            · R4 ✅ (D74) S5c registry-driven should_attempt_native (shadow superset). ALL S8 preconditions now MET.
            · R5 ✅ (D75) tidy/de-slop: fixed 2 stale producer docstrings; gitignore-untrack found entangled (deferred).
-         · S3c-design (NON-gated DESIGN only, NEXT): navigate convergence (g1 in-driver vgraph vs go2 external ROS2-FAR →
-           one config-parameterized capability). Pure design/ADR; the moment it proposes touching a nav INTERFACE →
-           decision queue, do NOT implement.
-         · Hardening — stale producer docstrings: ✅ FIXED R5 (D75: engine.run_turn_native "flag-gated OFF" →
-           DEFAULT producer; run_turn_unified "DARK-LAUNCHED" → LIVE on the REPL tool_use route, cli.py:2601). The
-           generated-scene-XML untrack is NOT a trivial micro-task (R5 finding): test_scene_builder.py:58-59 reads the
-           committed scene XML as the byte-identical REFERENCE, and ~10 @sim fixtures `git checkout` it to restore
-           churn — untracking breaks both. Needs its own round (re-point the reference + the fixtures) — DEFERRED.
+           · R6 ✅ (D76) S3c-design: navigate already converged at the tool layer; planner-plugin GATED+deferred (ADR-001).
+         · S9 (NON-gated, NEXT): docs — rewrite the workflow narrative (docs/cli-tool-system.md) to the NATIVE
+           model-driven path + the 5 plug-and-play contracts (the audit flagged it stale: it still calls IntentRouter
+           "the routing brain" / the legacy producer canonical) + add a CI doc-drift gate (fail if the documented
+           default producer ≠ the live default). Substantial + non-gated; the natural next while S8 etc. await CEO.
          · S8 (GATED — preconditions S5a✅+S5b✅+S5c✅ ALL MET; awaiting CEO approval, see Pending CEO gates):
-           retire classify_intent/should_use_vgg +
-           IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor legacy producer. Routing-contract +
-           -p acceptance entrypoint + escape-hatch flag defaults → executive summary to the decision queue first.
-         · Hardening (NON-gated filler): generated-scene-XML gitignore is PARTIAL (the R2 judge's "already done" was
-           WRONG — verified via git check-ignore): .gitignore covers go2 scene_flat/scene_room (L17-18) + the OLD
-           hardware/sim/ location (L49-51), but mjcf/go2/scene_room_piper.xml AND mjcf/g1/scene_g1_*.xml are STILL
-           TRACKED and churn on every connect. Fix = add those paths + `git rm --cached` them (FIRST confirm no
-           scene-builder byte-identical test reads the committed XML as a reference). Plus stale docstrings
-           (engine.py:1637/1677-1680, cli.py native-loop help) — doc-only, byte-safe.
-         · S9  docs: rewrite the workflow narrative to the native path + a CI drift gate.
+           retire classify_intent/should_use_vgg + IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor
+           legacy producer. Routing-contract + -p acceptance entrypoint + escape-hatch flag defaults → exec summary first.
+         · Deferred hardening (its own round): the generated-scene-XML untrack — NOT trivial (R5/D75 finding):
+           test_scene_builder.py:58-59 reads the committed scene XML as the byte-identical REFERENCE + ~10 @sim
+           fixtures `git checkout` it to restore churn; untracking breaks both. Needs re-pointing the reference + fixtures.
          · Non-gated hardening: the deepseek multi-turn REPL-routing reliability (dev-world launch routing);
            gitignore the runtime-GENERATED scene XMLs (scene_room_piper.xml / scene_g1_*; they churn).
          · CEO-GATE stages — do NOT cross; DESIGN + spike + exec-summary to a `## Decisions pending` queue, then
@@ -182,6 +185,13 @@ next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was pre
   fallback (mitigation: keep `VECTOR_LEGACY_TURN`/`VECTOR_PRINT_NATIVE` escape hatches one milestone). VERIFY: full
   S0 regression + a novel 3rd-language phrasing all route with ZERO keyword tables; `red-team` before sealing.
   → Needs Yusen's go/no-go before the deletion. Until then the loop does S3c-design + hardening.
+- **S3c — navigate planner-plugin (DESIGN done, ADR-001; implementation GATED + recommend DEFER).**
+  Navigate is already converged at the TOOL layer (one polymorphic `_NativeBaseNavigateTool`; pinned by
+  tests/unit/embodiments/test_navigate_contract.py). The Rule-11 convergence of the two PLANNER backends
+  (go2 external ROS2-FAR vs g1 in-driver vgraph) = a pluggable planner Capability declared in robot.yaml
+  (`planner: far|vgraph`). GATED: new Planner interface + a `nav` robot.yaml field + the FAR external-dep
+  formalization. Recommendation (ADR-001): DEFER until N≥3 planners/embodiments motivate the abstraction
+  (YAGNI at N=2; no regression risk meanwhile). → Yusen go/no-go, batched.
 - Plug-and-play stage gates: S4 embodiment-registration interface · S5 `ControlPolicy` interface + convex_mpc dep
   · S6 side-effecting-capability permission/security. Plus: nav→FAR cmd_vel causation (SPINE D14) · strategy_params
   preservation (SPINE D52) · explore TARE · VLN SysNav. New deps / interfaces / hardware / security route here.
