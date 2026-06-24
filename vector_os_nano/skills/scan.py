@@ -79,6 +79,29 @@ class ScanSkill:
                 result_data={"diagnosis": "no_arm"},
             )
 
+        # DoF-aware (Rule 11): the default scan pose is the 5-DoF SO-101 pose. A
+        # different arm (e.g. the 6-DoF Piper) has a different DoF, so a fixed-length
+        # pose is rejected by move_joints ("expected 6 positions, got 5"). If the pose
+        # length doesn't match THIS arm's DoF, hold the arm's CURRENT pose (a safe
+        # no-op move): for go2+Piper the workspace view comes from the go2 head camera,
+        # not the arm wrist, so the scan arm pose is non-critical. SO-101 (5==5) is
+        # byte-identical — this branch never fires for it.
+        arm_dof = getattr(context.arm, "dof", None)
+        if arm_dof is None:
+            try:
+                arm_dof = len(context.arm.get_joint_positions())
+            except Exception:  # noqa: BLE001
+                arm_dof = len(scan_joints)
+        if len(scan_joints) != arm_dof:
+            try:
+                scan_joints = list(context.arm.get_joint_positions())
+            except Exception:  # noqa: BLE001
+                scan_joints = [0.0] * int(arm_dof)
+            logger.info(
+                "[SCAN] configured scan pose len != arm DoF (%s); holding current pose",
+                arm_dof,
+            )
+
         logger.info("[SCAN] Moving to scan pose: %s", scan_joints)
         success = context.arm.move_joints(scan_joints, duration=_SCAN_DURATION)
 
