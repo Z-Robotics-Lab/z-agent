@@ -493,7 +493,16 @@ class MuJoCoPiper:
         finally:
             if paused and callable(resume_fn):
                 resume_fn()
-        self._ik_data.qpos[0:19] = live_qpos[0:19]
+        # Sync the robot's freejoint(7) + legs(12) from the live model by its
+        # ACTUAL qpos slice (DofLayout-derived), NOT a literal [0:19]: under the
+        # MjSpec.attach scene (S3b) the go2 freejoint sits at qpos[21] — the
+        # room's three pickable free joints occupy [0:21]. _ik_model loads the
+        # same composite scene, so its layout matches the live one. lo==0 for the
+        # legacy <include> scene, so this stays byte-identical there. (Arm joints
+        # are synced separately below via self._ik_arm_qpos_adr.)
+        _lo = go2._mj.layout.root_qpos_adr
+        _n = 7 + go2._mj.layout.num_actuated  # freejoint(7) + legs(12) = 19
+        self._ik_data.qpos[_lo : _lo + _n] = live_qpos[_lo : _lo + _n]
         if arm_joints is not None:
             for adr, q in zip(self._ik_arm_qpos_adr, arm_joints):
                 self._ik_data.qpos[adr] = float(q)

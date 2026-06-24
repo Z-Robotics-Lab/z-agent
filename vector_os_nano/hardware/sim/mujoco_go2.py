@@ -296,37 +296,51 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
             the MuJoCo subprocess without editing launch_explore.sh.
     """
     import os
+    from vector_os_nano.hardware.sim.scene_builder import build_room_scene
     if with_arm is None:
         with_arm = os.environ.get("VECTOR_SIM_WITH_ARM", "0") == "1"
+    assets_dir = _MJCF_DIR / "assets"
     if with_arm and _GO2_PIPER_XML.exists():
         go2_xml = _GO2_PIPER_XML
         scene_name = "scene_room_piper.xml"
+        # go2_piper.xml carries ABSOLUTE mesh paths (build_go2_piper writes them
+        # absolute so it is include-safe) — do NOT rewrite, pass meshes_dir=None.
+        robot_meshes_dir = None
+        # Grasp welds (name, body1, body2) — only with the arm (the no-arm model
+        # has no piper_link6; a weld to a missing body fails to compile).
+        # body1=piper_link6 (wrist carrying piper_ee_site + fingers), body2=each
+        # pickable; created INACTIVE — the gripper's _try_grasp activates one on
+        # close. This is what lets a grasp grade GROUNDED (the object physically
+        # attaches + lifts; mirrors so101_mujoco.xml).
+        welds: tuple[tuple[str, str, str], ...] = (
+            ("grasp_pickable_bottle_blue", "piper_link6", "pickable_bottle_blue"),
+            ("grasp_pickable_bottle_green", "piper_link6", "pickable_bottle_green"),
+            ("grasp_pickable_can_red", "piper_link6", "pickable_can_red"),
+        )
     else:
         go2_xml = _MJCF_DIR / "go2.xml"
         scene_name = "scene_room.xml"
-    assets_dir = _MJCF_DIR / "assets"
+        # bare go2.xml uses relative meshdir="assets" — make absolute on attach.
+        robot_meshes_dir = assets_dir
+        welds = ()
 
-    template = _ROOM_XML.read_text()
-    xml = template.replace("GO2_MODEL_PATH", str(go2_xml))
-    xml = xml.replace("GO2_ASSETS_DIR", str(assets_dir))
-
-    # Grasp welds — only with the arm (the no-arm model has no piper_link6, and a
-    # weld to a missing body fails to compile). body1=piper_link6 (wrist carrying
-    # piper_ee_site + fingers), body2=each pickable; active="false" until the
-    # gripper's _try_grasp activates one on close. This is what lets a grasp grade
-    # GROUNDED — the object physically attaches + lifts (mirrors so101_mujoco.xml).
-    welds = (
-        "  <equality>\n"
-        '    <weld name="grasp_pickable_bottle_blue"  body1="piper_link6" body2="pickable_bottle_blue"  active="false"/>\n'
-        '    <weld name="grasp_pickable_bottle_green" body1="piper_link6" body2="pickable_bottle_green" active="false"/>\n'
-        '    <weld name="grasp_pickable_can_red"      body1="piper_link6" body2="pickable_can_red"      active="false"/>\n'
-        "  </equality>\n"
-    ) if with_arm else ""
-    xml = xml.replace("GRASP_WELDS", welds)
-
+    # ONE scene-build path (Rule 11): MjSpec.attach + compile() (proven byte-
+    # identical to the legacy <include>), then a reloadable file is written for
+    # the cross-process scene_xml_path consumers (MuJoCoPiper IK, sim_tool
+    # pickable-population). connect() loads that file via from_xml_path.
     out = _MJCF_DIR / scene_name
-    out.write_text(xml)
-    return out
+    _model, scene_path = build_room_scene(
+        robot_model_path=go2_xml,
+        room_template_path=_ROOM_XML,
+        room_assets_dir=assets_dir,
+        attach_prefix="",
+        spawn_xy=(10.0, 3.0),
+        welds=welds,
+        out_path=out,
+        robot_meshes_dir=robot_meshes_dir,
+    )
+    assert scene_path is not None
+    return scene_path
 
 
 # ---------------------------------------------------------------------------
@@ -535,12 +549,15 @@ class MuJoCoGo2:
             data.qpos[rq + 2] = spawn.base_height
             # Set standing joint angles
             data.qpos[jq : jq + 12] = self._stance_qpos
-            # If Piper arm is mounted (nq=27 vs 19), stow it folded upright;
-            # otherwise joint2 defaults to 0 and the arm extends horizontally,
-            # shifting 1.2kg of link6+ mass forward and tipping the dog.
-            if model.nq >= 27:
-                data.qpos[19:27] = _PIPER_STOW_QPOS
+            # If Piper arm is mounted (nu=19 vs 12 — the arm adds 7 actuators),
+            # stow it folded upright; otherwise joint2 defaults to 0 and the arm
+            # extends horizontally, shifting 1.2kg of link6+ mass forward and
+            # tipping the dog. NOTE: gate on nu, NOT nq — the room's pickable_*
+            # free joints make the BARE go2 nq=40 (not 19), so an nq threshold
+            # mis-fires for the bare model under either scene-build path.
             if model.nu >= 19:
+                arm_q0 = layout.joint_qpos_start + layout.num_actuated
+                data.qpos[arm_q0 : arm_q0 + 8] = _PIPER_STOW_QPOS
                 data.ctrl[12:19] = _PIPER_STOW_CTRL
         else:
             scene_path = _build_flat_scene_xml()
@@ -969,24 +986,29 @@ class MuJoCoGo2:
         the full set of Pinocchio computations the MPC solver needs.
 
         When MuJoCo carries extra DoFs beyond the PinGo2 model (e.g. a
-        mounted Piper arm adds 8 DoFs), the leg segment is sliced out —
-        MuJoCo qpos layout is [base(7), legs(12), arm(...)], which matches
-        the Pinocchio URDF exactly for the first 19 entries.
+        mounted Piper arm adds 8 DoFs), the leg segment is sliced out via
+        the DofLayout addresses (base freejoint -> legs -> arm), so the
+        slice is correct whether the robot's freejoint sits at qpos[0]
+        (legacy <include> scene) or qpos[21] (MjSpec.attach scene).
         """
         mujoco_q = np.asarray(self._mj.data.qpos, dtype=float).reshape(-1)
         mujoco_dq = np.asarray(self._mj.data.qvel, dtype=float).reshape(-1)
 
-        qw, qx, qy, qz = mujoco_q[3:7]
+        L = self._mj.layout
+        qw, qx, qy, qz = mujoco_q[L.quat_start : L.quat_start + 4]
 
         import pinocchio as pin  # noqa: PLC0415
         R = pin.Quaternion(qw, qx, qy, qz).toRotationMatrix()
-        v_body = R.T @ mujoco_dq[0:3]
-        w_body = mujoco_dq[3:6]
+        v_body = R.T @ mujoco_dq[L.root_dof_adr : L.root_dof_adr + 3]
+        w_body = mujoco_dq[L.angvel_start : L.angvel_start + 3]
 
         n_leg_q = self._pin.model.nq - 7   # legs-only qpos count (12 for Go2)
         n_leg_v = self._pin.model.nv - 6   # legs-only qvel count (12 for Go2)
-        q_pin = np.concatenate([mujoco_q[0:3], [qx, qy, qz, qw], mujoco_q[7:7 + n_leg_q]])
-        dq_pin = np.concatenate([v_body, w_body, mujoco_dq[6:6 + n_leg_v]])
+        base_xyz = mujoco_q[L.root_qpos_adr : L.root_qpos_adr + 3]
+        leg_q = mujoco_q[L.joint_qpos_start : L.joint_qpos_start + n_leg_q]
+        leg_v = mujoco_dq[L.joint_dof_start : L.joint_dof_start + n_leg_v]
+        q_pin = np.concatenate([base_xyz, [qx, qy, qz, qw], leg_q])
+        dq_pin = np.concatenate([v_body, w_body, leg_v])
 
         self._pin.update_model(q_pin, dq_pin)
 
@@ -1070,9 +1092,12 @@ class MuJoCoGo2:
         data.qpos[rq + 2] = 0.35                    # standing height
         data.qpos[rq + 3 : rq + 7] = [1, 0, 0, 0]   # upright quaternion (w,x,y,z)
         data.qpos[jq : jq + 12] = _STAND_JOINTS      # standing joint angles
-        # If Piper arm is mounted, set it to the stow pose too (nq=27 vs 19)
-        if self._mj.model.nq >= 27:
-            data.qpos[19:27] = _PIPER_STOW_QPOS
+        # If Piper arm is mounted, set it to the stow pose too. Gate on nu (the
+        # arm adds 7 actuators), NOT nq — the room's pickable_* free joints make
+        # the bare go2 nq=40, so an nq threshold mis-fires for the bare model.
+        if self._mj.model.nu >= 19:
+            arm_q0 = jq + layout.num_actuated
+            data.qpos[arm_q0 : arm_q0 + 8] = _PIPER_STOW_QPOS
         data.qvel[:] = 0                         # zero all velocities
         data.ctrl[:] = 0                         # zero all actuators
         # Likewise drive Piper position actuators to stow (nu=19 vs 12)

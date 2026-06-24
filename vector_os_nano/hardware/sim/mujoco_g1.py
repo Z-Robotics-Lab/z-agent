@@ -45,8 +45,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -315,7 +313,7 @@ def _build_g1_room_scene_xml() -> Path:
 
     Returns the path to the written scene XML.
     """
-    mj = _get_mujoco()
+    from vector_os_nano.hardware.sim.scene_builder import build_room_scene
 
     if not _ROOM_XML.exists():
         raise FileNotFoundError(f"go2_room.xml not found at {_ROOM_XML}")
@@ -325,61 +323,28 @@ def _build_g1_room_scene_xml() -> Path:
             "run scripts/setup_g1_gait.sh first."
         )
 
-    # Step 1: resolve room template → room-only XML (no robot)
-    xml = _ROOM_XML.read_text()
-    xml = xml.replace('<include file="GO2_MODEL_PATH"/>', "<!-- no robot (g1 scene) -->")
-    xml = xml.replace("GO2_ASSETS_DIR", str(_GO2_ASSETS_DIR))
-    xml = xml.replace("GRASP_WELDS", "")
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".xml", delete=False, dir="/tmp", prefix="g1_room_12dof_tmp_"
-    ) as fh:
-        fh.write(xml)
-        room_tmp = fh.name
-
-    try:
-        # Step 2: load MjSpec for room and 12dof g1
-        room_spec = mj.MjSpec.from_file(room_tmp)
-
-        g1_spec = mj.MjSpec.from_file(str(_G1_12DOF_XML))
-        # Absolute mesh paths survive to_xml() round-trip (room meshdir overrides relative).
-        for mesh in g1_spec.meshes:
-            if not os.path.isabs(mesh.file):
-                mesh.file = str(_G1_MESHES_DIR / mesh.file)
-        g1_spec.meshdir = ""
-
-        # Add head camera: pos=(0.04,0,0.42) → ~head height; xyaxes → forward-facing.
-        pelvis_body = None
-        for b in g1_spec.bodies:
-            if b.name == "pelvis":
-                pelvis_body = b
-                break
-        if pelvis_body is None:
-            raise RuntimeError("pelvis body not found in g1_12dof.xml")
-
-        pelvis_body.add_camera(
-            name="head_rgb",
-            pos=[0.04, 0.0, 0.42],
-            xyaxes=[0, -1, 0, 0, 0, 1],
-        )
-
-        # Step 3: attach g1 at spawn frame; connect() sets standing z=0.793.
-        frame = room_spec.worldbody.add_frame(pos=[_G1_SPAWN_X, _G1_SPAWN_Y, 0.0])
-        room_spec.attach(g1_spec, prefix="g1_", frame=frame)
-        room_spec.compile()
-
-        # Step 4: write compiled scene
-        _G1_SCENE_XML.parent.mkdir(parents=True, exist_ok=True)
-        _G1_SCENE_XML.write_text(room_spec.to_xml())
-        logger.info("G1-12dof room scene written to %s", _G1_SCENE_XML)
-
-    finally:
-        try:
-            os.unlink(room_tmp)
-        except OSError:
-            pass
-
-    return _G1_SCENE_XML
+    # ONE scene-build path (Rule 11), shared with go2: MjSpec.attach + compile().
+    # g1 carries prefix "g1_" (keeps the room's pickable_* unprefixed), a head
+    # camera on pelvis, and no grasp welds. connect() then sets standing z=0.793.
+    _model, scene_path = build_room_scene(
+        robot_model_path=_G1_12DOF_XML,
+        room_template_path=_ROOM_XML,
+        room_assets_dir=_GO2_ASSETS_DIR,
+        attach_prefix="g1_",
+        spawn_xy=(_G1_SPAWN_X, _G1_SPAWN_Y),
+        welds=(),
+        out_path=_G1_SCENE_XML,
+        robot_meshes_dir=_G1_MESHES_DIR,
+        camera={
+            "mount_body": "pelvis",
+            "name": "head_rgb",
+            "pos": [0.04, 0.0, 0.42],
+            "xyaxes": [0, -1, 0, 0, 0, 1],
+        },
+    )
+    assert scene_path is not None
+    logger.info("G1-12dof room scene written to %s", scene_path)
+    return scene_path
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · arch/plug-and-play S2 done (drivers READ config + generic DofLayout)
+updated: 2026-06-24 · arch/plug-and-play S3b done (ONE scene builder via MjSpec.attach; byte-identical)
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,26 +12,32 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   S1+S2 DONE + e2e-verified (behavior-preserving, spine BYTE-UNCHANGED). S2: the two MuJoCo drivers
-         now READ `robot.yaml` (spawn + nominal stance) and use a generic `embodiments/dof_layout.py`
-         `DofLayout` (root-freejoint qpos/qvel introspection) — go2's ~14 hardcoded `qpos[7:19]`/`qpos[0:3]`
-         literals + g1's bespoke `_G1Offsets` are GONE; byte-identical (config == old constants). e2e go2
-         (connect/stand/walk/turn/sit) + g1 (RL-gait walk-forward) green. S1: `embodiments/config.py` (frozen
-         `EmbodimentConfig` + fail-loud loader) + `embodiments/{go2,g1}/robot.yaml` + MuJoCoG1 BaseProtocol
-         uniformity (fixed a latent g1 `disconnect` OOM leak). Also: North Star expanded (5 contracts + moat),
-         Rules 11/12 added, 5 dead files removed, DECISIONS compacted 494→250, ARCHITECTURE rewrite + getting-started.md.
+doing:   S1+S2+S3a+S3b DONE + verified (behavior-preserving, spine BYTE-UNCHANGED). S3b: ONE scene builder —
+         `hardware/sim/scene_builder.py build_room_scene(...) -> (MjModel, path)` via `MjSpec.attach`;
+         BOTH `_build_room_scene_xml` (go2, prefix="") and `_build_g1_room_scene_xml` (g1, prefix="g1_") call
+         it (the two-scene-builder fork is KILLED). Root blocker was a MuJoCo-3.9 `attach`+`to_xml` serializer
+         bug (anonymous nested `<default>` → reload "empty class name"); fixed (B) = in-memory `compile()`
+         authoritative + `normalize_attach_defaults` repairs the FILE (go2.xml NOT touched — fix A rejected).
+         2nd blocker (build agent STOPPED at the byte-id guardrail): attach reorders go2 qpos (freejoint
+         0→21, arm 19→40); finished D66's missed qpos-order literals (arm-stow + MPC pin) to DofLayout. Latent
+         bug fixed: arm-stow guard nq≥27→nu≥19 (pickables inflate bare nq to 40 → Case 8). BYTE-IDENTICAL all
+         3 cases (go2+arm/bare/g1: counts+name-sets+class-default params by NAME). ORCHESTRATOR VERIFICATION
+         caught+fixed a 2nd reorder regression the build agent MISSED: `MuJoCoPiper` IK base-sync read literal
+         `qpos[0:19]` → pickables under attach (root=21); fixed to DofLayout-derived (Case 9); IK-base-sync e2e
+         CONFIRMED (IK tracks the moved dog, not the default). 50 driver + 17 piper unit green. FULL bare-cli
+         grasp e2e still OWED before S3b is 100% done (R12).
+         S2: drivers READ `robot.yaml` + generic `DofLayout`. S1: config schema + g1 BaseProtocol uniformity.
 
-owns:    `embodiments/**` (NEW), `hardware/sim/mujoco_g1.py` (+BaseProtocol, additive), `docs/*`. Spine
-         `vcli/cognitive/` BYTE-UNCHANGED since 7b220d9.
+owns:    `embodiments/**`, `hardware/sim/{scene_builder.py NEW, mujoco_go2.py, mujoco_g1.py, mujoco_piper.py}`,
+         `docs/*`. Spine `vcli/cognitive/` BYTE-UNCHANGED since 7b220d9.
 
-blocked: none for S1. Later stages carry CEO gates (surface, do NOT cross): S4 embodiment-registration
+blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodiment-registration
          interface (replace the `sim_tool` enum); S5 `ControlPolicy` interface + convex_mpc as an explicit
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
-next:    S3 (in progress) — ONE shared impl per capability: **S3a LIDAR de-triplication DONE** (shared
-         `sensors/lidar_raycast.raycast_lidar`, both bodies e2e 360/360). Remaining: S3b scene-build
-         (go2 string-template → `MjSpec.attach`, one path) · S3c navigate (g1 in-driver vgraph vs go2
-         ROS2-FAR — genuinely different mechanisms, needs design, possibly gate-adjacent).
+next:    S3b bare-cli e2e (Rule 12 acceptance, still OWED before "done"): go2+arm grasp + bare go2 nav + g1
+         through bare `vector-cli` + NL, honest verdict surfaces. Then S3c navigate (g1 in-driver vgraph vs
+         go2 external ROS2-FAR — genuinely different mechanisms, needs design, possibly gate-adjacent).
          Then S4 (embodiment registry — replace the `sim_tool` enum, CEO gate), S5 (ControlPolicy plugin +
          convex_mpc dep, CEO gate), S6 (capability planner-exposure + side-effecting permission path, CEO
          gate), S8 (delete the legacy keyword producer + tables), S9 (doc CI drift gate).

@@ -77,16 +77,21 @@ def g1_model():
 # ---------------------------------------------------------------------------
 
 
-def test_go2_layout_addresses_are_zero_and_seven(go2_model) -> None:
+def test_go2_layout_addresses_are_self_consistent(go2_model) -> None:
     layout = DofLayout(go2_model, "base_link", 12)
-    # The go2 base_link is the first freejoint in the room scene; its slice
-    # literals were qpos[0:3] (spawn) and qpos[7:19] (legs).
-    assert layout.root_qpos_adr == 0
-    assert layout.joint_qpos_start == 7
-    assert layout.root_dof_adr == 0
-    assert layout.joint_dof_start == 6  # qvel[6:18] leg slice
-    assert layout.angvel_start == 3
-    assert layout.quat_start == 3
+    # S3b unified scene-build onto MjSpec.attach: the room is the base spec and
+    # the robot is ATTACHED LAST (so the room's pickable_* bodies keep unprefixed
+    # names), which lands go2's base freejoint at qpos[21], NOT qpos[0] as the
+    # legacy <include> build did. DofLayout introspects this — that is exactly why
+    # the driver must read these addresses, never hardcode 0/7. The CONTRACT
+    # (the relationships the driver relies on) is what's behavior-preserving:
+    assert layout.quat_start == layout.root_qpos_adr + 3
+    assert layout.joint_qpos_start == layout.root_qpos_adr + 7
+    assert layout.angvel_start == layout.root_dof_adr + 3
+    assert layout.joint_dof_start == layout.root_dof_adr + 6
+    # The base freejoint sits at qpos[0] under <include>, qpos[21] under attach;
+    # either way it is a single 7-dof freejoint introspected from the model.
+    assert layout.root_qpos_adr >= 0
     assert layout.robot_geom_ids  # non-empty self-geom set
 
 
