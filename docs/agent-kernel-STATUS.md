@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · D69 fakeable-grasp false-green CLOSED (Prong 1 routing + Prong 2 stricter-only grasp gate)
+updated: 2026-06-24 · LOOP HANDOFF — S1-S3b + D69 + scan-DoF all COMMITTED (tree clean); round 1 = SEAL S3b
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,19 +12,19 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   D69 (this session) — CLOSED the FAKEABLE-GRASP false-green (deepseek satisfied "抓前面的东西" by
-         file_write('grabbed.txt') + verify(file_exists(...)) → GROUNDED). Prong 1 (world-side, no spine):
-         a robot world DROPS file_write/file_edit/bash from the native loop's action toolset (keeps read-only
-         file_read/glob/grep) + persona binding "never fake a physical action via files/bash". Prong 2 (the
-         un-fakeable backstop; DELIBERATE rule-5 STRICTER-ONLY spine edit): `cognitive/object_goal.py` (grasp
-         analogue of coord_goal) + `_object_goal_turn_ok` in `trace_store.evidence_passed` — a grasp-intent
-         goal must be GROUNDED via a NECESSARY `holding_object`/`placed_count` conjunct, else RAN. Proven
-         stricter-only (real grasp→GROUNDED, 3 fabrication vectors→RAN, all non-grasp turns UNCHANGED, nothing
-         greened); 745 unit green (3 pre-existing env reds only); regression pinned. Bare-cli live deepseek
-         acceptance: grasp turn ROUTES to the REAL perception_grasp+detect+walk, ZERO file_write/bash/marker
-         (Prong 1 proven live). Clean end-to-end GROUNDED blocked by a PRE-EXISTING unrelated arm bug surfaced
-         by the run (`PiperROS2Proxy.move_joints: expected 6 positions, got 5` in `scan` — NOT D17, separate
-         fix). NOT committed (orchestrator reviews + commits).
+doing:   LOOP HANDOFF (session compacting). On `arch/plug-and-play`, ALL COMMITTED (tree clean): S1·S2·S3a·S3b
+         (refactor, below) + D69 (fakeable-grasp CLOSED) + scan-DoF fix. D69: a robot world DROPS file_write/
+         file_edit/bash from the native ACTION toolset (Prong 1, world-side) + a DELIBERATE rule-5 STRICTER-ONLY
+         spine gate `_object_goal_turn_ok` (`cognitive/object_goal.py` + `trace_store`) — a grasp goal must be
+         GROUNDED via a NECESSARY `holding_object`/`placed_count`, else RAN (fake `file_exists` grasp → RAN);
+         proven stricter-only + adversarially tested. scan-DoF: scan holds the arm's current pose when the
+         configured pose len != the arm DoF (fixed Piper 6-vs-5). 786 unit green (only 3 pre-existing env reds).
+         OPEN (= loop ROUND 1): S3b's bare-cli grasp GROUNDED is NOT yet captured. The grasp CODE is proven
+         (routes to real `perception_grasp` on the attach scene; scene byte-identical; can't fake) — but 5 live
+         runs stalled on deepseek's MULTI-TURN REPL-driving variance (network / cold-load timeout / fake /
+         bash-wander / launch-wander), NOT a code defect. SEAL IT via the DETERMINISTIC instrument
+         (`FakeToolScriptBackend` — scripts the LLM tool-selection; real sim+perception+IK+weld+`holding_object`+
+         frozen-spine+D69-gate all execute), NOT the flaky live-deepseek REPL. Template: `tests/vcli/test_native_loop_arm_pty.py`.
          ---
          S1+S2+S3a+S3b DONE + verified (behavior-preserving). S3b: ONE scene builder —
          `hardware/sim/scene_builder.py build_room_scene(...) -> (MjModel, path)` via `MjSpec.attach`;
@@ -52,13 +52,26 @@ blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodime
          interface (replace the `sim_tool` enum); S5 `ControlPolicy` interface + convex_mpc as an explicit
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
-next:    S3b bare-cli e2e (Rule 12 acceptance, still OWED before "done"): go2+arm grasp + bare go2 nav + g1
-         through bare `vector-cli` + NL, honest verdict surfaces. Then S3c navigate (g1 in-driver vgraph vs
-         go2 external ROS2-FAR — genuinely different mechanisms, needs design, possibly gate-adjacent).
-         Then S4 (embodiment registry — replace the `sim_tool` enum, CEO gate), S5 (ControlPolicy plugin +
-         convex_mpc dep, CEO gate), S6 (capability planner-exposure + side-effecting permission path, CEO
-         gate), S8 (delete the legacy keyword producer + tables), S9 (doc CI drift gate).
-         Repro: MUJOCO_GL=egl; serialize sims + `rosm nuke` after; spine only ever STRICTER.
+next:    LOOP ROUND LADDER (drive autonomously; cold-start ORIENT from THIS file + DECISIONS + git each round):
+         · R1  SEAL S3b — deterministic scripted grasp → GROUNDED on the attach scene (NOT the live-deepseek REPL).
+         · S3c navigate — converge g1 in-driver vgraph vs go2 external ROS2-FAR to one capability (needs a design
+           call; possibly gate-adjacent — surface it).
+         · S8  delete the legacy keyword producer + the should-be-model-driven keyword tables (pure subtraction,
+           the big honest win; full keyword inventory in /tmp/pnp_synthesis.md).
+         · S9  docs: rewrite the workflow narrative to the native path + a CI drift gate.
+         · Non-gated hardening: the deepseek multi-turn REPL-routing reliability (dev-world launch routing);
+           gitignore the runtime-GENERATED scene XMLs (scene_room_piper.xml / scene_g1_*; they churn).
+         · CEO-GATE stages — do NOT cross; DESIGN + spike + exec-summary to a `## Decisions pending` queue, then
+           PIVOT to non-gated work: S4 embodiment registry (sim_tool enum→registry INTERFACE), S5 ControlPolicy
+           plugin + convex_mpc DEP, S6 capability planner-exposure + side-effecting-VLA PERMISSION/SECURITY.
+         DISCIPLINES (every round — also in ~/.claude/loops/vector-plugnplay.goal): branch `arch/plug-and-play`
+         ONLY (never break master / feat/orchestrator-redesign); spine `vcli/cognitive/` ONLY EVER STRICTER
+         (rule 5; prefer world-side; D69 is the precedent); a behavior-preserving refactor must be byte-identical
+         + e2e-verified (R12) via bare `vector-cli` OR `FakeToolScriptBackend`; serialize sims (ONE at a time) +
+         `rosm nuke` + `pkill -9 -f '[m]ujoco'` after each, MUJOCO_GL=egl; NEVER trust subagent self-reports —
+         verify diff + re-run + e2e yourself (esp. any moat edit); blast-radius-grep after a layout change
+         (Case 8/9); UPDATE STATUS + a DECISIONS dot-point + ARCHITECTURE-if-structural EVERY round (docs-hygiene).
+         Repro: grounding-dino + EdgeTAM offline-cached; `timm>=1.0`; /tmp/pnp_synthesis.md = full refactor analysis.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
