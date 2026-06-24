@@ -22,6 +22,10 @@ from vector_os_nano.hardware.sim.sensors.gt_odom import (
     GroundTruthOdomPublisher,
     OdomSample,
 )
+from vector_os_nano.hardware.sim.sensors.lidar_raycast import (
+    RaycastResult,
+    raycast_lidar,
+)
 from vector_os_nano.hardware.sim.sensors.lidar360 import (
     LidarSample,
     MuJoCoLivox360,
@@ -38,5 +42,7 @@ __all__ = [
     "MuJoCoPano360",
     "OdomSample",
     "PanoSample",
+    "RaycastResult",
     "g1_lidar_scan",
+    "raycast_lidar",
 ]

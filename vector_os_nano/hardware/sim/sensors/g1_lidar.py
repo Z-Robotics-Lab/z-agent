@@ -58,85 +58,36 @@ def g1_lidar_scan(
     """
     from vector_os_nano.core.types import LaserScan  # noqa: PLC0415
 
-    import mujoco as _mj  # noqa: PLC0415
+    from vector_os_nano.hardware.sim.sensors.lidar_raycast import (  # noqa: PLC0415
+        raycast_lidar,
+    )
 
     # ------------------------------------------------------------------
     # Constants (mirrors the inline code exactly)
     # ------------------------------------------------------------------
-    tilt_rad = math.radians(-10.0)
-    cos_tilt = math.cos(tilt_rad)
-    sin_tilt = math.sin(tilt_rad)
-
     n_azimuth = 360
     elevations = sorted(set([0] + list(range(-8, 30, 3))))
 
-    cos_h = math.cos(heading)
-    sin_h = math.sin(heading)
-
-    mid_ring_ranges: list[float] = []
-    points_3d: list[tuple[float, float, float, float]] = []
-    near_zero_hits: int = 0
-
     # ------------------------------------------------------------------
-    # Ray-casting loop (byte-for-byte copy of the inline body)
+    # Ray-casting loop (shared impl — byte-identical to the old inline body;
+    # see sensors/lidar_raycast.py). g1: tilt -10, max_range 15, mid-ring bound.
     # ------------------------------------------------------------------
-    for elev_deg in elevations:
-        elev_rad = math.radians(elev_deg)
-        cos_elev = math.cos(elev_rad)
-        sin_elev = math.sin(elev_rad)
-        azimuth_step = 360.0 / n_azimuth
-
-        for i in range(n_azimuth):
-            azimuth = heading + math.radians(i * azimuth_step - 180.0)
-
-            dx_w = cos_elev * math.cos(azimuth)
-            dy_w = cos_elev * math.sin(azimuth)
-            dz_w = sin_elev
-
-            dx_b = dx_w * cos_h + dy_w * sin_h
-            dy_b = -dx_w * sin_h + dy_w * cos_h
-            dz_b = dz_w
-
-            dx_bt = dx_b * cos_tilt - dz_b * sin_tilt
-            dz_bt = dx_b * sin_tilt + dz_b * cos_tilt
-
-            direction = np.array(
-                [
-                    dx_bt * cos_h - dy_b * sin_h,
-                    dx_bt * sin_h + dy_b * cos_h,
-                    dz_bt,
-                ],
-                dtype=np.float64,
-            )
-
-            geom_id = np.zeros(1, dtype=np.int32)
-            dist = _mj.mj_ray(
-                model,
-                data,
-                pos_lidar,
-                direction,
-                None,
-                1,
-                pelvis_bid,
-                geom_id,
-            )
-
-            is_self = int(geom_id[0]) in robot_geom_ids
-            hit_valid = dist > 0 and dist < 15.0 and not is_self
-
-            if hit_valid:
-                px = pos_lidar[0] + dist * direction[0]
-                py = pos_lidar[1] + dist * direction[1]
-                pz = pos_lidar[2] + dist * direction[2]
-                points_3d.append((float(px), float(py), float(pz), 0.0))
-
-            if elev_deg == 0:
-                if is_self and dist > 0 and dist < 0.1:
-                    near_zero_hits += 1
-                if hit_valid:
-                    mid_ring_ranges.append(float(dist))
-                else:
-                    mid_ring_ranges.append(float("inf"))
+    raw = raycast_lidar(
+        model,
+        data,
+        pos_lidar=pos_lidar,
+        heading=heading,
+        exclude_bid=pelvis_bid,
+        robot_geom_ids=robot_geom_ids,
+        tilt_deg=-10.0,
+        elevations=elevations,
+        n_azimuth=n_azimuth,
+        max_range=15.0,
+        mid_ring_apply_max_range=True,
+    )
+    mid_ring_ranges = raw.mid_ring_ranges
+    points_3d = raw.points_3d
+    near_zero_hits = raw.near_zero_self_hits
 
     # ------------------------------------------------------------------
     # Build LaserScan + diagnostics wrapper (mirrors inline exactly)

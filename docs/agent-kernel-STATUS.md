@@ -28,7 +28,10 @@ blocked: none for S1. Later stages carry CEO gates (surface, do NOT cross): S4 e
          interface (replace the `sim_tool` enum); S5 `ControlPolicy` interface + convex_mpc as an explicit
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
-next:    S3 — ONE shared impl per capability: collapse the go2-vs-g1 forks (navigate / lidar / scene-build).
+next:    S3 (in progress) — ONE shared impl per capability: **S3a LIDAR de-triplication DONE** (shared
+         `sensors/lidar_raycast.raycast_lidar`, both bodies e2e 360/360). Remaining: S3b scene-build
+         (go2 string-template → `MjSpec.attach`, one path) · S3c navigate (g1 in-driver vgraph vs go2
+         ROS2-FAR — genuinely different mechanisms, needs design, possibly gate-adjacent).
          Then S4 (embodiment registry — replace the `sim_tool` enum, CEO gate), S5 (ControlPolicy plugin +
          convex_mpc dep, CEO gate), S6 (capability planner-exposure + side-effecting permission path, CEO
          gate), S8 (delete the legacy keyword producer + tables), S9 (doc CI drift gate).

@@ -1305,7 +1305,6 @@ class MuJoCoGo2:
         horizontal, so it sees the ground in front and walls ahead.
         """
         from vector_os_nano.core.types import LaserScan  # noqa: PLC0415
-        mj = _get_mujoco()
 
         # Sensor mounting: on top of Go2 head — above all leg geoms.
         # 0.3m forward (head position) + 0.2m up (above trunk top).
@@ -1330,76 +1329,40 @@ class MuJoCoGo2:
 
         robot_body_id = self._mj.base_bid
 
-        # Scan beam tilt: 20° downward from sensor horizontal plane
-        # (sensor frame itself is NOT tilted — only the beams are)
-        tilt_rad = math.radians(-20.0)
-        cos_tilt = math.cos(tilt_rad)
-        sin_tilt = math.sin(tilt_rad)
-
         # Livox MID360 FOV: -7° to +52° (asymmetric, 59° range)
         # With 20° downward tilt → world frame: -27° to +32°
-        # This gives both ground hits (below horizontal) and wall hits (above)
+        # This gives both ground hits (below horizontal) and wall hits (above).
+        # Scan beam tilt is 20° downward from sensor horizontal plane (sensor
+        # frame itself is NOT tilted — only the beams are).
         n_azimuth = 360
         elevations = list(range(-8, 53, 2))  # -8° to +52° in 2° steps, includes 0° for 2D scan
-        mid_ring_ranges: list[float] = []
-        points_3d: list[tuple[float, float, float, float]] = []
+        azimuth_step = 360.0 / n_azimuth
 
-        for elev_deg in elevations:
-            elev_rad = math.radians(elev_deg)
-            cos_elev = math.cos(elev_rad)
-            sin_elev = math.sin(elev_rad)
-            azimuth_step = 360.0 / n_azimuth
-            for i in range(n_azimuth):
-                azimuth = heading + math.radians(i * azimuth_step - 180)
+        # Ray-casting loop (shared impl — byte-identical to the old inline body;
+        # see sensors/lidar_raycast.py). go2: tilt -20, max_range 12, mid-ring
+        # records any non-self hit regardless of range (mid_ring_apply_max_range
+        # =False), and the near-zero self-hit diagnostic is unused here.
+        # mj_ray bodyexclude only filters the trunk; leg geoms (hip/thigh/calf)
+        # are separate bodies, so they are filtered via _robot_geom_ids.
+        from vector_os_nano.hardware.sim.sensors.lidar_raycast import (  # noqa: PLC0415
+            raycast_lidar,
+        )
 
-                # Ray direction in world frame (no tilt yet)
-                dx_w = cos_elev * math.cos(azimuth)
-                dy_w = cos_elev * math.sin(azimuth)
-                dz_w = sin_elev
-
-                # World → body frame (rotate by -heading around Z)
-                dx_b = dx_w * cos_h + dy_w * sin_h    # forward
-                dy_b = -dx_w * sin_h + dy_w * cos_h   # left
-                dz_b = dz_w                            # up
-
-                # Apply pitch tilt in body frame (rotate around body Y axis)
-                # Forward points down, backward points up
-                dx_bt = dx_b * cos_tilt - dz_b * sin_tilt
-                dz_bt = dx_b * sin_tilt + dz_b * cos_tilt
-
-                # Body → world frame (rotate by +heading)
-                direction = np.array([
-                    dx_bt * cos_h - dy_b * sin_h,
-                    dx_bt * sin_h + dy_b * cos_h,
-                    dz_bt,
-                ], dtype=np.float64)
-                geom_id = np.zeros(1, dtype=np.int32)
-                dist = mj.mj_ray(
-                    self._mj.model,
-                    self._mj.data,
-                    pos_lidar,
-                    direction,
-                    None,
-                    1,
-                    robot_body_id,
-                    geom_id,
-                )
-                # Skip self-hits: mj_ray bodyexclude only filters the trunk
-                # body. Leg geoms (hip/thigh/calf) are separate bodies and
-                # can be hit by rays pointing downward/forward. Filter them
-                # using the pre-built robot geom set.
-                if dist > 0 and dist < 12.0 and int(geom_id[0]) not in self._mj._robot_geom_ids:
-                    px = pos_lidar[0] + dist * direction[0]
-                    py = pos_lidar[1] + dist * direction[1]
-                    pz = pos_lidar[2] + dist * direction[2]
-                    points_3d.append((float(px), float(py), float(pz), 0.0))
-
-                if elev_deg == 0:
-                    # Self-hit → treat as no hit (inf range) for LaserScan too
-                    if dist > 0 and int(geom_id[0]) not in self._mj._robot_geom_ids:
-                        mid_ring_ranges.append(float(dist))
-                    else:
-                        mid_ring_ranges.append(float("inf"))
+        raw = raycast_lidar(
+            self._mj.model,
+            self._mj.data,
+            pos_lidar=pos_lidar,
+            heading=heading,
+            exclude_bid=robot_body_id,
+            robot_geom_ids=self._mj._robot_geom_ids,
+            tilt_deg=-20.0,
+            elevations=elevations,
+            n_azimuth=n_azimuth,
+            max_range=12.0,
+            mid_ring_apply_max_range=False,
+        )
+        mid_ring_ranges = raw.mid_ring_ranges
+        points_3d = raw.points_3d
 
         self._last_scan = LaserScan(
             timestamp=float(self._mj.data.time),
