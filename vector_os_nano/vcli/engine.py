@@ -1640,16 +1640,21 @@ class VectorEngine:
         app_state: dict[str, Any] | None = None,
         on_progress: "Callable[[str], None] | None" = None,
     ) -> "ExecutionTrace":
-        """THIN delegate to ``native_loop.run_turn_native`` (M1, flag-gated OFF).
+        """THIN delegate to ``native_loop.run_turn_native`` — the DEFAULT producer.
 
         The frontier-model NATIVE TOOL-USE producer: the MODEL drives a ReAct loop
         (skills-as-tools + a synthetic ``verify``/``finish``) and the loop assembles
         an ``ExecutionTrace`` the EXISTING verify spine consumes unchanged. This
         engine method is intentionally a one-liner so the 2000-line file is not
         bloated — all the producer logic lives in ``vcli/native_loop.py`` (which
-        imports ONLY the spine, enforced by an import-firewall test). The caller
-        (``cli.run_one_turn`` behind ``--native-loop``) feeds the returned trace to
-        ``VerdictReport.from_trace`` — this never computes ``verified``.
+        imports ONLY the spine, enforced by an import-firewall test).
+
+        CALLERS (no longer flag-gated OFF — native is the DEFAULT acceptance producer):
+        the interactive REPL cutover (``_repl_attempt_native``, default ON via
+        ``_repl_native_enabled``) and the ``-p`` print cutover (``run_one_turn``, default
+        ON via ``_print_native_enabled`` — S5b/D73); the ``--native-loop`` (pure-native)
+        and ``--native-first`` flags remain explicit forces. Each caller feeds the
+        returned trace to ``VerdictReport.from_trace`` — this never computes ``verified``.
         """
         from vector_os_nano.vcli.native_loop import run_turn_native as _run
 
@@ -1663,7 +1668,7 @@ class VectorEngine:
         )
 
     # ------------------------------------------------------------------
-    # Stage 5 (S5.3) — unified closed-loop controller (DARK-LAUNCHED)
+    # Stage 5 (S5.3) — unified closed-loop controller (LIVE on the REPL tool_use route)
     # ------------------------------------------------------------------
 
     def run_turn_unified(
@@ -1680,10 +1685,10 @@ class VectorEngine:
     ) -> UnifiedTurnResult:
         """Run ONE user turn through the unified closed loop (Stage 5, S5.3).
 
-        DARK-LAUNCHED — nothing in ``cli.py`` / ``mcp/server.py`` calls this yet;
-        it is exercised by tests (and is reachable behind an opt-in only). The two
-        legacy paths (``run_turn`` and ``vgg_decompose``/``vgg_execute``) are left
-        intact and unmodified.
+        LIVE: the REPL's non-VGG tool_use / chat route calls this (``cli.py`` run-turn
+        dispatch, ~line 2601) to produce a verified answer-only trace; ``mcp/server.py``
+        does not. The other producers (``run_turn_native`` — now the DEFAULT action
+        producer — and the legacy ``vgg_decompose``/``vgg_execute``) remain intact.
 
         North star (rule 1): every interaction is a CLOSED loop. This method ALWAYS
         produces a :class:`GoalTree` and runs the SAME harness loop (topo-execute

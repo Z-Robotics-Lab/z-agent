@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R4 — S5c: registry-driven should_attempt_native hint (shadow, safe superset). ALL S8 preconditions met → S8 is now GATE-PENDING (CEO)
+updated: 2026-06-24 · loop R5 — tidy/de-slop: fixed 2 stale producer docstrings (post-S5b accuracy); gitignore-hardening found entangled (deferred). S8 still gate-pending
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,16 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R4 DONE — S5c (S8 precondition #3, the LAST). New `should_attempt_native(user_input, *, agent, engine)`
+doing:   loop R5 DONE — tidy/de-slop (milestone cleanup; docs-hygiene). Fixed 2 ACTIVELY-MISLEADING producer
+         docstrings invalidated by S5b: `engine.run_turn_native` "(M1, flag-gated OFF)…behind --native-loop" →
+         it is now the DEFAULT producer (REPL `_repl_native_enabled` + `-p` `_print_native_enabled`); the flags are
+         explicit forces. `engine.run_turn_unified` "DARK-LAUNCHED — nothing calls this yet" → it is LIVE on the REPL
+         non-VGG tool_use/chat route (cli.py:2601). Imports OK + 49 focused tests green (docstring-only, no behavior
+         change). FINDING: the generated-scene-XML untrack hardening is NOT trivial (test_scene_builder.py:58-59
+         reads the committed XML as the byte-identical reference + ~10 @sim fixtures git-checkout it to restore churn)
+         — DEFERRED to its own round; STATUS hardening note corrected. No code/behavior change. Committed this RECORD.
+         ---
+         loop R4 DONE — S5c (S8 precondition #3, the LAST). New `should_attempt_native(user_input, *, agent, engine)`
          (native_loop.py): the REGISTRY-DRIVEN native-attempt hint that replaces the keyword `should_use_vgg`. The
          native producer routes by the MODEL reading tool descriptions, so the only pre-gate question collapses to
          "does this world expose any actionable tool?" — derived SINGLE-SOURCE from `_build_motor_tools` (Rule 3, NO
@@ -106,10 +115,15 @@ blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodime
 next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was premature). Cold-ORIENT each round:
          · R1 ✅ (D71) S3b SEALED. · R2 ✅ (D72) S5a cap-gating single-sourced. · R3 ✅ (D73) S5b native=-p default.
            · R4 ✅ (D74) S5c registry-driven should_attempt_native (shadow superset). ALL S8 preconditions now MET.
+           · R5 ✅ (D75) tidy/de-slop: fixed 2 stale producer docstrings; gitignore-untrack found entangled (deferred).
          · S3c-design (NON-gated DESIGN only, NEXT): navigate convergence (g1 in-driver vgraph vs go2 external ROS2-FAR →
            one config-parameterized capability). Pure design/ADR; the moment it proposes touching a nav INTERFACE →
-           decision queue, do NOT implement. (Also available non-gated: the hardening micro-tasks — git rm --cached the
-           tracked generated scene XMLs + the stale-docstring cleanup.)
+           decision queue, do NOT implement.
+         · Hardening — stale producer docstrings: ✅ FIXED R5 (D75: engine.run_turn_native "flag-gated OFF" →
+           DEFAULT producer; run_turn_unified "DARK-LAUNCHED" → LIVE on the REPL tool_use route, cli.py:2601). The
+           generated-scene-XML untrack is NOT a trivial micro-task (R5 finding): test_scene_builder.py:58-59 reads the
+           committed scene XML as the byte-identical REFERENCE, and ~10 @sim fixtures `git checkout` it to restore
+           churn — untracking breaks both. Needs its own round (re-point the reference + the fixtures) — DEFERRED.
          · S8 (GATED — preconditions S5a✅+S5b✅+S5c✅ ALL MET; awaiting CEO approval, see Pending CEO gates):
            retire classify_intent/should_use_vgg +
            IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor legacy producer. Routing-contract +
