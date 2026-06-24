@@ -67,6 +67,7 @@ cp .env.example .env
 vector-cli                  # interactive AI agent REPL
 vector-cli --sim            # SO-101 arm in MuJoCo (natural language: "wave", "pick up the mug")
 vector-cli --sim-go2        # Go2 quadruped in MuJoCo
+#                             then by NL: "switch to g1" / "切换到 g1" → Unitree G1 humanoid (same room)
 ```
 
 ---
@@ -113,7 +114,7 @@ vector-cli --sim
   <i>MuJoCo simulation: SO-101 arm with graspable objects, CLI conversation with V.</i>
 </p>
 
-Manipulation (`scan → detect → top-down pick`) is validated in MuJoCo. Enable with `VECTOR_ENABLE_MANIPULATION=1`.
+Manipulation (VLM `detect` → EdgeTAM segment → point-cloud grasp point → IK) is validated in MuJoCo and **on by default** in the arm sim; set `VECTOR_ENABLE_MANIPULATION=0` to disable it.
 
 ---
 

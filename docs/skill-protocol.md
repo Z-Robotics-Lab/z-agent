@@ -28,7 +28,7 @@ SkillRegistry.match("抓杯子")
       |   No → execute auto_steps directly
       |
       v
-Execute: scan → detect(杯子) → pick(杯子) → home
+Execute: scan → detect(杯子) → pick(杯子)
       |
       v
 Done. Zero LLM calls.
@@ -81,7 +81,7 @@ registry.match(input)     # Check @skill aliases
   |   Example: "home", "close", "open", "scan"
   |
   +-- Match + auto_steps   → Expand to skill chain (zero LLM)
-  |   Example: "抓杯子" → scan → detect → pick → home
+  |   Example: "抓杯子" → scan → detect → pick
   |
   +-- Match + complex      → LLM plans the full sequence
   |   Example: "把鸭子放到左前方" (has destination)
@@ -97,9 +97,9 @@ The 10 arm skills below are available when an arm agent is connected (via `vecto
 | Skill | Aliases | Direct | Auto-steps |
 |-------|---------|--------|------------|
 | home | go home, reset, 回家, 归位 | Yes | - |
-| wave | wave, 挥手, 打招呼 | No | wave |
+| wave | wave, hello, 挥手, 打招呼, 你好 | Yes | - |
 | scan | look, observe, 看看, 扫描 | Yes | - |
-| detect | find, search, 检测, 识别 | Yes | scan, detect |
+| detect | find, search, 检测, 识别, 找一下 | No | scan, detect |
 | describe | describe, what is, 描述, 这是什么 | Yes | - |
 | pick | grab, grasp, 抓, 拿, 抓起 | No | scan, detect, pick |
 | place | put, 放, 放下, 放到, 放置 | No | - |
@@ -122,9 +122,8 @@ from vector_os_nano.core.skill import skill, SkillContext
 from vector_os_nano.core.types import SkillResult
 
 @skill(
-    aliases=["wave", "挥手", "打招呼"],
-    direct=False,
-    auto_steps=["wave"],
+    aliases=["wave", "hello", "挥手", "打招呼", "你好"],
+    direct=True,
 )
 class WaveSkill:
     name = "wave"
@@ -147,7 +146,7 @@ class WaveSkill:
 agent.register_skill(WaveSkill())
 
 # Now these all work:
-# "wave"     → auto_steps → direct execute
+# "wave"     → direct execute (zero LLM)
 # "挥手"     → alias match → same
 # "wave 5 times" → LLM plans with params
 ```

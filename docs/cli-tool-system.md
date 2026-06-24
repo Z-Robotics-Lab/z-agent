@@ -55,7 +55,7 @@ AI Agent (VectorEngine)
 │                  │     └── post_hook: 执行后回调(验证/统计)         │
 │                  │                                              │
 │                  ├── LLM 后端 (Anthropic / OpenRouter / 本地)     │
-│                  ├── 权限系统 (7层检查)                            │
+│                  ├── 权限系统 (8层检查)                            │
 │                  └── Session (JSONL 持久化)                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -334,15 +334,17 @@ Nav stack: running
 
 ## 权限系统
 
-7 层检查（优先级从高到低）：
+8 层检查（优先级从高到低）：
 
-1. `no_permission` 标志 → 全部放行
-2. `deny_tools` 黑名单 → 拒绝
-3. `tool.check_permissions()` 返回 deny → 拒绝
-4. `session_allow`（用户说了 "always"）→ 放行
-5. `is_read_only(params)` → 放行
-6. `tool.check_permissions()` 返回 ask → 提示用户确认
-7. 默认 → 提示用户确认
+1. `tool.check_permissions()` 返回 deny → 拒绝（**内在安全闸门，无条件硬停**：
+   bash 黑名单 / 危险路径写入永不被 `--no-permission` 关闭）
+2. `no_permission` 标志 → 放行所有非内在拒绝的工具
+3. `deny_tools` 用户黑名单 → 拒绝（较软的偏好，`--no-permission` 可覆盖）
+4. `tool.check_permissions()` 返回 allow → 放行
+5. `session_allow`（用户说了 "always"）→ 放行
+6. `is_read_only(params)` → 放行
+7. `tool.check_permissions()` 返回 ask → 提示用户确认
+8. 默认 → 提示用户确认
 
 电机技能（navigate、walk、pick）→ 始终 ask。
 只读工具（file_read、grep、ros2_topics）→ 始终 allow。
@@ -426,14 +428,20 @@ vcli/
 │   ├── __init__.py         # LLMBackend Protocol + create_backend 工厂
 │   ├── anthropic.py        # Anthropic Messages API（流式）
 │   └── openai_compat.py    # OpenRouter / Ollama / vLLM
-├── cognitive/
+├── cognitive/               # VGG 认知层 + 诚实验证脊柱（~22 模块）
 │   ├── vgg_harness.py        # VGG 主循环（复杂 NL 任务分解入口）
 │   ├── goal_decomposer.py    # NL → 子步骤计划
-│   ├── goal_executor.py      # 执行计划
-│   ├── goal_verifier.py      # 验证步骤结果
+│   ├── goal_executor.py      # 执行计划（skill/primitive/code/tool/capability 派发）
+│   ├── goal_verifier.py      # 验证步骤结果（AST 沙箱谓词）
 │   ├── strategy_selector.py  # 策略选择
-│   ├── capabilities/         # 能力映射
-│   └── worlds/               # 世界模型适配
+│   ├── trace_store.py / evidence_classifier.py / verdict.py / actor_causation.py
+│   │                         #   诚实判决脊柱（"护城河"，字节不变）
+│   ├── vocab_from_registry.py # 从注册表单源 decompose 词表
+│   └── capabilities/         # 能力 seam（Capability + CapabilityRegistry + chat/detector）
+├── worlds/                  # 世界插件（在 vcli/ 下，不在 cognitive/ 下）：
+│   │                        #   dev / robot / registry + arm_/go2_/g1_ sim-oracle 谓词
+├── native_loop.py           # 原生 tool-use producer（run_turn_native，bare CLI 默认路径）
+├── verdict.py               # VerdictReport（-p/--json 的 VECTOR_VERDICT 判决依据）
 └── tools/
     ├── base.py             # Tool Protocol, @tool 装饰器,
     │                       # ToolRegistry, CategorizedToolRegistry
@@ -449,5 +457,5 @@ vcli/
     ├── ros2_tools.py       # ros2_topics, ros2_nodes, ros2_log
     ├── nav_tools.py        # nav_state, terrain_status
     ├── reload_tool.py      # skill_reload（热加载）
-    └── foxglove_tool.py    # open_foxglove
+    └── viz_tool.py         # open_foxglove（原 foxglove_tool.py）
 ```

@@ -97,7 +97,7 @@ module is the correct pattern.
 | `sit` | PD control to `_SIT_JOINTS` | Unitree SDK high-level |
 | `get_position` | `qpos[0:3]` | ROS2 odometry |
 | `get_heading` | quaternion from `qpos[3:7]` | ROS2 odometry yaw |
-| `get_lidar_scan` | `mj_ray` 360-degree scan (30 rings) | Livox MID360 pointcloud |
+| `get_lidar_scan` | `mj_ray` 360-degree scan (~31 rings) | Livox MID360 pointcloud |
 | `get_camera_frame` | `mj.Renderer` (d435_rgb) | RealSense D435 |
 
 ## MuJoCo Go2 Backends
@@ -194,8 +194,8 @@ mjpython re-exec.
 
 ### Test Suite
 
-All arm sim tests live in `tests/vcli/test_level71_robot_control.py` (15 tests, 656
-green across the full suite). Tests split into two groups:
+All arm sim tests live in `tests/vcli/test_level71_robot_control.py` (15 tests). Tests
+split into two groups:
 
 **Pure-logic (no mujoco dep):** `test_robot_context_arm_only_reports_connected`,
 `test_start_simulation_in_sim_category`, `test_start_simulation_visible_in_dev_world`,

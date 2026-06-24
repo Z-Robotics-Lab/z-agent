@@ -80,10 +80,10 @@ They run anywhere (macOS first).
    and the validator allowlist can never drift apart.
 4. **A persona / prompt block** — the role prompt and tool instructions for the domain.
 
-A world thus contributes the **routable capabilities** for its domain — today skills and
-atomic actions; as the heterogeneous model zoo lands, specialized models (detectors,
-planners, VLA policies) register here too, and the StrategySelector routes a sub-goal to
-the right one by measured fit. This is the "any model, any skill, any robot" seam.
+A world thus contributes the **routable capabilities** for its domain — today skills,
+atomic actions, and a first learned model (the grounding-dino **detector** capability); as
+the rest of the model zoo lands, planners and VLA policies register the same way, and the
+StrategySelector routes a sub-goal to the right one by name / measured fit. This is the "any model, any skill, any robot" seam.
 
 | Stays in the kernel (generic) | Moves to a world plugin |
 |---|---|
@@ -94,8 +94,9 @@ the right one by measured fit. This is the "any model, any skill, any robot" sea
 | `CategorizedToolRegistry` category mechanism | `skills/`, `hardware/`, `perception/`, `ros2/` |
 
 **Worlds today:** `dev` (laptop, robot-free, the build/test means — ships in the kernel),
-and `robot` embodiments — Go2 (has a mobile base) and SO-101 / Piper arm (no base). The
-kernel is identical across all of them; only the four registered things change.
+and `robot` embodiments — Go2 (mobile base), SO-101 / Piper arm (no base), and a Unitree
+**G1 humanoid** (mobile base; placed in the Go2 room). The kernel is identical across all of
+them; only the four registered things change.
 
 **The seam is the integration contract — and it is what makes parallel development
 possible.** Because a world touches the kernel through exactly these four registrations
@@ -124,9 +125,9 @@ and the observation surface. (Decision: D8.)
 |                   VGGHarness (plan-act-verify-replan loop)           |
 |                   Blackboard (per-run observations; ${path} binding) |
 |                   StrategyStats | ExperienceCompiler/TemplateLibrary |
-|                   CapabilityRegistry (chat now; detectors/VLA later) |
+|                   CapabilityRegistry (chat + grounding-dino; VLA next) |
 |  General tools    file/bash/glob/grep/web                            |
-|  Session | Permissions (7-layer) | IntentRouter                     |
+|  Session | Permissions (8-layer) | IntentRouter                     |
 +---------------------------------+------------------------------------+
                                   | a World registers 4 things:
                                   |  1 tools   2 verify namespace
@@ -135,7 +136,7 @@ and the observation surface. (Decision: D8.)
         +-------------------------+---------------------------+
         |                         |                           |
    DEV world                 ROBOT world                (future worlds /
-   (laptop, no robot)        Go2 (has_base) | SO-101 arm   embodiments)
+   (laptop, no robot)        Go2 | G1 (has_base) | SO-101 arm   embodiments)
    build/test MEANS          (no base)
                              tools + verify + vocab + persona
                              skills / primitives / (models)
@@ -301,7 +302,9 @@ relative to `vector_os_nano/`.
 - `vocab_from_registry.py` — `build_decompose_vocab`: single-sources the decompose
   vocabulary from the skill registry.
 - `capabilities/` — the capability seam (`Capability` protocol + `CapabilityRegistry` +
-  `LLMChatCapability`); the bridge to a heterogeneous model zoo.
+  `LLMChatCapability`); the bridge to a heterogeneous model zoo. A first LEARNED capability
+  is live — the grounding-dino `detect` (`perception/detector_capability.py`, registered by
+  `RobotWorld` onto a camera embodiment), routed by name and moat-graded like any step.
 - `trace_store.py` — save / load / replay of verified runs; the evidence gate and
   verify-as-eval signal. `evidence_passed` (per-trace) + `step_evidence_ok` (per-step analogue,
   W1.1) are the deterministic gate the LEARNING tier (bandit reward + template compilation) is
@@ -320,9 +323,14 @@ relative to `vector_os_nano/`.
 **Worlds** (`vcli/worlds/`)
 - `base.py` — the `World` protocol (the four-thing contract).
 - `dev.py` — the robot-free dev/code world (default; build/test means).
-- `robot.py` — robot embodiments (Go2 with a base; SO-101 / Piper arm without one).
+- `robot.py` — robot embodiments (Go2 with a base; SO-101 / Piper arm without one; the
+  Unitree G1 humanoid). Binds the matching sim-oracle predicates (arm / go2 / g1) when a sim is connected.
 - `registry.py` — `WorldRegistry`: world/scenario resolution (agent-driven `resolve_world` +
   named `resolve_world_named`); worlds self-register via lazy factories (the seam-as-contract entry).
+- `arm_sim_oracle.py` / `go2_sim_oracle.py` / `g1_perception_oracle.py` — the deterministic
+  sim-oracle verify predicates, SINGLE-SOURCED in the kernel (arm: `holding_object`/`placed_count`/…;
+  go2: `at_position`/`facing`/`visited`; g1: `detection_matches_gt`, a GT-backed perception match).
+  Worlds bind these; `playground/verify/*` are thin re-export shims.
 
 **Playground track** (`playground/` — a separate, parallel-developed world track; D8)
 - `world.py` / `scenario.py` / `catalog.py` — embodiment-aware `PlaygroundWorld` + frozen `Scenario`
@@ -332,7 +340,9 @@ relative to `vector_os_nano/`.
   (`holding_object`/`arm_at_home`/`placed_count`/`detect_objects`/`describe_scene`) are SINGLE-SOURCED
   in the kernel at `vcli/worlds/arm_sim_oracle.py` (so `RobotWorld` can reuse them without the kernel
   importing the playground); `playground/verify/arm_predicates.py` + `scene_predicates.py` are thin
-  re-export shims. The Go2 base predicates (`at_position`/`facing`/`visited`) still live here.
+  re-export shims. The Go2 base predicates (`at_position`/`facing`/`visited`) are likewise
+  single-sourced in `vcli/worlds/go2_sim_oracle.py`, with `playground/verify/base_predicates.py`
+  now a re-export shim (same pattern as the arm).
 
 **Tools, routing, prompt, session, permissions**
 - `vcli/tools/` — general tools (file/bash/glob/grep/web) + world-contributed tool wrappers.
@@ -340,7 +350,8 @@ relative to `vector_os_nano/`.
 - `vcli/dynamic_prompt.py` — the composable system prompt rebuilt as world state changes.
 - `vcli/prompt.py` — persona / role-prompt blocks.
 - `vcli/session.py` — conversation state and JSONL transcript.
-- `vcli/permissions.py` — the 7-layer permission system gating side-effecting tools.
+- `vcli/permissions.py` — the 8-layer permission system gating side-effecting tools (an
+  intrinsic tool deny is checked FIRST and is NOT overridable by `--no-permission`).
 
 ---
 
@@ -384,16 +395,15 @@ parallel but meet at milestones.
   one by one) work end-to-end.
 - **Stage 5 — unify the paths.** Collapse the fast path and the VGG path into one
   closed-loop controller and drop the keyword intent gate.
-- **Stage 6 (later) — learning loop v2 + model zoo (C.3).** A real specialized model
-  registered in the robot world, routed by measured fit.
+- **Stage 6 (later) — learning loop v2 + model zoo (C.3).** A first specialized model — the
+  grounding-dino `detect` — has landed (D48–D51); measured-fit routing across MANY models remains.
 
 Prior phases (A–C) established the foundation: kernel/world decoupling (Phase A), the
 differentiation tier wired and made real (Phase B — tool-backed execution, code-as-policy
 sandbox, verify-as-eval, persistent stats, experience compilation), and the capability
 seam plus cross-capability routing (Phase C.1/C.2). Phase C.3/C.4 are open and sequenced
-after the closed-loop stages; see
-[agent-kernel-phase-c-plan.md](agent-kernel-phase-c-plan.md) and
-[agent-kernel-phase-d-plan.md](agent-kernel-phase-d-plan.md).
+after the closed-loop stages (a first specialized model — the grounding-dino `detect`
+capability — has since landed in the robot world; see DECISIONS D48–D51).
 
 ---
 
@@ -432,9 +442,10 @@ hedged.
   what the predicate can express. Mitigation: predicate libraries, human-reviewable
   predicates, and the escalation ladder (deterministic -> visual/VLM -> LLM judge as last
   resort).
-- Model-zoo routing (route a sub-goal to a detector / planner / VLA policy by measured fit)
-  is **forward-looking**. Today the kernel routes to skills, primitives, code, tools, and
-  one chat capability. The capability seam exists; the heterogeneous fleet does not yet.
+- Model-zoo routing is **partially landed**. The kernel routes to skills, primitives, code,
+  tools, a chat capability, AND a first LEARNED model — the grounding-dino `detect` capability,
+  registered in the robot world and moat-graded (DECISIONS D48–D51). The broader fleet (planners,
+  VLA policies) is still forward-looking: the seam carries two capability families today, not the full zoo.
 - LLM-authored strategy code is sandboxed only on the VGG `code` path. Any code-as-policy
   execution must be forced through the AST validator before it runs.
 
