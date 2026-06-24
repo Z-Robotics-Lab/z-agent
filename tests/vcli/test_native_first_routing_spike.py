@@ -376,31 +376,10 @@ def test_native_first_covered_go2_routes_to_native(sim_cleanup) -> None:
     assert step["strategy"] == "walk", f"per-step strategy must be walk; got {step['strategy']}"
     assert step["verify"].startswith("at_position"), f"got verify={step['verify']}"
 
-
-@pytest.mark.sim
-@pytest.mark.cli_main
-@pytest.mark.capability
-def test_print_native_default_routes_to_native_no_flag(sim_cleanup) -> None:
-    """S5b SEAL — the -p path DEFAULTS to native (NO --native-first flag) on the REAL sim.
-
-    Same honest-walk case as test (c), but with NO native flag at all — relying on the
-    S5b print cutover (_print_native_enabled default ON). Native owns the covered walk
-    goal -> native verdict GROUNDED / verified True / exit 0. This proves the DEFAULT
-    -p acceptance path now exercises the redesign (not just under an explicit flag).
-    """
-    pytest.importorskip("mujoco")
-    from tests.harness.pty_cli import run_cli_turn
-
-    r = run_cli_turn(
-        "走到坐标 (11.0,3.0)",
-        sim_go2=True,
-        timeout_sec=_SIM_TIMEOUT_SEC,
-        extra_args=["--headless"],  # NO --native-first / --native-loop: rely on the default cutover
-        tool_script=_HONEST_SCRIPT,
-    )
-    assert r.verified is True, f"default -p cutover covered walk should verify; got {r.verdict}"
-    assert r.exit_code == 0, f"verified covered walk must exit 0; got {r.exit_code}"
-    assert r.evidence == "GROUNDED", f"got evidence={r.evidence}"
-    step = r.verdict["per_step"][0]
-    assert step["evidence"] == "GROUNDED"
-    assert step["strategy"] == "walk", f"native must own it (strategy walk); got {step['strategy']}"
+# NOTE (S5b): a no-flag "default cutover routes to native on the REAL sim" e2e is NOT
+# added here because run_cli_turn FORCES VECTOR_NATIVE_LOOP=1 for a tool_script without
+# --native-first (pty_cli.py), so it can't exercise the default _print_native_enabled
+# path. The default cutover IS e2e-verified by a raw -p run on the go2 sim (DECISIONS
+# D73): NO native flag -> native OWNS the turn (strategy=walk) -> honest verdict via the
+# frozen spine. Test (c) above is the committed sim proof of block-1's mechanism; the
+# deterministic unit tests pin that the DEFAULT triggers block 1.

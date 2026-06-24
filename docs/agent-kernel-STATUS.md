@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R2 — S5a: capability gating single-sourced onto resolve_capability_profile (byte-identical); S8 deferred (premature)
+updated: 2026-06-24 · loop R3 — S5b: native is the DEFAULT producer on the -p path (print cutover, additive+reversible) + stale repl-cutover test fixed
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,25 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R2 DONE — S5a (S8's precondition). A Decision Workflow (3 read-only recon agents + Opus judge)
+doing:   loop R3 DONE — S5b (S8 precondition #2): native is the DEFAULT producer on the `-p` acceptance path.
+         New `_print_native_enabled()` (cli.py, DEFAULT ON, escape hatch VECTOR_PRINT_NATIVE in {0,false,off,no})
+         mirrors the owner-approved REPL cutover (`_repl_native_enabled`) on the non-interactive entrypoint:
+         run_one_turn ATTEMPTS native first then FALLS THROUGH to legacy on no-action (strictly additive). Fires on
+         `_native_first_enabled(args) or (_print_native_enabled() and not _native_loop_enabled(args))` — the default
+         cutover does NOT pre-empt an explicit --native-loop (precedence guard), and the user-facing --native-first/
+         VECTOR_NATIVE_FIRST flag default stays OFF (NOT changed → not the interface gate the judge flagged). Also
+         FIXED the 3 pre-existing `test_repl_native_cutover` reds: ROOT CAUSE = the test's `_FakeEngine.run_turn_native`
+         stub was missing the `on_progress` param the REAL engine gained, so `_repl_attempt_native`'s call raised
+         TypeError (caught as "no action") — a STALE TEST, the production cutover was correct. VERIFIED: full
+         `tests/unit/vcli tests/vcli tests/integration/vcli -m "not sim"` = 1460 passed (only the 3 pre-existing
+         deepseek-config env reds); e2e = a RAW bare `-p` run on the go2 sim with NO native flag (default cutover) ->
+         native OWNED the turn (strategy=walk, n_steps=1) -> honest verdict via the frozen spine (RAN this run: the
+         open-loop walk didn't reach at_position(11,3) — sim-physics nondeterminism, NOT a producer defect). Committed
+         8c1200e + this RECORD. (No committed default-cutover SIM test: run_cli_turn forces VECTOR_NATIVE_LOOP=1 for a
+         tool_script w/o --native-first, so it can't exercise the default path — a harness limitation; test (c) is the
+         committed sim proof of block-1's mechanism, units pin the default-trigger. D73.)
+         ---
+         loop R2 DONE — S5a (S8's precondition). A Decision Workflow (3 read-only recon agents + Opus judge)
          REFUTED the optimistic "native is already the default producer": truth = run_turn_native is default ONLY
          for REPL ACTION turns; chat/sim/switch still fall to legacy run_turn_unified, -p is native-OFF, and
          classify_intent/should_use_vgg is a LIVE gate at 4 sites — so S8 (delete legacy producer) CUTS a live
@@ -71,18 +89,14 @@ blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodime
          dep; S6 capability permission/security path for side-effecting VLAs. Full analysis: /tmp/pnp_synthesis.md.
 
 next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was premature). Cold-ORIENT each round:
-         · R1 ✅ (D71) S3b SEALED.  · R2 ✅ (D72) S5a capability-gating single-sourced.
-         · S5b (NON-gated, next): make run_turn_native the default on the -p path (run_one_turn, cli.py:1751-1848)
-           via an ADDITIVE native-attempt-then-fall-through (mirrors the REPL cutover), KEEPING the legacy flags at
-           their current defaults (changing a user-facing flag DEFAULT is an interface gate → NOT here). NB: fix /
-           understand the 3 pre-existing test_repl_native_cutover reds here (the cutover-attempt path).
-         · S5c (NON-gated): a registry-driven should_attempt_native(...) routing HINT (Rule 3 single-source) run
+         · R1 ✅ (D71) S3b SEALED.  · R2 ✅ (D72) S5a capability-gating single-sourced.  · R3 ✅ (D73) S5b native = -p default.
+         · S5c (NON-gated, next): a registry-driven should_attempt_native(...) routing HINT (Rule 3 single-source) run
            ALONGSIDE classify_intent().use_vgg (shadow/parity, not replacing) — proves a model-driven replacement
            exists with zero behavior change, so the 4 keyword-gate sites can later be rewired off should_use_vgg.
          · S3c-design (NON-gated DESIGN only): navigate convergence (g1 in-driver vgraph vs go2 external ROS2-FAR →
            one config-parameterized capability). Pure design/ADR; the moment it proposes touching a nav INTERFACE →
            decision queue, do NOT implement.
-         · S8 (GATED + cuts live deps — REQUIRES S5a✅+S5b+S5c green): retire classify_intent/should_use_vgg +
+         · S8 (GATED + cuts live deps — REQUIRES S5a✅+S5b✅+S5c green): retire classify_intent/should_use_vgg +
            IntentRouter/StrategySelector tables + GoalDecomposer/GoalExecutor legacy producer. Routing-contract +
            -p acceptance entrypoint + escape-hatch flag defaults → executive summary to the decision queue first.
          · Hardening (NON-gated filler): generated-scene-XML gitignore is PARTIAL (the R2 judge's "already done" was
