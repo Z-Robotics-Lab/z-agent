@@ -78,6 +78,7 @@ The repo has a BOUNDED, fixed set of authoritative docs. A new session reads onl
 - `docs/agent-kernel-STATUS.md` — the volatile "where are we / what's next" resume anchor.
 
 ### Other allowed docs (bounded)
+- Tier 0 quickstart: `docs/getting-started.md` — the concise 5-minute developer onboarding (install/API, bare-CLI + NL, add a skill, bring a robot). Keep it SHORT; update when the start flow changes.
 - Tier 2 reference (stable subsystem docs): `docs/cli-tool-system.md`, `docs/skill-protocol.md`, `docs/sim-dev-guide.md`. Update only when that subsystem changes.
 - Tier 3 decision record: `docs/DECISIONS.md` — ONE consolidated file, dot-point entries (D3, D4, …). Append a new dated entry; never rewrite an accepted one (record a correction as a new line). Full original ADR prose is in git history.
 - Tier 3b hidden-bug casebook: `docs/tricky-bugs.md` — append-only record of IMPLICIT bugs (symptom pointed away from the cause). Short dot-point entries only; routine bugs stay in git history.
@@ -99,6 +100,7 @@ Venv `.venv` (uv-managed; legacy `.venv-nano` is gone — launch scripts fall ba
 
 ## Pointers
 
+- [docs/getting-started.md](docs/getting-started.md) — 5-minute developer quickstart (install/API, CLI, skills, bring a robot).
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — canonical system design (durable).
 - [docs/agent-kernel-STATUS.md](docs/agent-kernel-STATUS.md) — resume anchor (volatile).
 - [docs/cli-tool-system.md](docs/cli-tool-system.md) — VectorEngine, tool registry, IntentRouter, permissions, sessions.
