@@ -431,3 +431,56 @@ def test_oracle_stays_strict_wrong_canonical_name_is_false() -> None:
     assert holding_object("apple") is False  # wrong name -> NOT loosened
     assert holding_object("mug") is False    # present but resting, not held
     assert holding_object("香蕉") is False    # localized name is NOT a canonical key
+
+
+# ---------------------------------------------------------------------------
+# D17 Prong-1 — a ROBOT world drops the MUTATING code tools (file_write/file_edit/
+# bash) from the action surface so a physical robot goal cannot be "accomplished" by
+# writing a marker file; read-only diagnostics (file_read/glob/grep) are KEPT. The
+# DEV world (no robot agent) keeps the full code-tool set unchanged.
+# ---------------------------------------------------------------------------
+
+
+class _CodeTool:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.description = name
+        self.input_schema = {"type": "object", "properties": {}}
+
+    def execute(self, params, context):  # pragma: no cover - never dispatched here
+        return None
+
+
+class _CodeRegistry:
+    def list_categories(self):
+        return {"code": ["file_read", "file_write", "file_edit", "bash", "glob", "grep"]}
+
+    def get(self, name):
+        return _CodeTool(name)
+
+
+def _engine_with_code_tools():
+    return SimpleNamespace(_registry=_CodeRegistry(), _goal_executor=None)
+
+
+def test_robot_world_drops_mutating_code_tools() -> None:
+    from vector_os_nano.vcli.native_loop import _build_motor_tools
+
+    robot_agent = SimpleNamespace(_base=None, _arm=None, _perception=None, _skill_registry=None)
+    tools = _build_motor_tools(robot_agent, _engine_with_code_tools())
+    # Prong-1: no file/shell WRITE is offered as an action in a robot world.
+    assert "file_write" not in tools
+    assert "file_edit" not in tools
+    assert "bash" not in tools
+    # Read-only diagnostics stay — the persona inspects code with them.
+    assert "file_read" in tools
+    assert "glob" in tools
+    assert "grep" in tools
+
+
+def test_dev_world_keeps_full_code_tool_set() -> None:
+    from vector_os_nano.vcli.native_loop import _build_motor_tools
+
+    tools = _build_motor_tools(None, _engine_with_code_tools())  # dev world: no agent
+    for name in ("file_read", "file_write", "file_edit", "bash", "glob", "grep"):
+        assert name in tools, f"dev world must keep {name}"

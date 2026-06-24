@@ -420,7 +420,52 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
             and has_necessary_at_position(sg_by_name[s.sub_goal_name].verify)
             for s in checked
         )
-    return True
+    return _object_goal_turn_ok(checked, sg_by_name, oracle_names, goal_text)
+
+
+def _object_goal_turn_ok(
+    checked: list[StepRecord],
+    sg_by_name: dict[str, SubGoal],
+    oracle_names: frozenset[str],
+    goal_text: str | None,
+) -> bool:
+    """D17 OBJECT-GOAL TURN GATE (stricter-only) — the grasp analogue of the STEP-15
+    coordinate turn gate above.
+
+    A turn whose NL goal commands a physical GRASP / PICK must actually PROVE physical
+    possession via a GT MANIPULATION oracle (``holding_object`` / ``placed_count``) the
+    actor cannot author — NOT via a self-authored file/scene/marker predicate. This
+    closes the fakeable-grasp false-green (D17): deepseek satisfied "抓前面的东西" by
+    ``file_write('grabbed.txt')`` then ``verify(file_exists('grabbed.txt'))`` — and
+    ``file_exists`` is a PREDICATE oracle (classifies GROUNDED) AND a non-robot predicate
+    (never actor-causation-graded), so every prior gate failed OPEN and the turn went
+    GROUNDED. Mirrors the D15/D16 coordinate turn gate exactly — present-but-not-
+    necessary decoys are rejected by the same necessity discipline (``object_goal``).
+
+    Like the coordinate gate, this can ONLY REJECT (``all_grounded`` already held above)
+    and can NEVER fake-pass: the satisfying step must ITSELF classify GROUNDED (actor-
+    CAUSED + honest oracle) AND carry a NECESSARY manipulation-oracle conjunct. So a real
+    grasp (``perception_grasp`` -> ``holding_object('banana')`` weld-CAUSED) stays GROUNDED;
+    a fabricated grasp (file/scene/marker) downgrades the whole turn to RAN.
+
+    SCOPED to a manipulation world (``holding_object`` in the live oracle set, rule 3),
+    so go2-coordinate / dev / g1-detect worlds — whose goal text may incidentally contain
+    a grasp word — never see this gate. FAIL-OPEN for any goal with no grasp/pick intent.
+    """
+    if "holding_object" not in oracle_names:
+        return True
+    from vector_os_nano.vcli.cognitive.object_goal import (
+        goal_has_object_intent,
+        has_necessary_manip_oracle,
+    )
+
+    if not goal_has_object_intent(goal_text):
+        return True
+    return any(
+        classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
+        and has_necessary_manip_oracle(sg_by_name[s.sub_goal_name].verify)
+        for s in checked
+    )
 
 
 def step_evidence_ok(

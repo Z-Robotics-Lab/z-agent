@@ -79,6 +79,20 @@ _MAX_VERIFY_NUDGES = 2
 # registered action tools; there is NO "if dev" branch.
 _CODE_TOOL_CATEGORY = "code"
 
+# The MUTATING code tools — the ones whose effect is a file/shell WRITE the model can
+# author at will (so it can "accomplish" a task by writing a marker file or running a
+# shell command), NEVER a read-only diagnostic. In a ROBOT world these must NOT be an
+# action path to a PHYSICAL goal: the fakeable-grasp defect was deepseek satisfying
+# "抓前面的东西" by ``file_write('grabbed.txt')`` then ``verify(file_exists('grabbed.txt'))``
+# (D17). A physical robot task is accomplished by a robot SKILL and proven by a GT
+# oracle the actor cannot author — never by touching a file. So a robot world drops
+# these from the loop's ACTION toolset (Prong 1) while KEEPING the read-only diagnostics
+# (file_read / glob / grep) the persona uses to inspect code. The DEV world is untouched
+# — it has no robot agent, so the gate below never fires there. Prong 2 (the goal-
+# authenticity gate in the frozen spine) is the un-fakeable backstop if a model ever
+# reaches a file oracle another way; this prong removes the easy path by construction.
+_MUTATING_CODE_TOOLS: frozenset[str] = frozenset({"file_write", "file_edit", "bash"})
+
 # at_position tolerance (metres) — single-sourced for the system-prompt vocab from
 # the go2 oracle so the model's verify expr and the verifier agree. Read live with
 # a safe fallback so this module never hard-depends on the oracle's private const.
@@ -796,8 +810,17 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
     AFTER the code tools so the world's own skill wins if a clash ever arises.
     """
     tools: dict[str, Any] = {}
-    # Source 2: the engine registry's code tools (present in every world).
+    # Source 2: the engine registry's code tools (present in every world). In a ROBOT
+    # world (a connected robot ``agent``), the MUTATING code tools (file_write/file_edit/
+    # bash) are DROPPED from the action surface — a physical robot goal must be achieved
+    # by a robot SKILL and proven by a GT oracle, never by writing a marker file or
+    # running a shell command (the D17 fakeable-grasp path). The READ-ONLY diagnostics
+    # (file_read/glob/grep) are kept so the persona can still inspect code. The dev world
+    # (no robot agent) keeps the full set unchanged.
+    is_robot_world = agent is not None
     for name, code_tool in _code_tools_from_registry(engine).items():
+        if is_robot_world and name in _MUTATING_CODE_TOOLS:
+            continue  # Prong 1: no file/shell WRITE as a path to a physical robot task
         tools[name] = code_tool
     # Source 3 (D9 #1): the avoidance NAVIGATION route, only for a world with a mobile
     # base (go2). ``publish_goal`` -> FAR/local planner/lidar, so "go to a place/
@@ -976,6 +999,12 @@ def _native_system_prompt(
         "You control a robot through tools. For each goal: call the MOTION skill or "
         "navigate that achieves it, then IMMEDIATELY call verify(expr) with a "
         "deterministic predicate to PROVE the goal was achieved, then call finish. "
+        "A PHYSICAL action (grasp / pick / 抓 / 拿 / walk / navigate / place) is performed "
+        "ONLY by the robot SKILL for it and proven ONLY by a ground-truth oracle. NEVER "
+        "simulate or stand in for a physical action by writing a file, creating a marker, "
+        "or running a shell command — a grasp is real only when the GRIPPER holds the "
+        "object (holding_object), never when a file says so. If no skill can do it, say so "
+        "and stop; do NOT fake it. "
         "verify reads the real world state itself, so do NOT call a read-only "
         "status/query skill (e.g. where_am_i, look) before verify — the motion "
         "action must be the LAST action call before each verify. "

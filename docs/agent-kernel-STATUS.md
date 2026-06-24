@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · arch/plug-and-play S3b done (ONE scene builder via MjSpec.attach; byte-identical)
+updated: 2026-06-24 · D69 fakeable-grasp false-green CLOSED (Prong 1 routing + Prong 2 stricter-only grasp gate)
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,21 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   S1+S2+S3a+S3b DONE + verified (behavior-preserving, spine BYTE-UNCHANGED). S3b: ONE scene builder —
+doing:   D69 (this session) — CLOSED the FAKEABLE-GRASP false-green (deepseek satisfied "抓前面的东西" by
+         file_write('grabbed.txt') + verify(file_exists(...)) → GROUNDED). Prong 1 (world-side, no spine):
+         a robot world DROPS file_write/file_edit/bash from the native loop's action toolset (keeps read-only
+         file_read/glob/grep) + persona binding "never fake a physical action via files/bash". Prong 2 (the
+         un-fakeable backstop; DELIBERATE rule-5 STRICTER-ONLY spine edit): `cognitive/object_goal.py` (grasp
+         analogue of coord_goal) + `_object_goal_turn_ok` in `trace_store.evidence_passed` — a grasp-intent
+         goal must be GROUNDED via a NECESSARY `holding_object`/`placed_count` conjunct, else RAN. Proven
+         stricter-only (real grasp→GROUNDED, 3 fabrication vectors→RAN, all non-grasp turns UNCHANGED, nothing
+         greened); 745 unit green (3 pre-existing env reds only); regression pinned. Bare-cli live deepseek
+         acceptance: grasp turn ROUTES to the REAL perception_grasp+detect+walk, ZERO file_write/bash/marker
+         (Prong 1 proven live). Clean end-to-end GROUNDED blocked by a PRE-EXISTING unrelated arm bug surfaced
+         by the run (`PiperROS2Proxy.move_joints: expected 6 positions, got 5` in `scan` — NOT D17, separate
+         fix). NOT committed (orchestrator reviews + commits).
+         ---
+         S1+S2+S3a+S3b DONE + verified (behavior-preserving). S3b: ONE scene builder —
          `hardware/sim/scene_builder.py build_room_scene(...) -> (MjModel, path)` via `MjSpec.attach`;
          BOTH `_build_room_scene_xml` (go2, prefix="") and `_build_g1_room_scene_xml` (g1, prefix="g1_") call
          it (the two-scene-builder fork is KILLED). Root blocker was a MuJoCo-3.9 `attach`+`to_xml` serializer
@@ -28,8 +42,11 @@ doing:   S1+S2+S3a+S3b DONE + verified (behavior-preserving, spine BYTE-UNCHANGE
          grasp e2e still OWED before S3b is 100% done (R12).
          S2: drivers READ `robot.yaml` + generic `DofLayout`. S1: config schema + g1 BaseProtocol uniformity.
 
-owns:    `embodiments/**`, `hardware/sim/{scene_builder.py NEW, mujoco_go2.py, mujoco_g1.py, mujoco_piper.py}`,
-         `docs/*`. Spine `vcli/cognitive/` BYTE-UNCHANGED since 7b220d9.
+owns:    `embodiments/**`, `hardware/sim/{scene_builder.py, mujoco_go2.py, mujoco_g1.py, mujoco_piper.py}`,
+         `vcli/native_loop.py`, `vcli/cognitive/{object_goal.py NEW, trace_store.py}`, `docs/*`.
+         Spine `vcli/cognitive/` was byte-unchanged 7b220d9→D68; D69 is the FIRST deliberate edit since — a
+         PURELY STRICTER object-goal turn-gate (rule 5 "only ever stricter"; evidence_classifier / actor_causation
+         / coord_goal still UNTOUCHED).
 
 blocked: none. Later stages carry CEO gates (surface, do NOT cross): S4 embodiment-registration
          interface (replace the `sim_tool` enum); S5 `ControlPolicy` interface + convex_mpc as an explicit
