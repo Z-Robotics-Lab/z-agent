@@ -11,8 +11,22 @@ small models, classical skills, and atomic actions** into one deployable whole t
 value is in *choosing right, sequencing right, verifying right, and recovering when wrong* —
 NOT in re-implementing navigation or manipulation itself.
 
-Further, Vector OS is a **programmable platform**: developers build physical AI the way they
-write code (*code physical AI*) — any model, any skill, any robot, **plug and play**.
+Further, Vector OS is a **programmable, plug-and-play platform**: developers build physical AI the
+way they write code (*code physical AI*) — any model, any skill, any robot, **plug and play**, with no
+kernel edits. The orchestration runtime is the **brain**; the platform is how anyone brings their own
+parts to it:
+- **Embodiment** — bring a URDF + meshes + a manifest → the robot stands in the scene (any quadruped /
+  biped / arm / …), no per-robot driver.
+- **Policy** — bring a gait / control policy (RL / MPC / scripted) + an obs/action spec → the runtime
+  drives the body; the policy lives separately, plugged in.
+- **Skill** — bring a `@skill` declaring what it needs (arm / base / camera) → callable by NL; it may
+  wrap an external **VLA / VLM** or a classical **grasp / nav** stack.
+- **Capability** — register an external model or stack (detector / planner / VLA) as a routable unit.
+- **Verify** — bring a world-side predicate reading **independent ground truth** → how success is proven.
+
+What makes "bring your own model" *trustworthy* — and what no sim wrapper has — is the **honest-verify
+spine**: every plugged-in model and skill is graded by a deterministic predicate reading ground truth
+the actor **cannot author**. The runtime trusts *evidence*, never a self-report. This is the moat.
 
 **Current focus — sim.** In a high-quality simulator, an agent is commanded in natural language to:
 - **switch embodiment** — `go2`, `go2 + arm`, `g1`, … on demand;
