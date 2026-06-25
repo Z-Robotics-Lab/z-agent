@@ -44,7 +44,15 @@ never used depth** — it passed object *names only*, so every object fell to `m
   `compute_approach_pose` 0.7m standoff (object cell is an inflated obstacle) → NavigateSkill coordinate
   path. Registered in `get_go2_skills()`. Real sim: dog 2.67m→0.95m to green bottle (GT-measured).
   Harness `tools/verify_navigate_to_object.py`. 9 offline tests.
-- [ ] **#3 — arrival depth re-perceive + adjust, then grasp.** ← NEXT On arrival near the object, re-perceive
+- [~] **#3 — arrival depth re-perceive + grasp. COMPOSITION VERIFIED E2E (D93, bc477ea).**
+  Full `look → navigate_to_object → perception_grasp` grasps+lifts the green bottle in real sim
+  (0.32→0.558 m, holding + make_holding_object oracle). Arrival re-perceive is satisfied BY
+  COMPOSITION (perception_grasp perceives fresh at the navigate arrival standoff — R12's well-framed
+  distance; adding a 0.40 m re-perceive would REGRESS R12, so NOT added). Fixed the real gap:
+  pick_top_down required a world_model even with target_xyz (now optional). Harness
+  `tools/verify_fetch_flow.py`. **OPEN: end-to-end grasp reliability ~33% (1/3, N=3) — the
+  pre-existing R12 terminal-grasp precision bottleneck (EE closes ~0.04-0.07 m off the small bottle
+  from the variable arrival pose); perception+approach are correct every run. Improve next.** On arrival near the object, re-perceive
   with depth (`object_localizer`/`grasp_point`) to correct the position (arrival isn't exact), then
   approach+grasp (reuse R12 `perception_grasp`). NB: `perception_grasp` currently does NOT re-perceive
   after the approach (explicit comment) — this stage adds that.

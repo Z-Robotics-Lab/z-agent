@@ -7,8 +7,15 @@
 #   narrow claim. Found+fixed a real bug only e2e caught: localize_objects_3d keyed by
 #   detector label ("a green bottle") not the query -> objects stored at (0,0).
 # #2 navigate_to_object REAL-SIM VERIFIED (D92, c4cf5cc): drives dog 2.67m->0.95m to the
-#   named green bottle (GT-measured); targets a 0.7m standoff (object cell is an inflated
-#   obstacle). 9 offline tests. NEXT: #3 arrival depth re-perceive + grasp. Branch arch/plug-and-play.
+#   named green bottle (GT-measured); targets a 0.7m standoff (object cell is an inflated obstacle).
+# #3 FETCH PIPELINE COMPOSES END-TO-END (D93, bc477ea): look->navigate_to_object->perception_grasp
+#   grasps+lifts the green bottle (0.32->0.558m, holding+oracle confirmed). Fixed the real gap:
+#   pick_top_down required a world_model even with target_xyz (now optional — SceneGraph is the
+#   source). Arrival re-perceive satisfied BY COMPOSITION. CAVEAT: end-to-end grasp reliability
+#   ~33% (1/3, N=3) — pre-existing R12 TERMINAL-GRASP precision bottleneck (EE closes ~0.04-0.07m
+#   off the small bottle from the variable arrival pose); pipeline perceives+approaches correctly
+#   every run. NEXT (non-gated): grasp reliability. #4/#5 are CEO GATES (external dep / store unify).
+#   Branch arch/plug-and-play.
 # OPEN CAVEATS (D91): real GPT-4o VLM path unproven (OpenRouter SSL down); merge_object
 #   x=0/y=0 sentinel trap latent; bare-cli NL acceptance bypassed (home 5-vs-6 joint bug).
 
