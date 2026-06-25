@@ -221,12 +221,21 @@ class MuJoCoPiperGripper:
             try:
                 ee_pos = np.array(data.site_xpos[self._ee_site_id], dtype=float).copy()
                 best_name, best_dist = None, _GRASP_RADIUS
+                # Track the TRUE nearest free body (regardless of radius) for the
+                # miss diagnostic — a miss otherwise only logs the radius, hiding the
+                # actual EE-to-object gap a grasp-reliability hypothesis loop needs.
+                near_name, near_dist = None, float("inf")
                 for name, pos in self._free_body_positions().items():
                     d = float(np.linalg.norm(np.array(pos) - ee_pos))
+                    if d < near_dist:
+                        near_dist, near_name = d, name
                     if d < best_dist:
                         best_dist, best_name = d, name
                 if best_name is None:
-                    logger.info("MuJoCoPiperGripper: no object within %.0fmm of EE", _GRASP_RADIUS * 1000)
+                    logger.info(
+                        "MuJoCoPiperGripper: no object within %.0fmm of EE "
+                        "(nearest '%s' at %.0fmm)",
+                        _GRASP_RADIUS * 1000, near_name, near_dist * 1000)
                     return
                 for i in range(model.neq):
                     if model.eq_type[i] != mj.mjtEq.mjEQ_WELD:

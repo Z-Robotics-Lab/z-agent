@@ -56,16 +56,32 @@ def main() -> int:
         ok = bool(result and result.get("overall_pass"))
         lifted = None
         diag = None
+        perceive = None
         if result:
             g = result.get("steps", {}).get("grasp", {})
             lifted = g.get("lifted_m")
-            diag = (g.get("diag") or "") or (result.get("steps", {}).get("grasp", {})
-                                             .get("diag"))
-            # grasp result_data diagnosis is richer; pull from the printed line if present
+            diag = g.get("diag")
+            perceive = result.get("steps", {}).get("perceive_err")
+        # EE-to-object weld distance (mm) from the gripper log — the actual terminal
+        # miss. On a hit: "grasped '...' (Xmm)"; on a miss: "nearest '...' at Xmm".
+        ee_mm = None
+        for line in proc.stdout.splitlines():
+            if "MuJoCoPiperGripper: grasped" in line and "mm)" in line:
+                try:
+                    ee_mm = float(line.rsplit("(", 1)[1].split("mm")[0])
+                except (ValueError, IndexError):
+                    pass
+            elif "nearest '" in line and "at " in line and "mm)" in line:
+                try:
+                    ee_mm = float(line.rsplit("at ", 1)[1].split("mm")[0])
+                except (ValueError, IndexError):
+                    pass
         grasped += int(ok)
-        rows.append({"trial": i, "pass": ok, "lifted_m": lifted,
+        rows.append({"trial": i, "pass": ok, "lifted_m": lifted, "diag": diag,
+                     "perceive_err": perceive, "ee_miss_mm": ee_mm,
                      "exit": proc.returncode})
-        print(f"trial {i}/{n}: pass={ok} lifted={lifted}", flush=True)
+        print(f"trial {i}/{n}: pass={ok} lifted={lifted} diag={diag} "
+              f"perceive_err={perceive} ee_miss_mm={ee_mm}", flush=True)
         if not ok and result is None:
             # surface the tail so a crashed trial is debuggable
             tail = "\n".join(proc.stdout.splitlines()[-3:] + proc.stderr.splitlines()[-3:])

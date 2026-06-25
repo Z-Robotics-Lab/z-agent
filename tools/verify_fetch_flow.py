@@ -75,6 +75,15 @@ def _gt(go2, name):
     return [float(v) for v in data.xpos[bid]]
 
 
+def _ee_pos(go2):
+    """World position of the Piper EE weld site (the point the weld measures from)."""
+    model, data = go2._mj.model, go2._mj.data
+    sid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_SITE, "piper_ee_site")
+    if sid < 0:
+        return None
+    return [float(v) for v in data.site_xpos[sid]]
+
+
 def main() -> int:
     out: dict = {"steps": {}}
     go2 = MuJoCoGo2(gui=False, room=True, backend="mpc")
@@ -131,6 +140,22 @@ def main() -> int:
     held = bool(gripper.is_holding())
     oracle = bool(holding_oracle())
     lifted = z1 - z0
+
+    # --- error decomposition (OBSERVE): perceive error vs GT object centre.
+    # gw = perceived grasp point fed to IK; g_now = live GT object centre. We capture
+    # the planar (xy) and vertical (z) components so a hypothesis loop can tell a
+    # perception miss (gw far from GT) from an execution/pose miss (gw≈GT but the EE
+    # still lands off — read from the gripper's weld-distance log).
+    g_now = _gt(go2, _GT_BODY)
+    gw = (gr.result_data or {}).get("grasp_world")
+    perceive = None
+    if gw and len(gw) == 3:
+        pxy = math.hypot(gw[0] - g_now[0], gw[1] - g_now[1])
+        pz = gw[2] - g_now[2]
+        perceive = {"xy": round(pxy, 4), "z": round(pz, 4),
+                    "d3": round(math.dist(gw, g_now), 4)}
+    out["steps"]["perceive_err"] = perceive
+    print(f"   perceive_err vs GT centre: {perceive}  (gw={gw} gt={[round(v,3) for v in g_now]})")
     print(f"4) perception_grasp success={gr.success} diag={gr.diagnosis_code} err={gr.error_message!r}")
     print(f"   grasp result_data={json.dumps(gr.result_data or {})}")
     print(f"   green z AFTER={z1:.3f} (lifted {lifted:+.3f}m)  gripper.is_holding={held}  oracle={oracle}")
