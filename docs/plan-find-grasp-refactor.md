@@ -50,12 +50,16 @@ never used depth** — it passed object *names only*, so every object fell to `m
   COMPOSITION (perception_grasp perceives fresh at the navigate arrival standoff — R12's well-framed
   distance; adding a 0.40 m re-perceive would REGRESS R12, so NOT added). Fixed the real gap:
   pick_top_down required a world_model even with target_xyz (now optional). Harness
-  `tools/verify_fetch_flow.py`. **OPEN: end-to-end grasp reliability ~33% (1/3, N=3) — the
-  pre-existing R12 terminal-grasp precision bottleneck (EE closes ~0.04-0.07 m off the small bottle
-  from the variable arrival pose); perception+approach are correct every run. Improve next.** On arrival near the object, re-perceive
-  with depth (`object_localizer`/`grasp_point`) to correct the position (arrival isn't exact), then
-  approach+grasp (reuse R12 `perception_grasp`). NB: `perception_grasp` currently does NOT re-perceive
-  after the approach (explicit comment) — this stage adds that.
+  `tools/verify_fetch_flow.py`. **GRASP RELIABILITY RAISED + DIAGNOSIS CORRECTED (D94): 13/17 = 0.765
+  GT-measured** (the D93 "1/3" was an unlucky N=3; true baseline was a noisy ~0.67-0.75). D93's
+  "terminal-precision/gait-drift" diagnosis was WRONG — a probe proved the base does NOT drift standing
+  (0.2 mm/6 s) and the EE lands within 5 mm of the IK target from a good standoff. Real modes: (a)
+  PERCEPTION FRAMING (was dominant) — navigate_to_object landing the dog too CLOSE (<0.8 m) → head camera
+  pitches OVER the low bottle → scan finds nothing → fail; FIXED by raising the standoff 0.70→0.95 m
+  (perceive=None eliminated, 0/17 since). (b) NAV-APPROACH BAIL — `_approach_via_nav`'s `navigate_to` to
+  the tight 0.40 m near-obstacle standoff intermittently drives the dog ~4 m past the object; FIXED with a
+  scripted-creep recovery guard. REMAINING single mode = APPROACH reliability (dog doesn't always reach the
+  IK-reachable head-on standoff). +4 regression tests.**
 - [ ] **#4 — external-explore integration + persist + rebuild.** Enable observe (with #1 localization)
   during the TARE/FAR explore so the scene graph populates with accurate objects; persist. Add a
   `/rebuild` command (clear → explore → seed → save). (ExploreSkill currently emits `tare_not_running`

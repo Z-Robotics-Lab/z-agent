@@ -1,23 +1,27 @@
 # >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
-# Sim is IN USE this session (Yusen handed it over). RESUME FROM:
-#   docs/plan-find-grasp-refactor.md  (staged plan; #1 DONE+e2e, #2 built/offline)
-#   + DECISIONS D88/D89/D90/D91 + this file + git log.
-# #1 (accurate object positions) REAL-SIM VERIFIED (D91, commit ed2e810): localizer
-#   ~2.5cm vs MuJoCo GT, full look->scenegraph stores+persists; red-team CONFIRMED the
-#   narrow claim. Found+fixed a real bug only e2e caught: localize_objects_3d keyed by
-#   detector label ("a green bottle") not the query -> objects stored at (0,0).
-# #2 navigate_to_object REAL-SIM VERIFIED (D92, c4cf5cc): drives dog 2.67m->0.95m to the
-#   named green bottle (GT-measured); targets a 0.7m standoff (object cell is an inflated obstacle).
-# #3 FETCH PIPELINE COMPOSES END-TO-END (D93, bc477ea): look->navigate_to_object->perception_grasp
-#   grasps+lifts the green bottle (0.32->0.558m, holding+oracle confirmed). Fixed the real gap:
-#   pick_top_down required a world_model even with target_xyz (now optional — SceneGraph is the
-#   source). Arrival re-perceive satisfied BY COMPOSITION. CAVEAT: end-to-end grasp reliability
-#   ~33% (1/3, N=3) — pre-existing R12 TERMINAL-GRASP precision bottleneck (EE closes ~0.04-0.07m
-#   off the small bottle from the variable arrival pose); pipeline perceives+approaches correctly
-#   every run. NEXT (non-gated): grasp reliability. #4/#5 are CEO GATES (external dep / store unify).
-#   Branch arch/plug-and-play.
-# OPEN CAVEATS (D91): real GPT-4o VLM path unproven (OpenRouter SSL down); merge_object
-#   x=0/y=0 sentinel trap latent; bare-cli NL acceptance bypassed (home 5-vs-6 joint bug).
+# Sim is IN USE this session. RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D94 + git log.
+# #1 accurate object positions VERIFIED (D91). #2 navigate_to_object VERIFIED (D92). #3 pipeline COMPOSES e2e (D93).
+# >> GRASP RELIABILITY R-D94 (THIS round; commits 1360006 + 56aa289 + this RECORD): RAISED + DIAGNOSIS CORRECTED.
+#   D93's "terminal-precision / gait-drift" diagnosis was WRONG. A direct probe proved the base does NOT drift
+#   while standing (0.2mm over 6s) and the arm EE lands within 5mm of the IK target from a good standoff. The REAL
+#   failure modes (caught via GT failure traces):
+#     (a) PERCEPTION FRAMING (was DOMINANT, 3/3 caught): when navigate_to_object lands the dog too CLOSE (<0.8m),
+#         the head camera pitches OVER the low table bottle and the yaw-scan can't recover (NOTHING at all 6
+#         headings) -> grasp_world=None -> fail.
+#     (b) NAV-APPROACH BAIL: perception_grasp's base.navigate_to to the tight 0.40m near-obstacle standoff
+#         intermittently fails and drives the dog ~4m PAST the object; code ignored the False return -> out-of-reach.
+#   FIXES: (a) navigate_to_object standoff 0.70->0.95m -> arrivals land in the well-framed ~[0.90,1.15]m band
+#   (ELIMINATED perceive=None: 0/17 since). (b) _approach_via_nav VERIFIES the dog landed near the standoff, else
+#   recovers with the scripted forward creep (strictly additive, no-op on success). +4 regression tests green.
+#   RESULT: 13/17 = 0.765 GT-measured (baseline was a noisy ~0.67-0.75; D93's "1/3" was an unlucky N=3).
+#   REMAINING single mode = APPROACH reliability (after perceiving at 0.95m the dog doesn't always reach the
+#   IK-reachable head-on standoff; the grasp itself is reliable from a good standoff — probe: 0.42m seat -> 5mm EE).
+# NEXT round (non-gated): approach reliability — prefer the stall-seating scripted creep _approach_object over the
+#   flaky vgraph nav-approach for the FINAL hop; measure N>=12 (N<=6 is too noisy to trust). Don't touch the spine.
+#   #4/#5 are CEO GATES. Branch arch/plug-and-play.
+# OPEN CAVEATS: real GPT-4o VLM path unproven (network); merge_object x=0/y=0 sentinel trap latent; bare-cli NL
+#   acceptance bypassed (home 5-vs-6 joint bug, backlog #2). One RAM seen at 0.95 (recovery creep from a far pose
+#   knocked the bottle to the floor) — watch when reworking the approach.
 
 # Vector OS — STATUS (resume anchor)
 

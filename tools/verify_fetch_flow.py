@@ -135,6 +135,10 @@ def main() -> int:
                                 "dist": round(near, 2)}
 
     # 4. perception_grasp (arrival-fresh perceive + R12 approach + grasp)
+    # Snapshot the GT object centre BEFORE the grasp — the object is static until
+    # welded, so this is the honest reference for the perceive error (comparing the
+    # perceived point to the POST-lift GT would fold the +0.23 m lift into the z error).
+    g_pre = _gt(go2, _GT_BODY)
     gr = PerceptionGraspSkill().execute({"query": _TARGET}, ctx)
     z1 = _gt(go2, _GT_BODY)[2]
     held = bool(gripper.is_holding())
@@ -150,12 +154,12 @@ def main() -> int:
     gw = (gr.result_data or {}).get("grasp_world")
     perceive = None
     if gw and len(gw) == 3:
-        pxy = math.hypot(gw[0] - g_now[0], gw[1] - g_now[1])
-        pz = gw[2] - g_now[2]
+        pxy = math.hypot(gw[0] - g_pre[0], gw[1] - g_pre[1])
+        pz = gw[2] - g_pre[2]
         perceive = {"xy": round(pxy, 4), "z": round(pz, 4),
-                    "d3": round(math.dist(gw, g_now), 4)}
+                    "d3": round(math.dist(gw, g_pre), 4)}
     out["steps"]["perceive_err"] = perceive
-    print(f"   perceive_err vs GT centre: {perceive}  (gw={gw} gt={[round(v,3) for v in g_now]})")
+    print(f"   perceive_err vs GT centre (pre-grasp): {perceive}  (gw={gw} gt={[round(v,3) for v in g_pre]})")
     print(f"4) perception_grasp success={gr.success} diag={gr.diagnosis_code} err={gr.error_message!r}")
     print(f"   grasp result_data={json.dumps(gr.result_data or {})}")
     print(f"   green z AFTER={z1:.3f} (lifted {lifted:+.3f}m)  gripper.is_holding={held}  oracle={oracle}")
