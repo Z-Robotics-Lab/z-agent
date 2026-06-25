@@ -1571,17 +1571,18 @@ class MuJoCoGo2:
         from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
 
         self._require_connection()
-        mj = _get_mujoco()
 
         # ---- Step 1: snapshot current pose and plan path ---------------------
-        # mj_forward is a READ operation (updates geom_xpos from qpos) — safe to
-        # call while the daemon is running (it does not write qpos).
-        mj.mj_forward(self._mj.model, self._mj.data)
-
-        rq = self._mj.layout.root_qpos_adr
-        start_x = float(self._mj.data.qpos[rq])
-        start_y = float(self._mj.data.qpos[rq + 1])
-        start = (start_x, start_y)
+        # THREAD SAFETY (R12 fix): the 1 kHz gait daemon steps MjData continuously.
+        # Calling mj_forward HERE races that mj_step — mj_forward WRITES derived fields
+        # (geom_xpos, etc.), not just reads — so concurrent with the daemon it segfaults /
+        # hangs (observed on the go2+Piper grasp path). Read the start pose via the
+        # thread-safe accessor instead, and read obstacle geometry WITHOUT mj_forward: the
+        # daemon already keeps geom_xpos current, and the furniture obstacles are STATIC
+        # (constant geom_xpos), so the snapshot is race-free for planning. NEVER call
+        # mj_forward / write qpos on the live model while the daemon runs.
+        pos = self.get_position()
+        start = (float(pos[0]), float(pos[1]))
         goal = (float(x), float(y))
 
         obstacles = obstacles_from_model(

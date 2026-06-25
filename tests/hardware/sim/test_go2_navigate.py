@@ -134,3 +134,46 @@ def test_navigate_to_arrives_and_avoids_table(go2_sim: MuJoCoGo2) -> None:
         f"[test] PASS — arrived={arrived}, dist={dist_to_goal:.3f} m, "
         f"inside_table={inside_table}"
     )
+
+
+@pytest.mark.sim
+def test_navigate_to_with_piper_attached_does_not_crash() -> None:
+    """REGRESSION (R12): navigate_to must not segfault/hang with the Piper attached.
+
+    The grasp path runs navigate_to with a MuJoCoPiper connected and a tight tol. The
+    original navigate_to called mj_forward to snapshot the pose — that WRITES derived
+    fields and RACED the 1 kHz gait daemon's mj_step, segfaulting/hanging (the green
+    grasp "hang"). The fix reads the pose via the thread-safe accessor and never calls
+    mj_forward on the live model. This test reproduces the crashing configuration
+    (arm-enabled scene + Piper attached + tight tol) and asserts navigate_to returns
+    in bounded wall-time having moved the dog. Self-contained (own arm-enabled sim).
+    """
+    os.environ["VECTOR_SIM_WITH_ARM"] = "1"
+    from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
+
+    go2 = MuJoCoGo2(gui=False, room=True, backend="mpc")
+    go2.connect()
+    piper = MuJoCoPiper(go2)
+    piper.connect()
+    time.sleep(0.5)
+    try:
+        start = go2.get_position()
+        t0 = time.time()
+        # Tight tol (the grasp-context value) toward the table-front standoff.
+        arrived = go2.navigate_to(10.46, 3.0, tol=0.12, timeout=30.0)
+        elapsed = time.time() - t0
+        end = go2.get_position()
+        moved = math.hypot(end[0] - start[0], end[1] - start[1])
+        print(
+            f"\n[test] navigate_to(+piper) -> {arrived} in {elapsed:.1f}s, "
+            f"moved {moved:.2f} m, end=({end[0]:.2f},{end[1]:.2f})"
+        )
+        # Bounded wall-time (no hang/segfault — the test completing at all proves no
+        # crash; this also rules out a hang).
+        assert elapsed < 60.0, f"navigate_to took {elapsed:.1f}s — possible hang"
+        # Dog actually advanced toward the goal (didn't no-op).
+        assert moved > 0.15, f"dog barely moved ({moved:.2f} m)"
+    finally:
+        piper.disconnect()
+        go2.disconnect()
+        os.environ.pop("VECTOR_SIM_WITH_ARM", None)
