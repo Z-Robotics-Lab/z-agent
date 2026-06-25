@@ -60,6 +60,13 @@ never used depth** — it passed object *names only*, so every object fell to `m
   the tight 0.40 m near-obstacle standoff intermittently drives the dog ~4 m past the object; FIXED with a
   scripted-creep recovery guard. REMAINING single mode = APPROACH reliability (dog doesn't always reach the
   IK-reachable head-on standoff). +4 regression tests.**
+  **APPROACH UNIFIED + RELIABILITY RAISED (D95, 2389e84): 10/12 = 0.833 GT-measured** (up from 0.765). The
+  final hop is now ONE impl for every base — the scripted stall-seating creep `_approach_and_seat`
+  (_grasp_ready_repose → _approach_object → _face_object); the flaky vgraph `_approach_via_nav` is RETIRED
+  (net −33 lines, dropped _GRASP_STANDOFF_M + _NAV_APPROACH_MAX_OFF). The scripted creep seats the dog against
+  the table edge = a kinematically-pinned, planner-variance-free standoff. 2/12 fails are now two DIFFERENT
+  modes (1 perception-framing, 1 terminal-grasp) — no single dominant mode left. **Grasp reliability is
+  PLATEAUED at ~0.83 after R-D94/D95; per the loop invariant, pivot down the backlog (#2 home bug) next.**
 - [ ] **#4 — external-explore integration + persist + rebuild.** Enable observe (with #1 localization)
   during the TARE/FAR explore so the scene graph populates with accurate objects; persist. Add a
   `/rebuild` command (clear → explore → seed → save). (ExploreSkill currently emits `tare_not_running`
