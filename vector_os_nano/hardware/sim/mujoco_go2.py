@@ -37,6 +37,7 @@ from typing import Any
 import numpy as np
 from vector_os_nano.embodiments.config import load_embodiment_config
 from vector_os_nano.embodiments.dof_layout import DofLayout
+from vector_os_nano.hardware.sim.mujoco_g1 import obstacles_from_model
 
 # TEMP DIAGNOSTIC (off unless VECTOR_MPC_LOG set): count/log swallowed MPC solver
 # failures so the explore "float" can be checked for silently-failing QP solves
@@ -191,6 +192,24 @@ _MPC_LEG_NAMES: list[str] = ["FL", "FR", "RL", "RR"]
 # ---------------------------------------------------------------------------
 
 _LIDAR_UPDATE_INTERVAL: int = 200  # physics steps between scans (~5 Hz, 5200 rays/scan)
+
+# ---------------------------------------------------------------------------
+# Constants — obstacle-aware navigate_to
+# ---------------------------------------------------------------------------
+
+# Go2 is ~0.19m half-width / ~0.34m half-length; 0.28m is a safe planning
+# radius that clears furniture corners by the gait's natural COM oscillation.
+_GO2_BODY_RADIUS: float = 0.28
+
+# Proportional heading gain and limits (mirrors g1 nav tuning, go2 is more agile)
+_GO2_NAV_K_YAW: float = 2.0
+_GO2_NAV_VYAW_MAX: float = 0.8
+_GO2_NAV_FACE_TOL: float = 0.40       # rad: pivot until aligned within this
+_GO2_NAV_YAW_DEADBAND: float = 0.12   # rad: stop correcting when aligned
+_GO2_NAV_CAPTURE_R: float = 0.45      # m: inside → freeze steering
+_GO2_NAV_WP_CAPTURE: float = 0.45     # m: intermediate waypoint capture tolerance
+_GO2_NAV_TIMEOUT_S: float = 60.0      # default timeout (s) for the full path
+_GO2_NAV_STEP_S: float = 0.5          # seconds per walk step
 
 
 # ---------------------------------------------------------------------------
@@ -1518,3 +1537,179 @@ class MuJoCoGo2:
         finally:
             self._skill_ctrl_until = 0.0
             self._skill_ctrl_tid = 0
+
+    def navigate_to(
+        self,
+        x: float,
+        y: float,
+        tol: float = 0.25,
+        speed: float = 0.4,
+        timeout: float | None = None,
+        **_ignored: Any,
+    ) -> bool:
+        """Walk to world position (x, y) with obstacle avoidance.
+
+        Uses the visibility-graph planner (g1_vgraph) to plan a collision-free
+        path around furniture, walls, and the pick_table.  Returns True iff the
+        dog ended within ``tol`` of (x, y).  ``timeout=None`` uses the module
+        default (_GO2_NAV_TIMEOUT_S = 60 s).
+
+        Extra kwargs are accepted and ignored for call-shape compatibility with
+        the ROS2 proxy and the g1 driver.
+
+        Threading: the 1 kHz physics daemon continues running throughout.
+        Path planning (mj_forward + obstacle extraction) is done once at the
+        start; afterwards only ``walk()`` (thread-safe) is called.  qpos is
+        NEVER written directly.
+
+        ``reason`` is logged at INFO level on exit:
+          "arrived"     — reached goal within tol
+          "timeout"     — overall timeout exhausted before arrival
+          "unreachable" — planner found no collision-free path (goal inside an
+                          inflated obstacle); does NOT fall back to open-loop.
+        """
+        from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
+
+        self._require_connection()
+        mj = _get_mujoco()
+
+        # ---- Step 1: snapshot current pose and plan path ---------------------
+        # mj_forward is a READ operation (updates geom_xpos from qpos) — safe to
+        # call while the daemon is running (it does not write qpos).
+        mj.mj_forward(self._mj.model, self._mj.data)
+
+        rq = self._mj.layout.root_qpos_adr
+        start_x = float(self._mj.data.qpos[rq])
+        start_y = float(self._mj.data.qpos[rq + 1])
+        start = (start_x, start_y)
+        goal = (float(x), float(y))
+
+        obstacles = obstacles_from_model(
+            self._mj.model,
+            self._mj.data,
+            robot_geom_ids=self._mj.layout.robot_geom_ids,
+        )
+        waypoints, plan_length = vg.plan_path(start, goal, obstacles, _GO2_BODY_RADIUS)
+
+        if waypoints is None:
+            logger.warning(
+                "navigate_to(%.2f, %.2f): UNREACHABLE — planner returned None "
+                "(goal inside inflated obstacle or boxed-in); NOT falling back "
+                "to open-loop.  n_obstacles=%d",
+                x, y, len(obstacles),
+            )
+            return False
+
+        logger.info(
+            "navigate_to(%.2f, %.2f): plan has %d waypoints, geodesic=%.2f m, "
+            "n_obstacles=%d",
+            x, y, len(waypoints), plan_length, len(obstacles),
+        )
+
+        # ---- Step 2: walk the waypoint chain ---------------------------------
+        eff_timeout = float(timeout) if timeout is not None else _GO2_NAV_TIMEOUT_S
+        deadline = time.monotonic() + eff_timeout
+
+        # Walk intermediate waypoints (skip index 0 = start)
+        for wp_idx in range(1, len(waypoints)):
+            wp = waypoints[wp_idx]
+            is_final = wp_idx == len(waypoints) - 1
+            wp_tol = tol if is_final else _GO2_NAV_WP_CAPTURE
+
+            reached = self._go2_walk_to_waypoint(
+                wx=wp[0], wy=wp[1],
+                tol=wp_tol,
+                speed=speed,
+                deadline=deadline,
+            )
+            if not reached:
+                # Timeout or stall — report where we ended up
+                pos = self.get_position()
+                dist = math.hypot(pos[0] - x, pos[1] - y)
+                logger.info(
+                    "navigate_to(%.2f, %.2f): timeout/stall at waypoint %d/%d, "
+                    "dist_to_goal=%.2f m, pos=(%.2f, %.2f)",
+                    x, y, wp_idx, len(waypoints) - 1, dist, pos[0], pos[1],
+                )
+                return False
+
+        # Final check: did we actually land within tolerance?
+        self.stop()
+        pos = self.get_position()
+        dist = math.hypot(pos[0] - x, pos[1] - y)
+        arrived = dist <= tol
+        logger.info(
+            "navigate_to(%.2f, %.2f): %s — final pos=(%.2f, %.2f), dist=%.2f m",
+            x, y, "arrived" if arrived else "timeout", pos[0], pos[1], dist,
+        )
+        return arrived
+
+    def _go2_walk_to_waypoint(
+        self,
+        wx: float,
+        wy: float,
+        tol: float,
+        speed: float,
+        deadline: float,
+    ) -> bool:
+        """Steer and walk toward waypoint (wx, wy) until within tol or deadline.
+
+        Uses the same proportional heading + forward walk pattern as
+        perception_grasp._approach_object: compute bearing, compute yaw error,
+        turn-toward + creep forward, repeat until captured or timed out.
+
+        Returns True on capture, False on timeout/deadline.
+        """
+        _MAX_WALK_STEPS = 200  # hard upper bound to prevent infinite loops
+
+        for _ in range(_MAX_WALK_STEPS):
+            if time.monotonic() >= deadline:
+                return False
+
+            pos = self.get_position()
+            dx = wx - pos[0]
+            dy = wy - pos[1]
+            dist = math.hypot(dx, dy)
+
+            if dist < tol:
+                return True
+
+            bearing = math.atan2(dy, dx)
+            heading = self.get_heading()
+            yaw_err = math.atan2(
+                math.sin(bearing - heading), math.cos(bearing - heading)
+            )
+
+            # Inside capture radius — just creep forward, gentle yaw correction
+            if dist < _GO2_NAV_CAPTURE_R:
+                vyaw = float(
+                    max(-_GO2_NAV_VYAW_MAX, min(_GO2_NAV_VYAW_MAX,
+                                                _GO2_NAV_K_YAW * yaw_err))
+                )
+                self.walk(vx=speed, vy=0.0, vyaw=vyaw,
+                          duration=_GO2_NAV_STEP_S)
+                continue
+
+            # Misaligned: pivot first, then creep
+            if abs(yaw_err) > _GO2_NAV_FACE_TOL:
+                vyaw = float(
+                    max(-_GO2_NAV_VYAW_MAX, min(_GO2_NAV_VYAW_MAX,
+                                                _GO2_NAV_K_YAW * yaw_err))
+                )
+                self.walk(vx=0.0, vy=0.0, vyaw=vyaw,
+                          duration=_GO2_NAV_STEP_S)
+                continue
+
+            # Roughly aligned: walk forward with proportional yaw correction
+            if abs(yaw_err) < _GO2_NAV_YAW_DEADBAND:
+                vyaw = 0.0
+            else:
+                vyaw = float(
+                    max(-_GO2_NAV_VYAW_MAX, min(_GO2_NAV_VYAW_MAX,
+                                                _GO2_NAV_K_YAW * yaw_err))
+                )
+            self.walk(vx=speed, vy=0.0, vyaw=vyaw,
+                      duration=_GO2_NAV_STEP_S)
+
+        # Fell out of step budget without capturing the waypoint
+        return False
