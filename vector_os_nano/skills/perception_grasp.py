@@ -450,6 +450,14 @@ def _grasp_ready_repose(
 _GRASP_STANDOFF_M = 0.40
 _FACE_TOL_RAD = 0.08      # final heading alignment (the IK envelope is for a head-on dog)
 _FACE_VYAW_MAX = 0.6
+# Max distance (m) the dog may end FROM the intended nav-approach standoff before the
+# nav-approach is treated as FAILED. The vgraph planner intermittently cannot reach a
+# standoff this close to the INFLATED table obstacle (object cell + _GO2_BODY_RADIUS):
+# it returns False and leaves the dog far away (observed ~40% of runs: navigate_to ->
+# False, dog 4 m PAST the object → the grasp then fails out-of-reach). When the dog
+# lands farther than this from the standoff, recover with the scripted forward creep
+# (no planner) which closes the gap from the head-on pose navigate_to_object already set.
+_NAV_APPROACH_MAX_OFF = 0.35
 
 
 def _face_object(base: Any, target_xy: tuple[float, float], *, max_turns: int = 4) -> None:
@@ -479,7 +487,7 @@ def _face_object(base: Any, target_xy: tuple[float, float], *, max_turns: int = 
             return
 
 
-def _approach_via_nav(base: Any, grasp_xy: tuple[float, float]) -> None:
+def _approach_via_nav(base: Any, grasp_xy: tuple[float, float]) -> bool:
     """OBSTACLE-AWARE approach (R12): navigate to an ALIGNED, reachable standoff, then face.
 
     Computes a HEAD-ON standoff — on the object's y-LINE, _GRASP_STANDOFF_M in front of it
@@ -488,12 +496,21 @@ def _approach_via_nav(base: Any, grasp_xy: tuple[float, float]) -> None:
     planner routes AROUND the table + furniture, no ramming), then turns to face the
     object. The dog ends aligned within the IK reach band; the caller's short post-approach
     dock closes the navigate undershoot. World-agnostic: uses navigate_to / walk / get_position.
+
+    RECOVERY (D94): the vgraph planner intermittently CANNOT reach a standoff this close to
+    the inflated table obstacle — it returns False and leaves the dog far away (observed:
+    navigate_to -> False, dog 4 m PAST the object), and the grasp then fails out-of-reach.
+    So we VERIFY the dog actually landed near the standoff; if not, fall back to the scripted
+    open-loop forward creep ``_approach_object`` (no planner — the dog has clear LOS to the
+    object, navigate_to_object already routed it head-on). Strictly additive: on a SUCCESSFUL
+    nav-approach the dog is at the standoff and the guard does NOT fire, so the proven path is
+    byte-unchanged. Returns True iff the dog ended near the aligned standoff (or recovery ran).
     """
     gx, gy = float(grasp_xy[0]), float(grasp_xy[1])
     try:
         pos = base.get_position()
     except Exception:  # noqa: BLE001
-        return
+        return False
     # Head-on: stand on the object's y-line, _GRASP_STANDOFF_M in front on the dog's x-side.
     sx = gx - _GRASP_STANDOFF_M if pos[0] <= gx else gx + _GRASP_STANDOFF_M
     sy = gy
@@ -505,10 +522,23 @@ def _approach_via_nav(base: Any, grasp_xy: tuple[float, float]) -> None:
         logger.warning("[PGRASP] nav-approach navigate_to raised: %s", exc)
         ok = False
     try:
-        logger.info("[PGRASP] nav-approach: navigate_to -> %s, now at %s", ok, base.get_position())
+        now = base.get_position()
+        off = math.hypot(float(now[0]) - sx, float(now[1]) - sy)
     except Exception:  # noqa: BLE001
-        pass
+        now, off = None, 0.0
+    logger.info("[PGRASP] nav-approach: navigate_to -> %s, now at %s (off standoff=%.2fm)",
+                ok, now, off)
+    if not ok or off > _NAV_APPROACH_MAX_OFF:
+        # The planner bailed / left the dog far from the standoff — recover with the
+        # scripted forward creep (stall-detected, no planner). This is what rescues the
+        # ~40% of runs where navigate_to to the tight near-obstacle standoff fails.
+        logger.warning(
+            "[PGRASP] nav-approach did NOT reach the standoff (ok=%s, off=%.2fm) — "
+            "scripted forward-creep recovery toward the object (%.2f,%.2f)",
+            ok, off, gx, gy)
+        _approach_object(base, (gx, gy), max_walks=20)
     _face_object(base, (gx, gy))
+    return True
 
 
 @skill(
