@@ -132,6 +132,20 @@ def test_real_derivation_against_build_motor_tools():
     assert native_loop.should_attempt_native("抓红色的罐子", agent=None, engine=eng) is False
 
 
+def test_strip_asymmetry_former_miss_now_attempts(actionable_world):
+    """D79 fix — a 1-char-after-strip command that should_use_vgg accepts is no longer dropped.
+
+    `should_use_vgg` checks `len(raw) < 2`; should_attempt_native used to check
+    `len(strip()) < 2`, so "去 " (raw len 2, stripped len 1) was a MISS (should_use_vgg=True
+    but should_attempt_native=False). The threshold now matches (raw len), restoring the
+    superset within an actionable world.
+    """
+    assert IntentRouter().should_use_vgg("去 ") is True            # keyword router accepts it
+    assert native_loop.should_attempt_native(                      # superset: native also attempts
+        "去 ", agent=object(), engine=object()
+    ) is True
+
+
 def test_divergence_on_chat_is_fail_open_superset(actionable_world):
     """On chat/questions the keyword router says skip, but the registry hint attempts.
 

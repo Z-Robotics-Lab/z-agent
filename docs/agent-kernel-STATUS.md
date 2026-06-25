@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R8 — scene-XML churn FIXED (untracked+gitignored 2 generated scenes, deleted 1 orphan). NON-GATED LADDER EXHAUSTED; S8/S3c/S4/S5/S6 await CEO
+updated: 2026-06-24 · loop R9 — milestone adversarial REVIEW: build HOLDS (spine frozen, no false-greens), 2 doc overclaims FIXED; live-model producer reliability is the real UNPROVEN frontier (decision for Yusen)
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,21 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R8 DONE — scene-XML churn hardening (the LAST non-gated item). FINDING: the R5 "entangled" worry was a
+doing:   loop R9 DONE — milestone adversarial REVIEW (Ultracode Workflow: 6 skeptics refute each R1-R8 headline +
+         ambition critic + Opus judge; + my empirical re-verify: offline 1516 passed, S3b grasp RE-GROUNDS 36s, tree
+         clean post-sim). VERDICT: the BUILT work is TRUSTWORTHY — spine byte-frozen across R1-R8 (independently
+         re-verified), no false-greens, honesty discipline intact. FIXED 2 real overclaims the review caught: (1) the
+         D74 "safe superset" was claimed unconditionally but holds only WITHIN AN ACTIONABLE WORLD + had an off-by-strip
+         MISS ("去 " dropped) → aligned should_attempt_native threshold to len(raw)<2 (native_loop.py) + regression test
+         (30 green) + scoped the D74 wording; (2) the stale "BYTE-UNCHANGED since 7b220d9" slogan → corrected. THE REAL
+         FRONTIER (review's load-bearing finding; "non-gated exhausted" was PREMATURE): the North Star "route by the
+         MODEL not keywords" is PAPER-TESTED — every seal is a deterministic FakeToolScriptBackend replay; live-LLM
+         tests skipif'd off; the model-producer's e2e routing reliability is UNMEASURED (5 prior live runs stalled on
+         variance → the deterministic half was sealed instead). See "Pending decisions" for the live-model-reliability
+         harness (judge's #1; NON-gated but conflicts with the "no live-deepseek REPL" discipline → YUSEN's call).
+         Committed this RECORD (code+test+docs). D79.
+         ---
+         loop R8 DONE — scene-XML churn hardening (the LAST non-gated item). FINDING: the R5 "entangled" worry was a
          MISREAD — test_scene_builder.py reads the go2_room.xml TEMPLATE (`_ROOM`) and REGENERATES scene_room_piper.xml,
          it does NOT read the committed scene as a golden reference; the sim fixtures' `git checkout` restore is in a
          caught except. So untracking is safe. DID: `git rm --cached` the 2 LIVE generated scenes
@@ -199,12 +213,24 @@ next:    LOOP ROUND LADDER — CORRECTED by the R2 Decision Workflow (S8 was pre
 ## Standing facts (durable)
 - Branch `arch/plug-and-play` off `feat/orchestrator-redesign` off master; `feat/playground-vln` is ABANDONED.
 - Honest-verify moat: a step grades GROUNDED only when a deterministic predicate reads an oracle the ACTOR
-  cannot author. The sandbox may only get STRICTER (rule 5). `vcli/cognitive/` BYTE-UNCHANGED since 7b220d9.
+  cannot author. The sandbox may only get STRICTER (rule 5). `vcli/cognitive/` was byte-unchanged 7b220d9→D68;
+  D69 (object_goal.py + the trace_store gate) is the ONE deliberate edit since, and it is STRICTER-ONLY; the spine
+  tree-hash has been byte-frozen across the entire R1-R8 loop arc (independently re-verified R9/D79). [Was a stale
+  absolute "BYTE-UNCHANGED since 7b220d9" slogan — corrected R9 since D69 made it literally false.]
 - `native_loop.run_turn_native` is the default model-driven producer (no keyword table); the legacy keyword
   producer is being strangled (delete at S8). Acceptance = bare `vector-cli` + NL only.
 - cross-MODEL (D48-D50) + the moat are LIVE on master (origin/master cd7029a).
 
 ## Pending CEO gates (decision queue — do NOT cross autonomously)
+- **STRATEGIC DECISION (non-gate, R9/D79) — measure the live-model producer reliability?** The R9 review's
+  load-bearing finding: the North Star ("route by the MODEL, not keywords") is PAPER-TESTED — every seal is a
+  deterministic FakeToolScriptBackend replay; the model-producer's e2e routing reliability has NEVER been measured
+  (5 prior live runs stalled on variance → the deterministic half was sealed). Judge's #1: build a LIVE-LLM grasp
+  reliability harness (swap the fake backend for the real model in test_native_loop_grasp_attach_pty, N≈20, publish
+  the routing %). It is NON-gated (the approved acceptance path + real model + sample size) BUT directly conflicts
+  with the standing loop discipline "不用 live-deepseek 多轮 REPL" → NOT run autonomously; YUSEN decides: (a) authorize
+  the live-reliability harness (accept the model-variance + network risk), or (b) keep the deterministic-seal posture
+  and treat live reliability as out-of-scope. This is the real frontier the loop has been routing around.
 - **S8 — retire the legacy keyword producer (READY for approval; all preconditions S5a/S5b/S5c done).**
   One-liner: delete the keyword routing layer so routing is model + declared-metadata only (North Star).
   Remove: `IntentRouter` (`_RULES`/`should_use_vgg`/`is_complex`/`_MOTOR_*` keyword sets) + `StrategySelector`

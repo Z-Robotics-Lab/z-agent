@@ -874,13 +874,19 @@ def should_attempt_native(user_input: str, *, agent: Any, engine: Any) -> bool:
     FAIL-OPEN by design: when the world is actionable, attempt native and let the model
     decide routing — a goal it cannot route falls back to legacy on no-action (a wasted
     LLM call, NEVER a missed command). This makes the hint a SAFE SUPERSET of the keyword
-    ``should_use_vgg`` (proven in tests/vcli/test_native_routing_hint.py): for every input
-    the keyword router routes to VGG, this also attempts — so S8 can rewire the gate sites
-    off ``should_use_vgg`` onto this with no missed routing. Trivial input (< 2 non-space
-    chars) never attempts; a toolset-build error fails OPEN to native (never silently skip
-    the redesign). SHADOW for now: not yet wired into the live routing (zero behavior change).
+    ``should_use_vgg`` **WITHIN AN ACTIONABLE WORLD** (proven in
+    tests/vcli/test_native_routing_hint.py): for every input the keyword router routes to
+    VGG, this also attempts — so S8 can rewire the gate sites off ``should_use_vgg`` onto
+    this with no missed routing. The superset is SCOPED to an actionable world by
+    construction: in a TOOLLESS world (``_build_motor_tools`` empty — a sensorless/dev path)
+    this returns False even for an action-shaped command, which is CORRECT (nothing for the
+    model to route to; the keyword router's VGG attempt would only fail there too). The
+    trivial-input threshold MATCHES ``should_use_vgg`` exactly (``len(user_input) < 2`` on the
+    RAW input — NOT stripped — so a 1-char-after-strip command like "去 " that ``should_use_vgg``
+    accepts is not silently dropped; the earlier ``len(strip())`` was an off-by-strip MISS,
+    D79). A toolset-build error fails OPEN to native. SHADOW for now: not wired into live routing.
     """
-    if not user_input or len(user_input.strip()) < 2:
+    if not user_input or len(user_input) < 2:
         return False
     try:
         tools = _build_motor_tools(agent, engine)
