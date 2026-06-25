@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R10 — live-model grasp reliability MEASURED both paths: arm 13/15=87% (D80), go2+Piper PERCEPTION grasp 9/10=90% (D81, the North Star path), both visually confirmed, 0 stalls. The Review's #1 unproven frontier is ANSWERED (~90%).
+updated: 2026-06-25 · R12 (Yusen-directed): obstacle-avoidance PRIMITIVE MuJoCoGo2.navigate_to built+verified; grasp integration REVERTED (green navigate hangs) — needs a focused design pass (D85). Live grasp reliability arm 87%/go2+Piper 90% (D80/D81).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
