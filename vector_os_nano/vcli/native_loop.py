@@ -1054,12 +1054,15 @@ def _native_system_prompt(
         "gripper oracle: call holding_object('<name>') with the object's scene name as a "
         "QUOTED string, e.g. holding_object('banana'), to prove you grasped THAT specific "
         "object (a bare word without quotes is not a valid argument). "
-        "To DO the grasp, call the grasp / pick skill DIRECTLY: it PERCEIVES the target "
-        "object itself from the robot's camera, so you do NOT need a separate detect / scan "
-        "/ look step first, and you must NEVER repeat detect/scan — one grasp-skill call "
-        "both perceives AND grasps. Calling detect again and again without grasping wastes "
-        "turns and the goal stays unmet; commit to the grasp skill, then verify "
-        "holding_object(...). "
+        "To DO the grasp, call the grasp / pick skill DIRECTLY and as your FIRST action — it "
+        "is the COMPLETE grasp: in ONE call it PERCEIVES the target from the robot's camera, "
+        "WALKS the robot to it on its own (obstacle-aware), AND grasps. Because it does all "
+        "of that itself, you must NOT take any separate step before it: do NOT navigate / "
+        "walk toward the object, do NOT detect it, do NOT scan, do NOT look or describe the "
+        "scene first — every one of those is unnecessary and is the #1 way the goal stays "
+        "UNMET (you burn your turns moving/looking and never actually grasp). The single "
+        "biggest mistake here is calling navigate or detect instead of the grasp skill: "
+        "don't. Commit to the grasp skill on the FIRST action, then verify holding_object(...). "
         + object_vocab
         + locomotion_guidance
     )
