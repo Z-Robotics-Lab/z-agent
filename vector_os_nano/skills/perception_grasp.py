@@ -441,75 +441,6 @@ def _grasp_ready_repose(
             logger.warning("[PGRASP] re-pose move raised: %s", exc)
     return True
 
-# R12 — target dog-to-object standoff for the obstacle-aware nav approach. Deep in the
-# Piper top-down IK reach band (measured wide: ~0.24-0.54 m, tools/_ik_envelope_sweep.py),
-# so IK has MARGIN when the dog arrives ALIGNED. navigate_to's vgraph keeps the dog clear
-# of the inflated table, so the achievable standoff is table-limited (~0.42 m) but aligned.
-_GRASP_STANDOFF_M = 0.40
-# Final-heading alignment after the nav approach: face the object so the forward-mounted
-# arm points AT it (the IK envelope is measured for an aligned, head-on dog).
-_FACE_TOL_RAD = 0.08
-_FACE_VYAW_MAX = 0.6
-
-
-def _face_object(base: Any, target_xy: tuple[float, float], *, max_turns: int = 4) -> None:
-    """Turn in place so the dog FACES target_xy (final heading align before the grasp)."""
-    import math
-
-    walk = getattr(base, "walk", None)
-    get_pos = getattr(base, "get_position", None)
-    get_hd = getattr(base, "get_heading", None)
-    if not (callable(walk) and callable(get_pos) and callable(get_hd)):
-        return
-    for _ in range(max_turns):
-        try:
-            pos = get_pos()
-            hd = float(get_hd())
-        except Exception:  # noqa: BLE001
-            return
-        bearing = math.atan2(target_xy[1] - pos[1], target_xy[0] - pos[0])
-        yaw_err = math.atan2(math.sin(bearing - hd), math.cos(bearing - hd))
-        if abs(yaw_err) < _FACE_TOL_RAD:
-            return
-        try:
-            walk(vx=0.0, vy=0.0,
-                 vyaw=max(-_FACE_VYAW_MAX, min(_FACE_VYAW_MAX, yaw_err * 1.5)),
-                 duration=0.6)
-        except Exception:  # noqa: BLE001
-            return
-
-
-def _approach_via_nav(base: Any, grasp_xy: tuple[float, float]) -> None:
-    """OBSTACLE-AWARE approach (R12): navigate to an ALIGNED, reachable standoff, then face.
-
-    Computes a standoff ~_GRASP_STANDOFF_M from the grasp point ON THE LINE from the object
-    toward the dog (so the dog approaches head-on), drives there via ``base.navigate_to``
-    (the visibility-graph planner routes AROUND the table + furniture — no ramming), then
-    turns to face the object. The dog ends aligned + within the IK reach band, so the
-    grasp IK has margin. World-agnostic: uses only navigate_to / walk / get_position.
-    """
-    import math
-
-    gx, gy = float(grasp_xy[0]), float(grasp_xy[1])
-    try:
-        pos = base.get_position()
-    except Exception:  # noqa: BLE001
-        return
-    dx, dy = pos[0] - gx, pos[1] - gy
-    d = math.hypot(dx, dy) or 1e-6
-    sx, sy = gx + (dx / d) * _GRASP_STANDOFF_M, gy + (dy / d) * _GRASP_STANDOFF_M
-    logger.info("[PGRASP] nav-approach: standoff (%.2f,%.2f) for grasp (%.2f,%.2f)", sx, sy, gx, gy)
-    try:
-        ok = base.navigate_to(sx, sy, tol=0.12)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("[PGRASP] nav-approach navigate_to raised: %s", exc)
-        ok = False
-    try:
-        logger.info("[PGRASP] nav-approach: navigate_to -> %s, now at %s", ok, base.get_position())
-    except Exception:  # noqa: BLE001
-        pass
-    _face_object(base, (gx, gy))
-
 
 @skill(
     aliases=[
@@ -725,19 +656,10 @@ class PerceptionGraspSkill:
         # proven compute_approach_pose. Runs only when out of reach (a perfectly
         # placed dog needs no re-pose).
         if base is not None and arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is None:
-            if callable(getattr(base, "navigate_to", None)):
-                # R12 — OBSTACLE-AWARE approach to an ALIGNED, reachable standoff. Drive to a
-                # standoff ~_GRASP_STANDOFF_M from the object (deep in the Piper IK reach band)
-                # via base.navigate_to: the visibility-graph planner routes AROUND the table +
-                # furniture (no ramming) and leaves the dog aligned, so IK has margin. Replaces
-                # the open-loop re-pose + forward walk that rammed the table and left IK marginal
-                # (D82/D83). Falls back to the scripted approach for a base without navigate_to.
-                _approach_via_nav(base, (gp.x, gp.y))
-            else:
-                logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — re-pose + approach",
-                            resolved, gp.x, gp.y)
-                _grasp_ready_repose(base, (gp.x, gp.y), clearance=_REPOSE_CLEARANCE_M)
-                _approach_object(base, (gp.x, gp.y), max_walks=30)
+            logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — re-pose + approach",
+                        resolved, gp.x, gp.y)
+            _grasp_ready_repose(base, (gp.x, gp.y), clearance=_REPOSE_CLEARANCE_M)
+            _approach_object(base, (gp.x, gp.y), max_walks=30)
             approached = True
 
         # Post-approach nudge: if the approach stall fired short of the true reach
