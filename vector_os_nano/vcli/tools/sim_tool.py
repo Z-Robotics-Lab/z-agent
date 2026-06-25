@@ -559,37 +559,20 @@ class SimStartTool:
         from vector_os_nano.skills.go2 import get_go2_skills  # type: ignore[import]
         for skill in get_go2_skills():
             agent._skill_registry.register(skill)
-        # Local manipulation (Piper pick/place) is wired whenever the user
-        # launched go2 WITH the arm — per the North Star, a capability behind a
-        # flag is NOT done, and `with_arm=True` is the user explicitly asking for
-        # the arm. Escape hatch to disable for a bare-mobility demo:
+        # Local manipulation (Piper pick/place + perception-grasp) is wired
+        # whenever the user launched go2 WITH the arm — per the North Star, a
+        # capability behind a flag is NOT done, and `with_arm=True` is the user
+        # explicitly asking for the arm. Single-sourced with the in-process
+        # --sim-go2 path via register_manipulation_skills so the two launchers can
+        # never drift (Rule 3/11). holding_object grades GROUNDED on this bare-cli
+        # path: the bridge welds the object on gripper-close and publishes per-body
+        # world xpos + per-weld active over /piper/object_state. Escape hatch:
         # VECTOR_ENABLE_MANIPULATION=0 (default ON for with_arm).
-        _manip_on = os.environ.get("VECTOR_ENABLE_MANIPULATION", "1") != "0"
-        if piper_arm is not None and _manip_on:
-            from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-            from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
-            from vector_os_nano.skills.mobile_pick import MobilePickSkill
-            from vector_os_nano.skills.mobile_place import MobilePlaceSkill
-            agent._skill_registry.register(PickTopDownSkill())
-            agent._skill_registry.register(PlaceTopDownSkill())
-            agent._skill_registry.register(MobilePickSkill())
-            agent._skill_registry.register(MobilePlaceSkill())
-            # Perception-driven grasp (the honest North-Star path): real RGB-D
-            # from the go2 d435 (bridge -> /camera/image + /camera/depth -> proxy)
-            # + Moondream VLM + EdgeTAM -> 3D grasp point (NOT ground truth).
-            # Registered LAST so it wins the shared 抓/grab aliases on the empty-
-            # world-model path (it needs no pre-populated world model; PickTopDown
-            # does). holding_object grades GROUNDED on this bare-cli path: the
-            # bridge welds the object on gripper-close and publishes per-body world
-            # xpos + per-weld active over /piper/object_state; the Piper proxies
-            # expose get_object_positions() + weld_is_active() + weld-backed
-            # is_holding() the verify oracle + actor_causation read (D36).
-            from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
-            from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-            # Bridge publishes 320×240; intrinsics must match the actual frame size.
-            agent._perception = Go2GraspPerception(base, width=320, height=240)
-            agent._skill_registry.register(PerceptionGraspSkill())
-            logger.info("[sim_tool] perception-grasp wired: Go2GraspPerception + PerceptionGraspSkill")
+        if piper_arm is not None:
+            from vector_os_nano.skills.manipulation_setup import (
+                register_manipulation_skills,
+            )
+            register_manipulation_skills(agent, base)
 
         # VLM perception (GPT-4o via OpenRouter)
         if api_key:

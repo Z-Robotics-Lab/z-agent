@@ -792,12 +792,47 @@ def _init_agent(args: argparse.Namespace) -> Any:
             or os.environ.get("OPENROUTER_API_KEY", "")
         )
 
-        agent = Agent(base=base, llm_api_key=api_key, config=cfg)
+        # Attach the in-process Piper arm when the go2_piper attach scene was
+        # selected (VECTOR_SIM_WITH_ARM=1) so the lightweight in-process --sim-go2
+        # path is manipulation-capable — same capability the heavier ROS2 NL path
+        # (sim_tool._start_go2(with_arm=True)) already provides. Without this the
+        # full fetch (look -> navigate_to_object -> perception_grasp) is
+        # unreachable from `vector-cli --sim-go2`, and "a capability behind a flag
+        # is NOT done" (North Star). The arm/gripper classes mirror the in-process
+        # rig the fetch harnesses build.
+        _with_arm = os.environ.get("VECTOR_SIM_WITH_ARM", "0") == "1"
+        piper_arm = piper_gripper = None
+        if _with_arm:
+            try:
+                from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
+                from vector_os_nano.hardware.sim.mujoco_piper_gripper import (
+                    MuJoCoPiperGripper,
+                )
+                piper_arm = MuJoCoPiper(base)
+                piper_arm.connect()
+                piper_gripper = MuJoCoPiperGripper(base)
+                piper_gripper.connect()
+                console.print(f"[dim]  Piper arm attached (in-process)[/dim]")
+            except Exception as exc:
+                console.print(f"[yellow]  Piper arm unavailable: {exc}[/yellow]")
+                piper_arm = piper_gripper = None
+
+        agent = Agent(base=base, arm=piper_arm, gripper=piper_gripper,
+                      llm_api_key=api_key, config=cfg)
 
         # Register Go2 skills
         from vector_os_nano.skills.go2 import get_go2_skills
         for skill in get_go2_skills():
             agent._skill_registry.register(skill)
+
+        # Manipulation (Piper pick/place + perception-grasp) — single-sourced with
+        # the ROS2 NL path so the two launchers never drift (Rule 3/11).
+        if piper_arm is not None:
+            from vector_os_nano.skills.manipulation_setup import (
+                register_manipulation_skills,
+            )
+            if register_manipulation_skills(agent, base):
+                console.print(f"[dim]  Manipulation: perception_grasp + pick/place[/dim]")
 
         # VLM perception (GPT-4o via OpenRouter)
         if api_key:
