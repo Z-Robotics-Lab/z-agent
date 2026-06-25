@@ -184,12 +184,6 @@ class PickTopDownSkill:
                 error_message="No gripper connected",
                 result_data={"diagnosis": "no_gripper"},
             )
-        if wm is None:
-            return SkillResult(
-                success=False,
-                error_message="No world_model available; this skill requires a populated world model",
-                result_data={"diagnosis": "no_world_model"},
-            )
         if not hasattr(arm, "ik_top_down"):
             return SkillResult(
                 success=False,
@@ -201,18 +195,32 @@ class PickTopDownSkill:
                 result_data={"diagnosis": "arm_unsupported"},
             )
 
-        # Resolve target
+        # Resolve target. The explicit target_xyz path (the honest perception path —
+        # PerceptionGraspSkill passes the depth-perceived grasp point) needs NO world
+        # model; only the object_id/label lookups do. So a None world_model is fatal
+        # ONLY when there is no target_xyz to fall back on (refactor direction: the
+        # SceneGraph, not a GT world model, is the object source — D89).
         target = self._resolve_target(params, wm)
 
         # v2.3 hot-fix: perception-driven auto-detect retry on world_model miss.
         # Symmetric with MobilePickSkill — VGG routes "抓 X" to whichever skill
         # it thinks fits, and both must self-heal via the same auto-detect path.
-        if target is None:
+        # Only meaningful when a world model exists to populate/consult.
+        if target is None and wm is not None:
             from vector_os_nano.skills.utils import run_autodetect_retry
             if run_autodetect_retry(params, context, log_tag="PICK-TD") > 0:
                 target = self._resolve_target(params, wm)
 
         if target is None:
+            if wm is None:
+                return SkillResult(
+                    success=False,
+                    error_message=(
+                        "No target_xyz supplied and no world_model available — "
+                        "cannot locate the object to pick."
+                    ),
+                    result_data={"diagnosis": "no_world_model"},
+                )
             query = params.get("object_label") or params.get("object_id") or ""
             known_labels = [
                 o.label for o in wm.get_objects()
@@ -337,6 +345,12 @@ class PickTopDownSkill:
                 xyz = ()
             if len(xyz) == 3 and all(math.isfinite(v) for v in xyz):
                 return (params.get("object_id") or "xyz_target", xyz)  # type: ignore[return-value]
+
+        # Steps 2+ look the object up in the world model. With no world model
+        # (the honest SceneGraph-driven path, where target_xyz is supplied), there
+        # is nothing more to resolve — return None rather than dereferencing None.
+        if wm is None:
+            return None
 
         # 2. Exact object_id
         obj_id = params.get("object_id")

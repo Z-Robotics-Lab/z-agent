@@ -135,6 +135,18 @@ def test_no_world_model_returns_no_world_model_diag():
     assert r.result_data["diagnosis"] == "no_world_model"
 
 
+def test_target_xyz_bypasses_world_model_requirement():
+    """The honest perception path (PerceptionGraspSkill) passes target_xyz and has
+    NO world model (SceneGraph is the object source — D89). Such a call must NOT
+    fail no_world_model; it must proceed to grasp the explicit point."""
+    skill = PickTopDownSkill()
+    ctx = _mkctx(arm=_MockArm(), gripper=_MockGripper(), world_model=None)
+    r = skill.execute({"target_xyz": [1.0, 2.0, 0.5], "object_id": "green_bottle"}, ctx)
+    assert r.result_data.get("diagnosis") != "no_world_model"
+    # With a reachable mock arm + holding gripper the explicit-target grasp succeeds.
+    assert r.success, r.error_message
+
+
 def test_arm_without_ik_top_down_rejected():
     """An arm missing ``ik_top_down`` must fail with arm_unsupported."""
     class _BareArm:
