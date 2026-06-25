@@ -66,7 +66,13 @@ never used depth** — it passed object *names only*, so every object fell to `m
   (net −33 lines, dropped _GRASP_STANDOFF_M + _NAV_APPROACH_MAX_OFF). The scripted creep seats the dog against
   the table edge = a kinematically-pinned, planner-variance-free standoff. 2/12 fails are now two DIFFERENT
   modes (1 perception-framing, 1 terminal-grasp) — no single dominant mode left. **Grasp reliability is
-  PLATEAUED at ~0.83 after R-D94/D95; per the loop invariant, pivot down the backlog (#2 home bug) next.**
+  PLATEAUED at ~0.83 after R-D94/D95; per the loop invariant, pivoted down the backlog.**
+- [x] **#2b — `home` skill 5-vs-6 DoF bug FIXED + REAL-SIM VERIFIED (D96, 064294f).** The hard-coded
+  5-DoF SO-101 home pose crashed `Agent.execute_skill('home')` on the 6-DoF Piper (`move_joints expected
+  6 got 5`), crashing the whole planner/executor path (a trailing `home` step is appended to manip plans).
+  DoF-aware fix (Rule 11): `len(pose)!=arm.dof` → URDF-zero neutral `[0.0]*dof`. Real sim: execute_skill
+  ('home') success, arm reaches neutral, exit 0 (tools/verify_home_dof.py). +4 unit tests. Unblocks the
+  bare-cli NL fetch route. NEXT non-gated: drive "把绿色瓶子拿过来" through bare `vector-cli` REPL by NL.
 - [ ] **#4 — external-explore integration + persist + rebuild.** Enable observe (with #1 localization)
   during the TARE/FAR explore so the scene graph populates with accurate objects; persist. Add a
   `/rebuild` command (clear → explore → seed → save). (ExploreSkill currently emits `tare_not_running`
@@ -80,9 +86,9 @@ never used depth** — it passed object *names only*, so every object fell to `m
 
 - **Real GPT-4o VLM path unproven.** `look` with the real VLM failed on OpenRouter SSL/network;
   only the stub-named path ran (localization itself was real). Re-run when network is up.
-- **bare-cli NL acceptance not yet exercised** (the non-negotiable face). The #1 harness hand-builds
-  the SkillContext to dodge a pre-existing `home` skill bug (`MuJoCoPiper.move_joints expected 6 got 5`)
-  in the planner/executor path. Fix that before the full "把绿色瓶子拿过来" NL flow can run end-to-end.
+- **bare-cli NL acceptance not yet exercised** (the non-negotiable face). The `home` 5-vs-6 DoF bug that
+  blocked the planner/executor path is now FIXED + real-verified (D96), so the full "把绿色瓶子拿过来" NL
+  flow can run end-to-end — that bare-cli e2e is the next non-gated chunk (the harnesses are internal only).
 - **`merge_object` x=0/y=0 sentinel trap** (`scene_graph.py:454`): a real object genuinely at the world
   origin/axis, or look's `(name,0,0)` un-localized fallback, is silently kept at the zero/stale value
   — the same bug class #1 kills. Not triggered by the bottles (x≈10.9). Hardening: merge None-sentinel

@@ -1,27 +1,25 @@
 # >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
-# Sim is FREE now (nuked). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D95 + git log.
-# #1 accurate object positions VERIFIED (D91). #2 navigate_to_object VERIFIED (D92). #3 pipeline COMPOSES e2e (D93).
-# >> GRASP RELIABILITY R-D95 (THIS round; code commit 2389e84 + this RECORD): VERIFIED, KEPT.
-#   D95 unified the FINAL hop onto the scripted stall-seating creep `_approach_and_seat` (= _grasp_ready_repose ->
-#   _approach_object -> _face_object) and RETIRED the flaky vgraph `_approach_via_nav` for EVERY base (one impl,
-#   Rule 11; net -33 lines, dropped _GRASP_STANDOFF_M + _NAV_APPROACH_MAX_OFF). Rationale: the last short hop to the
-#   tight near-obstacle standoff was the flakiest link when handed to the vgraph planner (intermittently dumps the
-#   dog metres past, or seats a few cm short of the thin Piper reach band). The scripted creep stall-SEATS the dog
-#   against the table edge = a kinematically-pinned, planner-variance-free standoff (the proven D34-D51 placement).
-#   RESULT: 10/12 = 0.833 GT-measured (oracle weld+lift+holding), UP from D94's 0.765 (13/17) AND simpler code.
-#   KEEP-criteria both met (rate raised-or-held + cleaner code). +0.068 is partly within the noisy ~0.67-0.77 band,
-#   so the decisive justification is "raised-or-held + retired a flaky path + -33 lines", true even pessimistically.
-#   2 fails (now two DIFFERENT modes, no single dominant): trial8 = perception-framing miss (perceive_err=None, the
-#   pre-D94 mode resurfaced once); trial9 = terminal-grasp miss despite good perception. perceive_err≈0.024 on every
-#   pass = the localizer's systematic ~2.4cm bias the grasp tolerates.
-# NEXT round (non-gated): grasp plateau is near ~0.83 after R-D94/D95 real pushing. Per loop invariant (plateau
-#   after ~4-5 honest rounds -> pivot down backlog), do backlog #2 next: fix `home` 5-vs-6 joint bug
-#   (skills/home.py passes 5, MuJoCoPiper wants 6) -> unblocks the bare-`vector-cli` + NL acceptance of the full
-#   fetch ("把绿色瓶子拿过来"), the non-negotiable face. Then #3 merge_object x=0/y=0 sentinel trap. Don't touch spine.
-#   #4/#5 are CEO GATES. Branch arch/plug-and-play.
-# OPEN CAVEATS: real GPT-4o VLM path unproven (network); merge_object x=0/y=0 sentinel trap latent; bare-cli NL
-#   acceptance still bypassed (home 5-vs-6 joint bug, backlog #2 = next round). Residual grasp fails are 1 perception
-#   -framing + 1 terminal-grasp per ~12; no single dominant mode left to cheaply remove.
+# Sim is FREE now (nuked). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D96 + git log.
+# #1 object positions VERIFIED (D91). #2 navigate_to_object VERIFIED (D92). #3 pipeline COMPOSES e2e (D93).
+# Grasp reliability RAISED to 0.833 (D94/D95) then PLATEAUED -> pivoted down the backlog.
+# >> THIS round (backlog #2; code commit 064294f WIP + this RECORD): `home` 5-vs-6 DoF bug FIXED + REAL-SIM
+#   VERIFIED on the actual 6-DoF Piper. The hard-coded 5-DoF SO-101 home pose crashed
+#   Agent.execute_skill('home') -> move_joints('expected 6 positions, got 5'); since a trailing `home` step is
+#   appended to manip plans, this crashed the WHOLE planner/executor path -> the bare-vector-cli + NL fetch was
+#   bypassed. FIX (skills/home.py, Rule 11 — no per-robot code): len(configured_pose)!=arm.dof -> URDF-zero neutral
+#   [0.0]*dof (what MuJoCoPiper.home() uses); SO-101 (5==5) byte-identical. REAL-VERIFY (tools/verify_home_dof.py,
+#   real go2+Piper sim, the ONLY acceptance): drove the arm away then ran the previously-crashing execute_skill
+#   ('home') -> GoalExecutor -> HomeSkill -> real 6-DoF move_joints -> NO crash, success=True/completed, executor
+#   "Step s1 (home) OK in 3.023s", arm reached near-neutral (max|q|<0.05), overall_pass=true, exit 0; log confirms
+#   the DoF-aware branch fired. +4 regression unit tests (tests/unit/skills/test_home_dof.py, green). Spine untouched.
+# NEXT round (non-gated): the home blocker is gone, so drive the full fetch "把绿色瓶子拿过来" through the BARE
+#   `vector-cli` REPL by NL end-to-end (look->navigate_to_object->perception_grasp->home) and add THAT bare-cli e2e
+#   as the TRUE acceptance (harnesses are internal only, the non-negotiable face). Watch for model-routing variance.
+#   Then backlog #3: merge_object x=0/y=0 sentinel trap (scene_graph.py:454 + look.py fallback, coordinated 2-file
+#   fix + regression test). Don't touch spine. #4/#5 are CEO GATES. Branch arch/plug-and-play.
+# OPEN CAVEATS: real GPT-4o VLM path unproven (network); merge_object x=0/y=0 sentinel trap latent (backlog #3);
+#   bare-cli full-fetch NL acceptance now UNBLOCKED but not yet exercised end-to-end (next round). Grasp plateau ~0.83
+#   (1 perception-framing + 1 terminal-grasp per ~12; no single dominant mode left to cheaply remove).
 
 # Vector OS — STATUS (resume anchor)
 
