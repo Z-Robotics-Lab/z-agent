@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-24 · loop R9 — milestone adversarial REVIEW: build HOLDS (spine frozen, no false-greens), 2 doc overclaims FIXED; live-model producer reliability is the real UNPROVEN frontier (decision for Yusen)
+updated: 2026-06-24 · loop R10 — live-model grasp routing reliability MEASURED (Yusen-authorized): 13/15 = 87% GROUNDED, 0 stalls, visually confirmed (banana lifted 20cm). The Review's #1 unproven frontier is now answered.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
@@ -12,7 +12,20 @@ phase:   PLUG-AND-PLAY PLATFORM REFACTOR (branch `arch/plug-and-play` off `feat/
          Make the OS config-driven (a robot = a CONFIG file, not a driver class — Rule 11) + model-routed
          (strangle the legacy keyword producer), staged strangler-fig with bare-cli e2e each stage (Rule 12).
 
-doing:   loop R9 DONE — milestone adversarial REVIEW (Ultracode Workflow: 6 skeptics refute each R1-R8 headline +
+doing:   loop R10 DONE — live-model grasp routing reliability MEASURED (Yusen authorized "A 去测"). Harness
+         tools/measure_grasp_reliability.py: N fresh isolated `cli -p --sim --native-loop` subprocesses, REAL DeepSeek
+         (.env), single-turn so the flaky multi-turn REPL launch is excluded. RESULT N=15: **13/15 = 87% GROUNDED**
+         (model autonomously routes pick→holding_object('banana')→GROUNDED, graded by the untouched spine, real weld);
+         2/15 RAN (model over-perceived → detect/scan instead of committing to pick); 0 stalls/timeouts/errors —
+         CORRECTS the "5 stalls" prior (those were the multi-turn LAUNCH, not the routing). VISUAL (tools/visual_grasp.py,
+         EGL offscreen, per Yusen's "see the effect"): before=banana on table → after=arm raised + banana removed
+         (lifted 0.06→0.26m, holding True). Closes the R9/D79 #1 residual (North Star "route by the MODEL" was
+         paper-tested). Failure mode is ACTIONABLE (a prompt/tool-desc nudge to grasp-not-over-detect could lift 87%).
+         SCOPE: standalone-arm routing (cleanest isolation); go2+Piper perception_grasp is the harder follow-up.
+         Committed aae6d77 (D80). NEXT options for Yusen: (a) raise the 87% (prompt nudge), (b) measure the go2+Piper
+         perception grasp the same way, (c) the queued CEO gates (S8 etc.).
+         ---
+         loop R9 DONE — milestone adversarial REVIEW (Ultracode Workflow: 6 skeptics refute each R1-R8 headline +
          ambition critic + Opus judge; + my empirical re-verify: offline 1516 passed, S3b grasp RE-GROUNDS 36s, tree
          clean post-sim). VERDICT: the BUILT work is TRUSTWORTHY — spine byte-frozen across R1-R8 (independently
          re-verified), no false-greens, honesty discipline intact. FIXED 2 real overclaims the review caught: (1) the
