@@ -68,3 +68,4 @@ artifacts/
 assets/
 robot_mode.txt
 tools/grasp_reliability.log
+tools/go2piper_grasp_reliability.log
