@@ -67,3 +67,4 @@ scratch/
 artifacts/
 assets/
 robot_mode.txt
+tools/grasp_reliability.log
