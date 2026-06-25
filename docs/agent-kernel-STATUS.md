@@ -4,7 +4,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 → North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 
-updated: 2026-06-25 · R12 (Yusen-directed): obstacle-avoidance PRIMITIVE MuJoCoGo2.navigate_to built+verified; grasp integration REVERTED (green navigate hangs) — needs a focused design pass (D85). Live grasp reliability arm 87%/go2+Piper 90% (D80/D81).
+updated: 2026-06-25 · R12 DONE (Yusen-directed): green grasp "hang" was a mj_forward DATA-RACE SEGFAULT — FIXED + regression-tested (447a100); obstacle-aware nav-approach integrated, all 3 colours GROUND deterministically (9d5adbe); live N=6=67% (4/4 perception_grasp routings grounded — drag is pre-existing model-routing variance, D86). navigate_to converges go2+g1 on one planner.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot
          (urdf+mesh+config), policy, skill, capability; plan · route · verify · recover. Bare
          `vector-cli` + NL is the only acceptance face; the honest-verify spine is frozen.
