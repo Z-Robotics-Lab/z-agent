@@ -1,8 +1,14 @@
 # >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
-# Loop STOPPED (no autonomous wakeups). A fresh session drives this. RESUME FROM:
-#   docs/plan-find-grasp-refactor.md  (staged plan; stage #1 DONE offline)
-#   + DECISIONS D88/D89/D90 + this file + git log.
-# Do NOT run sim until Yusen frees it (he tests manually). Branch arch/plug-and-play.
+# Sim is IN USE this session (Yusen handed it over). RESUME FROM:
+#   docs/plan-find-grasp-refactor.md  (staged plan; #1 DONE+e2e, #2 built/offline)
+#   + DECISIONS D88/D89/D90/D91 + this file + git log.
+# #1 (accurate object positions) REAL-SIM VERIFIED (D91, commit ed2e810): localizer
+#   ~2.5cm vs MuJoCo GT, full look->scenegraph stores+persists; red-team CONFIRMED the
+#   narrow claim. Found+fixed a real bug only e2e caught: localize_objects_3d keyed by
+#   detector label ("a green bottle") not the query -> objects stored at (0,0).
+# #2 navigate_to_object built + 9 offline tests green (sim e2e PENDING). Branch arch/plug-and-play.
+# OPEN CAVEATS (D91): real GPT-4o VLM path unproven (OpenRouter SSL down); merge_object
+#   x=0/y=0 sentinel trap latent; bare-cli NL acceptance bypassed (home 5-vs-6 joint bug).
 
 # Vector OS — STATUS (resume anchor)
 

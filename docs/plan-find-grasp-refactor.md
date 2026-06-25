@@ -34,13 +34,14 @@ never used depth** — it passed object *names only*, so every object fell to `m
 
 ## Staged plan
 
-- [x] **#1 — accurate object positions.** `perception/object_localizer.py` `localize_objects_3d()`
-  (reuses `grasp_point_from_rgbd`: detect→segment→depth→world centroid, SysNav-style) wired into
-  `skills/go2/look.py` observe path → scene graph stores real `(x,y)`. Offline-verified (18 tests,
-  no sim). **E2E in the real sim PENDING (needs Yusen's sim).** ← verify this first on resume.
-- [ ] **#2 — `navigate_to_object(object)` tool.** Bridge: object name → `SceneGraph.find_objects_by_category`
-  → world `(x,y)` → `base.navigate_to(x,y)` to the vicinity. No standalone bridge exists today
-  (D88); navigate only takes coordinate/room. Add as a skill the agent can call.
+- [x] **#1 — accurate object positions. REAL-SIM VERIFIED (D91, ed2e810).** `localize_objects_3d()`
+  wired into `look.py` → scene graph stores real `(x,y)`. Real sim: green/blue/red ~2.3-2.8 cm vs
+  MuJoCo GT; full look→scenegraph stores+persists; red-team CONFIRMED the narrow claim.
+  Bug found+fixed (only e2e caught it): localizer keyed by detector label ("a green bottle") not the
+  query → objects stored at (0,0); now keyed by input query. Harness: `tools/verify_localize_scenegraph.py`.
+- [~] **#2 — `navigate_to_object(object)` tool. BUILT + 9 offline tests (sim e2e PENDING).**
+  `skills/navigate_to_object.py`: object name → `find_objects_by_category` → nearest localized match →
+  delegate to NavigateSkill coordinate path (FAR + hold at vicinity). Registered in `get_go2_skills()`.
 - [ ] **#3 — arrival depth re-perceive + adjust, then grasp.** On arrival near the object, re-perceive
   with depth (`object_localizer`/`grasp_point`) to correct the position (arrival isn't exact), then
   approach+grasp (reuse R12 `perception_grasp`). NB: `perception_grasp` currently does NOT re-perceive
@@ -53,6 +54,22 @@ never used depth** — it passed object *names only*, so every object fell to `m
   `config/room_layout.yaml` (today only lazy inside explore). Add `config/worlds/<world>.yaml`
   (rooms/boundary/persistence/cameras — world-as-config, Rule 11; objects discovered not declared).
   Unify SceneGraph as the single object store (bridge/retire WorldModel + the paused SysNav bridge).
+
+## Open caveats / known issues (from #1 red-team — D91)
+
+- **Real GPT-4o VLM path unproven.** `look` with the real VLM failed on OpenRouter SSL/network;
+  only the stub-named path ran (localization itself was real). Re-run when network is up.
+- **bare-cli NL acceptance not yet exercised** (the non-negotiable face). The #1 harness hand-builds
+  the SkillContext to dodge a pre-existing `home` skill bug (`MuJoCoPiper.move_joints expected 6 got 5`)
+  in the planner/executor path. Fix that before the full "把绿色瓶子拿过来" NL flow can run end-to-end.
+- **`merge_object` x=0/y=0 sentinel trap** (`scene_graph.py:454`): a real object genuinely at the world
+  origin/axis, or look's `(name,0,0)` un-localized fallback, is silently kept at the zero/stale value
+  — the same bug class #1 kills. Not triggered by the bottles (x≈10.9). Hardening: merge None-sentinel
+  + look fallback emit None (coordinated 2-file fix) — DEFERRED.
+- **`find_objects_by_category` substring match** → "bottle" matches green+blue; merge dedups by exact
+  category → possible duplicate nodes at scale. Fine for distinct names now.
+- **Single viewpoint only.** #1 accuracy proven at the fixed spawn (~0.9 m, well-framed); other
+  poses/distances/occlusion/clutter untested. #3's arrival re-perceive is what handles inexact arrival.
 
 ## What already EXISTS (reuse, don't rebuild)
 
