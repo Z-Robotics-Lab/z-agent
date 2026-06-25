@@ -27,6 +27,7 @@ import pytest
 
 from vector_os_nano.skills.perception_grasp import (
     PerceptionGraspSkill,
+    _approach_and_seat,
     _grasp_ready_repose,
 )
 from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
@@ -159,30 +160,31 @@ def test_perception_grasp_source_has_no_plus_x_heading_fallback():
     assert "assume facing +x" not in src.lower(), (
         "the +X heading fallback is still present in PerceptionGraspSkill.execute"
     )
-    # And the seam is wired into execute().
-    assert "_grasp_ready_repose" in src, "re-pose seam not called from execute()"
+    # And the seat-approach (which runs the re-pose seam + stall-seat creep) is
+    # wired into execute() as the out-of-reach final hop (D95).
+    assert "_approach_and_seat" in src, "seat-approach not called from execute()"
+    # The re-pose seam itself lives in the unified seat-approach helper.
+    seat_src = inspect.getsource(_approach_and_seat)
+    assert "_grasp_ready_repose" in seat_src, "re-pose seam not in the seat-approach"
 
 
 # ---------------------------------------------------------------------------
-# 4. nav-approach recovery (D94) — when the vgraph planner bails to a tight
-#    near-obstacle standoff and leaves the dog far away, the scripted forward
-#    creep must recover; on a SUCCESSFUL nav-approach the guard must NOT fire.
+# 4. final-hop seat-approach (D95) — the flaky vgraph nav-approach for the last
+#    hop is RETIRED. The scripted re-pose + stall-seating creep is now the primary
+#    (and only) final-hop mechanism for every base: it must creep forward (vx>0)
+#    and must NOT route through the planner (navigate_to), whose intermittent
+#    bail-to-far / seat-short was the remaining grasp failure mode.
 # ---------------------------------------------------------------------------
 
-class _NavBase:
-    """Base double with ``navigate_to``; scripts its result + where it leaves the dog.
+class _SeatBase:
+    """Base double recording walks; advances forward each vx>0 walk so the creep can
+    stall-seat. Exposes ``navigate_to`` (counted) to PROVE the seat-approach no longer
+    routes through the planner. ``walk`` integrates vx along the (fixed) +X heading."""
 
-    ``navigate_to`` records the call, teleports the scripted pose to ``land_pos``
-    (mimicking the planner's terminal pose), and returns the scripted ``nav_ok``.
-    ``walk`` records (vx, vy, vyaw, dur) so a test can detect the scripted forward
-    creep (a vx>0 walk) the recovery issues.
-    """
-
-    def __init__(self, *, nav_ok, land_pos, start_pos=(10.0, 3.0), heading=0.0):
-        self._nav_ok = nav_ok
-        self._land = list(land_pos)
+    def __init__(self, *, start_pos=(10.0, 3.0), heading=0.0, table_x=10.46):
         self._pos = list(start_pos)
         self._heading = heading
+        self._table_x = table_x  # the dog body jams here (table edge)
         self.walks: list[tuple[float, float, float, float]] = []
         self.nav_calls: list[tuple[float, float, float]] = []
 
@@ -194,47 +196,46 @@ class _NavBase:
 
     def navigate_to(self, x, y, tol=0.1):
         self.nav_calls.append((x, y, tol))
-        self._pos = list(self._land)
-        return self._nav_ok
+        return True
 
     def walk(self, vx=0.0, vy=0.0, vyaw=0.0, duration=1.0):
         self.walks.append((float(vx), float(vy), float(vyaw), float(duration)))
+        # Integrate forward motion along +X, jamming at the table edge (stall).
+        if vx > 0.0:
+            self._pos[0] = min(self._table_x, self._pos[0] + vx * duration)
+        self._pos[1] += vy * duration
         return True
 
 
-def test_nav_approach_recovers_when_planner_bails_far():
-    """navigate_to returns False and dumps the dog 4 m past the object (the observed
-    ~40% catastrophic failure) -> the scripted forward creep MUST run (a vx>0 walk)."""
-    from vector_os_nano.skills.perception_grasp import _approach_via_nav
+def test_seat_approach_creeps_forward_and_does_not_call_navigate_to():
+    """From the head-on perceive standoff the seat-approach must creep forward (a vx>0
+    walk) and must NOT hand the final hop to the planner (navigate_to), whose flaky
+    bail-to-far was the failure mode D95 retires."""
+    from vector_os_nano.skills.perception_grasp import _approach_and_seat
 
     obj = (10.86, 3.00)
-    base = _NavBase(nav_ok=False, land_pos=(14.40, 4.11), start_pos=(10.00, 3.00))
-    _approach_via_nav(base, obj)
+    base = _SeatBase(start_pos=(9.90, 3.00), heading=0.0)  # ~0.96 m head-on
+    _approach_and_seat(base, obj)
 
-    assert base.nav_calls, "navigate_to was not attempted"
-    # Recovery fired: the scripted _approach_object issued at least one forward walk.
     assert any(vx > 0.0 for (vx, _vy, _vyaw, _d) in base.walks), (
-        "scripted forward-creep recovery did not run after the planner bailed"
+        "the scripted forward seat-creep did not run"
+    )
+    assert not base.nav_calls, (
+        f"the final hop still routed through navigate_to (calls={base.nav_calls})"
     )
 
 
-def test_nav_approach_no_recovery_when_planner_lands_at_standoff():
-    """navigate_to succeeds and leaves the dog AT the aligned standoff -> the guard
-    must NOT fire (no scripted forward creep), preserving the proven path."""
-    from vector_os_nano.skills.perception_grasp import (
-        _GRASP_STANDOFF_M,
-        _approach_via_nav,
-    )
+def test_seat_approach_seats_against_the_table_edge():
+    """The creep must drive the dog forward to the table-edge jam (its repeatable,
+    IK-reachable standoff), not stop short at the far perceive pose."""
+    from vector_os_nano.skills.perception_grasp import _approach_and_seat
 
     obj = (10.86, 3.00)
-    standoff = (obj[0] - _GRASP_STANDOFF_M, obj[1])  # dog on the -x side
-    base = _NavBase(nav_ok=True, land_pos=standoff, start_pos=(9.80, 3.00),
-                    heading=0.0)
-    _approach_via_nav(base, obj)
+    base = _SeatBase(start_pos=(9.90, 3.00), heading=0.0, table_x=10.46)
+    _approach_and_seat(base, obj)
 
-    assert base.nav_calls, "navigate_to was not attempted"
-    # No forward creep: the dog is at the standoff and already faces +X toward the
-    # object, so neither the recovery nor _face_object should issue a vx>0 walk.
-    assert all(vx == 0.0 for (vx, _vy, _vyaw, _d) in base.walks), (
-        f"the recovery fired on a successful nav-approach (walks={base.walks})"
+    # The dog advanced from 9.90 toward the table edge (proven standoff ~10.46),
+    # closing most of the gap rather than stalling at the far perceive distance.
+    assert base.get_position()[0] > 10.30, (
+        f"the dog did not seat near the table edge (ended x={base.get_position()[0]:.2f})"
     )

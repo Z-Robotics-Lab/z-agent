@@ -442,22 +442,11 @@ def _grasp_ready_repose(
     return True
 
 
-# R12 — obstacle-aware nav-approach. Target dog→object standoff for navigate_to: deep in
-# the Piper top-down IK reach band (measured wide ~0.24-0.54 m; aligned, the standoff
-# reaches across ±8° heading and ±0.06 m lateral — tools/_ik_align_tol.py). navigate_to's
-# vgraph keeps the dog clear of the inflated table, so the achievable standoff is
-# table-limited (~0.42 m); the short post-approach dock closes the navigate undershoot.
-_GRASP_STANDOFF_M = 0.40
-_FACE_TOL_RAD = 0.08      # final heading alignment (the IK envelope is for a head-on dog)
+# Final heading-alignment tolerance for _face_object (the Piper top-down IK envelope
+# is sized for a dog standing HEAD-ON, facing the object). Tighter than the
+# approach-loop yaw band so the forward-mounted arm points square at the target.
+_FACE_TOL_RAD = 0.08
 _FACE_VYAW_MAX = 0.6
-# Max distance (m) the dog may end FROM the intended nav-approach standoff before the
-# nav-approach is treated as FAILED. The vgraph planner intermittently cannot reach a
-# standoff this close to the INFLATED table obstacle (object cell + _GO2_BODY_RADIUS):
-# it returns False and leaves the dog far away (observed ~40% of runs: navigate_to ->
-# False, dog 4 m PAST the object → the grasp then fails out-of-reach). When the dog
-# lands farther than this from the standoff, recover with the scripted forward creep
-# (no planner) which closes the gap from the head-on pose navigate_to_object already set.
-_NAV_APPROACH_MAX_OFF = 0.35
 
 
 def _face_object(base: Any, target_xy: tuple[float, float], *, max_turns: int = 4) -> None:
@@ -487,56 +476,38 @@ def _face_object(base: Any, target_xy: tuple[float, float], *, max_turns: int = 
             return
 
 
-def _approach_via_nav(base: Any, grasp_xy: tuple[float, float]) -> bool:
-    """OBSTACLE-AWARE approach (R12): navigate to an ALIGNED, reachable standoff, then face.
+def _approach_and_seat(base: Any, grasp_xy: tuple[float, float]) -> bool:
+    """FINAL-HOP approach: scripted re-pose + stall-seating creep (D95).
 
-    Computes a HEAD-ON standoff — on the object's y-LINE, _GRASP_STANDOFF_M in front of it
-    on the dog's side in x (the forward-mounted Piper must approach square; its lateral
-    grasp window is narrow) — drives there via ``base.navigate_to`` (the visibility-graph
-    planner routes AROUND the table + furniture, no ramming), then turns to face the
-    object. The dog ends aligned within the IK reach band; the caller's short post-approach
-    dock closes the navigate undershoot. World-agnostic: uses navigate_to / walk / get_position.
+    The dog reaches here already routed head-on to the perceive standoff (~0.95 m) by
+    ``navigate_to_object``'s vgraph plan, with clear line-of-sight to the table. The
+    remaining short hop to the IK-reachable standoff is the FLAKIEST link when handed
+    back to the vgraph planner (the prior ``_approach_via_nav`` path): targeting a
+    standoff this close to the inflated table obstacle, ``navigate_to`` intermittently
+    (a) returns False and dumps the dog metres PAST the object, or (b) returns True at a
+    sub-optimally-seated pose a few cm short of the THIN Piper forward-reach band → IK
+    still fails. The scripted forward creep ``_approach_object`` instead stall-SEATS the
+    dog against the table edge — a kinematically-pinned standoff, repeatable run-to-run
+    and independent of planner variance — the proven, most-reliable terminal placement
+    (it is exactly what the no-navigate_to path already used, D34-D51).
 
-    RECOVERY (D94): the vgraph planner intermittently CANNOT reach a standoff this close to
-    the inflated table obstacle — it returns False and leaves the dog far away (observed:
-    navigate_to -> False, dog 4 m PAST the object), and the grasp then fails out-of-reach.
-    So we VERIFY the dog actually landed near the standoff; if not, fall back to the scripted
-    open-loop forward creep ``_approach_object`` (no planner — the dog has clear LOS to the
-    object, navigate_to_object already routed it head-on). Strictly additive: on a SUCCESSFUL
-    nav-approach the dog is at the standoff and the guard does NOT fire, so the proven path is
-    byte-unchanged. Returns True iff the dog ended near the aligned standoff (or recovery ran).
+    So the scripted seat-creep is now the PRIMARY (and only) final-hop mechanism for
+    every base — unifying the two former approach branches onto ONE impl (Rule 11):
+        1. ``_grasp_ready_repose`` — turn to FACE the object + close any standoff gap
+           (a benign no-op when already head-on, as it is after navigate_to_object).
+        2. ``_approach_object``    — open-loop forward creep that stall-seats at the
+           table edge (steers heading + lateral each step; the proven repeatable pose).
+        3. ``_face_object``        — final tight heading align before the grasp.
+    World-agnostic: uses only the base's walk / get_position / get_heading surface;
+    each step gracefully no-ops if that surface is absent. Always returns True (the
+    approach ran best-effort; the caller's post-approach nudge + IK gate are the
+    acceptance, not this return value).
     """
     gx, gy = float(grasp_xy[0]), float(grasp_xy[1])
-    try:
-        pos = base.get_position()
-    except Exception:  # noqa: BLE001
-        return False
-    # Head-on: stand on the object's y-line, _GRASP_STANDOFF_M in front on the dog's x-side.
-    sx = gx - _GRASP_STANDOFF_M if pos[0] <= gx else gx + _GRASP_STANDOFF_M
-    sy = gy
-    logger.info("[PGRASP] nav-approach: head-on standoff (%.2f,%.2f) for grasp (%.2f,%.2f)",
-                sx, sy, gx, gy)
-    try:
-        ok = base.navigate_to(sx, sy, tol=0.12)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("[PGRASP] nav-approach navigate_to raised: %s", exc)
-        ok = False
-    try:
-        now = base.get_position()
-        off = math.hypot(float(now[0]) - sx, float(now[1]) - sy)
-    except Exception:  # noqa: BLE001
-        now, off = None, 0.0
-    logger.info("[PGRASP] nav-approach: navigate_to -> %s, now at %s (off standoff=%.2fm)",
-                ok, now, off)
-    if not ok or off > _NAV_APPROACH_MAX_OFF:
-        # The planner bailed / left the dog far from the standoff — recover with the
-        # scripted forward creep (stall-detected, no planner). This is what rescues the
-        # ~40% of runs where navigate_to to the tight near-obstacle standoff fails.
-        logger.warning(
-            "[PGRASP] nav-approach did NOT reach the standoff (ok=%s, off=%.2fm) — "
-            "scripted forward-creep recovery toward the object (%.2f,%.2f)",
-            ok, off, gx, gy)
-        _approach_object(base, (gx, gy), max_walks=20)
+    logger.info("[PGRASP] seat-approach: scripted re-pose + stall-seat creep to (%.2f,%.2f)",
+                gx, gy)
+    _grasp_ready_repose(base, (gx, gy), clearance=_REPOSE_CLEARANCE_M)
+    _approach_object(base, (gx, gy), max_walks=30)
     _face_object(base, (gx, gy))
     return True
 
@@ -755,20 +726,15 @@ class PerceptionGraspSkill:
         # proven compute_approach_pose. Runs only when out of reach (a perfectly
         # placed dog needs no re-pose).
         if base is not None and arm.ik_top_down((gp.x, gp.y, gp.z + _PRE_GRASP_H)) is None:
-            if callable(getattr(base, "navigate_to", None)):
-                # R12 — OBSTACLE-AWARE approach to an ALIGNED, reachable standoff via
-                # base.navigate_to (visibility-graph planner routes AROUND the table +
-                # furniture — no ramming; the navigate mj_forward race that hung this path
-                # is fixed). The dog ends head-on on the object's y-line; the short
-                # post-approach dock below closes the last few cm to the IK-reach standoff.
-                logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — nav-approach",
-                            resolved, gp.x, gp.y)
-                _approach_via_nav(base, (gp.x, gp.y))
-            else:
-                logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — re-pose + approach",
-                            resolved, gp.x, gp.y)
-                _grasp_ready_repose(base, (gp.x, gp.y), clearance=_REPOSE_CLEARANCE_M)
-                _approach_object(base, (gp.x, gp.y), max_walks=30)
+            # D95 — the dog arrived head-on at the ~0.95 m perceive standoff (routed by
+            # navigate_to_object's vgraph), out of IK reach. Close the final hop with the
+            # SCRIPTED re-pose + stall-seating creep — the proven, planner-variance-free
+            # terminal placement — for EVERY base (one impl, Rule 11). This replaces the
+            # flaky vgraph nav-approach for the last hop (it intermittently dumped the dog
+            # metres past the object or seated a few cm short of the thin reach band).
+            logger.info("[PGRASP] %s out of reach @ (%.2f,%.2f) — scripted seat-approach",
+                        resolved, gp.x, gp.y)
+            _approach_and_seat(base, (gp.x, gp.y))
             approached = True
 
         # Post-approach nudge: if the approach stall fired short of the true reach
