@@ -15,7 +15,19 @@ import pytest
 
 from vector_os_nano.core.scene_graph import ObjectNode, SceneGraph
 from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.skills.navigate_to_object import NavigateToObjectSkill
+from vector_os_nano.skills.navigate_to_object import (
+    NavigateToObjectSkill,
+    _VICINITY_CLEARANCE_M,
+)
+
+
+def _assert_standoff(nav_calls, obj_xy):
+    """The single navigate_to target is a standoff at the vicinity clearance from
+    the object (never the object centre — that cell is an inflated obstacle)."""
+    assert len(nav_calls) == 1
+    tx, ty = nav_calls[0]
+    d = ((tx - obj_xy[0]) ** 2 + (ty - obj_xy[1]) ** 2) ** 0.5
+    assert d == pytest.approx(_VICINITY_CLEARANCE_M, abs=1e-3)
 
 
 class _FakeBase:
@@ -61,7 +73,7 @@ def test_navigates_to_localized_object():
     sg = _sg_with([("green bottle", 10.88, 3.00)])
     res = NavigateToObjectSkill().execute({"object": "green bottle"}, _ctx(base, sg))
     assert res.success, res.error_message
-    assert base.nav_calls == [(10.88, 3.00)]
+    _assert_standoff(base.nav_calls, (10.88, 3.00))
     assert res.result_data["matched_category"] == "green bottle"
     assert res.result_data["object_world"] == [10.88, 3.0]
 
@@ -72,7 +84,7 @@ def test_substring_category_match():
     sg = _sg_with([("green bottle", 10.88, 3.00)])
     res = NavigateToObjectSkill().execute({"object": "bottle"}, _ctx(base, sg))
     assert res.success
-    assert base.nav_calls == [(10.88, 3.00)]
+    _assert_standoff(base.nav_calls, (10.88, 3.00))
 
 
 def test_picks_nearest_among_matches():
@@ -80,8 +92,8 @@ def test_picks_nearest_among_matches():
     sg = _sg_with([("green bottle", 5.0, 5.0), ("blue bottle", 1.5, 1.0)])
     res = NavigateToObjectSkill().execute({"object": "bottle"}, _ctx(base, sg))
     assert res.success
-    # nearest to (1,1) is the blue bottle at (1.5,1.0)
-    assert base.nav_calls == [(1.5, 1.0)]
+    # nearest to (1,1) is the blue bottle at (1.5,1.0); drive to its standoff
+    _assert_standoff(base.nav_calls, (1.5, 1.0))
     assert res.result_data["matched_category"] == "blue bottle"
 
 
@@ -134,4 +146,4 @@ def test_accepts_query_alias():
     sg = _sg_with([("red can", 10.90, 3.22)])
     res = NavigateToObjectSkill().execute({"query": "red can"}, _ctx(base, sg))
     assert res.success
-    assert base.nav_calls == [(10.90, 3.22)]
+    _assert_standoff(base.nav_calls, (10.90, 3.22))

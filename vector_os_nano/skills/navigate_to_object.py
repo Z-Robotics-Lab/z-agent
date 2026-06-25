@@ -26,6 +26,7 @@ from typing import Any
 from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
 from vector_os_nano.skills.navigate import NavigateSkill, _distance
+from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,13 @@ logger = logging.getLogger(__name__)
 # treated as "not localized yet" (the merge_object x=y=0.0 default), mirroring
 # pick.py's abs()>0.01 guard.
 _COORD_EPS_M: float = 0.01
+
+# We navigate to a STANDOFF this far in front of the object (toward the robot),
+# never the object centre: the object is an inflated obstacle to the planner
+# (_GO2_BODY_RADIUS=0.28 m), so its exact cell is UNREACHABLE. The standoff is
+# safely outside the inflation and leaves the object in camera view for the
+# downstream arrival re-perceive + grasp (#3, which docks the final few cm).
+_VICINITY_CLEARANCE_M: float = 0.7
 
 
 def _accept_object_name(params: dict) -> str:
@@ -151,27 +159,41 @@ class NavigateToObjectSkill:
                 -getattr(o, "confidence", 0.0),
             ),
         )
-        tx, ty = float(target_obj.x), float(target_obj.y)
+        ox, oy = float(target_obj.x), float(target_obj.y)
+        oz = float(getattr(target_obj, "z", 0.0))
+
+        # Compute a reachable standoff in front of the object (toward the robot);
+        # the object centre itself is inside an inflated obstacle and unreachable.
+        yaw = float(context.base.get_heading()) if hasattr(context.base, "get_heading") else 0.0
+        try:
+            sx, sy, _syaw = compute_approach_pose(
+                (ox, oy, oz), (rx, ry, yaw), clearance=_VICINITY_CLEARANCE_M,
+            )
+        except ValueError:
+            # Robot XY already on the object — nothing to drive; report arrival.
+            sx, sy = ox, oy
         logger.info(
-            "[NAV-OBJ] %r -> object %r in %s @ (%.2f, %.2f)",
-            obj_name, target_obj.category, getattr(target_obj, "room_id", "?"), tx, ty,
+            "[NAV-OBJ] %r -> object %r in %s @ (%.2f, %.2f); standoff (%.2f, %.2f)",
+            obj_name, target_obj.category, getattr(target_obj, "room_id", "?"),
+            ox, oy, sx, sy,
         )
 
-        # Delegate the drive to NavigateSkill's coordinate path (FAR planner +
-        # hold at vicinity). Reuse, don't reimplement.
-        nav_result = NavigateSkill().execute({"x": tx, "y": ty}, context)
+        # Delegate the drive to NavigateSkill's coordinate path (planner + hold at
+        # vicinity). Reuse, don't reimplement.
+        nav_result = NavigateSkill().execute({"x": sx, "y": sy}, context)
 
         # Enrich the result with the object metadata so the agent/loop sees what
-        # it actually drove to.
+        # it actually drove to (distance is measured to the OBJECT, not the standoff).
         rd: dict[str, Any] = dict(getattr(nav_result, "result_data", None) or {})
         final_pos = context.base.get_position()
         rd.update({
             "object": obj_name,
             "matched_category": target_obj.category,
-            "object_world": [round(tx, 3), round(ty, 3)],
+            "object_world": [round(ox, 3), round(oy, 3)],
+            "standoff": [round(sx, 3), round(sy, 3)],
             "room": getattr(target_obj, "room_id", ""),
             "distance_to_object": round(
-                _distance(float(final_pos[0]), float(final_pos[1]), tx, ty), 2
+                _distance(float(final_pos[0]), float(final_pos[1]), ox, oy), 2
             ),
         })
         return SkillResult(
