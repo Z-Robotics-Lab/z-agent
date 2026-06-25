@@ -1,3 +1,8 @@
+# ⏸ LOOP PAUSED — 2026-06-25 — Yusen is MANUALLY testing.
+# Do NOT launch any sim/measure, do NOT reschedule a wakeup. If a scheduled
+# wakeup fires: nuke any stray sim, acknowledge, and STOP (no new sim). Resume
+# ONLY when Yusen re-runs /loop or says to continue.
+
 # Vector OS — STATUS (resume anchor)
 
 One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUDE.md](../CLAUDE.md)
