@@ -40,7 +40,18 @@ _COORD_EPS_M: float = 0.01
 # (_GO2_BODY_RADIUS=0.28 m), so its exact cell is UNREACHABLE. The standoff is
 # safely outside the inflation and leaves the object in camera view for the
 # downstream arrival re-perceive + grasp (#3, which docks the final few cm).
-_VICINITY_CLEARANCE_M: float = 0.7
+#
+# 0.95 m (D94), raised from 0.70 m: the downstream perception_grasp PERCEIVES at
+# this arrival pose, and the forward head camera looks OVER the low table object
+# when the dog is too CLOSE (pitch framing — turning to scan cannot recover it).
+# Real-sim measurement: arrivals < ~0.8 m → perception scan finds nothing at all 6
+# headings → grasp fails (the dominant fetch failure). FAR/vgraph arrival overshoots
+# the standoff toward the object by up to ~0.05 m and undershoots by up to ~0.20 m,
+# so a 0.70 m standoff lands the dog in ~[0.66, 0.90] m (the close end fails); 0.95 m
+# lands it in ~[0.90, 1.15] m, the empirically well-framed band where perception
+# succeeds. perception_grasp's nav-approach + scripted-creep recovery then closes the
+# extra distance to the grasp standoff, so reach is unaffected.
+_VICINITY_CLEARANCE_M: float = 0.95
 
 
 def _accept_object_name(params: dict) -> str:
