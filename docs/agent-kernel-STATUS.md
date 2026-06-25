@@ -6,7 +6,9 @@
 #   ~2.5cm vs MuJoCo GT, full look->scenegraph stores+persists; red-team CONFIRMED the
 #   narrow claim. Found+fixed a real bug only e2e caught: localize_objects_3d keyed by
 #   detector label ("a green bottle") not the query -> objects stored at (0,0).
-# #2 navigate_to_object built + 9 offline tests green (sim e2e PENDING). Branch arch/plug-and-play.
+# #2 navigate_to_object REAL-SIM VERIFIED (D92, c4cf5cc): drives dog 2.67m->0.95m to the
+#   named green bottle (GT-measured); targets a 0.7m standoff (object cell is an inflated
+#   obstacle). 9 offline tests. NEXT: #3 arrival depth re-perceive + grasp. Branch arch/plug-and-play.
 # OPEN CAVEATS (D91): real GPT-4o VLM path unproven (OpenRouter SSL down); merge_object
 #   x=0/y=0 sentinel trap latent; bare-cli NL acceptance bypassed (home 5-vs-6 joint bug).
 

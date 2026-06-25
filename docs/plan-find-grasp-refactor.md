@@ -39,10 +39,12 @@ never used depth** — it passed object *names only*, so every object fell to `m
   MuJoCo GT; full look→scenegraph stores+persists; red-team CONFIRMED the narrow claim.
   Bug found+fixed (only e2e caught it): localizer keyed by detector label ("a green bottle") not the
   query → objects stored at (0,0); now keyed by input query. Harness: `tools/verify_localize_scenegraph.py`.
-- [~] **#2 — `navigate_to_object(object)` tool. BUILT + 9 offline tests (sim e2e PENDING).**
+- [x] **#2 — `navigate_to_object(object)` tool. REAL-SIM VERIFIED (D92, c4cf5cc).**
   `skills/navigate_to_object.py`: object name → `find_objects_by_category` → nearest localized match →
-  delegate to NavigateSkill coordinate path (FAR + hold at vicinity). Registered in `get_go2_skills()`.
-- [ ] **#3 — arrival depth re-perceive + adjust, then grasp.** On arrival near the object, re-perceive
+  `compute_approach_pose` 0.7m standoff (object cell is an inflated obstacle) → NavigateSkill coordinate
+  path. Registered in `get_go2_skills()`. Real sim: dog 2.67m→0.95m to green bottle (GT-measured).
+  Harness `tools/verify_navigate_to_object.py`. 9 offline tests.
+- [ ] **#3 — arrival depth re-perceive + adjust, then grasp.** ← NEXT On arrival near the object, re-perceive
   with depth (`object_localizer`/`grasp_point`) to correct the position (arrival isn't exact), then
   approach+grasp (reuse R12 `perception_grasp`). NB: `perception_grasp` currently does NOT re-perceive
   after the approach (explicit comment) — this stage adds that.
