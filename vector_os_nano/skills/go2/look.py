@@ -16,6 +16,7 @@ import numpy as np  # noqa: F401 — used by callers for frame type
 
 from vector_os_nano.core.skill import SkillContext, skill
 from vector_os_nano.core.types import SkillResult
+from vector_os_nano.perception.object_localizer import localize_objects_3d
 
 logger = logging.getLogger(__name__)
 
@@ -105,13 +106,36 @@ class LookSkill:
         # DetectedObject instances — the latter trips a `.lower()` call deep
         # in the scene-graph merge pipeline.
         object_names: list[str] = [obj.name for obj in scene.objects]
+
+        # Attempt to lift each object to its accurate world position via the
+        # depth→world pipeline.  Falls back gracefully to names-only when
+        # perception is unavailable or returns no usable depth points.
+        world_positions: dict[str, tuple[float, float, float]] = {}
+        if context.perception is not None:
+            try:
+                loc_results = localize_objects_3d(context.perception, object_names)
+                world_positions = {label: (x, y, z) for label, x, y, z in loc_results}
+            except Exception as exc:
+                logger.debug("[LOOK] object localization failed: %s", exc)
+
         spatial_memory = context.services.get("spatial_memory")
         if spatial_memory is not None:
             try:
                 if hasattr(spatial_memory, "observe_with_viewpoint"):
+                    # Build detected_objects with per-object world XY when available.
+                    # observe_with_viewpoint takes (category, obj_x, obj_y) 2-D tuples.
+                    detected_objects: list[tuple[str, float, float]] | None = None
+                    if world_positions:
+                        detected_objects = [
+                            (name, world_positions[name][0], world_positions[name][1])
+                            if name in world_positions
+                            else (name, 0.0, 0.0)
+                            for name in object_names
+                        ]
                     spatial_memory.observe_with_viewpoint(
                         room, float(pos[0]), float(pos[1]),
                         float(heading), object_names, scene.summary,
+                        detected_objects=detected_objects,
                     )
                 else:
                     spatial_memory.visit(room, float(pos[0]), float(pos[1]))
@@ -126,11 +150,22 @@ class LookSkill:
         # Return plain dicts (JSON-serialisable) rather than frozen
         # DetectedObject dataclass instances so downstream consumers
         # (YAML persist, LLM tool responses) don't trip on class lookup.
+        # Include world coordinates when available so the agent/tool response
+        # surfaces real positions rather than zeros.
         objects_data: list[dict[str, Any]] = [
             {
                 "name": obj.name,
                 "description": obj.description,
                 "confidence": obj.confidence,
+                **(
+                    {
+                        "world_x": world_positions[obj.name][0],
+                        "world_y": world_positions[obj.name][1],
+                        "world_z": world_positions[obj.name][2],
+                    }
+                    if obj.name in world_positions
+                    else {}
+                ),
             }
             for obj in scene.objects
         ]

@@ -1,7 +1,8 @@
-# ⏸ LOOP PAUSED — 2026-06-25 — Yusen is MANUALLY testing.
-# Do NOT launch any sim/measure, do NOT reschedule a wakeup. If a scheduled
-# wakeup fires: nuke any stray sim, acknowledge, and STOP (no new sim). Resume
-# ONLY when Yusen re-runs /loop or says to continue.
+# >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
+# Loop STOPPED (no autonomous wakeups). A fresh session drives this. RESUME FROM:
+#   docs/plan-find-grasp-refactor.md  (staged plan; stage #1 DONE offline)
+#   + DECISIONS D88/D89/D90 + this file + git log.
+# Do NOT run sim until Yusen frees it (he tests manually). Branch arch/plug-and-play.
 
 # Vector OS — STATUS (resume anchor)
 
