@@ -75,6 +75,28 @@ class HomeSkill:
                 result_data={"diagnosis": "no_arm"},
             )
 
+        # DoF-aware (Rule 11): the default home pose is the 5-DoF SO-101 pose. A
+        # different arm (e.g. the 6-DoF Piper) has a different DoF, so a fixed-length
+        # pose is rejected by move_joints ("expected 6 positions, got 5") — the bug
+        # that blocked the bare-`vector-cli` + NL fetch path through the planner/
+        # executor. If the configured pose length doesn't match THIS arm's DoF, fall
+        # back to the URDF-zero neutral home (`[0.0]*dof`, exactly what the arm's own
+        # home() uses, e.g. MuJoCoPiper.home()). SO-101 (5==5) is byte-identical —
+        # this branch never fires for it.
+        arm_dof = getattr(context.arm, "dof", None)
+        if arm_dof is None:
+            try:
+                arm_dof = len(context.arm.get_joint_positions())
+            except Exception:  # noqa: BLE001
+                arm_dof = len(home_joints)
+        if len(home_joints) != arm_dof:
+            home_joints = [0.0] * int(arm_dof)
+            logger.info(
+                "[HOME] configured home pose len != arm DoF (%s); "
+                "using URDF-zero neutral home",
+                arm_dof,
+            )
+
         logger.info("[HOME] Moving to home pose: %s", home_joints)
         success = context.arm.move_joints(home_joints, duration=_HOME_DURATION)
 
