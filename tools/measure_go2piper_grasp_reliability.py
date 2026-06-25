@@ -44,8 +44,22 @@ def main() -> int:
             )
             line = next((ln for ln in p.stdout.splitlines() if ln.startswith("RESULT ")), None)
             rec.update(json.loads(line[len("RESULT "):]) if line else {"evidence": "NO_RESULT"})
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as te:
             rec["evidence"] = "TIMEOUT"
+            # Capture WHAT the run was doing when it timed out (diagnose over-detect vs
+            # an early/infra hang). TimeoutExpired carries the partial stdout/stderr.
+            partial = ((te.stdout or "") + "\n" + (te.stderr or ""))
+            if isinstance(partial, bytes):
+                partial = partial.decode("utf-8", "replace")
+            tail = [ln for ln in partial.splitlines()
+                    if any(k in ln for k in ("skill", "strateg", "detect", "look",
+                                             "describe", "perception_grasp", "PGRASP",
+                                             "step", "RESULT"))]
+            rec["timeout_tail"] = tail[-12:]
+            rec["timeout_skill_counts"] = {
+                k: partial.count(k) for k in ("perception_grasp", "look", "describe_scene",
+                                              "detect", "navigate", "pick_top_down")
+            }
         except Exception as exc:  # noqa: BLE001
             rec["evidence"] = "ORCH_ERROR"
             rec["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
