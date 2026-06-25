@@ -261,13 +261,27 @@ def test_localize_multiple_different_queries():
     assert len(results) == 2
 
 
-def test_localize_deduplicates_same_label_across_queries():
-    """Two queries that map to the same label → only one entry in output."""
-    perc = _StubPerception(label="can")
-    # Both queries produce detections labelled "can"
+def test_localize_keys_result_by_query_not_detector_label():
+    """Regression (real-sim bug): grounding-dino returns labels like
+    'a green bottle' for the query 'green bottle'.  The result MUST be keyed by
+    the input QUERY so callers (look skill) can map their requested name ->
+    position; keying by det.label stored every looked object at (0, 0).
+    """
+    perc = _StubPerception(label="a green bottle")  # detector label != query
+    results = localize_objects_3d(perc, ["green bottle"])
+    assert len(results) == 1
+    assert results[0][0] == "green bottle"  # the QUERY, not "a green bottle"
+
+
+def test_localize_keys_each_distinct_query_independently():
+    """Each distinct query is localized and keyed by the QUERY string, even when
+    the detector returns the same label for both (query-keyed contract — no
+    cross-query dedup by detector label)."""
+    perc = _StubPerception(label="can")  # detector labels everything "can"
     results = localize_objects_3d(perc, ["can", "metal can"])
-    labels = [r[0] for r in results]
-    assert labels.count("can") == 1
+    keys = {r[0] for r in results}
+    assert keys == {"can", "metal can"}
+    assert len(results) == 2
 
 
 # ---------------------------------------------------------------------------

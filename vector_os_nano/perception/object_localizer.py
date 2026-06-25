@@ -63,9 +63,11 @@ def localize_objects_3d(
          grasp_point_from_rgbd to obtain a world-frame Pose3D.
       4. Emit (label, float(x), float(y), float(z)).
 
-    Deduplicates by label: only the highest-confidence detection per label
-    is kept.  Multiple queries producing the same label are also deduped (the
-    first world point wins, as that comes from the highest-score detection).
+    Results are keyed by the input QUERY string (the caller's handle), not the
+    detector's returned label — grounding-dino returns labels like "a green
+    bottle" for the query "green bottle", and callers map their requested name
+    back to a position.  Each distinct query is localized once, using the
+    highest-confidence detection that yields a valid world point.
 
     Args:
         perception: A Go2GraspPerception-like object with the required API.
@@ -99,6 +101,14 @@ def localize_objects_3d(
     results: dict[str, tuple[str, float, float, float]] = {}
 
     for query in queries:
+        # Key results by the QUERY (the caller's handle), NOT the detector's
+        # returned label.  grounding-dino returns strings like "a green bottle"
+        # for the query "green bottle", and callers (e.g. the look skill) map
+        # their requested NAME -> position.  Keying by det.label silently breaks
+        # that mapping and stores objects at (0, 0) — the real-sim bug this
+        # contract guards against.  Each distinct query is localized once.
+        if query in results:
+            continue
         try:
             detections = perception.detect(query)
         except Exception as exc:
@@ -109,18 +119,13 @@ def localize_objects_3d(
             logger.debug("[OBJ-LOC] no detections for %r", query)
             continue
 
-        # detections are sorted by confidence descending (grounding-dino contract).
+        # detections are sorted by confidence descending (grounding-dino contract);
+        # take the highest-confidence detection that yields a valid world point.
         for det in detections:
-            label: str = det.label if det.label else query
-            # Skip if we already have a world point for this label
-            # (first = highest-confidence detection wins).
-            if label in results:
-                continue
-
             try:
                 mask = perception.segment(color, det.bbox)
                 if mask is None:
-                    logger.debug("[OBJ-LOC] segment returned None for %r", label)
+                    logger.debug("[OBJ-LOC] segment returned None for %r", query)
                     continue
 
                 world = grasp_point_from_rgbd(
@@ -130,21 +135,21 @@ def localize_objects_3d(
                     logger.debug(
                         "[OBJ-LOC] grasp_point_from_rgbd returned None for %r "
                         "(too few depth points in mask)",
-                        label,
+                        query,
                     )
                     continue
 
-                results[label] = (label, float(world.x), float(world.y), float(world.z))
+                results[query] = (query, float(world.x), float(world.y), float(world.z))
                 logger.debug(
                     "[OBJ-LOC] localised %r → (%.3f, %.3f, %.3f)",
-                    label, world.x, world.y, world.z,
+                    query, world.x, world.y, world.z,
                 )
-                # Found a good point for this label; move to next query.
+                # Found a good point for this query; move to the next.
                 break
 
             except Exception as exc:
                 logger.debug(
-                    "[OBJ-LOC] per-object localization failed for %r: %s", label, exc
+                    "[OBJ-LOC] per-object localization failed for %r: %s", query, exc
                 )
                 continue
 
