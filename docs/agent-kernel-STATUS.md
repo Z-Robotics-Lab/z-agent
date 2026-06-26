@@ -1,33 +1,25 @@
 # >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
-# Sim is FREE now (nuked). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D97 + git log.
-# >> D97 (90dd65c) — BARE-CLI FOUNDATION FIXED (Yusen-found; my stub harness missed it). Yusen tested bare
-#   vector-cli: scene graph ALL objects at (0,0). Root: _start_go2 set agent._perception=None → look never
-#   localized; explore passed coord-less dicts (dead+raised); look's (0,0) fallback polluted the graph. FIX:
-#   guarded _build_go2_perception(base) wired into _start_go2 + in-process --sim-go2 (single-sourced); explore
-#   depth-localizes (cat,x,y) tuples; look stores localized-only. REAL-VERIFY via the ACTUAL launcher
-#   (SimStartTool._start_go2): look stores green/blue/red <3cm vs GT, none at (0,0). LESSON: bare-cli is the
-#   ONLY acceptance — verify through the real launcher, never a hand-built/stub perception.
-#   RESIDUAL: live-VLM naming was stubbed (network fake-IP) — real-VLM e2e "把绿色瓶子拿过来" is the NEXT round.
-# #1 object positions VERIFIED (D91). #2 navigate_to_object VERIFIED (D92). #3 pipeline COMPOSES e2e (D93).
-# Grasp reliability RAISED to 0.833 (D94/D95) then PLATEAUED -> pivoted down the backlog.
-# >> THIS round (backlog #2; code commit 064294f WIP + this RECORD): `home` 5-vs-6 DoF bug FIXED + REAL-SIM
-#   VERIFIED on the actual 6-DoF Piper. The hard-coded 5-DoF SO-101 home pose crashed
-#   Agent.execute_skill('home') -> move_joints('expected 6 positions, got 5'); since a trailing `home` step is
-#   appended to manip plans, this crashed the WHOLE planner/executor path -> the bare-vector-cli + NL fetch was
-#   bypassed. FIX (skills/home.py, Rule 11 — no per-robot code): len(configured_pose)!=arm.dof -> URDF-zero neutral
-#   [0.0]*dof (what MuJoCoPiper.home() uses); SO-101 (5==5) byte-identical. REAL-VERIFY (tools/verify_home_dof.py,
-#   real go2+Piper sim, the ONLY acceptance): drove the arm away then ran the previously-crashing execute_skill
-#   ('home') -> GoalExecutor -> HomeSkill -> real 6-DoF move_joints -> NO crash, success=True/completed, executor
-#   "Step s1 (home) OK in 3.023s", arm reached near-neutral (max|q|<0.05), overall_pass=true, exit 0; log confirms
-#   the DoF-aware branch fired. +4 regression unit tests (tests/unit/skills/test_home_dof.py, green). Spine untouched.
-# NEXT round (non-gated): the home blocker is gone, so drive the full fetch "把绿色瓶子拿过来" through the BARE
-#   `vector-cli` REPL by NL end-to-end (look->navigate_to_object->perception_grasp->home) and add THAT bare-cli e2e
-#   as the TRUE acceptance (harnesses are internal only, the non-negotiable face). Watch for model-routing variance.
-#   Then backlog #3: merge_object x=0/y=0 sentinel trap (scene_graph.py:454 + look.py fallback, coordinated 2-file
-#   fix + regression test). Don't touch spine. #4/#5 are CEO GATES. Branch arch/plug-and-play.
-# OPEN CAVEATS: real GPT-4o VLM path unproven (network); merge_object x=0/y=0 sentinel trap latent (backlog #3);
-#   bare-cli full-fetch NL acceptance now UNBLOCKED but not yet exercised end-to-end (next round). Grasp plateau ~0.83
-#   (1 perception-framing + 1 terminal-grasp per ~12; no single dominant mode left to cheaply remove).
+# Sim is FREE now (no mujoco). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D98 + git log.
+# >> THIS round (backlog #3; commit e762f12): merge_object x=0/y=0 SENTINEL TRAP FIXED. Backlog #1 (live-model
+#   bare-cli full-fetch e2e, TOP priority) was NETWORK-BLOCKED — DeepSeek http=000 + GPT-4o 421 (VPN fake-IP);
+#   per loop discipline pivoted to the offline backlog #3 (same bug class as the D97 (0,0) catastrophe).
+#   FIX (scene_graph.py merge_object, spine untouched): the `x=x if x!=0.0 else existing.x` merge silently kept a
+#   STALE pos when a real obs localized an object at the world origin / on the x=0|y=0 axis. Switched the sentinel
+#   to None: None = no new localization (keep existing on merge, default 0.0 on new); a real float INCL 0.0 always
+#   applied. Caller audit: all internal (649/708/744 coord-less; 701/738 coord-bearing) + test callers behavior-
+#   preserved; only the genuine-0.0 case changes (was buggy). VERIFY = TDD (the honest verification for a pure
+#   in-memory data-store fix, no sim-observable behavior): RED 3 origin cases failed → GREEN all 6 pass; 100
+#   scene-graph + 175 core/perception/skills tests green, no regressions. tests/unit/core/test_merge_object_origin_sentinel.py.
+# PRIOR: D97 (90dd65c) perception wired into the real go2 launcher (look/explore depth-localize, no (0,0) pollution),
+#   real-verify via the ACTUAL launcher (<3cm vs GT). #1 positions VERIFIED (D91). #2 navigate_to_object (D92).
+#   #3 pipeline COMPOSES e2e (D93). Grasp reliability RAISED to 0.833 (D94/D95) then PLATEAUED. home 5-vs-6 DoF FIXED (D96).
+# NEXT round (non-gated): backlog #1 — drive the FULL fetch "把绿色瓶子拿过来" through the BARE `vector-cli` REPL by NL
+#   end-to-end via the LIGHT in-process --sim-go2 path (tools/verify_fetch_cli.py EXISTS, WIP eddf8ad) — but ONLY
+#   when network is up (needs DeepSeek routing + GPT-4o VLM naming; both down this round). If still network-down,
+#   re-measure grasp reliability via the OFFLINE tools/measure_fetch_reliability.py (no model needed). Spine untouched.
+#   #4 (find_objects_by_category substring) speculative — only if it bites at scale. #4-ext-explore / #5-store-unify = CEO GATES.
+# OPEN CAVEATS: live-model bare-cli full-fetch e2e (backlog #1) still UNRUN — network-blocked (DeepSeek + GPT-4o down).
+#   Grasp plateau ~0.83 (1 perception-framing + 1 terminal-grasp per ~12). merge_object sentinel trap now FIXED (D98).
 
 # Vector OS — STATUS (resume anchor)
 

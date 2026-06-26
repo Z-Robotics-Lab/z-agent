@@ -89,10 +89,10 @@ never used depth** — it passed object *names only*, so every object fell to `m
 - **bare-cli NL acceptance not yet exercised** (the non-negotiable face). The `home` 5-vs-6 DoF bug that
   blocked the planner/executor path is now FIXED + real-verified (D96), so the full "把绿色瓶子拿过来" NL
   flow can run end-to-end — that bare-cli e2e is the next non-gated chunk (the harnesses are internal only).
-- **`merge_object` x=0/y=0 sentinel trap** (`scene_graph.py:454`): a real object genuinely at the world
-  origin/axis, or look's `(name,0,0)` un-localized fallback, is silently kept at the zero/stale value
-  — the same bug class #1 kills. Not triggered by the bottles (x≈10.9). Hardening: merge None-sentinel
-  + look fallback emit None (coordinated 2-file fix) — DEFERRED.
+- **`merge_object` x=0/y=0 sentinel trap** (`scene_graph.py:458`): FIXED (D98, e762f12). The merge now
+  uses a `None` sentinel (`x: float|None=None`) so a real object genuinely at the world origin/axis is
+  applied, not discarded; coordinate-less merges keep the existing pose. look's `(0,0)` fallback was
+  already removed D97. +6 regression unit tests; 100 scene-graph + 175 core/perception/skills green.
 - **`find_objects_by_category` substring match** → "bottle" matches green+blue; merge dedups by exact
   category → possible duplicate nodes at scale. Fine for distinct names now.
 - **Single viewpoint only.** #1 accuracy proven at the fixed spawn (~0.9 m, well-framed); other
