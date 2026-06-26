@@ -47,7 +47,12 @@ def measure(command: str, *, n: int, snapshot_dir: str, timeout: float = 280.0) 
         "grounded": grounded,
         "grounded_rate": round(grounded / n, 3) if n else 0.0,
         "vision_pass": sum(1 for r in recs if r["vision"].get("witness") == "PASS"),
-        "disagreements": sum(1 for r in recs if r["disagreement"]),
+        # The false-green catch: count ONLY trials the GT oracle GROUNDED yet the eyes object to
+        # (vision FAIL/ABSTAIN or a temporal motion disagreement on a "verified" turn). A failed
+        # trial is already not-acceptance (REJECT) — re-flagging it would be noise, not the D91-D95
+        # convincing-but-wrong signal this number exists to surface. >0 here => red-team before
+        # believing the grounded_rate.
+        "disagreements": sum(1 for r in recs if r["gt"]["verified"] and r["disagreement"]),
         "accept": sum(1 for r in recs if r["decision"] == "ACCEPT"),
         "red_flag": sum(1 for r in recs if r["decision"] == "RED_FLAG"),
     }

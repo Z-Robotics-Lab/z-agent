@@ -1,5 +1,9 @@
 # >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
-# Sim is FREE now (no mujoco). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D98 + git log.
+# Sim is FREE now (no mujoco). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D99 + git log.
+# >> EYES NOW IN THE LOOP (ADR-002, D99): per-round REAL-VERIFY = tools/acceptance/measure_fetch_visual.py
+#   (GT oracle + visual witness + temporal). `disagreements>0` (a GROUNDED turn the eyes object to) => red-team
+#   BEFORE trusting grounded_rate. Gate semantics corrected: a GT-FAIL is NOT a vision disagreement (orthogonal
+#   rubric is silent on success) — only GT-PASS+vision-FAIL is. See DECISIONS D99.
 # >> THIS round (backlog #3; commit e762f12): merge_object x=0/y=0 SENTINEL TRAP FIXED. Backlog #1 (live-model
 #   bare-cli full-fetch e2e, TOP priority) was NETWORK-BLOCKED — DeepSeek http=000 + GPT-4o 421 (VPN fake-IP);
 #   per loop discipline pivoted to the offline backlog #3 (same bug class as the D97 (0,0) catastrophe).

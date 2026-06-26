@@ -40,18 +40,25 @@ def decide(gt_verified: bool, vision_witness: str | None) -> AcceptanceDecision:
     """Combine the frozen GT verdict with the visual witness. Vision can only DOWNGRADE.
 
     Truth table:
-      GT fail   + any vision           -> REJECT (vision never rescues; GT-fail+vision-PASS is the
-                                          over-claim class, logged to harden the rubric)
+      GT fail   + any vision           -> REJECT (vision never rescues; NOT a disagreement — the
+                                          orthogonal rubric is silent on task success, see below)
       GT pass   + vision None          -> ACCEPT_WITH_WARNING (coverage gap)
       GT pass   + vision PASS          -> ACCEPT
       GT pass   + vision FAIL/ABSTAIN  -> RED_FLAG (disagreement -> red-team, block headline)
     """
     if not gt_verified:
+        # GT-fail is REJECT regardless of vision, and it is NOT an oracle-vs-vision disagreement:
+        # the visual rubric is ORTHOGONAL to task success (upright/floating, rendered/black,
+        # body-intact, workspace-in-frame) — a vision PASS only says "the scene rendered and the
+        # robot looks fine", it never claims the task succeeded, so it cannot contradict a GT fail.
+        # The disagreement that matters is the INVERSE (GT pass + vision FAIL: "oracle says success
+        # but the picture looks wrong"), handled below. Flagging GT-fail+vision-PASS here would
+        # red-team every ordinary failed-but-rendered trial = noise, not signal.
         return AcceptanceDecision(
             decision=REJECT,
             gt_verified=False,
             vision_witness=vision_witness,
-            disagreement=(vision_witness == _PASS),
+            disagreement=False,
             needs_red_team=False,
             block_headline=True,
             reason="GT oracle did not verify — vision can never rescue a fail",
