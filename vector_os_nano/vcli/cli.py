@@ -1841,6 +1841,22 @@ def _build_turn_context(
     )
 
 
+def _safe_verdict_snapshot(agent: Any) -> None:
+    """Best-effort same-process visual snapshot at verdict time (ADR-002 visual acceptance).
+
+    PNG-only, env-gated by ``VECTOR_SNAPSHOT_DIR``. It is handed ONLY the agent (never the
+    ``VerdictReport``) so it CANNOT change the verdict, and any failure is swallowed here as
+    defense-in-depth over ``capture.snapshot_on_verdict`` (which is itself non-raising). The
+    capture module is imported lazily so non-sim turns never pay the cost.
+    """
+    try:
+        from vector_os_nano.acceptance import capture
+
+        capture.snapshot_on_verdict(agent)
+    except Exception:  # noqa: BLE001 — a snapshot must NEVER affect the turn / verdict
+        pass
+
+
 def run_one_turn(args: Any) -> int:
     """Run ONE turn for ``args.print_prompt`` non-interactively and return an exit code.
 
@@ -1862,7 +1878,12 @@ def run_one_turn(args: Any) -> int:
     prompt = args.print_prompt
     emit_json = bool(getattr(args, "json", False))
 
-    def _emit(report: "VerdictReport") -> int:
+    def _emit(report: "VerdictReport", agent: Any = None) -> int:
+        # ADR-002 visual acceptance: a same-process, env-gated PNG snapshot. Inert by
+        # construction (it is not given the report, and never raises); only fires on paths
+        # that carry a connected sim agent. NEVER reorder before computing the verdict.
+        if agent is not None:
+            _safe_verdict_snapshot(agent)
         if emit_json:
             # The ONE machine line on real stdout (Rich/banner are on stderr).
             print(report.to_sentinel_line(), flush=True)
@@ -1914,7 +1935,7 @@ def run_one_turn(args: Any) -> int:
                 report = VerdictReport.from_trace(trace, oracle_names)
             except Exception as exc:  # noqa: BLE001
                 report = VerdictReport.no_trace(goal=prompt or "", error=f"verdict failed: {exc}")
-            return _emit(report)
+            return _emit(report, agent=getattr(engine, "_vgg_agent", None))
         # Native took NO action -> fall through to the legacy block (no return here).
 
     # M1 strangler-fig (flag-gated, default OFF): the frontier-model NATIVE
@@ -1933,7 +1954,7 @@ def run_one_turn(args: Any) -> int:
             report = VerdictReport.from_trace(trace, oracle_names)
         except Exception as exc:  # noqa: BLE001
             report = VerdictReport.no_trace(goal=prompt or "", error=f"verdict failed: {exc}")
-        return _emit(report)
+        return _emit(report, agent=getattr(engine, "_vgg_agent", None))
 
     # Decompose + execute SYNCHRONOUSLY. A non-VGG (chat / tool_use) route yields
     # no GoalTree -> no deterministic trace -> NO_TRACE (fail closed, exit 1).
@@ -1958,7 +1979,7 @@ def run_one_turn(args: Any) -> int:
     except Exception as exc:  # noqa: BLE001
         report = VerdictReport.no_trace(goal=goal_tree.goal, error=f"verdict failed: {exc}")
 
-    return _emit(report)
+    return _emit(report, agent=getattr(engine, "_vgg_agent", None))
 
 
 def main(argv: list[str] | None = None) -> None:
