@@ -4,6 +4,11 @@
 #   (GT oracle + visual witness + temporal). `disagreements>0` (a GROUNDED turn the eyes object to) => red-team
 #   BEFORE trusting grounded_rate. Gate semantics corrected: a GT-FAIL is NOT a vision disagreement (orthogonal
 #   rubric is silent on success) — only GT-PASS+vision-FAIL is. See DECISIONS D99.
+# >> LIVE EYES-VERIFIED BASELINE (2026-06-26, OpenRouter routing, N=5 "把绿色的瓶子拿过来"): grounded_rate=0.8
+#   (4/5), vision_pass=5, DISAGREEMENTS=0 (no false-greens — eyes agree with the GT oracle on every success);
+#   I read a grounded frame = real Go2+arm grasp at the table. CAVEAT (honest): temporal=None on all 4 grounded
+#   trials — the 1-step perception_grasp routing captures <2 strip frames, so the temporal motion witness fires
+#   only on the slower failed trial; GT weld (holding_object) + spatial vision still cover success.
 # >> THIS round (backlog #3; commit e762f12): merge_object x=0/y=0 SENTINEL TRAP FIXED. Backlog #1 (live-model
 #   bare-cli full-fetch e2e, TOP priority) was NETWORK-BLOCKED — DeepSeek http=000 + GPT-4o 421 (VPN fake-IP);
 #   per loop discipline pivoted to the offline backlog #3 (same bug class as the D97 (0,0) catastrophe).
