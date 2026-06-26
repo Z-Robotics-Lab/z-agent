@@ -843,6 +843,16 @@ def _init_agent(args: argparse.Namespace) -> Any:
             except Exception:
                 agent._vlm = None
 
+        # Real RGB-D + detector + segmenter perception over the in-process base
+        # so look/explore can depth-localize VLM-named objects to accurate world
+        # (x, y, z).  Single-sourced with the ROS2 NL launcher via
+        # _build_go2_perception (Rule 3/11) — guarded: leaves perception None
+        # when the base has no camera, never crashing the launch.
+        from vector_os_nano.vcli.tools.sim_tool import _build_go2_perception
+        agent._perception = _build_go2_perception(base)
+        if agent._perception is not None:
+            console.print(f"[dim]  Perception: RGB-D detector + segmenter[/dim]")
+
 
         # Scene graph (SysNav-style) with persistence
         import os as _os

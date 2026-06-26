@@ -55,6 +55,55 @@ def locate_mjpython(executable: str | None = None) -> str | None:
     return shutil.which("mjpython")
 
 
+# Frame-source methods a base must expose for Go2GraspPerception to localize.
+_GO2_PERCEPTION_FRAME_METHODS = (
+    "get_camera_frame",
+    "get_depth_frame",
+    "get_camera_pose",
+)
+
+
+def _build_go2_perception(base: Any) -> Any:
+    """Build a Go2GraspPerception over *base*, or None when *base* has no camera.
+
+    Single source of truth for wiring real RGB-D + detector + segmenter
+    perception onto a Go2-class base, shared by BOTH the ROS2 NL launcher
+    (SimStartTool._start_go2) and the in-process ``--sim-go2`` launcher
+    (cli._init_simulation) so the two can never drift (Rule 3/11).
+
+    GUARD: only constructs perception when *base* exposes the full RGB-D frame
+    source (get_camera_frame / get_depth_frame / get_camera_pose).  A base
+    without a camera (or any construction failure) returns None so a launch is
+    never crashed and non-perception embodiments stay unaffected — exactly the
+    behaviour the previous explicit ``agent._perception = None`` provided.
+
+    Args:
+        base: A connected Go2-class base (MuJoCoGo2 / Go2ROS2Proxy).
+
+    Returns:
+        A Go2GraspPerception instance, or None when the base lacks a camera.
+    """
+    if base is None:
+        return None
+    for meth in _GO2_PERCEPTION_FRAME_METHODS:
+        if not callable(getattr(base, meth, None)):
+            logger.debug(
+                "[sim_tool] base lacks %s — leaving perception None "
+                "(no depth localization)", meth,
+            )
+            return None
+    try:
+        from vector_os_nano.perception.go2_grasp_perception import (
+            Go2GraspPerception,
+        )
+        return Go2GraspPerception(base)
+    except Exception as exc:  # noqa: BLE001 — never crash a launch on perception
+        logger.warning(
+            "[sim_tool] Go2GraspPerception unavailable (%s) — perception None", exc,
+        )
+        return None
+
+
 @tool(
     name="start_simulation",
     description="Start a robot simulation (arm or go2 quadruped) with isaac, mujoco, or gazebo backend. No restart needed.",
@@ -546,13 +595,16 @@ class SimStartTool:
             except Exception as exc:
                 logger.warning("[sim_tool] demo-populate failed: %s", exc)
 
-        # Go2 perception is sourced from the SysNav sibling workspace via the
-        # sysnav_bridge adapter (vector_os_nano/integrations/sysnav_bridge/).
-        # We do NOT instantiate an in-process VLM detector here; the bridge
-        # populates world_model when SysNav publishes /object_nodes_list.
-        # Until the bridge is wired (v2.4), agent._perception stays None and
-        # MobilePick returns object_not_found against an empty world_model.
-        agent._perception = None
+        # Go2 perception: wire the REAL RGB-D + detector + segmenter backend
+        # (Go2GraspPerception) over the connected base so look/explore can
+        # depth-localize VLM-named objects to accurate world (x, y, z) via
+        # localize_objects_3d.  Previously left None, which made every looked /
+        # auto-observed object fall back to the names-only path with NO real
+        # coordinate.  GUARD: only wire when the base actually exposes the RGB-D
+        # frame source (get_camera_frame/get_depth_frame/get_camera_pose); a
+        # base without a camera leaves perception None so the launch never
+        # crashes and non-perception embodiments are unaffected.
+        agent._perception = _build_go2_perception(base)
         agent._calibration = None
 
         # Go2 skills

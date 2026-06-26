@@ -471,6 +471,15 @@ def test_look_skill_passes_detected_objects_when_perception_present():
     assert apple_entry[1] == pytest.approx(1.1, abs=1e-6)
     assert apple_entry[2] == pytest.approx(2.2, abs=1e-6)
 
+    # Regression: 'cup' was reported by the VLM but NOT localized (the patched
+    # localize_objects_3d returns only 'apple').  It must NOT appear in
+    # detected_objects with a fake (0, 0) position — un-localized objects are
+    # never stored at the origin (scene-graph pollution bug).
+    cup_entry = next((t for t in detected if t[0] == "cup"), None)
+    assert cup_entry is None, (
+        "un-localized 'cup' must not be passed with a fake (0,0) position"
+    )
+
 
 def test_look_skill_passes_detected_objects_none_when_perception_absent():
     """Without perception, observe_with_viewpoint is called with

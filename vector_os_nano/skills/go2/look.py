@@ -122,15 +122,21 @@ class LookSkill:
         if spatial_memory is not None:
             try:
                 if hasattr(spatial_memory, "observe_with_viewpoint"):
-                    # Build detected_objects with per-object world XY when available.
+                    # Build detected_objects from ONLY the successfully-localized
+                    # objects (those with a real world XY).  An UN-localized
+                    # object is never given a fake (0, 0) position — that would
+                    # pollute the scene graph and be mistaken downstream
+                    # (navigate_to_object / pick use an abs(x)>0.01 or abs(y)>0.01
+                    # localized-check) for a known position at the origin.
+                    # Un-localized names are re-recorded (with a real position)
+                    # on the next look/explore once depth yields a usable point.
                     # observe_with_viewpoint takes (category, obj_x, obj_y) 2-D tuples.
                     detected_objects: list[tuple[str, float, float]] | None = None
                     if world_positions:
                         detected_objects = [
                             (name, world_positions[name][0], world_positions[name][1])
-                            if name in world_positions
-                            else (name, 0.0, 0.0)
                             for name in object_names
+                            if name in world_positions
                         ]
                     spatial_memory.observe_with_viewpoint(
                         room, float(pos[0]), float(pos[1]),

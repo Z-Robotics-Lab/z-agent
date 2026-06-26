@@ -340,56 +340,57 @@ class TestAutoObserveConcept:
         assert _vlm is None  # skip condition confirmed
 
     def test_observe_with_viewpoint_called_on_success(self):
-        """Mock scene_graph.observe_with_viewpoint is called with correct args."""
-        mock_sg = MagicMock()
-        mock_vlm = MagicMock()
-        import numpy as np
+        """observe_with_viewpoint accepts (category, x, y) 3-tuples on a REAL
+        SceneGraph and stores the object at its localized world position.
 
-        desc_mock = MagicMock()
-        desc_mock.summary = "living room view"
-        mock_vlm.describe_scene.return_value = desc_mock
+        Hardened against the original bug: the auto-observe hook used to build
+        ``detected_objects`` as a list of DICTS ({'category','confidence'}) and
+        pass them to observe_with_viewpoint, whose contract unpacks
+        ``for category, obj_x, obj_y in detected_objects`` (3-tuples).  Dicts
+        iterate to their keys -> ValueError, which the hook's try/except
+        swallowed so explore stored NOTHING.  A MagicMock never caught this;
+        this test drives a real SceneGraph so the tuple contract is enforced.
+        """
+        from vector_os_nano.core.scene_graph import SceneGraph
 
-        sofa_obj = MagicMock()
-        sofa_obj.name = "sofa"
-        sofa_obj.confidence = 0.85
-        mock_vlm.find_objects.return_value = [sofa_obj]
-        mock_sg.should_add_viewpoint.return_value = True
-
-        # Simulate the hook logic
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        current_room = "living_room"
-        x, y, heading = 1.0, 2.0, 0.0
-
-        if mock_vlm is not None and mock_sg.should_add_viewpoint(current_room, x, y):
-            try:
-                frame_cap = frame
-                desc_result = mock_vlm.describe_scene(frame_cap)
-                obj_result = mock_vlm.find_objects(frame_cap)
-                scene_summary = str(getattr(desc_result, "summary", ""))
-                detected = [
-                    {
-                        "category": str(getattr(o, "name", "")),
-                        "confidence": float(getattr(o, "confidence", 0.5)),
-                    }
-                    for o in (obj_result or [])
-                ]
-                object_names = [d["category"] for d in detected if d["category"]]
-                mock_sg.observe_with_viewpoint(
-                    room=current_room, x=x, y=y, heading=heading,
-                    objects=object_names,
-                    description=scene_summary,
-                    detected_objects=detected,
-                )
-            except Exception:
-                pass  # non-blocking
-
-        mock_sg.observe_with_viewpoint.assert_called_once_with(
+        sg = SceneGraph()
+        # The (cat, x, y) tuple shape the fixed hook now produces.
+        detected_objects = [("sofa", 1.5, 2.5)]
+        vp = sg.observe_with_viewpoint(
             room="living_room",
             x=1.0, y=2.0, heading=0.0,
             objects=["sofa"],
             description="living room view",
-            detected_objects=[{"category": "sofa", "confidence": 0.85}],
+            detected_objects=detected_objects,
         )
+        assert vp is not None
+        # The object is stored at its localized (1.5, 2.5), NOT a fake (0, 0).
+        objs = sg.find_objects_in_room("living_room")
+        sofa = next((o for o in objs if o.category == "sofa"), None)
+        assert sofa is not None
+        assert sofa.x == pytest.approx(1.5)
+        assert sofa.y == pytest.approx(2.5)
+
+    def test_observe_with_viewpoint_rejects_dict_detected_objects(self):
+        """Lock in WHY the fix was needed: the OLD dict-based detected_objects
+        form trips the 3-tuple-unpack contract and raises ValueError.
+
+        observe_with_viewpoint does ``for category, obj_x, obj_y in
+        detected_objects``; a dict iterates to its keys, so a list of dicts
+        cannot unpack to three values.  The hook used to swallow this, storing
+        nothing — this asserts the contract so a regression to dicts is caught.
+        """
+        from vector_os_nano.core.scene_graph import SceneGraph
+
+        sg = SceneGraph()
+        with pytest.raises(ValueError):
+            sg.observe_with_viewpoint(
+                room="kitchen",
+                x=1.0, y=2.0, heading=0.0,
+                objects=["cup"],
+                description="",
+                detected_objects=[{"category": "cup", "confidence": 0.9}],
+            )
 
     def test_observe_with_viewpoint_not_called_when_no_new_viewpoint(self):
         """Hook skips if should_add_viewpoint returns False."""
