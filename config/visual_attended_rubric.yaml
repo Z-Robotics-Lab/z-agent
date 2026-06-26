@@ -1,0 +1,16 @@
+# FROZEN attended-screen rubric (ADR-002 Stage 4). The LAUNCHER-TRUTH questions the vision judge
+# answers about a grab of the REAL :0 screen the owner watches. A launcher that CLAIMED a sim but
+# opened no window grabs as a plain desktop -> simulator_window_present=no -> caught. Orthogonal to
+# the GT oracle (which can't see "did a window actually open on the physical screen"). Editing to
+# WEAKEN a check is a moat change — version it, keep it out of the self-edit surface.
+version: 1
+items:
+  - key: simulator_window_present
+    question: >
+      Is a 3D physics-simulation window (e.g. a MuJoCo viewer showing a robot in a rendered 3D scene,
+      or an RViz 3D view) actually OPEN and visible on this screen? Answer 'no' if the screen shows
+      only a desktop / wallpaper / terminal / code editor / browser with NO 3D simulation window.
+  - key: robot_visible_on_screen
+    question: >
+      If a simulation window is open, is a robot (e.g. a four-legged dog or a robot arm) visible
+      inside a rendered 3D scene? Answer 'no' if there is no simulation window, or it is empty/black.

@@ -26,6 +26,7 @@ _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _JUDGE_MODEL = os.environ.get("VECTOR_JUDGE_MODEL", "openai/gpt-4o")
 _RUBRIC_PATH = Path(__file__).resolve().parents[2] / "config" / "visual_acceptance_rubric.yaml"
 _TEMPORAL_RUBRIC_PATH = Path(__file__).resolve().parents[2] / "config" / "visual_temporal_rubric.yaml"
+_ATTENDED_RUBRIC_PATH = Path(__file__).resolve().parents[2] / "config" / "visual_attended_rubric.yaml"
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -61,6 +62,11 @@ def load_rubric(path: str | os.PathLike | None = None) -> list[dict]:
 def load_temporal_rubric(path: str | os.PathLike | None = None) -> list[dict]:
     """Load the frozen TEMPORAL (montage) rubric items (ADR-002 Stage 3)."""
     return _load_rubric_file(Path(path) if path else _TEMPORAL_RUBRIC_PATH)
+
+
+def load_attended_rubric(path: str | os.PathLike | None = None) -> list[dict]:
+    """Load the frozen ATTENDED (real-screen launcher-truth) rubric items (ADR-002 Stage 4)."""
+    return _load_rubric_file(Path(path) if path else _ATTENDED_RUBRIC_PATH)
 
 
 def _encode_full_res(image_path: str | os.PathLike) -> str:
@@ -176,6 +182,37 @@ def judge(
         b64 = _encode_full_res(image_path)
         prompt = _build_prompt(items)
         raw = call(b64, prompt, model=model, api_key=api_key)
+    except Exception as exc:  # noqa: BLE001 — fail-closed: never a PASS on error
+        return VisionVerdict(witness=ABSTAIN, per_item=(), reasoning=f"judge unavailable: {exc}", model=model)
+    per = _parse(raw, items)
+    reasoning = "; ".join(f"{k}={a}" for k, a, _ in per)
+    return VisionVerdict(witness=_fold(per), per_item=per, reasoning=reasoning, model=model, raw=raw)
+
+
+def _build_attended_prompt(items: list[dict]) -> str:
+    lines = [
+        "You are a STRICT inspector of a SCREENSHOT of a real computer screen (a desktop that may or",
+        "may not have application windows open). Answer ONLY about what is VISIBLE. For EACH check",
+        "answer exactly 'yes', 'no', or 'abstain', with a one-sentence justification.",
+        'Return ONLY a JSON object: {"items": {"<key>": {"answer": "yes|no|abstain", "why": "..."}}}.',
+        "Checks:",
+    ]
+    for it in items:
+        lines.append(f'- {it["key"]}: {" ".join(str(it["question"]).split())}')
+    return "\n".join(lines)
+
+
+def judge_attended(image_path, *, items=None, model=None, api_key=None, call=None) -> VisionVerdict:
+    """Grade a grab of the REAL :0 screen against the attended/launcher-truth rubric (ADR-002 Stage 4).
+    Same fail-closed contract as ``judge``; never PASS on error. A bypassed launcher (no sim window on
+    screen) folds to FAIL via ``simulator_window_present=no``."""
+    items = items if items is not None else load_attended_rubric()
+    model = model or _JUDGE_MODEL
+    api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    call = call or _call_vlm
+    try:
+        b64 = _encode_full_res(image_path)
+        raw = call(b64, _build_attended_prompt(items), model=model, api_key=api_key)
     except Exception as exc:  # noqa: BLE001 — fail-closed: never a PASS on error
         return VisionVerdict(witness=ABSTAIN, per_item=(), reasoning=f"judge unavailable: {exc}", model=model)
     per = _parse(raw, items)

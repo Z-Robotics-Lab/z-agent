@@ -12,6 +12,7 @@ Heavy deps (cv2, mujoco) load lazily inside ``snapshot`` so importing this modul
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 from dataclasses import dataclass
 
@@ -212,6 +213,72 @@ def _sample_evenly(items: list, k: int) -> list:
         return items
     idxs = sorted({round(i * (n - 1) / (k - 1)) for i in range(k)})
     return [items[i] for i in idxs]
+
+
+# --- ATTENDED real-screen capture (ADR-002 Stage 4): grab the ACTUAL :0 display the owner watches
+# (the GUI MuJoCo viewer + RViz live there), via ImageMagick `import` / ffmpeg `x11grab`. This is the
+# "watch my screen" path — distinct from the offscreen-EGL render above. It also gives the
+# LAUNCHER-TRUTH witness: a bypassed launcher that claimed a sim but opened no window shows up as a
+# plain desktop grab (no simulator window), which the vision judge catches.
+
+
+def _xauthority() -> str | None:
+    """Best-effort X authority cookie for grabbing the real display (gdm puts it under XDG runtime)."""
+    for cand in (
+        os.environ.get("XAUTHORITY"),
+        f"/run/user/{os.getuid()}/gdm/Xauthority",
+        os.path.expanduser("~/.Xauthority"),
+    ):
+        if cand and os.path.exists(cand):
+            return cand
+    return None
+
+
+def _x_env(display: str) -> dict:
+    env = dict(os.environ)
+    env["DISPLAY"] = display
+    xa = _xauthority()
+    if xa:
+        env["XAUTHORITY"] = xa
+    return env
+
+
+def attended_snapshot(out_path: str, *, display: str = ":0", window: str = "root", timeout: float = 10.0) -> str | None:
+    """Grab the REAL screen on ``display`` (what the owner actually sees) via ImageMagick ``import``.
+    Captures the whole root window by default (the GUI viewer + RViz live there). Best-effort; returns
+    the path or ``None`` (never raises). Per-window targeting needs xdotool/wmctrl (absent) — root grab
+    + a layout-aware rubric is the no-apt path.
+    """
+    try:
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        r = subprocess.run(
+            ["import", "-window", window, "-silent", out_path],
+            env=_x_env(display), capture_output=True, timeout=timeout,
+        )
+        if r.returncode == 0 and os.path.exists(out_path):
+            return out_path
+    except Exception:  # noqa: BLE001 — capture is best-effort, never fatal
+        pass
+    return None
+
+
+def attended_record(out_path: str, dur: float, *, display: str = ":0", fps: int = 10,
+                    size: str | None = None, timeout: float | None = None) -> str | None:
+    """Record the REAL screen for ``dur`` seconds via ffmpeg ``x11grab`` (the screen-recording the
+    owner can review; catches the TIME COURSE the way attended_snapshot can't). None on failure.
+    """
+    try:
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "x11grab", "-framerate", str(fps)]
+        if size:
+            cmd += ["-video_size", size]
+        cmd += ["-i", display, "-t", str(dur), out_path]
+        r = subprocess.run(cmd, env=_x_env(display), capture_output=True, timeout=(timeout or dur + 20))
+        if r.returncode == 0 and os.path.exists(out_path):
+            return out_path
+    except Exception:  # noqa: BLE001
+        pass
+    return None
 
 
 def montage(frame_paths: list[str], out_path: str, cols: int = 4, max_frames: int = 12) -> str | None:

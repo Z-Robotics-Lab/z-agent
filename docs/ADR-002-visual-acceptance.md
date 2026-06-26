@@ -171,8 +171,16 @@ Per `rules/common/agents.md`, these cross the CEO gates and are queued, not cros
   is the sole authority on "did it move" and vision can only flag a DISAGREEMENT. Real-verified:
   a genuine 0.88m gait → vision PASS + pose-delta → AGREE; a 0.13m stuck-against-table shuffle →
   pose-delta "moved" but vision "not locomoting" → DISAGREEMENT flagged. Vision never the sole judge.
-- **Stage 4 (gated):** attended real-`:0` + RViz launcher-truth witness (a bypassed launcher caught
-  as window-never-opened).
+- **Stage 4 (gated): ✅ DONE (core).** Attended real-`:0` capture — `capture.attended_snapshot`
+  (ImageMagick `import -window root`) + `capture.attended_record` (ffmpeg `x11grab`) grab the ACTUAL
+  screen the owner watches; `vision_judge.judge_attended` (`config/visual_attended_rubric.yaml`) is the
+  LAUNCHER-TRUTH witness — a bypassed launcher that opened no window grabs as a desktop ->
+  `simulator_window_present=no` -> caught. `tools/acceptance/attended.py launcher_truth` ties it
+  together; `rviz_grab` launches+grabs RViz for attended ROS2 demos. Real-verified: `:0` grab
+  (2560x1600, non-black) + a 2s `:0` recording work; the judge PASSes a go2 render and FAILs a
+  non-sim image. The full grab-Yusen's-real-screen->VLM flow is owner-watched (his desktop is not
+  sent to the VLM by the build verify). RViz costmap/path demo needs the full ROS2 nav stack up
+  (deferred to an attended session). No-apt path (root grab); xdotool/wmctrl/Xvfb still optional.
 - **Stage 5 (gated):** the self-edit experiment loop (the `~/.claude` Workflow), AcceptanceGate as
   the commit gate, frozen surface read-only, never auto-merge master.
 
