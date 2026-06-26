@@ -144,5 +144,18 @@ def test_sim_patterns_target_sims_not_idle_repl():
     assert not matches("vector-cli")                                              # idle REPL
 
 
+def test_default_lock_path_is_home_independent(monkeypatch, tmp_path):
+    """Regression: the global lock must NOT move when HOME changes — pty_cli/sandbox harnesses
+    override HOME, and a ~-relative lock would split per sandbox and stop serializing."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setenv("HOME", "/some/sandbox/home")
+    monkeypatch.delenv("VECTOR_SIM_LOCK_PATH", raising=False)
+    p = str(sim_lock._default_lock_path())
+    assert "/some/sandbox/home" not in p and str(tmp_path) in p
+    # explicit override is honored
+    monkeypatch.setenv("VECTOR_SIM_LOCK_PATH", "/tmp/explicit_sim.lock")
+    assert str(sim_lock._default_lock_path()) == "/tmp/explicit_sim.lock"
+
+
 def test_live_sim_pids_excludes_self():
     assert os.getpid() not in sim_lock.live_sim_pids()

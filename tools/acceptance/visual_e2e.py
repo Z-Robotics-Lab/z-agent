@@ -43,7 +43,15 @@ def run_once(
     os.makedirs(snapshot_dir, exist_ok=True)
     for f in glob.glob(f"{snapshot_dir}/verdict_*.png"):
         os.remove(f)
-    env = {"VECTOR_SNAPSHOT_DIR": snapshot_dir, "MUJOCO_GL": "egl", "VECTOR_NO_ROS2": "1"}
+    # VECTOR_SIM_LOCK=1: the bare-cli child acquires the global one-sim lock (ADR-002 Stage 0), so
+    # every sim this harness drives serializes host-wide. The cli child is the SOLE lock owner — the
+    # harness does NOT also lock (that would deadlock its own child).
+    env = {
+        "VECTOR_SNAPSHOT_DIR": snapshot_dir,
+        "MUJOCO_GL": "egl",
+        "VECTOR_NO_ROS2": "1",
+        "VECTOR_SIM_LOCK": "1",
+    }
     r = run_cli_turn(
         command,
         sim_go2=sim_go2,

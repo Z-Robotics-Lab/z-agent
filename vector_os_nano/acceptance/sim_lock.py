@@ -36,8 +36,19 @@ import subprocess
 import time
 from pathlib import Path
 
-_LOCK_DIR = Path(os.path.expanduser("~/.claude/loops"))
-_DEFAULT_LOCK = _LOCK_DIR / "vector_sim.lock"
+def _default_lock_path() -> Path:
+    """Host-global, HOME-INDEPENDENT lock path. It MUST NOT live under ``~``: test/sandbox harnesses
+    (e.g. ``tests.harness.pty_cli``) override ``HOME``, so a ``~``-relative lock would split per
+    sandbox and STOP serializing the harness against real-HOME sims (the loop). Uses the per-user
+    runtime dir (tmpfs, always present on a logged-in host); override with ``VECTOR_SIM_LOCK_PATH``.
+    """
+    override = os.environ.get("VECTOR_SIM_LOCK_PATH")
+    if override:
+        return Path(override)
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime and os.path.isdir(runtime):
+        return Path(runtime) / "vector_sim.lock"
+    return Path(f"/tmp/vector_sim_{os.getuid()}.lock")
 # A live SIMULATOR (not an idle vector-cli REPL): an actual mujoco/explore process, or a cli launched
 # WITH a sim flag (`--sim` / `--sim-go2`). Bracket patterns so `pgrep -f` never matches its own (or
 # our) command line. NB: an in-process sim launched by NL inside a REPL (no `--sim` in argv) is not
@@ -119,7 +130,7 @@ def sim_lock(
     Raises ``SimBusy`` if neither the flock nor a clear host could be obtained in time (fail-loud,
     never silently run a 2nd concurrent sim). Teardown fires ONLY if we actually ran a sim.
     """
-    path = Path(lock_path) if lock_path else _DEFAULT_LOCK
+    path = Path(lock_path) if lock_path else _default_lock_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(path), os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o664)
     acquired = False

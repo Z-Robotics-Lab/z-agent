@@ -1857,6 +1857,40 @@ def _safe_verdict_snapshot(agent: Any) -> None:
         pass
 
 
+def _sim_lock_enabled(args: Any) -> bool:
+    """True when the global ONE-sim lock should wrap this turn — ``VECTOR_SIM_LOCK=1`` AND a sim is
+    launched (ADR-002 Stage 0). Default OFF: interactive ``vector-cli`` and the test suite are
+    unaffected; the EvolvingLoop and the acceptance harnesses opt in via the env so EVERY automated
+    sim serializes through this one owner (no double-lock: only the sim-running cli process holds it).
+    """
+    if os.environ.get("VECTOR_SIM_LOCK", "0").strip().lower() not in ("1", "true", "on", "yes"):
+        return False
+    return bool(getattr(args, "sim_go2", False) or getattr(args, "sim", False))
+
+
+def _hold_sim_lock_until_exit() -> None:
+    """Acquire the global one-sim lock for this process's lifetime (released + nuke-after at exit).
+
+    Raises ``sim_lock.SimBusy`` if the host cannot be cleared within ``VECTOR_SIM_LOCK_TIMEOUT`` (the
+    caller turns that into a fail-fast 'sim busy' verdict — never a silent 2nd concurrent sim).
+    """
+    import atexit
+
+    from vector_os_nano.acceptance import sim_lock
+
+    timeout = float(os.environ.get("VECTOR_SIM_LOCK_TIMEOUT", "600"))
+    cm = sim_lock.sim_lock(nuke_after=True, wait_timeout=timeout)
+    cm.__enter__()  # acquire flock + clear-host preflight; raises SimBusy on failure
+    atexit.register(lambda: _release_sim_lock(cm))
+
+
+def _release_sim_lock(cm: Any) -> None:
+    try:
+        cm.__exit__(None, None, None)
+    except Exception:  # noqa: BLE001 — release/teardown is best-effort at process exit
+        pass
+
+
 def run_one_turn(args: Any) -> int:
     """Run ONE turn for ``args.print_prompt`` non-interactively and return an exit code.
 
@@ -1893,6 +1927,17 @@ def run_one_turn(args: Any) -> int:
                 f"verified={report.verified} ({report.n_grounded}/{report.n_steps} grounded)"
             )
         return report.exit_code()
+
+    # ADR-002 Stage 0: serialize the global one-sim-at-a-time discipline when enabled (the loop /
+    # harnesses set VECTOR_SIM_LOCK=1). Acquire BEFORE building the sim; hold for the process; release
+    # + teardown at exit. Fail-fast (never run a 2nd concurrent sim) if the host can't be cleared.
+    if _sim_lock_enabled(args):
+        from vector_os_nano.acceptance.sim_lock import SimBusy
+
+        try:
+            _hold_sim_lock_until_exit()
+        except SimBusy as exc:
+            return _emit(VerdictReport.no_trace(goal=prompt or "", error=f"sim busy: {exc}"))
 
     try:
         ctx = _build_turn_context(args)
