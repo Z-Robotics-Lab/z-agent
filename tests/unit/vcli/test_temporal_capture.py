@@ -64,6 +64,23 @@ def test_montage_empty_is_none(tmp_path):
     assert capture.montage([], str(tmp_path / "m.png")) is None
 
 
+def test_sample_evenly_keeps_first_and_last():
+    s = capture._sample_evenly(list(range(100)), 5)
+    assert s[0] == 0 and s[-1] == 99 and len(s) <= 5
+
+
+def test_montage_caps_frame_count(tmp_path):
+    paths = []
+    for i in range(30):
+        p = str(tmp_path / f"f{i:03d}.png")
+        cv2.imwrite(p, np.full((10, 10, 3), (i * 5) % 255, np.uint8))
+        paths.append(p)
+    out = capture.montage(paths, str(tmp_path / "m.png"), cols=4, max_frames=12)
+    assert out is not None
+    img = cv2.imread(out)
+    assert img is not None and img.shape[0] <= 10 * 3  # <=12 frames at cols=4 -> at most 3 rows
+
+
 def test_judge_temporal_fail_closed_on_unreadable():
     v = vj.judge_temporal("/nonexistent/montage.png", call=lambda *a, **k: "{}")
     assert v.witness == vj.ABSTAIN

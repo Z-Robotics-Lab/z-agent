@@ -192,11 +192,23 @@ def load_strip(out_dir: str) -> list[dict]:
     return sorted(recs, key=lambda r: r.get("idx", 0))
 
 
-def montage(frame_paths: list[str], out_path: str, cols: int = 4) -> str | None:
-    """Tile frames (in order) into one grid image for the temporal VLM judge. None on failure."""
+def _sample_evenly(items: list, k: int) -> list:
+    """Down-sample ``items`` to at most ``k``, keeping the first + last and even spacing between."""
+    n = len(items)
+    if n <= k:
+        return items
+    idxs = sorted({round(i * (n - 1) / (k - 1)) for i in range(k)})
+    return [items[i] for i in idxs]
+
+
+def montage(frame_paths: list[str], out_path: str, cols: int = 4, max_frames: int = 12) -> str | None:
+    """Tile frames (in order) into one grid image for the temporal VLM judge. Down-samples to
+    ``max_frames`` evenly (keeping first+last) so a long turn never produces an oversized image the
+    VLM may choke on. None on failure."""
     try:
         import cv2
 
+        frame_paths = _sample_evenly(list(frame_paths), max_frames)
         imgs = [im for im in (cv2.imread(p) for p in frame_paths) if im is not None]
         if not imgs:
             return None

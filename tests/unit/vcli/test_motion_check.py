@@ -6,6 +6,8 @@ a disagreement — it is never the sole motion judge.
 """
 from __future__ import annotations
 
+import math
+
 from vector_os_nano.acceptance import motion_check as mc
 
 
@@ -46,3 +48,23 @@ def test_vision_abstain_on_moving_robot_is_disagreement():
     # couldn't confirm plausible motion on a robot the pose-delta says moved -> fail-closed flag
     v = mc.cross_check([{"x": 0, "y": 0}, {"x": 1, "y": 0}], "ABSTAIN")
     assert v.disagreement
+
+
+def test_excursion_robust_to_jitter():
+    # 10 frames jittering ~+/-0.01 around the origin: cumulative path accrues but the robot did NOT
+    # translate -> max excursion stays < eps -> hard_moved=False (the path-length jitter bug fixed).
+    jitter = [{"x": 0.01 * ((-1) ** i), "y": 0.0} for i in range(10)]
+    v = mc.cross_check(jitter, "FAIL")
+    assert not v.hard_moved
+    assert v.path_m > v.moved_m  # cumulative path overcounts the jitter the excursion ignores
+
+
+def test_excursion_catches_there_and_back():
+    v = mc.cross_check([{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 0, "y": 0}], "PASS")
+    assert v.hard_moved and v.moved_m >= 1.0  # net displacement is 0 but the excursion is 1m
+
+
+def test_nonfinite_poses_are_filtered():
+    track = [{"x": 0, "y": 0}, {"x": float("nan"), "y": 0}, {"x": float("inf"), "y": 0}, {"x": 1, "y": 0}]
+    v = mc.cross_check(track, "PASS")
+    assert math.isfinite(v.moved_m) and v.hard_moved  # NaN/inf dropped; the 0->1 move still counts
