@@ -5,30 +5,44 @@
 The host RAM (64 GB) is SHARED across sessions/loops and the documented #1 OOM cause is leaked /
 concurrent simulators (two go2 sims ~= 50 GB). This is the missing IN-CODE serialization point the
 repo lacked: an ``fcntl.flock`` on one host-wide lock file + a preflight that WAITS while any other
-sim (``mujoco`` / ``vcli``) is live or RAM is low, and a nuke-after teardown. Pure stdlib.
+sim is live or RAM is low, and a TARGETED teardown.
 
-Why flock (not a pidfile): an ``fcntl`` lock is bound to the process/open-file-description, so it
-AUTO-RELEASES when the holder dies — no stale-lock cleanup, no "the loop crashed and wedged the lock".
+Why flock (not a pidfile): a flock is bound to the open file description (OFD), so it releases when
+the last fd for that OFD closes — which the OS does on process death. The lock fd is opened
+``O_CLOEXEC`` and ``subprocess`` defaults ``close_fds=True``, so a spawned sim child never inherits
+it; thus "the lock releases when the holder dies" holds (no stale-lock cleanup, no pidfile).
 
 Usage:
     from vector_os_nano.acceptance import sim_lock
-    with sim_lock.sim_lock():           # blocks until the host is sim-free, up to wait_timeout
-        run_one_sim_turn()              # only OUR sim runs while we hold the lock
-    # -> on exit: rosm nuke --yes + pkill -9 -f mujoco, THEN the lock releases (next waiter proceeds)
+    with sim_lock.sim_lock():            # blocks until the host is sim-free, up to wait_timeout
+        run_one_sim_turn()               # only OUR sim runs while we hold the lock
+    # -> on exit: teardown of the sims WE started (targeted, not host-wide), then the lock releases.
+
+Safety invariants (see the adversarial review, ADR-002 Stage 0):
+  - Teardown fires ONLY if we actually RAN a sim (reached the ``yield``) — NEVER on a preflight
+    refusal, so refusing to run beside a live sim can never kill that sim.
+  - Teardown is TARGETED: it kills only sim processes that appeared AFTER we acquired (sparing any
+    pre-existing ``protected`` sim), not a host-wide ``pkill``.
+  - The mid-hold gap (a non-lock launcher, e.g. the EvolvingLoop, starting a sim WHILE we hold) is
+    closed only by that launcher ALSO taking this lock — the remaining adoption follow-up.
 """
 from __future__ import annotations
 
 import contextlib
 import fcntl
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
 
 _LOCK_DIR = Path(os.path.expanduser("~/.claude/loops"))
 _DEFAULT_LOCK = _LOCK_DIR / "vector_sim.lock"
-# Bracket patterns so `pgrep -f` never matches its OWN command line (the classic self-match trap).
-_SIM_PATTERNS = ("[m]ujoco", "[v]cli.cli", "[l]aunch_explore")
+# A live SIMULATOR (not an idle vector-cli REPL): an actual mujoco/explore process, or a cli launched
+# WITH a sim flag (`--sim` / `--sim-go2`). Bracket patterns so `pgrep -f` never matches its own (or
+# our) command line. NB: an in-process sim launched by NL inside a REPL (no `--sim` in argv) is not
+# detected by cmdline alone — that interactive case relies on the human pausing automated loops.
+_SIM_PATTERNS = ("[m]ujoco", "[-]-sim", "[l]aunch_explore")
 
 
 class SimBusy(RuntimeError):
@@ -36,11 +50,11 @@ class SimBusy(RuntimeError):
 
 
 def live_sim_pids(exclude: set[int] | None = None) -> list[int]:
-    """PIDs of live simulator/cli processes (mujoco|vcli|launch_explore), excluding self + ``exclude``.
+    """PIDs of live simulator processes, excluding self.
 
     Excludes ONLY our own PID (bracket patterns already prevent matching pgrep's/our cmdline). We do
-    NOT exclude the parent: a false-positive wait is safe, but masking a real sim that happens to be an
-    ancestor (false-negative) is exactly the OOM-unsafe direction this guard exists to prevent.
+    NOT exclude the parent: a false-positive wait is safe, but masking a real sim that happens to be
+    an ancestor (false-negative) is exactly the OOM-unsafe direction this guard exists to prevent.
     """
     skip = set(exclude or ()) | {os.getpid()}
     found: set[int] = set()
@@ -71,18 +85,23 @@ def free_gb() -> float:
     return float("inf")
 
 
-def nuke() -> None:
-    """Tear down any simulator this lock-holder left behind (rosm nuke + pkill mujoco). Best-effort.
-
-    Safe ONLY because the caller holds the lock AND the preflight ensured no OTHER sim was live — so
-    the only simulator processes are ours. (Full coverage requires every sim launcher, incl. the
-    EvolvingLoop, to also acquire this lock; until then, the preflight + a paused loop is the gap.)
+def nuke(protect: set[int] | None = None) -> None:
+    """Tear down simulator processes that appeared AFTER acquire (i.e. NOT in ``protect``), then
+    rosm-nuke ROS state. TARGETED (per-PID ``os.kill``, never a host-wide ``pkill``) so a sim some
+    other process started is not collateral-killed. Best-effort; never raises.
     """
-    for cmd in (["rosm", "nuke", "--yes"], ["pkill", "-9", "-f", "mujoco"]):
+    protect = protect or set()
+    for pid in live_sim_pids():
+        if pid in protect:
+            continue
         try:
-            subprocess.run(cmd, capture_output=True, timeout=20)
-        except Exception:  # noqa: BLE001
+            os.kill(pid, signal.SIGKILL)
+        except Exception:  # noqa: BLE001 — already gone / not ours to signal
             pass
+    try:
+        subprocess.run(["rosm", "nuke", "--yes"], capture_output=True, timeout=20)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @contextlib.contextmanager
@@ -97,16 +116,18 @@ def sim_lock(
 ):
     """Acquire the global sim lock, WAITING (up to ``wait_timeout``) until the host is sim-free + RAM ok.
 
-    Raises ``SimBusy`` if neither the flock nor a clear host could be obtained in time (fail-loud, never
-    silently run a 2nd concurrent sim). On exit: ``nuke_after`` teardown UNDER the lock, then release.
+    Raises ``SimBusy`` if neither the flock nor a clear host could be obtained in time (fail-loud,
+    never silently run a 2nd concurrent sim). Teardown fires ONLY if we actually ran a sim.
     """
     path = Path(lock_path) if lock_path else _DEFAULT_LOCK
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o664)
-    deadline = time.monotonic() + wait_timeout
+    fd = os.open(str(path), os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o664)
     acquired = False
+    ran = False
+    protected: set[int] = set()
     try:
         # 1) acquire the flock — NON-blocking poll so a hung holder cannot deadlock us forever.
+        deadline = time.monotonic() + wait_timeout
         while True:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -116,29 +137,31 @@ def sim_lock(
                 if time.monotonic() >= deadline:
                     raise SimBusy(f"sim lock {path} held by another process for > {wait_timeout}s")
                 time.sleep(poll)
-        # 2) preflight: even holding the flock, refuse to run while a non-lock sim (e.g. the loop) is
-        #    live or RAM is low — this is the cross-process guard (the loop does not take our flock).
+        # 2) preflight (its OWN budget, so a long flock-wait can't starve it): refuse to run while a
+        #    non-lock sim is live or RAM is low. Raising here MUST NOT nuke (ran is still False).
         if require_clear:
+            pre_deadline = time.monotonic() + wait_timeout
             while True:
                 live = live_sim_pids()
                 avail = free_gb()
                 if not live and avail >= min_free_gb:
                     break
-                if time.monotonic() >= deadline:
-                    raise SimBusy(
-                        f"host not sim-free after {wait_timeout}s (live={live}, free={avail}GB)"
-                    )
+                if time.monotonic() >= pre_deadline:
+                    raise SimBusy(f"host not sim-free after {wait_timeout}s (live={live}, free={avail}GB)")
                 time.sleep(poll)
-        # record the holder (observability only; flock — not this text — is the lock)
+        # Pre-existing sims to SPARE on teardown (empty after a clear preflight; matters when
+        # require_clear=False, so we never kill a sim that was already running).
+        protected = set(live_sim_pids())
         try:
             os.ftruncate(fd, 0)
             os.write(fd, f"{os.getpid()} {int(time.time())}\n".encode())
         except Exception:  # noqa: BLE001
             pass
+        ran = True  # from here on a sim may run -> teardown is OURS to do
         yield
     finally:
-        if acquired and nuke_after:
-            nuke()
+        if ran and nuke_after:
+            nuke(protect=protected)
         if acquired:
             try:
                 fcntl.flock(fd, fcntl.LOCK_UN)
