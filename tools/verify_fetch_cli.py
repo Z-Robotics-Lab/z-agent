@@ -51,7 +51,14 @@ def _nuke() -> None:
         subprocess.run(["rosm", "nuke", "--yes"], timeout=30, capture_output=True)
     except Exception:  # noqa: BLE001
         pass
-    subprocess.run("pkill -9 -f '[m]ujoco' 2>/dev/null || true", shell=True)
+    # Target ONLY a leaked cli worker, never "mujoco": an autonomous round runs as
+    # `claude -p "<loop prompt>"` whose cmdline literally contains "mujoco", so
+    # `pkill -f mujoco` SIGKILLs the round itself (self-destruct → zero commits).
+    # The in-process sim lives inside the `python -m vector_os_nano.vcli.cli`
+    # worker, so match that exact module path (absent from the round's cmdline).
+    subprocess.run(
+        "pkill -9 -f 'vector_os_nano.vcli.cli' 2>/dev/null || true", shell=True
+    )
 
 
 def main() -> int:
