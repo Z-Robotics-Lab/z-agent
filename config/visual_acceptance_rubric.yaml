@@ -1,0 +1,25 @@
+# FROZEN visual-acceptance rubric (ADR-002). The questions the visual SECOND WITNESS answers.
+#
+# HONESTY CONTRACT: every item is ORTHOGONAL to the GT oracle — a perceptual / embodiment check the
+# pose-reading oracle is structurally blind to. NONE asks "did the task succeed?" (that is the
+# oracle's job; re-asking it would re-import VLM hallucination into the gate). Vision can only
+# DOWNGRADE/flag, never create a green. Editing an item to WEAKEN it is a MOAT change — version it,
+# keep it OUT of the self-edit surface (checksum-pinned, dispatcher-owned per ADR-002).
+version: 1
+items:
+  - key: scene_rendered
+    question: >
+      Is this a real rendered 3D scene (a room with a floor, walls, and objects), and NOT a black,
+      blank, single-flat-color, or garbled/corrupted frame?
+  - key: robot_present_upright
+    question: >
+      Is a four-legged (quadruped) robot visible, resting or standing ON the floor — NOT floating in
+      mid-air, NOT fallen on its back or side, NOT sunk/clipping through the ground?
+  - key: body_intact
+    question: >
+      Does the robot body look intact and plausibly posed — legs attached to the body, exactly one
+      robot, no exploded / duplicated / obviously-teleported geometry?
+  - key: workspace_in_frame
+    question: >
+      Is a table or raised surface holding one or more small objects (e.g. bottles or cans) visible
+      somewhere in the frame?

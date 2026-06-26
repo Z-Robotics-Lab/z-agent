@@ -111,13 +111,18 @@ L3  BARE-CLI NL E2E    the whole flow through the bare REPL + natural language, 
 
 | File (new unless noted) | Role |
 |---|---|
-| `tools/acceptance/capture.py` | `snapshot()` / `record()` — EGL offscreen + real `:0` (import/ffmpeg); free third-person `CamSpec`. Extracted from `tools/visual_grasp.py:42-50`. |
-| `tools/acceptance/sim_lock.py` | global `fcntl.flock` on `~/.claude/loops/vector_sim.lock` + `pgrep`/`free -g` preflight + nuke-after. The one-sim-globally discipline the repo lacks today (OOM root). |
-| `tools/acceptance/gate.py` | `AcceptanceGate(gt_verdict, vision_verdict)` — downgrade-only; disagreement → RED_FLAG. The ONLY bridge; never touches `evidence_passed`. |
-| `tools/acceptance/visual_e2e.py` | the harness: sim-lock → drive REAL bare-cli (`pty_cli`, `live=True`, `VECTOR_SNAPSHOT_DIR`) → collect verdict+frames → gate → emit `AcceptanceRecord.json`. Extends `tools/verify_fetch_cli.py` + `measure_*_reliability.py`. |
-| `vcli/cognitive/vision_judge.py` | the VLM witness (replaces the mis-wired `visual_verifier.py`): orthogonal atomic rubric, ABSTAIN-fail-closed, K-sample-on-suspicion, reuses the `perception/vlm_go2.py:266-347` `_call_model` HTTP shape at ≥640×480. |
-| `vcli/...` verdict path | a PNG-only `VECTOR_SNAPSHOT_DIR` hook before the `VECTOR_VERDICT` sentinel (`verdict.py:182`). Contract-tested inert w.r.t. `verified`. |
-| `config/` (frozen) | the rubric, a held-out acceptance set, `config/nav2_go2.rviz`. |
+> Layering note (as built, refines the original sketch): the IMPORTABLE primitives live IN-PACKAGE
+> at `vector_os_nano/acceptance/` so the cli hook can import them cheaply AND they stay OUT of the
+> frozen deterministic spine `vcli/cognitive/` (vision is non-deterministic and rides outside the
+> gate). The RUNNABLE harness stays under `tools/acceptance/`. Stage 1 + Stage 2-core are BUILT.
+
+| `vector_os_nano/acceptance/capture.py` | ✅ Stage 1. `snapshot()` (EGL offscreen, free third-person `CamSpec`) + `snapshot_on_verdict()` (isolated-qpos render, thread-safe). Extracted from `tools/visual_grasp.py:42-50`. |
+| `vector_os_nano/acceptance/vision_judge.py` | ✅ Stage 2. The VLM witness (replaces the mis-wired `vcli/cognitive/visual_verifier.py`): orthogonal rubric, ABSTAIN-fail-closed, gpt-4o via OpenRouter at full res. In `acceptance/` (NOT `vcli/cognitive/`) — vision rides OUTSIDE the frozen spine. |
+| `vector_os_nano/acceptance/gate.py` | ✅ Stage 2. `decide(gt_verified, vision_witness)` — downgrade-only; disagreement → RED_FLAG. The ONLY bridge; never touches `evidence_passed`. |
+| `tools/acceptance/visual_e2e.py` | ✅ Stage 2. The harness: drive REAL bare-cli (`pty_cli`, `live=`, `VECTOR_SNAPSHOT_DIR`) → same-process frame → frozen GT oracle + VisionJudge → gate → `AcceptanceRecord`. Extends `tools/verify_fetch_cli.py`. (sim-lock wiring = Stage 0, pending.) |
+| `config/visual_acceptance_rubric.yaml` | ✅ Stage 2. The FROZEN orthogonal rubric (4 perceptual checks). Held-out set + `config/nav2_go2.rviz` = later stages. |
+| `vcli/cli.py` verdict path | ✅ Stage 1. A PNG-only `VECTOR_SNAPSHOT_DIR` hook (`_safe_verdict_snapshot` in `_emit`) before the `VECTOR_VERDICT` sentinel. Contract-tested inert w.r.t. `verified`. |
+| `tools/acceptance/sim_lock.py` | ⏳ Stage 0 (pending). global `fcntl.flock` + `pgrep`/`free -g` preflight + nuke-after — the one-sim-globally discipline. |
 
 `AcceptanceRecord` (verdict + frames + VisionVerdict + disagreement) joins the cold-read resume
 stack so a compaction loses nothing.
