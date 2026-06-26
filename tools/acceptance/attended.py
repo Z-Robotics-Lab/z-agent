@@ -27,13 +27,33 @@ from vector_os_nano.acceptance import capture  # noqa: E402
 from vector_os_nano.acceptance import vision_judge as vj  # noqa: E402
 
 
-def launcher_truth(out_dir: str, *, display: str = ":0") -> dict:
-    """Grab the real screen and judge it: did a simulator window actually open? Returns a dict with
-    the witness + the per-item launcher-truth answers, or a no-grab marker."""
+def _consent(explicit: bool | None) -> bool:
+    if explicit is not None:
+        return bool(explicit)
+    return os.environ.get("VECTOR_ATTENDED_CONSENT", "0").strip().lower() in ("1", "true", "on", "yes")
+
+
+def launcher_truth(out_dir: str, *, display: str = ":0", consent: bool | None = None) -> dict:
+    """Grab the real screen and judge it: did a simulator window actually open?
+
+    PRIVACY (security.md — confirm before outward-facing actions): a root grab is the owner's WHOLE
+    desktop (possibly private windows), and judging it base64-sends it to an EXTERNAL VLM. That send
+    happens ONLY with explicit consent (``VECTOR_ATTENDED_CONSENT=1`` or ``consent=True``) — never
+    silently from an automated path. Without consent the screen is grabbed LOCALLY only and the VLM
+    is skipped. (Single-grab launcher-truth checks window PRESENCE, not liveness; a frozen window
+    still reads 'present' — use attended_record + the temporal check to catch a frozen viewer.)
+    """
     os.makedirs(out_dir, exist_ok=True)
     shot = capture.attended_snapshot(os.path.join(out_dir, "screen.png"), display=display)
     if not shot:
         return {"screen": None, "witness": None, "reason": "screen grab failed (no display / no X auth)"}
+    if not _consent(consent):
+        return {
+            "screen": shot,
+            "witness": None,
+            "reason": "screen grabbed LOCALLY; VLM send SKIPPED — set VECTOR_ATTENDED_CONSENT=1 "
+                      "(or pass consent=True) to send this screen to the external VLM judge",
+        }
     v = vj.judge_attended(shot)
     items = {k: a for k, a, _ in v.per_item}
     return {
@@ -78,8 +98,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Stage-4 launcher-truth witness (ADR-002)")
     ap.add_argument("--out-dir", default="/tmp/vector_attended")
     ap.add_argument("--display", default=os.environ.get("DISPLAY", ":0"))
+    ap.add_argument("--consent", action="store_true",
+                    help="SEND the screen grab to the external VLM judge (off by default — the screen "
+                         "may hold private content; can also set VECTOR_ATTENDED_CONSENT=1)")
     args = ap.parse_args()
-    print(json.dumps(launcher_truth(args.out_dir, display=args.display), ensure_ascii=False, indent=2))
+    result = launcher_truth(args.out_dir, display=args.display, consent=(True if args.consent else None))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

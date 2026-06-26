@@ -55,3 +55,23 @@ def test_judge_attended_sim_window_present_is_pass(tmp_path):
     p = str(tmp_path / "x.png")
     cv2.imwrite(p, np.full((8, 8, 3), 120, np.uint8))
     assert vj.judge_attended(p, call=fake).witness == vj.PASS
+
+
+def test_launcher_truth_requires_consent_before_vlm_send(monkeypatch, tmp_path):
+    """PRIVACY: the owner's screen is sent to the external VLM ONLY with explicit consent — never
+    silently from an automated path (security.md: confirm before outward-facing actions)."""
+    from tools.acceptance import attended
+
+    monkeypatch.setattr(attended.capture, "attended_snapshot", lambda *a, **k: str(tmp_path / "screen.png"))
+    sent = []
+    monkeypatch.setattr(
+        attended.vj, "judge_attended",
+        lambda *a, **k: sent.append("SENT") or attended.vj.VisionVerdict("PASS", (), "", "x"),
+    )
+    monkeypatch.delenv("VECTOR_ATTENDED_CONSENT", raising=False)
+
+    r = attended.launcher_truth(str(tmp_path))  # no consent -> grab locally, DO NOT send
+    assert sent == [] and r["witness"] is None and "consent" in r["reason"].lower()
+
+    r2 = attended.launcher_truth(str(tmp_path), consent=True)  # explicit consent -> sends
+    assert sent == ["SENT"] and r2["witness"] == "PASS"
