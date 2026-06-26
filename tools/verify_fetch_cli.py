@@ -21,8 +21,14 @@ so the fetch is reachable from the bare entrypoint — no ROS2 stack, no flaky m
 REPL. Each attempt is a fresh isolated subprocess (MuJoCo can't realloc worlds);
 `rosm nuke` + pkill between. The headline is `grounded/N` and the routing breakdown.
 
+The routing brain + VLM run via OpenRouter (repo-root .env OPENROUTER_API_KEY) —
+DeepSeek-direct is frequently network-blocked, OpenRouter is reachable. Force the
+provider with VECTOR_PROVIDER=openrouter (+ a concrete VECTOR_MODEL); the
+``--sim-go2`` VLM already routes GPT-4o via OpenRouter.
+
 Run (serialized sim):
-    N=3 MUJOCO_GL=egl PATH=/usr/bin:$PATH .venv/bin/python tools/verify_fetch_cli.py
+    N=3 MUJOCO_GL=egl VECTOR_PROVIDER=openrouter VECTOR_MODEL=deepseek/deepseek-chat \
+      PATH=/usr/bin:$PATH .venv/bin/python tools/verify_fetch_cli.py
 """
 from __future__ import annotations
 
@@ -57,7 +63,14 @@ def main() -> int:
             r = run_cli_turn(
                 _PROMPT, sim_go2=True, live=True,
                 timeout_sec=_PER_RUN_TIMEOUT,
-                extra_env={"VECTOR_SIM_WITH_ARM": "1", "MUJOCO_GL": "egl"},
+                extra_env={
+                    "VECTOR_SIM_WITH_ARM": "1",
+                    "MUJOCO_GL": "egl",
+                    # Lightweight fully-in-process path: skip the external ROS2 nav
+                    # stack (navigate_to plans via in-process vgraph) so an
+                    # unattended round does not OOM/SIGKILL (rc=137 guardrail).
+                    "VECTOR_NO_ROS2": "1",
+                },
                 extra_args=["--headless", "--native-loop"],
             )
             v = r.verdict or {}

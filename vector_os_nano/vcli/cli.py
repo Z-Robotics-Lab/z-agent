@@ -871,12 +871,22 @@ def _init_agent(args: argparse.Namespace) -> Any:
             console.print(f"[dim]  Memory: scene graph (rooms -> viewpoints -> objects)[/dim]")
         agent._spatial_memory = _sg
 
-        # ROS2 bridge + nav stack (background)
-        try:
-            _launch_ros2_stack(base)
-            console.print(f"[dim]  ROS2: bridge + nav stack launched[/dim]")
-        except Exception as exc:
-            console.print(f"[dim]  ROS2: not available ({exc})[/dim]")
+        # ROS2 bridge + nav stack (background). OPTIONAL: navigate_to_object plans
+        # in-process via MuJoCoGo2.navigate_to (visibility-graph), so the external
+        # nav stack is only needed for explore (TARE/FAR), never for the fetch flow.
+        # VECTOR_NO_ROS2=1 skips it so the bare `cli --sim-go2` fetch runs fully
+        # in-process — the lightweight path autonomous verification needs (the heavy
+        # multi-process stack OOM/SIGKILLs an unattended round). Default unchanged.
+        if _should_launch_ros2_stack():
+            try:
+                _launch_ros2_stack(base)
+                console.print(f"[dim]  ROS2: bridge + nav stack launched[/dim]")
+            except Exception as exc:
+                console.print(f"[dim]  ROS2: not available ({exc})[/dim]")
+        else:
+            console.print(
+                f"[dim]  ROS2: skipped (VECTOR_NO_ROS2=1; in-process vgraph nav)[/dim]"
+            )
 
         return agent
 
@@ -885,6 +895,21 @@ def _init_agent(args: argparse.Namespace) -> Any:
         import traceback
         traceback.print_exc()
         return None
+
+
+def _should_launch_ros2_stack() -> bool:
+    """Whether to launch the external ROS2 nav stack on a ``--sim-go2`` startup.
+
+    The in-process ``MuJoCoGo2.navigate_to`` plans collision-free paths with the
+    visibility-graph planner, so the external Vector Nav Stack is only needed for
+    explore (TARE/FAR), never for the fetch flow (look -> navigate_to_object ->
+    perception_grasp). ``VECTOR_NO_ROS2=1`` skips it, yielding the lightweight
+    fully-in-process path autonomous fetch verification uses — the heavy
+    multi-process stack OOM/SIGKILLs an unattended ``claude -p`` round. Default
+    (unset, or any value other than the exact string "1") launches the stack so
+    interactive sessions are byte-unchanged.
+    """
+    return os.environ.get("VECTOR_NO_ROS2", "0") != "1"
 
 
 def _launch_ros2_stack(go2: Any) -> None:
