@@ -39,6 +39,7 @@ def run_once(
     sim_go2: bool = True,
     live: bool = False,
     tool_script: dict | None = None,
+    with_arm: bool = False,
     timeout: float = 240.0,
 ) -> dict:
     """One real bare-cli turn -> same-process frame -> GT oracle + VisionJudge -> AcceptanceGate."""
@@ -55,6 +56,8 @@ def run_once(
         "VECTOR_SIM_LOCK": "1",
         "VECTOR_SNAPSHOT_STRIP": "1",  # Stage 3: per-step temporal frames + pose track
     }
+    if with_arm:
+        env["VECTOR_SIM_WITH_ARM"] = "1"  # attach the in-process Piper for fetch/grasp turns
     # fresh strip manifest per trial
     try:
         os.remove(os.path.join(snapshot_dir, "strip.jsonl"))
