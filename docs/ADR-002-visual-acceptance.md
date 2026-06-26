@@ -122,7 +122,7 @@ L3  BARE-CLI NL E2E    the whole flow through the bare REPL + natural language, 
 | `tools/acceptance/visual_e2e.py` | ✅ Stage 2. The harness: drive REAL bare-cli (`pty_cli`, `live=`, `VECTOR_SNAPSHOT_DIR`) → same-process frame → frozen GT oracle + VisionJudge → gate → `AcceptanceRecord`. Extends `tools/verify_fetch_cli.py`. (sim-lock wiring = Stage 0, pending.) |
 | `config/visual_acceptance_rubric.yaml` | ✅ Stage 2. The FROZEN orthogonal rubric (4 perceptual checks). Held-out set + `config/nav2_go2.rviz` = later stages. |
 | `vcli/cli.py` verdict path | ✅ Stage 1. A PNG-only `VECTOR_SNAPSHOT_DIR` hook (`_safe_verdict_snapshot` in `_emit`) before the `VECTOR_VERDICT` sentinel. Contract-tested inert w.r.t. `verified`. |
-| `tools/acceptance/sim_lock.py` | ⏳ Stage 0 (pending). global `fcntl.flock` + `pgrep`/`free -g` preflight + nuke-after — the one-sim-globally discipline. |
+| `vector_os_nano/acceptance/sim_lock.py` | ✅ Stage 0. `sim_lock()` ctx-mgr: global `fcntl.flock` (auto-releases on holder death) + a clear-host `pgrep`/`free -g` preflight (WAIT, else `SimBusy` — fail-loud) + nuke-after UNDER the lock. In-package (importable). EvolvingLoop adoption of the lock = the remaining follow-up that closes the mid-run-overlap gap. |
 
 `AcceptanceRecord` (verdict + frames + VisionVerdict + disagreement) joins the cold-read resume
 stack so a compaction loses nothing.
