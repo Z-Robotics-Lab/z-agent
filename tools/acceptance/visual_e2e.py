@@ -26,7 +26,9 @@ _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO))
 
 from tests.harness.pty_cli import run_cli_turn  # noqa: E402
+from vector_os_nano.acceptance import capture  # noqa: E402
 from vector_os_nano.acceptance import gate  # noqa: E402
+from vector_os_nano.acceptance import motion_check  # noqa: E402
 from vector_os_nano.acceptance import vision_judge as vj  # noqa: E402
 
 
@@ -51,7 +53,15 @@ def run_once(
         "MUJOCO_GL": "egl",
         "VECTOR_NO_ROS2": "1",
         "VECTOR_SIM_LOCK": "1",
+        "VECTOR_SNAPSHOT_STRIP": "1",  # Stage 3: per-step temporal frames + pose track
     }
+    # fresh strip manifest per trial
+    try:
+        os.remove(os.path.join(snapshot_dir, "strip.jsonl"))
+    except OSError:
+        pass
+    for _f in glob.glob(f"{snapshot_dir}/frame_*.png"):
+        os.remove(_f)
     r = run_cli_turn(
         command,
         sim_go2=sim_go2,
@@ -71,16 +81,36 @@ def run_once(
     else:
         witness, vision = None, {"witness": None, "reason": "no same-process frame captured"}
     d = gate.decide(gt_verified, witness)
+
+    # Stage 3: temporal strip -> montage -> temporal judge (soft) X hard pose-delta cross-check.
+    strip = capture.load_strip(snapshot_dir)
+    temporal = {"n_frames": len(strip), "witness": None, "disagreement": False}
+    if len(strip) >= 2:
+        montage_path = capture.montage([s["path"] for s in strip], os.path.join(snapshot_dir, "montage.png"))
+        tv = vj.judge_temporal(montage_path) if montage_path else None
+        mv = motion_check.cross_check(strip, tv.witness if tv else None)
+        temporal = {
+            "n_frames": len(strip),
+            "witness": (tv.witness if tv else None),
+            "moved_m": round(mv.moved_m, 3),
+            "hard_moved": mv.hard_moved,
+            "disagreement": mv.disagreement,
+            "note": mv.note,
+            "montage": montage_path,
+        }
+
+    temporal_flag = bool(temporal.get("disagreement"))
     return {
         "command": command,
         "gt": {"evidence": verdict.get("evidence"), "verified": gt_verified, "exit": r.exit_code},
         "vision": vision,
+        "temporal": temporal,
         "frame": frames[-1] if frames else None,
         "decision": d.decision,
-        "disagreement": d.disagreement,
-        "needs_red_team": d.needs_red_team,
-        "block_headline": d.block_headline,
-        "reason": d.reason,
+        "disagreement": d.disagreement or temporal_flag,
+        "needs_red_team": d.needs_red_team or temporal_flag,
+        "block_headline": d.block_headline or temporal_flag,
+        "reason": d.reason + (f" | TEMPORAL DISAGREEMENT: {temporal.get('note')}" if temporal_flag else ""),
     }
 
 

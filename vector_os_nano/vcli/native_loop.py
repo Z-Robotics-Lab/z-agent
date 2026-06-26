@@ -528,6 +528,16 @@ class NativeStepRunner:
         self._sub_goals.append(sub_goal)
         self._steps.append(step)
 
+        # ADR-002 Stage 3: env-gated (VECTOR_SNAPSHOT_STRIP=1), inert per-step TEMPORAL frame — a
+        # PNG + base pose for the strip. Renders on THIS (the producer) thread from an isolated qpos
+        # copy; a failure is swallowed so it can NEVER affect the StepRecord / verdict just built.
+        try:
+            from vector_os_nano.acceptance.capture import capture_strip_frame
+
+            capture_strip_frame(self._agent, self._step_idx - 1)
+        except Exception:  # noqa: BLE001 — a strip frame must never touch grading
+            pass
+
         # Close the step: reset the action chain + baseline for the next pair. NEVER
         # carry a baseline across a verify (else the next step's causation folds in).
         self._chain = []

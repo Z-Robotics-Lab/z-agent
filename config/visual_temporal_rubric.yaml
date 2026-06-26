@@ -1,0 +1,20 @@
+# FROZEN temporal-acceptance rubric (ADR-002 Stage 3). The SOFT narrator questions the temporal
+# VLM answers about a MONTAGE of ordered frames (earlier->later). It NEVER decides whether the robot
+# moved — that is the DETERMINISTIC pose-delta (actor_causation, motion_check). Vision only narrates
+# plausibility (gait vs slide vs teleport vs float) and raises a disagreement flag. Editing to WEAKEN
+# a check is a moat change — version it, keep it out of the self-edit surface.
+version: 1
+items:
+  - key: locomotion_plausible
+    question: >
+      Across the ordered frames (left-to-right, top-to-bottom = earlier to later), does the
+      four-legged robot appear to LOCOMOTE with visible leg/gait movement — as opposed to sliding
+      rigidly with frozen legs, or staying completely still?
+  - key: no_teleport
+    question: >
+      Between any two ADJACENT frames, does the robot's position change only gradually — NOT a
+      sudden large jump across the room (a teleport)?
+  - key: upright_throughout
+    question: >
+      In EVERY frame, does the robot stay upright on the floor — never flipped, sunk through the
+      ground, floating in the air, exploded, or duplicated?

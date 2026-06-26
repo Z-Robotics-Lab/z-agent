@@ -164,8 +164,13 @@ Per `rules/common/agents.md`, these cross the CEO gates and are queued, not cros
   not paper.
 - **Stage 2 (gated):** `vision_judge.py` + `gate.py` + red-team call site; a forced-black render
   yields a GT-pass + vision-FAIL disagreement that auto-fires red-team and blocks the headline.
-- **Stage 3 (non-gated):** temporal strip + `actor_causation` pose-delta cross-check (injected
-  teleport caught by the hard channel, narrated by vision).
+- **Stage 3 (non-gated): ✅ DONE.** Per-step temporal strip (inert `capture_strip_frame` hook in
+  `native_loop.handle_verify`, env-gated `VECTOR_SNAPSHOT_STRIP=1`) → `capture.montage` →
+  `vision_judge.judge_temporal` (SOFT narrator, `config/visual_temporal_rubric.yaml`) X
+  `acceptance/motion_check.cross_check` where the pose-delta (`DISPLACEMENT_EPS`, the HARD channel)
+  is the sole authority on "did it move" and vision can only flag a DISAGREEMENT. Real-verified:
+  a genuine 0.88m gait → vision PASS + pose-delta → AGREE; a 0.13m stuck-against-table shuffle →
+  pose-delta "moved" but vision "not locomoting" → DISAGREEMENT flagged. Vision never the sole judge.
 - **Stage 4 (gated):** attended real-`:0` + RViz launcher-truth witness (a bypassed launcher caught
   as window-never-opened).
 - **Stage 5 (gated):** the self-edit experiment loop (the `~/.claude` Workflow), AcceptanceGate as

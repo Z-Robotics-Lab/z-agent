@@ -25,6 +25,7 @@ _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # The judge model MUST differ from the routing brain (generator != evaluator). Default gpt-4o.
 _JUDGE_MODEL = os.environ.get("VECTOR_JUDGE_MODEL", "openai/gpt-4o")
 _RUBRIC_PATH = Path(__file__).resolve().parents[2] / "config" / "visual_acceptance_rubric.yaml"
+_TEMPORAL_RUBRIC_PATH = Path(__file__).resolve().parents[2] / "config" / "visual_temporal_rubric.yaml"
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -42,16 +43,24 @@ class VisionVerdict:
     raw: str = ""
 
 
-def load_rubric(path: str | os.PathLike | None = None) -> list[dict]:
-    """Load the frozen rubric items (each ``{key, question}``). Fails LOUD on a missing/bad file."""
+def _load_rubric_file(p: Path) -> list[dict]:
     import yaml
 
-    p = Path(path) if path else _RUBRIC_PATH
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     items = data.get("items") if isinstance(data, dict) else None
     if not items:
         raise ValueError(f"rubric has no items: {p}")
     return items
+
+
+def load_rubric(path: str | os.PathLike | None = None) -> list[dict]:
+    """Load the frozen single-frame rubric items. Fails LOUD on a missing/bad file."""
+    return _load_rubric_file(Path(path) if path else _RUBRIC_PATH)
+
+
+def load_temporal_rubric(path: str | os.PathLike | None = None) -> list[dict]:
+    """Load the frozen TEMPORAL (montage) rubric items (ADR-002 Stage 3)."""
+    return _load_rubric_file(Path(path) if path else _TEMPORAL_RUBRIC_PATH)
 
 
 def _encode_full_res(image_path: str | os.PathLike) -> str:
@@ -167,6 +176,37 @@ def judge(
         b64 = _encode_full_res(image_path)
         prompt = _build_prompt(items)
         raw = call(b64, prompt, model=model, api_key=api_key)
+    except Exception as exc:  # noqa: BLE001 — fail-closed: never a PASS on error
+        return VisionVerdict(witness=ABSTAIN, per_item=(), reasoning=f"judge unavailable: {exc}", model=model)
+    per = _parse(raw, items)
+    reasoning = "; ".join(f"{k}={a}" for k, a, _ in per)
+    return VisionVerdict(witness=_fold(per), per_item=per, reasoning=reasoning, model=model, raw=raw)
+
+
+def _build_temporal_prompt(items: list[dict]) -> str:
+    lines = [
+        "You are a STRICT inspector of a MONTAGE of ordered robotics-simulator frames. Read them",
+        "left-to-right then top-to-bottom = EARLIER to LATER in time. Judge the robot's MOTION ACROSS",
+        "the frames. Do NOT judge whether any task succeeded. For EACH check answer exactly 'yes',",
+        "'no', or 'abstain' (abstain if unclear), with a one-sentence justification.",
+        'Return ONLY a JSON object: {"items": {"<key>": {"answer": "yes|no|abstain", "why": "..."}}}.',
+        "Checks:",
+    ]
+    for it in items:
+        lines.append(f'- {it["key"]}: {" ".join(str(it["question"]).split())}')
+    return "\n".join(lines)
+
+
+def judge_temporal(montage_path, *, items=None, model=None, api_key=None, call=None) -> VisionVerdict:
+    """Grade a MONTAGE of ordered frames against the temporal rubric (ADR-002 Stage 3 — the SOFT
+    motion narrator). Same fail-closed contract as ``judge``; never PASS on error."""
+    items = items if items is not None else load_temporal_rubric()
+    model = model or _JUDGE_MODEL
+    api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    call = call or _call_vlm
+    try:
+        b64 = _encode_full_res(montage_path)
+        raw = call(b64, _build_temporal_prompt(items), model=model, api_key=api_key)
     except Exception as exc:  # noqa: BLE001 — fail-closed: never a PASS on error
         return VisionVerdict(witness=ABSTAIN, per_item=(), reasoning=f"judge unavailable: {exc}", model=model)
     per = _parse(raw, items)

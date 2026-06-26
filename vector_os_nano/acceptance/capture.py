@@ -91,44 +91,124 @@ def _connected_model_data(base):
     return getattr(mjw, "model", None), getattr(mjw, "data", None)
 
 
-def snapshot_on_verdict(agent) -> str | None:
-    """Env-gated, best-effort same-process snapshot for the verdict hook (ADR-002).
-
-    Writes a third-person PNG into ``$VECTOR_SNAPSHOT_DIR`` IFF that env var is set AND a MuJoCo
-    sim base is connected on ``agent._base``. Returns the path, or ``None`` if nothing was captured.
-
-    Takes ONLY the agent — it has NO access to the ``VerdictReport`` and so CANNOT change it.
-    NEVER raises (every failure, including the render, returns ``None``). The free camera is aimed
-    at the robot's own odometry position (framing only — never used to grade, no GT leak).
-    """
-    out_dir = os.environ.get("VECTOR_SNAPSHOT_DIR")
-    if not out_dir:
+def _base_pose(base):
+    """(x, y, heading) of the connected base, or None — the deterministic pose track (hard channel)."""
+    try:
+        pos = base.get_position()
+        x, y = float(pos[0]), float(pos[1])
+    except Exception:  # noqa: BLE001
         return None
+    try:
+        h = float(base.get_heading())
+    except Exception:  # noqa: BLE001
+        h = 0.0
+    return (x, y, h)
+
+
+def _render_agent_frame(agent, path: str):
+    """Render a same-process third-person frame of ``agent._base`` to ``path`` from an ISOLATED qpos
+    copy with a FRESH renderer on the CALLING thread (thread-safe vs the control thread — ADR-002
+    tricky Case 11). Returns the base pose ``(x, y, heading)`` (``(0,0,0)`` if unknown), or ``None``
+    when there is no connected sim to render. May raise (GL/cv2) — callers wrap for inertness.
+    """
     base = getattr(agent, "_base", None)
     if base is None:
         return None
     model, data = _connected_model_data(base)
     if model is None or data is None:
         return None
+    import mujoco as mj
+
+    pose = _base_pose(base)
+    spec = CamSpec(lookat=(pose[0], pose[1], 0.3)) if pose else CamSpec()
+    data_copy = mj.MjData(model)
+    n = min(len(data_copy.qpos), len(data.qpos))
+    data_copy.qpos[:n] = np.asarray(data.qpos)[:n]
+    snapshot(model, data_copy, spec, path)  # transient renderer (this thread) + forward on the copy
+    return pose if pose is not None else (0.0, 0.0, 0.0)
+
+
+def snapshot_on_verdict(agent) -> str | None:
+    """Env-gated, best-effort same-process snapshot for the verdict hook (ADR-002 Stage 1).
+
+    Writes a third-person PNG into ``$VECTOR_SNAPSHOT_DIR`` IFF that env var is set AND a MuJoCo sim
+    base is connected on ``agent._base``. Returns the path, or ``None`` if nothing was captured.
+    Takes ONLY the agent — no access to the ``VerdictReport``, so it CANNOT change it. NEVER raises.
+    """
+    out_dir = os.environ.get("VECTOR_SNAPSHOT_DIR")
+    if not out_dir:
+        return None
     try:
-        spec = CamSpec()
-        pos = base.get_position()
-        if pos is not None and len(pos) >= 2:
-            spec = CamSpec(lookat=(float(pos[0]), float(pos[1]), 0.3))
         os.makedirs(out_dir, exist_ok=True)
         stamp = os.environ.get("VECTOR_SNAPSHOT_TAG") or str(int(time.time() * 1000))
         path = os.path.join(out_dir, f"verdict_{stamp}.png")
-        # Render from an ISOLATED copy of the sim state with a FRESH renderer created on THIS
-        # (the verdict-emit) thread. MuJoCo GL contexts are thread-bound and a control/physics
-        # thread may still be stepping the LIVE data, so reusing a worker-thread renderer or
-        # rendering live data segfaults (cross-thread GL / torn read). Copying qpos into a fresh
-        # MjData is race-free; the frame reflects the final pose the verdict was emitted on.
-        import mujoco as mj
-
-        data_copy = mj.MjData(model)
-        n = min(len(data_copy.qpos), len(data.qpos))
-        data_copy.qpos[:n] = np.asarray(data.qpos)[:n]
-        snapshot(model, data_copy, spec, path)  # transient renderer (this thread) + forward on copy
-        return path
+        return path if _render_agent_frame(agent, path) is not None else None
     except Exception:  # noqa: BLE001 — a snapshot must NEVER affect the turn / verdict
+        return None
+
+
+def _strip_enabled() -> bool:
+    return os.environ.get("VECTOR_SNAPSHOT_STRIP", "0").strip().lower() in ("1", "true", "on", "yes")
+
+
+def capture_strip_frame(agent, idx: int) -> str | None:
+    """Env-gated per-step TEMPORAL frame (ADR-002 Stage 3) — gated by ``VECTOR_SNAPSHOT_DIR`` AND
+    ``VECTOR_SNAPSHOT_STRIP=1`` (off by default; strips add render latency). Renders
+    ``frame_{idx}.png`` from the same process AND appends the base pose to ``strip.jsonl`` — the
+    deterministic pose track that is the HARD motion channel. Inert: never raises, never grades.
+    """
+    out_dir = os.environ.get("VECTOR_SNAPSHOT_DIR")
+    if not out_dir or not _strip_enabled():
+        return None
+    try:
+        import json
+
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"frame_{int(idx):03d}.png")
+        pose = _render_agent_frame(agent, path)
+        if pose is None:
+            return None
+        rec = {"idx": int(idx), "path": path, "x": pose[0], "y": pose[1], "heading": pose[2], "t": time.time()}
+        with open(os.path.join(out_dir, "strip.jsonl"), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec) + "\n")
+        return path
+    except Exception:  # noqa: BLE001 — a strip frame must NEVER affect the turn / verdict
+        return None
+
+
+def load_strip(out_dir: str) -> list[dict]:
+    """Read the per-step pose manifest (``strip.jsonl``) ordered by step idx. [] on any failure."""
+    import json
+
+    recs: list[dict] = []
+    try:
+        with open(os.path.join(out_dir, "strip.jsonl"), encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    recs.append(json.loads(line))
+    except Exception:  # noqa: BLE001
+        return []
+    return sorted(recs, key=lambda r: r.get("idx", 0))
+
+
+def montage(frame_paths: list[str], out_path: str, cols: int = 4) -> str | None:
+    """Tile frames (in order) into one grid image for the temporal VLM judge. None on failure."""
+    try:
+        import cv2
+
+        imgs = [im for im in (cv2.imread(p) for p in frame_paths) if im is not None]
+        if not imgs:
+            return None
+        h, w = imgs[0].shape[:2]
+        imgs = [cv2.resize(im, (w, h)) for im in imgs]
+        rows = []
+        for i in range(0, len(imgs), cols):
+            row = imgs[i : i + cols]
+            while len(row) < cols:
+                row.append(np.zeros_like(imgs[0]))
+            rows.append(cv2.hconcat(row))
+        cv2.imwrite(out_path, cv2.vconcat(rows))
+        return out_path
+    except Exception:  # noqa: BLE001
         return None
