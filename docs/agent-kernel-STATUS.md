@@ -1,5 +1,13 @@
 # >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
-# Sim is FREE now (nuked). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D96 + git log.
+# Sim is FREE now (nuked). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D97 + git log.
+# >> D97 (90dd65c) — BARE-CLI FOUNDATION FIXED (Yusen-found; my stub harness missed it). Yusen tested bare
+#   vector-cli: scene graph ALL objects at (0,0). Root: _start_go2 set agent._perception=None → look never
+#   localized; explore passed coord-less dicts (dead+raised); look's (0,0) fallback polluted the graph. FIX:
+#   guarded _build_go2_perception(base) wired into _start_go2 + in-process --sim-go2 (single-sourced); explore
+#   depth-localizes (cat,x,y) tuples; look stores localized-only. REAL-VERIFY via the ACTUAL launcher
+#   (SimStartTool._start_go2): look stores green/blue/red <3cm vs GT, none at (0,0). LESSON: bare-cli is the
+#   ONLY acceptance — verify through the real launcher, never a hand-built/stub perception.
+#   RESIDUAL: live-VLM naming was stubbed (network fake-IP) — real-VLM e2e "把绿色瓶子拿过来" is the NEXT round.
 # #1 object positions VERIFIED (D91). #2 navigate_to_object VERIFIED (D92). #3 pipeline COMPOSES e2e (D93).
 # Grasp reliability RAISED to 0.833 (D94/D95) then PLATEAUED -> pivoted down the backlog.
 # >> THIS round (backlog #2; code commit 064294f WIP + this RECORD): `home` 5-vs-6 DoF bug FIXED + REAL-SIM
