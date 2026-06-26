@@ -9,6 +9,13 @@
 #   I read a grounded frame = real Go2+arm grasp at the table. CAVEAT (honest): temporal=None on all 4 grounded
 #   trials — the 1-step perception_grasp routing captures <2 strip frames, so the temporal motion witness fires
 #   only on the slower failed trial; GT weld (holding_object) + spatial vision still cover success.
+# >> BACKLOG-#1 FINDING (verify_fetch_cli N=3, GT-only): the FULL look->navigate->grasp chain does NOT route —
+#   the model collapses to grasp/handover. PROMPT VERB ROUTES DIFFERENTLY: "拿给我"(hand-to-me)=handover-centric,
+#   1/3=33%, FLAKY (run1 strategies=["handover"] ALONE, run2=["perception_grasp","handover"], run3=[]); vs
+#   "拿过来"(bring-over)=perception_grasp-centric, 0.8 thru eyes. RED-FLAG TO CHECK NEXT ROUND: run1 GROUNDED with
+#   ["handover"] ONLY (no grasp step) = false-green CANDIDATE (handover can't give an unheld object) — and the
+#   "拿给我"/handover path has NEVER been eyes-checked. NEXT ROUND: push "拿给我" thru measure_fetch_visual (the
+#   eyes) to test the handover-only grounding = real or false-green (the D91-D95 class the eyes exist to catch).
 # >> THIS round (backlog #3; commit e762f12): merge_object x=0/y=0 SENTINEL TRAP FIXED. Backlog #1 (live-model
 #   bare-cli full-fetch e2e, TOP priority) was NETWORK-BLOCKED — DeepSeek http=000 + GPT-4o 421 (VPN fake-IP);
 #   per loop discipline pivoted to the offline backlog #3 (same bug class as the D97 (0,0) catastrophe).
