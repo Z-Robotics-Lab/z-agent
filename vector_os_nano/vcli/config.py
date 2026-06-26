@@ -165,6 +165,21 @@ def resolve_credentials(
         )
         return ds_key, "openai_compat", ds_model, ds_base
 
+    # Forced OpenRouter: VECTOR_PROVIDER=openrouter is a HARD override — it wins
+    # over the OAuth / ANTHROPIC branches below, not just the DeepSeek branch.
+    # Without this, a present Claude OAuth credential (sk-ant-oat...) silently
+    # hijacks resolution to anthropic-direct even when the operator explicitly
+    # forced OpenRouter because anthropic/DeepSeek-direct are network-blocked
+    # (the bare-cli fetch-acceptance path). A CLI --api-key still wins above this.
+    if _forced_provider == "openrouter" and not cli_api_key:
+        or_key = os.environ.get("OPENROUTER_API_KEY", "") or config.get("openrouter_api_key", "")
+        if or_key:
+            or_model = cli_model or os.environ.get("VECTOR_MODEL") or config.get("model", "claude-sonnet-4-6")
+            if "/" not in or_model:
+                or_model = f"anthropic/{or_model}"
+            or_base = cli_base_url or config.get("base_url", "") or "https://openrouter.ai/api/v1"
+            return or_key, "openrouter", or_model, or_base
+
     if not api_key:
         # Vector CLI's own OAuth credentials (independent rate limits)
         from vector_os_nano.vcli.oauth import load_credentials

@@ -75,6 +75,28 @@ def test_deepseek_branch_skipped_without_key(monkeypatch):
     assert key == "sk-or-real"
 
 
+def test_forced_openrouter_overrides_oauth(monkeypatch):
+    # The non-negotiable fetch-acceptance scenario: a Claude OAuth credential is
+    # present (sk-ant-oat...) AND DeepSeek-direct is the configured default, but
+    # the operator forces VECTOR_PROVIDER=openrouter because anthropic-direct +
+    # DeepSeek-direct are network-blocked. An explicit force MUST win over the
+    # OAuth branch — otherwise resolution silently routes to a dead endpoint.
+    monkeypatch.setenv("VECTOR_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-forced")
+    monkeypatch.setenv("VECTOR_MODEL", "deepseek/deepseek-chat")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-present")  # default down
+    # OAuth creds ARE present (would otherwise hijack to anthropic).
+    monkeypatch.setattr(oauth, "load_credentials", lambda: {"accessToken": "sk-ant-oat-xyz"})
+    monkeypatch.setattr(config, "load_claude_oauth", lambda: {"accessToken": "sk-ant-oat-xyz"})
+    _patch_config(monkeypatch, {"provider": "deepseek", "deepseek_api_key": "sk-ds"})
+    key, provider, model, base_url = config.resolve_credentials()
+    assert provider == "openrouter", f"forced openrouter ignored -> {provider}"
+    assert key == "sk-or-forced"
+    # A slash-bearing id is passed through untouched (no anthropic/ mangling).
+    assert model == "deepseek/deepseek-chat"
+    assert base_url == "https://openrouter.ai/api/v1"
+
+
 def test_openrouter_path_unchanged(monkeypatch):
     # Regression: a normal openrouter config still mangles a slashless model to
     # anthropic/<model> (existing behaviour the deepseek branch must not disturb).

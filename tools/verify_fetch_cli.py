@@ -70,6 +70,14 @@ def main() -> int:
                     # stack (navigate_to plans via in-process vgraph) so an
                     # unattended round does not OOM/SIGKILL (rc=137 guardrail).
                     "VECTOR_NO_ROS2": "1",
+                    # Force OpenRouter for the routing brain: anthropic-direct +
+                    # DeepSeek-direct are network-blocked here, and a present
+                    # Claude OAuth credential would otherwise hijack resolution to
+                    # the dead anthropic endpoint (config.resolve_credentials honors
+                    # this forced provider as a hard override). The VLM already
+                    # routes GPT-4o via OpenRouter unconditionally.
+                    "VECTOR_PROVIDER": os.environ.get("VECTOR_PROVIDER", "openrouter"),
+                    "VECTOR_MODEL": os.environ.get("VECTOR_MODEL", "deepseek/deepseek-chat"),
                 },
                 extra_args=["--headless", "--native-loop"],
             )
