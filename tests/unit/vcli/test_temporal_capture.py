@@ -39,6 +39,16 @@ def test_capture_strip_never_raises(monkeypatch, tmp_path):
         assert capture.capture_strip_frame(bad, 0) is None
 
 
+def test_strip_frame_cap_skips_high_idx(monkeypatch, tmp_path):
+    monkeypatch.setenv("VECTOR_SNAPSHOT_DIR", str(tmp_path))
+    monkeypatch.setenv("VECTOR_SNAPSHOT_STRIP", "1")
+    calls = []
+    monkeypatch.setattr(capture, "_render_agent_frame", lambda *a, **k: calls.append(1) or (0.0, 0.0, 0.0))
+    capture.capture_strip_frame(object(), 0)                          # under the cap -> renders
+    capture.capture_strip_frame(object(), capture._STRIP_MAX_FRAMES)  # at the cap -> skipped
+    assert calls == [1]
+
+
 def test_load_strip_empty(tmp_path):
     assert capture.load_strip(str(tmp_path)) == []
 

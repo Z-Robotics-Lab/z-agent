@@ -100,13 +100,18 @@ def run_once(
         }
 
     temporal_flag = bool(temporal.get("disagreement"))
+    # A temporal disagreement must move the DECISION (not only the flags), else the summary
+    # accept-count silently hides it. Downgrade-only: it never turns a REJECT into an ACCEPT.
+    decision = d.decision
+    if temporal_flag and decision == gate.ACCEPT:
+        decision = gate.RED_FLAG
     return {
         "command": command,
         "gt": {"evidence": verdict.get("evidence"), "verified": gt_verified, "exit": r.exit_code},
         "vision": vision,
         "temporal": temporal,
         "frame": frames[-1] if frames else None,
-        "decision": d.decision,
+        "decision": decision,
         "disagreement": d.disagreement or temporal_flag,
         "needs_red_team": d.needs_red_team or temporal_flag,
         "block_headline": d.block_headline or temporal_flag,

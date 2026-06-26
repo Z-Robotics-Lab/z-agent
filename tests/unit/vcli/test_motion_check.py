@@ -68,3 +68,14 @@ def test_nonfinite_poses_are_filtered():
     track = [{"x": 0, "y": 0}, {"x": float("nan"), "y": 0}, {"x": float("inf"), "y": 0}, {"x": 1, "y": 0}]
     v = mc.cross_check(track, "PASS")
     assert math.isfinite(v.moved_m) and v.hard_moved  # NaN/inf dropped; the 0->1 move still counts
+
+
+def test_teleport_caught_by_hard_channel_regardless_of_vision():
+    # a multi-metre single-step jump is non-physical -> HARD-channel teleport flag even if vision PASSes
+    v = mc.cross_check([{"x": 0, "y": 0}, {"x": 3, "y": 0}], "PASS")
+    assert v.teleport and v.disagreement and v.max_step_m >= 3.0
+
+
+def test_normal_walk_is_not_teleport():
+    v = mc.cross_check([{"x": 0, "y": 0}, {"x": 0.5, "y": 0}, {"x": 1.0, "y": 0}], "PASS")
+    assert not v.teleport and not v.disagreement

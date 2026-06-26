@@ -105,11 +105,21 @@ def _base_pose(base):
     return (x, y, h)
 
 
-def _render_agent_frame(agent, path: str):
+# The temporal strip TRACKS the robot (cam_spec=None) so its GAIT/legs stay big enough for the VLM to
+# judge locomotion plausibility — a fixed wide cam makes the robot too small to see the gait (verified
+# regression). DIVISION OF LABOR (review finding): TRANSLATION + TELEPORT are the HARD channel's job
+# (the deterministic pose-delta in motion_check, which measures displacement the camera can't hide),
+# NOT vision's — so the tracking cam framing being tied to odometry is fine: vision never judges
+# translation here, only gait/upright (what it can actually see).
+_STRIP_MAX_FRAMES = 60  # cap per-step strip renders so a very long turn can't churn GL unboundedly
+
+
+def _render_agent_frame(agent, path: str, *, cam_spec: "CamSpec | None" = None):
     """Render a same-process third-person frame of ``agent._base`` to ``path`` from an ISOLATED qpos
     copy with a FRESH renderer on the CALLING thread (thread-safe vs the control thread — ADR-002
-    tricky Case 11). Returns the base pose ``(x, y, heading)`` (``(0,0,0)`` if unknown), or ``None``
-    when there is no connected sim to render. May raise (GL/cv2) — callers wrap for inertness.
+    tricky Case 11). With ``cam_spec=None`` the camera TRACKS the robot (the single verdict frame);
+    pass a fixed ``cam_spec`` for the temporal strip. Returns the base pose ``(x, y, heading)``
+    (``(0,0,0)`` if unknown), or ``None`` when there is no connected sim. May raise — callers wrap.
     """
     base = getattr(agent, "_base", None)
     if base is None:
@@ -120,11 +130,12 @@ def _render_agent_frame(agent, path: str):
     import mujoco as mj
 
     pose = _base_pose(base)
-    spec = CamSpec(lookat=(pose[0], pose[1], 0.3)) if pose else CamSpec()
+    if cam_spec is None:
+        cam_spec = CamSpec(lookat=(pose[0], pose[1], 0.3)) if pose else CamSpec()
     data_copy = mj.MjData(model)
     n = min(len(data_copy.qpos), len(data.qpos))
     data_copy.qpos[:n] = np.asarray(data.qpos)[:n]
-    snapshot(model, data_copy, spec, path)  # transient renderer (this thread) + forward on the copy
+    snapshot(model, data_copy, cam_spec, path)  # transient renderer (this thread) + forward on copy
     return pose if pose is not None else (0.0, 0.0, 0.0)
 
 
@@ -161,11 +172,13 @@ def capture_strip_frame(agent, idx: int) -> str | None:
     if not out_dir or not _strip_enabled():
         return None
     try:
+        if int(idx) >= _STRIP_MAX_FRAMES:  # bound the per-step render cost over a very long turn
+            return None
         import json
 
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"frame_{int(idx):03d}.png")
-        pose = _render_agent_frame(agent, path)
+        pose = _render_agent_frame(agent, path)  # tracking cam -> gait visible for the VLM
         if pose is None:
             return None
         rec = {"idx": int(idx), "path": path, "x": pose[0], "y": pose[1], "heading": pose[2], "t": time.time()}
