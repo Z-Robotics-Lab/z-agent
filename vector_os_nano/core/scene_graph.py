@@ -423,14 +423,21 @@ class SceneGraph:
         viewpoint_id: str,
         description: str = "",
         confidence: float = 0.8,
-        x: float = 0.0,
-        y: float = 0.0,
+        x: float | None = None,
+        y: float | None = None,
     ) -> ObjectNode:
         """Add or merge an object in a room.
 
         If an object with the same category already exists in this room,
         update it (add viewpoint, update description if confidence is higher).
         Otherwise create a new ObjectNode.
+
+        ``x``/``y`` use a ``None`` sentinel for "no new localization this
+        observation" — on a merge the existing position is kept; on a new
+        object it defaults to ``0.0``. A real float (INCLUDING ``0.0``) is
+        always applied, so an object genuinely at the world origin / on an
+        axis is no longer silently discarded as if un-localized (backlog #3,
+        the same bug class as the D97 (0,0) catastrophe).
 
         Returns the resulting ObjectNode.
         """
@@ -451,8 +458,8 @@ class SceneGraph:
                         ),
                         confidence=max(confidence, existing.confidence),
                         room_id=room_id,
-                        x=x if x != 0.0 else existing.x,
-                        y=y if y != 0.0 else existing.y,
+                        x=x if x is not None else existing.x,
+                        y=y if y is not None else existing.y,
                         z=existing.z,
                         attributes=existing.attributes,
                         viewpoint_ids=tuple(sorted(vp_ids)),
@@ -468,7 +475,8 @@ class SceneGraph:
                 description=description,
                 confidence=confidence,
                 room_id=room_id,
-                x=x, y=y,
+                x=x if x is not None else 0.0,
+                y=y if y is not None else 0.0,
                 viewpoint_ids=(viewpoint_id,),
             )
             self._objects[obj.object_id] = obj
