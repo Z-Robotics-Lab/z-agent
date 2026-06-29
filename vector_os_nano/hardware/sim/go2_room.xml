@@ -593,6 +593,15 @@
       <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
     </body>
 
+    <!-- Far pedestal for the VECTOR_FETCH_FAR scenario: the same oak box ~3 m down
+         the clear +X hall. INERT in the default near scene (the dog grasps at x~10.9
+         and never drives here); in FAR mode mujoco_go2.connect() relocates the green
+         bottle onto this top so the fetch is out of a 1-step grasp's reach and the
+         model must compose look -> navigate_to_object -> perception_grasp. -->
+    <body name="pick_table_far" pos="13.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
+    </body>
+
     <!-- Objects on the pedestal top (z_top=0.28 + 0.04 half-height = 0.32 centre).
          GREEN is the deictic "前面的东西" target: placed dead-ahead on the dog's
          spawn-y line (y=3.0) AND 8 cm back from the near edge (x=10.88) so it is

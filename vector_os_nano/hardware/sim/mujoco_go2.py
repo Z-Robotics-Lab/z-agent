@@ -201,6 +201,14 @@ _LIDAR_UPDATE_INTERVAL: int = 200  # physics steps between scans (~5 Hz, 5200 ra
 # radius that clears furniture corners by the gait's natural COM oscillation.
 _GO2_BODY_RADIUS: float = 0.28
 
+# VECTOR_FETCH_FAR scenario knob: relocate the green fetch target onto pick_table_far,
+# ~3 m down the clear +X hall — beyond perception_grasp's 1.6 m self-approach radius —
+# so a 1-step grasp cannot reach it and the model must compose
+# look -> navigate_to_object -> perception_grasp (the agent-adaptive fetch). Default
+# unset keeps the in-reach near-grasp baseline. z=0.32 = pick_table_far top (0.28) +
+# the cylinder half-height (0.04), matching the near placement.
+_FAR_TARGET_XYZ: tuple[float, float, float] = (13.88, 3.00, 0.32)
+
 # Proportional heading gain and limits (mirrors g1 nav tuning, go2 is more agile)
 _GO2_NAV_K_YAW: float = 2.0
 _GO2_NAV_VYAW_MAX: float = 0.8
@@ -578,6 +586,17 @@ class MuJoCoGo2:
                 arm_q0 = layout.joint_qpos_start + layout.num_actuated
                 data.qpos[arm_q0 : arm_q0 + 8] = _PIPER_STOW_QPOS
                 data.ctrl[12:19] = _PIPER_STOW_CTRL
+
+            # Optional FAR-FETCH scenario (additive; default off keeps the in-reach
+            # near-grasp baseline). VECTOR_FETCH_FAR relocates the green target onto
+            # pick_table_far so a 1-step grasp can't reach it and the model must route
+            # look -> navigate_to_object -> perception_grasp. The verify spine reads
+            # live GT, so moving the body stays honest. Never break a launch over it.
+            if os.environ.get("VECTOR_FETCH_FAR"):
+                bid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "pickable_bottle_green")
+                if bid >= 0:
+                    qadr = int(model.jnt_qposadr[int(model.body_jntadr[bid])])
+                    data.qpos[qadr : qadr + 3] = _FAR_TARGET_XYZ
         else:
             scene_path = _build_flat_scene_xml()
             model = mj.MjModel.from_xml_path(str(scene_path))
