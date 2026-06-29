@@ -124,11 +124,6 @@ _DOCK_FACE_GAIN = 0.85         # damp the residual (raised from 0.6 so a big re-
 _DOCK_FACE_MAX_S = 1.0
 _DOCK_FACE_MAX_STEPS = 12      # raised from 6 — enough to close a ~180° residual
 
-# Closed-loop lateral re-center onto the dock_y centerline (body-frame vy sidestep).
-_DOCK_LATERAL_DEADBAND_M = 0.05  # m; within this the lateral step is a no-op
-_DOCK_LATERAL_VY = 0.25          # m/s sidestep speed
-_DOCK_LATERAL_MAX_STEPS = 4      # max sidestep commands
-
 # R42 (D55): HOLONOMIC body-frame fine-positioning. FAR drops the dog PAST the dock point
 # (observed: arrives at x≈10.6-10.7 for a dock_x=10.0), so the residual is a SMALL
 # BACKWARD + sideways correction. The old path faced that ~172° bearing (a full turn in
@@ -426,39 +421,6 @@ def _face_heading(base: Any, target_hd: float, yaw_deadband: float,
         if on_progress:
             on_progress(f"dock: face residual {math.degrees(face_err):.0f}deg")
         _safe_walk(base, vyaw=vyaw, duration=dur)
-
-
-def _recenter_lateral(
-    base: Any,
-    dock_xy: tuple[float, float],
-    dock_hd: float,
-    on_progress: Any,
-) -> None:
-    """Sidestep (body-frame vy) to re-center the dog's y on the dock_y centerline.
-
-    Closes the perpendicular-to-heading offset from the dock centerline (R39 t2:
-    y=3.18 vs target 3.0 framed the wrong object at 22 cm inter-can spacing). The
-    world-y offset is projected perpendicular to the dock heading, so this is correct
-    at any dock heading. Benign no-op when already within the deadband; errors are
-    swallowed via _safe_walk so a base glitch cannot abort the dock.
-    """
-    dock_y = float(dock_xy[1])
-    for _ in range(_DOCK_LATERAL_MAX_STEPS):
-        pose = _measure(base)
-        if pose is None:
-            return
-        dx = float(dock_xy[0]) - pose[0]
-        dy = dock_y - pose[1]
-        lateral = -dx * math.sin(pose[2]) + dy * math.cos(pose[2])
-        if abs(lateral) <= _DOCK_LATERAL_DEADBAND_M:
-            return  # already on centerline — benign no-op
-        vy = _DOCK_LATERAL_VY if lateral > 0 else -_DOCK_LATERAL_VY
-        dur = min(1.0, abs(lateral) / _DOCK_LATERAL_VY)
-        if on_progress:
-            on_progress(f"dock: lateral re-center {lateral:.3f}m (vy={vy:.2f})")
-        logger.debug("[DOCK] lateral re-center lateral=%.3fm vy=%.2f dur=%.2fs",
-                     lateral, vy, dur)
-        _safe_walk(base, vx=0.0, vy=vy, vyaw=0.0, duration=dur)
 
 
 def _body_fine_position(

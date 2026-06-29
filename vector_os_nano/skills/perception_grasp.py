@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from typing import Any
 
 from vector_os_nano.core.skill import SkillContext, skill
@@ -40,6 +41,15 @@ from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
 from vector_os_nano.skills.utils.terminal_dock import dock_converged, terminal_dock
 
 logger = logging.getLogger(__name__)
+
+# Opt-in debug: dump the per-grasp RGB/depth/mask frames to /tmp/pgrasp_*.png.
+# OFF by default — these unconditional writes were slop in the grasp hot path
+# (a side-effecting /tmp write on every perceive). Set VECTOR_PGRASP_DEBUG=1 to
+# re-enable for visual debugging. The mask itself is still computed regardless;
+# only the diagnostic image writes are gated.
+_PGRASP_DEBUG: bool = os.environ.get("VECTOR_PGRASP_DEBUG", "") not in (
+    "", "0", "false", "off", "no",
+)
 
 # Perception-backend surface this skill consumes (a Go2GraspPerception or any
 # RGB-D + VLM + segmenter adapter exposing these).
@@ -1180,29 +1190,32 @@ class PerceptionGraspSkill:
         detection_found = False
         if use_front_resolver:
             try:
-                # Save frames for diagnosis
-                try:
-                    import cv2 as _cv2
-                    _cv2.imwrite("/tmp/pgrasp_rgb.png", rgb[:, :, ::-1] if rgb is not None else np.zeros((240,320,3),np.uint8))
-                    if depth is not None:
-                        _dvis = np.clip(depth / 3.0 * 255, 0, 255).astype(np.uint8)
-                        _cv2.imwrite("/tmp/pgrasp_depth.png", _dvis)
-                except Exception:
-                    pass
+                # Save frames for diagnosis (opt-in via VECTOR_PGRASP_DEBUG)
+                if _PGRASP_DEBUG:
+                    try:
+                        import cv2 as _cv2
+                        _cv2.imwrite("/tmp/pgrasp_rgb.png", rgb[:, :, ::-1] if rgb is not None else np.zeros((240,320,3),np.uint8))
+                        if depth is not None:
+                            _dvis = np.clip(depth / 3.0 * 255, 0, 255).astype(np.uint8)
+                            _cv2.imwrite("/tmp/pgrasp_depth.png", _dvis)
+                    except Exception:
+                        pass
                 mask = perception.front_object_mask(rgb, depth, color=color)
                 _mask_px = int(np.count_nonzero(mask)) if mask is not None else 0
                 _d_valid = int((depth > 0).sum()) if depth is not None else -1
                 _d_near = int(((depth > 0) & (depth <= 2.0)).sum()) if depth is not None else -1
                 _d_min = float(depth[depth > 0].min()) if depth is not None and (depth > 0).any() else -1
                 _d_med = float(np.median(depth[depth > 0])) if depth is not None and (depth > 0).any() else -1
-                # Save mask overlay
-                try:
-                    if mask is not None and rgb is not None:
-                        _overlay = rgb.copy()
-                        _overlay[mask > 0] = [255, 0, 0]  # red highlight
-                        _cv2.imwrite("/tmp/pgrasp_mask.png", _overlay[:, :, ::-1])
-                except Exception:
-                    pass
+                # Save mask overlay (opt-in via VECTOR_PGRASP_DEBUG)
+                if _PGRASP_DEBUG:
+                    try:
+                        import cv2 as _cv2
+                        if mask is not None and rgb is not None:
+                            _overlay = rgb.copy()
+                            _overlay[mask > 0] = [255, 0, 0]  # red highlight
+                            _cv2.imwrite("/tmp/pgrasp_mask.png", _overlay[:, :, ::-1])
+                    except Exception:
+                        pass
                 logger.info(
                     "[PGRASP] front_object_mask: mask_px=%d valid_depth=%d "
                     "near_depth(<=2m)=%d d_min=%.3f d_med=%.3f",

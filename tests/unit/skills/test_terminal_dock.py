@@ -34,7 +34,6 @@ import math
 import pytest
 
 from vector_os_nano.skills.utils.terminal_dock import (
-    _DOCK_LATERAL_DEADBAND_M,
     _DOCK_POS_DEADBAND_M,
     _GATE_HEADING_TOL_RAD,
     _GATE_LATERAL_TOL_M,
@@ -217,13 +216,14 @@ def test_dock_skips_none_base():
     assert result.ran is False
 
 
-def test_dock_lateral_recenter_fires_when_off_centerline():
-    """The closed-loop lateral re-center closes a y offset — final y within deadband."""
+def test_dock_lateral_offset_closed_by_fine_position():
+    """terminal_dock closes a lateral y offset (via the holonomic _body_fine_position
+    step) — final y within the post-fine-position residual tolerance."""
     base = _KinematicBase(pose=(9.88, 3.18), heading=0.02)
     terminal_dock(base, (_DOCK_X, _DOCK_Y), _DOCK_HD)
     _, py, _ = base.get_position()
-    assert abs(py - _DOCK_Y) <= _DOCK_LATERAL_DEADBAND_M + 0.03, (
-        f"lateral re-center did not close y offset: py={py:.3f}")
+    assert abs(py - _DOCK_Y) <= 0.08, (  # lateral deadband (0.05) + measurement margin
+        f"dock did not close the y offset: py={py:.3f}")
 
 
 # ---------------------------------------------------------------------------

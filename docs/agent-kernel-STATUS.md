@@ -25,10 +25,17 @@
 #   foreground probes REFUTED that (IK converges to z=0.10) and found the TRUE blocker = the LOADED arm COLLIDES
 #   with the table edge on descent (stalls z~0.30, bottle settles near table top, placed_count=0). A
 #   placed_count-GROUNDED place needs a receptacle-relative oracle = CEO GATE (queued, plan ## Decisions pending).
-# >> NEXT (non-gated, autonomous loop priority — far gated+plateaued, place wiring done): backlog #4 SLOP CLEANUP
-#   (dead _recenter_lateral in terminal_dock.py; gate the unconditional /tmp/pgrasp_*.png debug writes behind an
-#   env flag; hoist inline hot-path imports; harden find_objects_by_category substring collision "bottle"→green+blue).
-#   Then re-survey the frontier (Decision Workflow) — most substantial fetch/place work is now CEO-gated.
+# >> BACKLOG #4 DONE (D107, this round): SLOP CLEANUP. Removed dead _recenter_lateral (+ 3 orphaned
+#   _DOCK_LATERAL_* consts; superseded by _body_fine_position holonomic closure — dock test renamed+kept green);
+#   gated the 3 unconditional /tmp/pgrasp_*.png writes behind VECTOR_PGRASP_DEBUG (default off; mask compute
+#   untouched). INVESTIGATED + LEFT AS-IS (not slop): find_objects_by_category substring match is INTENTIONAL +
+#   tested (test_..._substring pins 'chair'->'office_chair'; navigate_to_object relies on it); the cv2 inline
+#   import is a deliberate optional-dep lazy import. Behavior-neutral: 109 skills unit tests + dock e2e green, no
+#   sim re-verify needed (no behavior/reliability claim).
+# >> NEXT (non-gated): the per-item backlog (#1-#4) is now EXHAUSTED — far-fetch is CEO-gated+plateaued (D100-D104),
+#   place placed_count is CEO-gated (D106), #2/#3/#4 shipped. Run a DECISION WORKFLOW to re-survey the frontier for
+#   the next non-gated chunk (research the SOTA mobile-manip / orchestration frontier, rank by ambition×feasibility);
+#   if it surfaces only gated work, light regression-watch + batch the queued CEO gates for Yusen's return.
 
 # Vector OS — STATUS (resume anchor)
 
