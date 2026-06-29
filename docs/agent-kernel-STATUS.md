@@ -4,14 +4,19 @@
 #    GT-PASS+vision-FAIL for red-team. Coverage gap (D101): BLIND to grasp authenticity -> the GT weld
 #    (holding_object) is the success authority. disagreements>0 => red-team before trusting any grounded_rate.
 # >> IN-REACH fetch: grounded_rate ~0.8 (D99, frozen weld+lift oracle, three consistent runs) — steady baseline.
-# >> FAR fetch (out-of-reach) CLOSES THE LOOP (D110, 35307bc): bare-cli "把绿色的瓶子拿过来" + real model,
-#    VECTOR_FETCH_FAR=1 -> GROUNDED verified=True (1 logged run). Mechanism = SKILL-LEVEL recovery inside
-#    perception_grasp (D109, CEO Gate A — NOT a kernel replan, native-is-the-design): on no_detections it
-#    seeds an un-gated localize from the clean forward pose -> drives the standoff -> re-perceives -> grasps.
-#    RELIABILITY VARIABLE (model routing / colour-param variance + intermittent VLM SSL) — the loop CAN close,
-#    it does not yet ground every turn.
-# >> NEXT (non-gated): far routing consistency · extend the eyes harness to require BOTH welds for a
-#    multi-object command (D108) then a live grounded_rate over N · fix the pre-existing describe 'no caption' crash.
+# >> FAR fetch (out-of-reach) via perception_grasp is now RELIABLE (D111, 7756132): the D110 "sometimes
+#    no_detections" variance was ROOT-CAUSED (logged probe) to a NAV terminal-heading bug, not perception —
+#    FAR's navigate_to leaves the dog mis-faced at the standoff and the one-directional ~200deg re-perceive
+#    scan misses the bottle. FIX (skill-level, kernel/moat untouched): the recovery faces the KNOWN seed xy
+#    via _grasp_ready_repose before re-perceiving. Verified 3/3 skill-direct (real weld +0.23m each).
+#    Mechanism still = SKILL-LEVEL recovery in perception_grasp (D109, CEO Gate A — NOT a kernel replan).
+# >> FAR end-to-end is now gated by MODEL ROUTING, not no_detections: bare-cli N=2 both routed mobile_pick
+#    (not perception_grasp), and mobile_pick fails the far fetch for a SEPARATE reason — it resolves the
+#    target from world_model and gets a BOGUS near-origin far position. EYES not yet run (no clean
+#    perception_grasp ground reached end-to-end; VLM confirmation pending).
+# >> NEXT (non-gated): (1) mobile_pick far-target resolution (world_model bogus position for the relocated
+#    far bottle); (2) routing consistency — make BOTH far skills reliable (native-is-the-design, don't
+#    hardcode the choice); (3) eyes grounded_rate over N once a perception_grasp route grounds end-to-end.
 # >> CEO gates still queued (do NOT cross — see Pending CEO gates below): S8 · S3c · S4 · S5 · S6 · D106 place oracle.
 
 # Vector OS — STATUS (resume anchor)
@@ -21,7 +26,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-29 · D110 — far fetch closes the loop via skill-level recovery; multi-object D108 sealed.
+updated: 2026-06-29 · D111 — far perception_grasp no_detections variance root-caused (nav heading) + fixed; mobile_pick is the new end-to-end gate.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -31,13 +36,15 @@ phase:   FIND-AND-GRASP / FETCH campaign on `arch/plug-and-play` (find→navigat
 owns:    `skills/{perception_grasp,navigate_to_object,mobile_*}.py`, `perception/object_localizer.py`,
          `tools/acceptance/**` + `acceptance/**`, `docs/*`. Spine `vcli/cognitive/` is FROZEN
          (only-ever-stricter; untouched this campaign — see Standing facts).
-doing:   far fetch GROUNDED verified=True through bare-cli + real model (D110) via perception_grasp's
-         skill-level recovery; far reliability still VARIABLE; multi-object fetch sealed (D108,
-         FakeToolScriptBackend); in-reach 0.8 baseline steady; eyes (ADR-002) are the per-round REAL-VERIFY.
+doing:   far perception_grasp recovery now FACES the known seed xy before re-perceiving (D111, fixes the
+         no-terminal-heading no_detections variance; 3/3 skill-direct, real weld +0.23m); end-to-end far is
+         now gated by model routing (picks mobile_pick) + mobile_pick's bogus world_model far-target; in-reach
+         0.8 baseline steady; multi-object D108 sealed; eyes (ADR-002) are the per-round REAL-VERIFY.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    (1) why a model-routed perception_grasp sometimes still no_detections (colour-param/routing variance);
-         (2) far routing consistency; (3) extend measure_fetch_visual to require BOTH welds for a multi-object
-         command, then a live grounded_rate over N when the VLM net is stable; (4) the describe 'no caption' crash.
+next:    (1) mobile_pick far-target resolution — world_model gives a near-origin position for the relocated
+         far bottle (VECTOR_FETCH_FAR likely not reflected in world_model's object table); (2) routing
+         consistency — make BOTH far skills reliable so whichever the model picks grounds (native-is-the-design);
+         (3) eyes grounded_rate over N once a perception_grasp route grounds end-to-end and the VLM net is up.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
