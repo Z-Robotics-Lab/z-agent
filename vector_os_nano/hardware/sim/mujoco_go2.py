@@ -201,13 +201,23 @@ _LIDAR_UPDATE_INTERVAL: int = 200  # physics steps between scans (~5 Hz, 5200 ra
 # radius that clears furniture corners by the gait's natural COM oscillation.
 _GO2_BODY_RADIUS: float = 0.28
 
-# VECTOR_FETCH_FAR scenario knob: relocate the green fetch target onto pick_table_far,
+# VECTOR_FETCH_FAR scenario knob: relocate ALL THREE pickables onto pick_table_far,
 # ~3 m down the clear +X hall — beyond perception_grasp's 1.6 m self-approach radius —
-# so a 1-step grasp cannot reach it and the model must compose
-# look -> navigate_to_object -> perception_grasp (the agent-adaptive fetch). Default
-# unset keeps the in-reach near-grasp baseline. z=0.32 = pick_table_far top (0.28) +
-# the cylinder half-height (0.04), matching the near placement.
-_FAR_TARGET_XYZ: tuple[float, float, float] = (13.88, 3.00, 0.32)
+# so a 1-step grasp cannot reach them and the model must compose
+# look -> navigate_to_object -> perception_grasp (the agent-adaptive fetch). Moving the
+# blue/red distractors the SAME +3 m as green (not green alone) removes the confound
+# where a near distractor sat inside the spawn's reach and a 1-step grasp could engage
+# it instead of routing to the far target — isolating "can the model fetch a CLEAN far
+# object?" from the near-distractor noise. The +3.0 m matches pick_table (10.95) ->
+# pick_table_far (13.95); each body keeps its y/z (green 10.88->13.88 dead-ahead, blue
+# 2.78 / red 3.22 keeping the deictic y-spread). Default unset keeps the in-reach
+# near-grasp baseline.
+_FAR_FETCH_OFFSET_X: float = 3.0
+_FAR_FETCH_BODIES: tuple[str, ...] = (
+    "pickable_bottle_green",
+    "pickable_bottle_blue",
+    "pickable_can_red",
+)
 
 # Proportional heading gain and limits (mirrors g1 nav tuning, go2 is more agile)
 _GO2_NAV_K_YAW: float = 2.0
@@ -588,15 +598,18 @@ class MuJoCoGo2:
                 data.ctrl[12:19] = _PIPER_STOW_CTRL
 
             # Optional FAR-FETCH scenario (additive; default off keeps the in-reach
-            # near-grasp baseline). VECTOR_FETCH_FAR relocates the green target onto
-            # pick_table_far so a 1-step grasp can't reach it and the model must route
-            # look -> navigate_to_object -> perception_grasp. The verify spine reads
-            # live GT, so moving the body stays honest. Never break a launch over it.
+            # near-grasp baseline). VECTOR_FETCH_FAR relocates ALL THREE pickables
+            # +3 m onto pick_table_far so a 1-step grasp can't reach any of them and
+            # the model must route look -> navigate_to_object -> perception_grasp; the
+            # blue/red distractors move too, so no near distractor confounds the far
+            # green fetch. The verify spine reads live GT, so moving the bodies stays
+            # honest. Never break a launch over it.
             if os.environ.get("VECTOR_FETCH_FAR"):
-                bid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "pickable_bottle_green")
-                if bid >= 0:
-                    qadr = int(model.jnt_qposadr[int(model.body_jntadr[bid])])
-                    data.qpos[qadr : qadr + 3] = _FAR_TARGET_XYZ
+                for _name in _FAR_FETCH_BODIES:
+                    bid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, _name)
+                    if bid >= 0:
+                        qadr = int(model.jnt_qposadr[int(model.body_jntadr[bid])])
+                        data.qpos[qadr] += _FAR_FETCH_OFFSET_X
         else:
             scene_path = _build_flat_scene_xml()
             model = mj.MjModel.from_xml_path(str(scene_path))
