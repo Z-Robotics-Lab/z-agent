@@ -562,3 +562,34 @@ def test_low_z_passed_box_fails_loud():
         f"expected low_z_backprojection at passed-box site, got {rd['diagnosis']}")
     assert rd.get("consumed_bbox") is True
     assert rd.get("actual_z", 1.0) < _MIN_GRASP_Z
+
+
+# ---------------------------------------------------------------------------
+# Backlog #2 — ran-no-weld diagnosis: the dominant out-of-reach fetch failure
+# is RAN (the grasp pipeline runs to completion but no holding_object weld
+# forms). The skill must stamp result_data['diagnosis']='ran_no_weld', read from
+# the GT gripper weld — INFORMATIONAL only, never feeding the verify oracle.
+# ---------------------------------------------------------------------------
+
+
+def test_ran_no_weld_diagnosis_when_grasp_completes_without_weld():
+    """Grasp runs to completion but the gripper holds nothing -> 'ran_no_weld'."""
+    perc = FakePerception()
+    gripper = FakeGripper(holding_after_close=False)  # close() runs but NO weld forms
+    res = PerceptionGraspSkill().execute(
+        {"query": "banana"}, _ctx(perc, arm=FakeArm(), gripper=gripper))
+    rd = res.result_data
+    assert rd.get("weld_formed") is False
+    assert rd.get("diagnosis") == "ran_no_weld", (
+        f"expected ran_no_weld on a no-weld grasp, got {rd.get('diagnosis')!r}")
+
+
+def test_no_ran_no_weld_diagnosis_when_weld_forms():
+    """A real weld -> weld_formed True and NO ran_no_weld code."""
+    perc = FakePerception()
+    gripper = FakeGripper(holding_after_close=True)  # default: weld forms
+    res = PerceptionGraspSkill().execute(
+        {"query": "banana"}, _ctx(perc, arm=FakeArm(), gripper=gripper))
+    rd = res.result_data
+    assert rd.get("weld_formed") is True
+    assert rd.get("diagnosis") != "ran_no_weld"

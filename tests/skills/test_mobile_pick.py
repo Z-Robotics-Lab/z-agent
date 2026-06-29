@@ -686,3 +686,59 @@ def test_mobile_pick_detect_crash_does_not_crash_skill():
     assert not result.success
     assert result.result_data["diagnosis"] == "object_not_found"
     mock_pick.execute.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Backlog #2 — ran-no-weld diagnosis: PickTopDown can report success while the
+# gripper holds nothing (RAN: success-but-no-ground, the dominant far failure).
+# MobilePick reads the GT weld and stamps diagnosis='ran_no_weld'. Informational.
+# ---------------------------------------------------------------------------
+
+
+def test_mobile_pick_ran_no_weld_when_pick_succeeds_without_weld():
+    """Pick 'succeeds' (possibly_missed) but no weld -> diagnosis='ran_no_weld'."""
+    ax, ay, ayaw = _APPROACH_POSE
+    base = _make_base(pos=(ax, ay, 0.28), heading=ayaw)
+    wm = _make_world_model()
+    skill, mock_pick = _make_skill_with_mock_pick(
+        pick_execute_return=SkillResult(
+            success=True,
+            result_data={"diagnosis": "possibly_missed", "object_id": _OBJ_ID},
+        )
+    )
+    gripper = MagicMock()
+    gripper.is_holding.return_value = False  # GT: no weld formed
+
+    with (
+        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("time.sleep"),
+    ):
+        ctx = _make_context(base=base, arm=MagicMock(), gripper=gripper, world_model=wm)
+        result = skill.execute({}, ctx)
+
+    assert result.success
+    assert result.result_data["weld_formed"] is False
+    assert result.result_data["diagnosis"] == "ran_no_weld"
+
+
+def test_mobile_pick_keeps_ok_diagnosis_when_weld_forms():
+    """A real weld -> weld_formed True, the ok diagnosis is preserved (no override)."""
+    ax, ay, ayaw = _APPROACH_POSE
+    base = _make_base(pos=(ax, ay, 0.28), heading=ayaw)
+    wm = _make_world_model()
+    skill, mock_pick = _make_skill_with_mock_pick()  # default success diagnosis='ok'
+    gripper = MagicMock()
+    gripper.is_holding.return_value = True
+
+    with (
+        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("time.sleep"),
+    ):
+        ctx = _make_context(base=base, arm=MagicMock(), gripper=gripper, world_model=wm)
+        result = skill.execute({}, ctx)
+
+    assert result.success
+    assert result.result_data["weld_formed"] is True
+    assert result.result_data["diagnosis"] != "ran_no_weld"

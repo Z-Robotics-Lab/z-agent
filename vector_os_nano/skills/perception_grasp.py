@@ -835,7 +835,24 @@ class PerceptionGraspSkill:
             "consumed_bbox": consumed_bbox,
             "reperceived": not consumed_bbox,
         })
-        if not res.success and "diagnosis" not in rd:
+        # --- ran-no-weld diagnosis (backlog #2) ------------------------------
+        # The dominant out-of-reach fetch failure is RAN: the grasp pipeline runs
+        # to completion but no holding_object weld forms (success-but-no-ground).
+        # PickTopDownSkill reports success even then (diagnosis 'possibly_missed'),
+        # so without a precise code the loop cannot tell a no-weld grasp apart from
+        # a fail-loud one. Read the GT weld (gripper.is_holding — the oracle the
+        # actor cannot author) and stamp 'ran_no_weld' in place of the vague/empty
+        # diagnosis. INFORMATIONAL ONLY — it rides result_data -> StepVerdict.diagnosis,
+        # NEVER ``verified`` (the spine grades holding_object independently).
+        weld_formed = False
+        try:
+            weld_formed = bool(gripper.is_holding())
+        except Exception as exc:  # noqa: BLE001 — a diagnosis read must never crash the grasp
+            logger.debug("[PGRASP] is_holding() diagnosis read failed: %s", exc)
+        rd["weld_formed"] = weld_formed
+        if not weld_formed and rd.get("diagnosis") in (None, "", "ok", "possibly_missed"):
+            rd["diagnosis"] = "ran_no_weld"
+        elif not res.success and not rd.get("diagnosis"):
             rd["diagnosis"] = "grasp_failed"
         return SkillResult(
             success=res.success,

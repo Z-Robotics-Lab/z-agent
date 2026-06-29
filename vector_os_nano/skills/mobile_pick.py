@@ -283,10 +283,26 @@ class MobilePickSkill:
                 "nav_distance": nav_dist,
                 "skipped_navigate": already_reachable or skip_nav,
             }
+            rd = {**result.result_data, "mobile_pick": mobile_meta}
+            # --- ran-no-weld diagnosis (backlog #2) --------------------------
+            # PickTopDownSkill reports success even when the weld did not form
+            # (diagnosis 'possibly_missed') — the dominant far failure is this RAN
+            # (success-but-no-ground) mode. Read the GT weld (gripper.is_holding —
+            # the oracle the actor cannot author) and stamp the precise 'ran_no_weld'
+            # so it is diagnosable. INFORMATIONAL only: it rides result_data ->
+            # StepVerdict.diagnosis, never ``verified`` (the spine grades the oracle).
+            weld_formed = False
+            try:
+                weld_formed = bool(context.gripper.is_holding())
+            except Exception as exc:  # noqa: BLE001 — a diagnosis read must never crash the pick
+                logger.debug("[MOBILE_PICK] is_holding() diagnosis read failed: %s", exc)
+            rd["weld_formed"] = weld_formed
+            if not weld_formed and rd.get("diagnosis") in (None, "", "ok", "possibly_missed"):
+                rd["diagnosis"] = "ran_no_weld"
             result = SkillResult(
                 success=result.success,
                 error_message=result.error_message,
-                result_data={**result.result_data, "mobile_pick": mobile_meta},
+                result_data=rd,
             )
 
         return result

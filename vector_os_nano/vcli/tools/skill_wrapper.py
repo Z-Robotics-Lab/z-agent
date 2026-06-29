@@ -165,7 +165,14 @@ class SkillWrapperTool:
             post = self._get_post_state(agent)
             if post:
                 error_msg += f"\nCurrent state: {post}"
-        return ToolResult(content=error_msg, is_error=True)
+        # Carry the failure diagnosis through metadata too (backlog #2), so the
+        # native loop can thread it onto the StepRecord for triage — not only the
+        # success path. Prefer the skill's structured result_data['diagnosis'];
+        # fall back to the diagnosis_code attribute. Informational only.
+        fail_meta: dict[str, Any] = dict(getattr(result, "result_data", None) or {})
+        if diag and not fail_meta.get("diagnosis"):
+            fail_meta["diagnosis"] = diag
+        return ToolResult(content=error_msg, is_error=True, metadata=fail_meta)
 
     def _get_post_state(self, agent: Any) -> dict[str, Any] | None:
         """Snapshot robot state after skill execution."""

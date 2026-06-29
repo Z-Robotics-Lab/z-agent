@@ -484,3 +484,60 @@ def test_dev_world_keeps_full_code_tool_set() -> None:
     tools = _build_motor_tools(None, _engine_with_code_tools())  # dev world: no agent
     for name in ("file_read", "file_write", "file_edit", "bash", "glob", "grep"):
         assert name in tools, f"dev world must keep {name}"
+
+
+# ---------------------------------------------------------------------------
+# Backlog #2 — the kernel threads a skill's result_data['diagnosis'] into the
+# StepRecord so it surfaces on the StepVerdict. Without this, the native loop
+# dropped every skill diagnosis (D103 diagnosis=null on the far failures).
+# INFORMATIONAL only — the moat (verified) is delegated verbatim to the spine.
+# ---------------------------------------------------------------------------
+
+
+class _FakeGraspSkill:
+    """A grasp double that 'succeeds' but emits a ran_no_weld diagnosis (RAN)."""
+
+    name = "grasp"
+    description = "Grasp the object in front of the robot (test double)."
+    parameters = {"query": {"type": "string", "required": False}}
+    preconditions = ["base"]
+    effects: dict = {}
+
+    def execute(self, params, context):
+        from vector_os_nano.core.types import SkillResult
+
+        return SkillResult(
+            success=True,
+            result_data={"diagnosis": "ran_no_weld", "weld_formed": False},
+        )
+
+
+def test_skill_diagnosis_threads_into_step_and_verdict() -> None:
+    """A skill's result_data['diagnosis'] reaches StepRecord.result_data AND the
+    StepVerdict.diagnosis — INFORMATIONAL only, ``verified`` stays the spine's call."""
+    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+
+    backend = FakeToolScriptBackend.from_tool_script(
+        [
+            tool_turn(("grasp", {"query": "banana"})),
+            # FALSE predicate -> the step is RAN (ran, did not ground).
+            tool_turn(("verify", {"expr": "at_position(99.0, 99.0, 0.5)"})),
+            tool_turn(("finish", {})),
+        ]
+    )
+    agent, _base = _make_agent(0.0, 0.0)
+    agent._skill_registry.register(_FakeGraspSkill())
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("grasp the banana then verify", session=_session())
+
+    assert len(trace.steps) == 1
+    step = trace.steps[0]
+    # The kernel threaded the skill diagnosis onto the StepRecord.
+    assert step.result_data.get("diagnosis") == "ran_no_weld"
+
+    oracle_names = frozenset()
+    report = VerdictReport.from_trace(trace, oracle_names)
+    assert report.per_step[0].diagnosis == "ran_no_weld"
+    # MOAT: verified is delegated VERBATIM to evidence_passed — diagnosis never feeds it.
+    assert report.verified == bool(evidence_passed(trace, oracle_names))
+    assert report.verified is False  # RAN, not grounded

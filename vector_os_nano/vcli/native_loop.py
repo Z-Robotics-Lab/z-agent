@@ -436,6 +436,11 @@ class NativeStepRunner:
         self._chain: list[str] = []
         self._baseline: Any = None
         self._step_open: bool = False
+        # Backlog #2 — the most-recent INFORMATIONAL skill diagnosis seen during the
+        # current step's action chain (from a dispatched skill's ToolResult.metadata).
+        # Threaded onto the StepRecord at verify time so triage codes (e.g.
+        # 'ran_no_weld', 'nav_failed') survive into the verdict. NEVER feeds the moat.
+        self._step_diag: str | None = None
 
         # The assembled trace pieces (one SubGoal + one StepRecord per verify pair).
         self._sub_goals: list[SubGoal] = []
@@ -471,10 +476,21 @@ class NativeStepRunner:
             self._step_open = True
         self._chain.append(name)
         try:
-            return tool.execute(params, self._ctx)
+            result = tool.execute(params, self._ctx)
         except Exception as exc:  # noqa: BLE001
             logger.debug("native_loop: skill '%s' raised: %s", name, exc)
             return ToolResult(content=f"Skill '{name}' raised: {exc}", is_error=True)
+        # Backlog #2 — capture an INFORMATIONAL skill diagnosis from the tool's
+        # metadata (the skill wrapper passes the skill's result_data through there).
+        # Keep the LAST non-empty code seen this step (the grasp/terminal action is
+        # last in a chain) so handle_verify can thread it onto the StepRecord. This
+        # is pure triage metadata — it never touches verify_result / actor causation.
+        md = getattr(result, "metadata", None)
+        if isinstance(md, dict):
+            diag = md.get("diagnosis")
+            if diag:
+                self._step_diag = str(diag)
+        return result
 
     # ------------------------------------------------------------------
     # The verify-tool HANDLER — appends EXACTLY ONE StepRecord per pair
@@ -524,6 +540,11 @@ class NativeStepRunner:
             verify_result=verify_result,
             duration_sec=0.0,
             actor_caused=actor_caused,
+            # Backlog #2 — INFORMATIONAL triage code from the step's last action
+            # skill (e.g. 'ran_no_weld'). Read by verdict._step_diagnosis as the
+            # fallback after the deterministic failure_class; NEVER feeds the moat
+            # (verified is delegated verbatim to evidence_passed).
+            result_data=({"diagnosis": self._step_diag} if self._step_diag else {}),
         )
         self._sub_goals.append(sub_goal)
         self._steps.append(step)
@@ -540,9 +561,11 @@ class NativeStepRunner:
 
         # Close the step: reset the action chain + baseline for the next pair. NEVER
         # carry a baseline across a verify (else the next step's causation folds in).
+        # Reset the per-step diagnosis too, so a stale code can never leak forward.
         self._chain = []
         self._baseline = None
         self._step_open = False
+        self._step_diag = None
 
         return ToolResult(
             content=(
