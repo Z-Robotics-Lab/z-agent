@@ -93,7 +93,12 @@ generically on the right**.
   plugged in by spec (referenced from `policy.ref` in the manifest), not fused into the body.
 - **Skill** — *user provides:* a `@skill` declaring what it `requires` (arm / base / camera);
   it may wrap an external **VLA / VLM** or a classical **grasp / nav** stack. *system does:*
-  makes it callable by NL, routes to it by requirement match, and grades it like any step.
+  makes it callable by NL, routes to it by requirement match, and grades it like any step. A skill
+  may **self-compose recovery internally** (Rule 1's *recover* pillar at the skill layer,
+  kernel/moat untouched): `perception_grasp` does this for an out-of-reach target — on a
+  `no_detections` from the colour-gated HSV perceive it seeds an un-gated localisation
+  (`object_localizer`) from the clean forward pose, drives to the standoff via the navigate planner,
+  and re-perceives at arrival; this is how the far fetch closes the loop (D109/D110).
 - **Capability** — *user provides:* an external model or stack (detector / planner / VLA)
   registered as a routable unit with a typed `(input → output)` contract
   (`vcli/cognitive/capabilities/`, the `Capability` protocol). *system does:* routes a sub-goal
@@ -113,8 +118,18 @@ truth **the actor cannot author**: the runtime trusts *evidence*, never a self-r
 spine is the **frozen reference** of the system — the native producer hands it an
 `ExecutionTrace` and the spine computes `verified` byte-for-byte unchanged; the producer never
 computes it itself. Verification is **only ever stricter, never looser** (Rule 5): an
-AST-sandbox predicate, no `eval`/`exec`, no import escape, with an escalation ladder to a
-visual/VLM check only as a last resort. An action step with no predicate **fails** the gate.
+AST-sandbox predicate, no `eval`/`exec`, no import escape. An action step with no predicate
+**fails** the gate.
+
+A **second, independent witness** sits beside the GT oracle. The ADR-002 visual-acceptance layer
+(`acceptance/` + the `tools/acceptance/` harnesses, see `ADR-002-visual-acceptance.md`) runs a
+separate VLM over a same-process frame strip on **every** run and emits `PASS | FAIL | ABSTAIN`
+into a field that **never feeds `evidence_passed`** — an extension of the Verify contract,
+orthogonal to the GT oracle, not itself a gate. Its only action is to flag a disagreement
+(GT-PASS + vision-FAIL — "the oracle says success but the picture looks wrong") for red-team. It
+has a known structural coverage gap: the rubric is blind to grasp authenticity, so the GT weld
+(`holding_object`) stays the success authority (D101).
+
 This is the moat — the reason a heterogeneous fleet of bring-your-own models can run
 trustworthily on the industrial floor.
 
@@ -222,8 +237,18 @@ One terse line per package. No line numbers (they rot — read the file). Paths 
   all single-source through it (gated flags runtime-authoritative; enrichment flags reconcile
   runtime-OR-declared for the runtime-attach, e.g. go2+Piper).
 - `perception/` — perception backends incl. `detector_capability.py` (the grounding-dino
-  open-vocabulary `detect`, registered by `RobotWorld` onto a camera embodiment).
-- `skills/` — the `@skill` library (declares `requires` arm|base|camera) + SkillFlow routing.
+  open-vocabulary `detect`, registered by `RobotWorld` onto a camera embodiment) and
+  `object_localizer.py` (`localize_objects_3d`: detect→segment→depth→world-centroid via camera FK,
+  SysNav-style; seeds the SceneGraph with metric object positions).
+- `acceptance/` + `tools/acceptance/` — the **ADR-002 visual-acceptance layer** (the L2 visual
+  witness): `acceptance/gate.py` (the downgrade-only disagreement gate), plus `capture.py` /
+  `vision_judge.py` / `motion_check.py` / `sim_lock.py`, and the harness drivers
+  `tools/acceptance/measure_fetch_visual.py` + `visual_e2e.py`. A second witness ORTHOGONAL to the
+  GT oracle that never feeds `evidence_passed` (§4).
+- `skills/` — the `@skill` library (declares `requires` arm|base|camera) + SkillFlow routing, incl.
+  `navigate_to_object.py` (SceneGraph lookup → standoff pose → `NavigateSkill` coordinate path; the
+  find-grasp building block) and `perception_grasp.py` (the grasp substrate carrying the skill-level
+  far-fetch recovery).
 - `hardware/` + `hardware/sim/` — `base.py` `BaseProtocol` (uniform across bodies) and the
   MuJoCo sim drivers (go2 / arm) every body's config describes.
 - `vcli/tools/` · `intent_router.py` · `dynamic_prompt.py` · `prompt.py` · `session.py` ·
