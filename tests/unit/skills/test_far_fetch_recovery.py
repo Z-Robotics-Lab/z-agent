@@ -10,6 +10,8 @@ the single-sourced standoff. The end-to-end grounding is the REAL-VERIFY (bare c
 """
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from vector_os_nano.skills import perception_grasp as pg
@@ -21,6 +23,7 @@ class _FakeBase:
         self._h = heading
         self._nav_ok = nav_ok
         self.nav_calls: list[tuple[float, float]] = []
+        self.walk_calls: list[dict] = []
 
     def get_position(self):
         return (self._pos[0], self._pos[1], 0.35)
@@ -31,6 +34,12 @@ class _FakeBase:
     def navigate_to(self, x, y, *a, **k):
         self.nav_calls.append((x, y))
         return self._nav_ok
+
+    def walk(self, vx=0.0, vy=0.0, vyaw=0.0, duration=0.0):
+        # Record + crudely integrate heading so _grasp_ready_repose's yaw deadband
+        # converges in one turn step (real driver turns the body).
+        self.walk_calls.append({"vx": vx, "vy": vy, "vyaw": vyaw, "duration": duration})
+        self._h += vyaw * duration
 
 
 class _NoNavBase:  # missing navigate_to -> not steerable
@@ -55,6 +64,29 @@ def test_far_target_localizes_and_drives_to_standoff(monkeypatch):
     sx, sy = base.nav_calls[0]
     assert sx == pytest.approx(13.88 - 0.95, abs=0.05)  # standoff on the dog's side
     assert sy == pytest.approx(3.0, abs=0.05)
+
+
+def test_far_recovery_faces_target_when_arrival_heading_is_off(monkeypatch):
+    """FAR's navigate_to has no terminal-heading control: the dog can arrive at the
+    standoff facing AWAY from the bottle, and the re-perceive's one-directional ~200deg
+    scan then misses it (the dominant far-fetch reliability variance). Since the seed
+    gives the KNOWN target xy, the recovery must TURN TO FACE it after driving."""
+    _patch_localize(monkeypatch, [("green bottle", 13.88, 3.0, 0.32)])
+    base = _FakeBase(pos=(10.0, 3.0), heading=math.pi)  # facing -X, AWAY from the +X bottle
+    assert pg._far_localize_and_approach(object(), base, "green bottle") is True
+    assert len(base.nav_calls) == 1
+    turns = [c for c in base.walk_calls if abs(c["vyaw"]) > 1e-6]
+    assert turns, "recovery must turn to face the (known) target after driving to the standoff"
+
+
+def test_far_recovery_face_is_benign_when_already_head_on(monkeypatch):
+    """Idempotent: when the dog already faces the +X bottle, the facing repose issues
+    no turn (yaw error below the deadband) — no regression to the spawn-facing path."""
+    _patch_localize(monkeypatch, [("green bottle", 13.88, 3.0, 0.32)])
+    base = _FakeBase(pos=(10.0, 3.0), heading=0.0)  # already facing +X
+    assert pg._far_localize_and_approach(object(), base, "green bottle") is True
+    turns = [c for c in base.walk_calls if abs(c["vyaw"]) > 1e-6]
+    assert not turns, "already head-on -> the facing repose must not issue a turn"
 
 
 def test_non_steerable_base_returns_false():

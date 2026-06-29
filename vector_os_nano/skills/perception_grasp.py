@@ -423,9 +423,20 @@ def _far_localize_and_approach(
     logger.info("[PGRASP] far recovery: %r at (%.2f,%.2f) d=%.2fm -> standoff (%.2f,%.2f)",
                 query, ox, oy, d, sx, sy)
     try:
-        return bool(base.navigate_to(sx, sy))
+        if not bool(base.navigate_to(sx, sy)):
+            return False
     except Exception:  # noqa: BLE001
         return False
+    # FAR's navigate_to has NO terminal-heading control, so the dog can arrive at the
+    # standoff facing OFF the bottle. The re-perceive then relies on a one-directional
+    # ~200deg scan (_SCAN_MAX_STEPS * _SCAN_STEP_RAD) that MISSES a target in the
+    # uncovered arc — observed: two near-identical-depth arrivals masked 2073 vs 0 green
+    # px purely on heading, the dominant far-fetch reliability variance. We KNOW the
+    # target xy (the seed), so deterministically TURN TO FACE it (the proven pre-grasp
+    # repose primitive, idempotent when already head-on) before the caller re-perceives
+    # — no search, no luck.
+    _grasp_ready_repose(base, (ox, oy), clearance=_FAR_STANDOFF_M)
+    return True
 _SCAN_TURN_VYAW = 0.8           # rad/s
 
 
