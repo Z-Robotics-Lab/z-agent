@@ -16,35 +16,20 @@
 #   have NEVER caught a real false-green and cannot catch a grasp-fakery one with the current rubric (real coverage
 #   gap). The "拿给我" eyes run (0.4, disagreements=0) was TERMINAL-ONLY, never committed as a RESULT artifact.
 #   All in-reach 1-step grasps; the FULL look->navigate->grasp never routed (object spawns in arm reach).
-# >> THIS round (D100, commit d84aa5c): VECTOR_FETCH_FAR scenario knob — relocates the green target onto a new
-#   pick_table_far ~3m down the +X hall (13.88,3.0), beyond perception_grasp's 1.6m self-approach, so a 1-step
-#   grasp can't reach it. Additive/env-gated, default off = baseline preserved; verify spine reads live GT (honest).
-#   FINDING (far-fetch, verify_fetch_cli N=3): forces the model OFF the 1-step grasp (routes mobile_pick x2 /
-#   perception_grasp x1) and the dog PHYSICALLY navigates (eyes strip frame = dog mid-doorway), BUT grounds 0/3 —
-#   the composed out-of-reach fetch is BROKEN. The model never composes the explicit navigate_to_object->
-#   perception_grasp; mobile_pick navigates but fails to seat the grasp, bare perception_grasp can't reach (fails
-#   loud, no replan-to-navigate). NEXT ROUND (Debug Protocol): why mobile_pick doesn't weld at the far table +
-#   whether to steer routing toward navigate_to_object->perception_grasp. NOTE: far trials ~3-4min each (slow nav).
-# >> THIS round (backlog #3; commit e762f12): merge_object x=0/y=0 SENTINEL TRAP FIXED. Backlog #1 (live-model
-#   bare-cli full-fetch e2e, TOP priority) was NETWORK-BLOCKED — DeepSeek http=000 + GPT-4o 421 (VPN fake-IP);
-#   per loop discipline pivoted to the offline backlog #3 (same bug class as the D97 (0,0) catastrophe).
-#   FIX (scene_graph.py merge_object, spine untouched): the `x=x if x!=0.0 else existing.x` merge silently kept a
-#   STALE pos when a real obs localized an object at the world origin / on the x=0|y=0 axis. Switched the sentinel
-#   to None: None = no new localization (keep existing on merge, default 0.0 on new); a real float INCL 0.0 always
-#   applied. Caller audit: all internal (649/708/744 coord-less; 701/738 coord-bearing) + test callers behavior-
-#   preserved; only the genuine-0.0 case changes (was buggy). VERIFY = TDD (the honest verification for a pure
-#   in-memory data-store fix, no sim-observable behavior): RED 3 origin cases failed → GREEN all 6 pass; 100
-#   scene-graph + 175 core/perception/skills tests green, no regressions. tests/unit/core/test_merge_object_origin_sentinel.py.
-# PRIOR: D97 (90dd65c) perception wired into the real go2 launcher (look/explore depth-localize, no (0,0) pollution),
-#   real-verify via the ACTUAL launcher (<3cm vs GT). #1 positions VERIFIED (D91). #2 navigate_to_object (D92).
-#   #3 pipeline COMPOSES e2e (D93). Grasp reliability RAISED to 0.833 (D94/D95) then PLATEAUED. home 5-vs-6 DoF FIXED (D96).
-# NEXT round (non-gated): backlog #1 — drive the FULL fetch "把绿色瓶子拿过来" through the BARE `vector-cli` REPL by NL
-#   end-to-end via the LIGHT in-process --sim-go2 path (tools/verify_fetch_cli.py EXISTS, WIP eddf8ad) — but ONLY
-#   when network is up (needs DeepSeek routing + GPT-4o VLM naming; both down this round). If still network-down,
-#   re-measure grasp reliability via the OFFLINE tools/measure_fetch_reliability.py (no model needed). Spine untouched.
-#   #4 (find_objects_by_category substring) speculative — only if it bites at scale. #4-ext-explore / #5-store-unify = CEO GATES.
-# OPEN CAVEATS: live-model bare-cli full-fetch e2e (backlog #1) still UNRUN — network-blocked (DeepSeek + GPT-4o down).
-#   Grasp plateau ~0.83 (1 perception-framing + 1 terminal-grasp per ~12). merge_object sentinel trap now FIXED (D98).
+# >> FAR-FETCH (D100, commit d84aa5c): VECTOR_FETCH_FAR knob (env-gated, default off=baseline preserved) relocates
+#   the green target ~3m down the +X hall (pick_table_far) to force the composed fetch. Result: model routes
+#   mobile_pick OR perception_grasp, NEVER the working navigate_to_object->perception_grasp; grounds 0/N. The far
+#   failure is fundamentally a ROUTING problem (model doesn't compose the proven path), not (mostly) grasp-seating.
+# >> ROUND 1 honest-acceptance DONE (D102, commits 0db2abb/acdffb4/0ea72f8 + review-driven): (1) MOAT HOLE closed —
+#   object-goal gate now fires on 拿过来/拿给我/带过来/取过来/bring/give (anchored 取/带 so 读取/获取/带领/带我去 stay
+#   False; only-stricter, adversarial-reviewed — caught + fixed an over-match). (2) handover 6-DoF crash FIXED
+#   (LIVE-verified: "拿给我" runs no-crash to verdict). (3) far-fetch 60s nav timeout + diagnosis plumbing (still
+#   BLIND: StepVerdict doesn't serialize result_data -> diagnosis=null; needs an additive field, Round 2). Near
+#   baseline NOT regressed (2/3 GROUNDED+ACCEPT with the moat active). 269 unit tests green.
+# >> NEXT = ROUND 2 (routing fix, the real far-fetch lever): skill-condition the kernel prompt (native_loop.py
+#   ~1067) so an out-of-reach target -> navigate_to_object(name) -> perception_grasp; add result_data/diagnosis to
+#   StepVerdict (additive, Rule 6) so the far failure is skill-level diagnosable. CEO GATE: a STRUCTURAL
+#   verify->FAIL->replan addition to the native kernel ReAct loop = architectural plan.md -> PAUSE + exec summary.
 
 # Vector OS — STATUS (resume anchor)
 
