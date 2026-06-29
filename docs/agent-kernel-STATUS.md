@@ -10,12 +10,13 @@
 #    scan misses the bottle. FIX (skill-level, kernel/moat untouched): the recovery faces the KNOWN seed xy
 #    via _grasp_ready_repose before re-perceiving. Verified 3/3 skill-direct (real weld +0.23m each).
 #    Mechanism still = SKILL-LEVEL recovery in perception_grasp (D109, CEO Gate A — NOT a kernel replan).
-# >> FAR FETCH CLOSES END-TO-END (D113, campaign #1 problem). Three composed fixes: D111 perception_grasp
-#    FACES the seed before re-perceiving; D112 no origin-phantom (ObjectState.has_position) -> mobile_pick
-#    fast-fails honestly; D113 ROUTING — skill descriptions corrected so the model routes a far fetch to the
-#    working perception_grasp (native, not a keyword table). REAL-VERIFY (bare cli + model + GT weld):
-#    GREEN N=5 = 5/5 GROUNDED, BLUE 1/1 GROUNDED (all routed perception_grasp). Pre-fix the same command
-#    was 0/3. RED 0/1 = a NEW separate FOV issue (below), not a regression.
+# >> FAR FETCH WORKS but is ROUTING-GATED (D111-D114, campaign #1). perception_grasp far is RELIABLE when
+#    routed (D111 face-the-seed: 9/9 grounds); D112 mobile_pick fast-fails honestly; D113 routing-descriptions
+#    shifted routing toward perception_grasp. RED-TEAM (D114, the key honesty catch): the early "5/5" was a
+#    routing STREAK — honest far-green grounded_rate ≈ 9/12 (0.75) over 12 model-path samples (GT weld), because
+#    the model STILL picks mobile_pick ~25% of the time (-> fast object_not_found, no ground). 0.75 is just
+#    BELOW the >=0.8 target; the binding constraint is now ROUTING CONSISTENCY, not any single skill. Blue 1/1
+#    grounded. RED 0/1 = a separate FOV issue (below). Pre-all-fixes the same command was 0/N.
 # >> RED short-can FOV (next seed): the red object is a CAN, shorter than the bottles; its mask is ~1000px
 #    at the 3.9m scan but 0 at the ~0.9m grasp standoff — it falls below the head camera's vertical FOV up
 #    close. Fix = raise camera tilt / widen standoff for short objects.
@@ -32,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-29 · D113 — FAR FETCH CLOSES END-TO-END (campaign #1): green 5/5 + blue 1/1 GROUNDED via bare-cli+model (D111 face + D112 no-phantom + D113 routing). Red 0/1 = short-can FOV (next).
+updated: 2026-06-29 · D114 — far fetch WORKS but ROUTING-GATED: honest green grounded_rate ≈9/12 (0.75) red-teamed (5/5 was a streak); perception_grasp 9/9 when routed, model picks mobile_pick ~25%. Robust fix = mobile_pick far-capable.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -42,15 +43,16 @@ phase:   FIND-AND-GRASP / FETCH campaign on `arch/plug-and-play` (find→navigat
 owns:    `skills/{perception_grasp,navigate_to_object,mobile_*}.py`, `perception/object_localizer.py`,
          `tools/acceptance/**` + `acceptance/**`, `docs/*`. Spine `vcli/cognitive/` is FROZEN
          (only-ever-stricter; untouched this campaign — see Standing facts).
-doing:   FAR FETCH CLOSED END-TO-END (D113) — bare-cli + NL + model: green 5/5 + blue 1/1 GROUNDED (GT weld),
-         all routed perception_grasp via D111 (face seed) + D112 (no origin-phantom) + D113 (routing
-         descriptions). Red 0/1 = short-can FOV (a fresh, separate issue). in-reach 0.8 baseline steady;
-         multi-object D108 sealed; eyes (ADR-002) confirmation pending a stable-VLM run.
+doing:   FAR FETCH WORKS but ROUTING-GATED (D111-D114). perception_grasp far grounds 9/9 when routed (D111 face
+         + D112 no-phantom + D113 routing-descriptions); RED-TEAM (D114): honest green grounded_rate ≈9/12 (0.75,
+         not the 5/5 streak) — model still routes mobile_pick ~25% -> no ground. Blue 1/1. Red 0/1 = short-can
+         FOV. in-reach 0.8 baseline steady; multi-object D108 sealed; eyes confirmation of a perception_grasp
+         far ground still pending (VLM works; ~75% routing means eyes N>=3 should catch one).
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    (1) RED short-can FOV — raise camera tilt / widen standoff so a short can stays in the vertical FOV at
-         the grasp standoff (then red far grounds like green/blue); (2) EYES grounded_rate over N (green/blue)
-         when the VLM net is stable; (3) near all-3-colours confirm. find-fetch then reliably closed; PLACE
-         half remains CEO-gated (D106 receptacle oracle).
+next:    (1) ROUTING-INDEPENDENT far fetch — give mobile_pick the same un-gated object_localizer far-acquire as
+         perception_grasp so EITHER routed skill grounds (rate -> ~1.0 regardless of routing; needs world/base
+         frame check, D112); (2) RED short-can FOV (raise cam tilt / widen standoff for short objects); (3) eyes
+         grounded over N. find-fetch then reliably closed; PLACE half remains CEO-gated (D106 receptacle oracle).
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
