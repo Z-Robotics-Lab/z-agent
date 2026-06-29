@@ -762,7 +762,12 @@ class PerceptionGraspSkill:
         if context.base is not None:
             try:
                 from vector_os_nano.perception.object_localizer import localize_objects_3d as _loc3d
-                _far_seed = _loc3d(perception, [query])
+                # grounding-dino is ENGLISH open-vocab: a Chinese NL query ("绿色的瓶子") won't
+                # match. Localize by the colour-English name when a colour is resolved.
+                _loc_query = f"{color} bottle" if color else query
+                _far_seed = _loc3d(perception, [_loc_query])
+                logger.info("[PGRASP] far seed: localize %r (color=%s query=%r) -> %s",
+                            _loc_query, color, query, _far_seed)
             except Exception:  # noqa: BLE001
                 _far_seed = None
         passed_box = self._resolve_passed_box(params, color)
