@@ -249,3 +249,63 @@ class TestDetectSkillMergeLogic:
         # Position should be updated to the tracked pose values
         assert abs(obj.x - 0.2) < 1e-6, f"x should be 0.2, got {obj.x}"
         assert abs(obj.y - 0.2) < 1e-6, f"y should be 0.2, got {obj.y}"
+
+    def test_detect_2d_only_is_not_a_targetable_phantom(self):
+        """A detection the tracker can't 3D-localise (pose=None — the FAR-object case where
+        depth has no valid points) must be recorded for EXISTENCE but marked
+        has_position=False, NOT stored as a targetable object at the (0,0,0) origin (which
+        made mobile_pick navigate to the origin and flail, D111 follow-on)."""
+        from vector_os_nano.core.world_model import WorldModel
+
+        world = WorldModel()
+        detections = [Detection(label="bottle", bbox=(100, 100, 200, 200), confidence=0.9)]
+        tracked = [TrackedObject(track_id=0, label="bottle", bbox_2d=(100, 100, 200, 200), pose=None)]
+        ctx = _make_detect_context(world, detections, tracked)
+
+        DetectSkill().execute({"query": "bottle"}, ctx)
+        obj = world.get_object("bottle_0")
+        assert obj is not None, "existence is still recorded (2D detection happened)"
+        assert obj.has_position is False, "no 3D -> must be flagged un-targetable"
+
+    def test_detect_2d_only_does_not_clobber_existing_position(self):
+        """Re-detecting a well-localised object without a fresh 3D pose must PRESERVE its
+        position (and has_position=True), not overwrite it with the (0,0,0) sentinel."""
+        from vector_os_nano.core.world_model import WorldModel, ObjectState
+
+        world = WorldModel()
+        world.add_object(ObjectState(
+            object_id="bottle_0", label="bottle", x=10.88, y=3.0, z=0.32, has_position=True,
+        ))
+        detections = [Detection(label="bottle", bbox=(100, 100, 200, 200), confidence=0.9)]
+        tracked = [TrackedObject(track_id=0, label="bottle", bbox_2d=(100, 100, 200, 200), pose=None)]
+        ctx = _make_detect_context(world, detections, tracked)
+
+        DetectSkill().execute({"query": "bottle"}, ctx)
+        obj = world.get_object("bottle_0")
+        assert abs(obj.x - 10.88) < 1e-6 and obj.has_position is True, "good position must survive a 2D re-detect"
+
+
+class TestResolveTargetSkipsPositionLess:
+    """pick/mobile_pick must NOT target an object with no usable 3D position."""
+
+    def test_resolve_target_skips_position_less_object(self):
+        from vector_os_nano.core.world_model import WorldModel, ObjectState
+        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+
+        world = WorldModel()
+        world.add_object(ObjectState(
+            object_id="bottle_0", label="bottle", x=0.0, y=0.0, z=0.0, has_position=False,
+        ))
+        target = PickTopDownSkill()._resolve_target({"object_label": "bottle"}, world)
+        assert target is None, "a position-less (un-targetable) object must not resolve as a target"
+
+    def test_resolve_target_returns_positioned_object(self):
+        from vector_os_nano.core.world_model import WorldModel, ObjectState
+        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+
+        world = WorldModel()
+        world.add_object(ObjectState(
+            object_id="bottle_0", label="bottle", x=10.88, y=3.0, z=0.32, has_position=True,
+        ))
+        target = PickTopDownSkill()._resolve_target({"object_label": "bottle"}, world)
+        assert target is not None and target[0] == "bottle_0"

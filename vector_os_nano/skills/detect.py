@@ -138,6 +138,7 @@ class DetectSkill:
 
             # Merge with existing world model objects by label
             existing = context.world_model.get_objects_by_label(label)
+            existing_obj = existing[0] if existing else None
             if existing:
                 obj_id = existing[0].object_id  # Reuse existing ID
                 merged_count += 1
@@ -182,15 +183,31 @@ class DetectSkill:
                     has_3d = True
                     logger.info("[DETECT] %s: camera(%.3f,%.3f,%.3f) (no calibration)", det.label, x, y, z)
 
+            # Position resolution for the stored state:
+            #  - fresh 3D            -> use it, targetable (has_position True)
+            #  - no 3D but already localised (a prior detect/look) -> PRESERVE the known
+            #    position; never clobber a good position with the (0,0,0) sentinel
+            #  - no 3D, never localised -> record EXISTENCE only, has_position False so
+            #    targeting skills (mobile_pick/_resolve_target) don't drive to the origin.
+            if has_3d:
+                pos_x, pos_y, pos_z, has_position = x, y, z, True
+            elif existing_obj is not None and existing_obj.has_position:
+                pos_x, pos_y, pos_z, has_position = (
+                    existing_obj.x, existing_obj.y, existing_obj.z, True,
+                )
+            else:
+                pos_x, pos_y, pos_z, has_position = 0.0, 0.0, 0.0, False
+
             obj = ObjectState(
                 object_id=obj_id,
                 label=label,
-                x=x,
-                y=y,
-                z=z,
+                x=pos_x,
+                y=pos_y,
+                z=pos_z,
                 confidence=det.confidence,
                 state="on_table",
                 last_seen=now,
+                has_position=has_position,
             )
             context.world_model.add_object(obj)
 

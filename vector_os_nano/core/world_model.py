@@ -47,6 +47,12 @@ class ObjectState:
     state: str = "on_table"  # on_table | grasped | placed | unknown
     last_seen: float = field(default_factory=time.time)
     properties: dict = field(default_factory=dict)
+    # False when the object was detected in 2D but the tracker/depth could not yield a usable
+    # 3D position (e.g. a FAR object with no valid depth points). Such an object is recorded
+    # for EXISTENCE but its (x,y,z) is the unfilled (0,0,0) sentinel — it must NOT be used as a
+    # navigation/grasp target (that made mobile_pick drive to the origin and flail). Additive,
+    # defaults True so every existing constructor and a real localised detection is unaffected.
+    has_position: bool = True
 
     def distance_from_origin(self) -> float:
         """Euclidean distance from robot base origin in XY plane."""
@@ -63,6 +69,7 @@ class ObjectState:
             "state": self.state,
             "last_seen": self.last_seen,
             "properties": dict(self.properties),
+            "has_position": self.has_position,
         }
 
     @classmethod
@@ -77,6 +84,7 @@ class ObjectState:
             state=str(d.get("state", "on_table")),
             last_seen=float(d.get("last_seen", time.time())),
             properties=dict(d.get("properties", {})),
+            has_position=bool(d.get("has_position", True)),
         )
 
 

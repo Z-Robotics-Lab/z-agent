@@ -352,17 +352,21 @@ class PickTopDownSkill:
         if wm is None:
             return None
 
+        # An object detected in 2D but never 3D-localised carries the (0,0,0) sentinel
+        # (has_position=False). It records EXISTENCE but is NOT a usable nav/grasp target —
+        # skip it so resolution falls through to autodetect / object_not_found instead of
+        # driving to the origin (the mobile_pick far-fetch flail, D111 follow-on).
         # 2. Exact object_id
         obj_id = params.get("object_id")
         if obj_id:
             obj = wm.get_object(obj_id)
-            if obj is not None:
+            if obj is not None and obj.has_position:
                 return (obj.object_id, _xyz_of(obj))
 
         # 3. Exact label match
         label = params.get("object_label")
         if label:
-            matches = wm.get_objects_by_label(label)
+            matches = [o for o in wm.get_objects_by_label(label) if o.has_position]
             if matches:
                 obj = matches[0]
                 return (obj.object_id, _xyz_of(obj))
@@ -375,7 +379,7 @@ class PickTopDownSkill:
                 # Try each unique English color value that appears in the normalised string.
                 for en_color in dict.fromkeys(_CN_COLOR_MAP.values()):
                     if en_color in normalised:
-                        norm_matches = wm.get_objects_by_label(en_color)
+                        norm_matches = [o for o in wm.get_objects_by_label(en_color) if o.has_position]
                         if norm_matches:
                             obj = norm_matches[0]
                             logger.info(
