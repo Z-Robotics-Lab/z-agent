@@ -10,17 +10,19 @@
 #    scan misses the bottle. FIX (skill-level, kernel/moat untouched): the recovery faces the KNOWN seed xy
 #    via _grasp_ready_repose before re-perceiving. Verified 3/3 skill-direct (real weld +0.23m each).
 #    Mechanism still = SKILL-LEVEL recovery in perception_grasp (D109, CEO Gate A — NOT a kernel replan).
-# >> FAR end-to-end now has TWO reliable outcomes; the only remaining gate is MODEL ROUTING. (a) D111:
-#    perception_grasp far grounds reliably. (b) D112: mobile_pick's far failure was an ORIGIN PHANTOM —
-#    DetectSkill stored a 2D-only (position-less) far detection at the (0,0,0) sentinel and mobile_pick
-#    drove there (61-line flail); FIX = additive ObjectState.has_position, skip position-less targets ->
-#    fast honest object_not_found (real-sim: 61-line flail -> 11-line object_not_found). So whichever far
-#    skill the model picks, it either GROUNDS (perception_grasp) or FAILS FAST + re-routes (mobile_pick).
-# >> NEXT (non-gated): (1) ROUTING — help the model prefer/re-route to perception_grasp for an
-#    out-of-reach fetch WITHOUT a hardcoded table (skill descriptions / native producer guidance);
-#    (2) optional far-localise for mobile_pick (un-gated object_localizer, needs frame verification);
-#    (3) eyes grounded_rate over N once routing lands a perception_grasp far ground (OpenRouter was
-#    intermittently dropping connections this session — model-path GROUNDED-rate + eyes still pending).
+# >> FAR FETCH CLOSES END-TO-END (D113, campaign #1 problem). Three composed fixes: D111 perception_grasp
+#    FACES the seed before re-perceiving; D112 no origin-phantom (ObjectState.has_position) -> mobile_pick
+#    fast-fails honestly; D113 ROUTING — skill descriptions corrected so the model routes a far fetch to the
+#    working perception_grasp (native, not a keyword table). REAL-VERIFY (bare cli + model + GT weld):
+#    GREEN N=5 = 5/5 GROUNDED, BLUE 1/1 GROUNDED (all routed perception_grasp). Pre-fix the same command
+#    was 0/3. RED 0/1 = a NEW separate FOV issue (below), not a regression.
+# >> RED short-can FOV (next seed): the red object is a CAN, shorter than the bottles; its mask is ~1000px
+#    at the 3.9m scan but 0 at the ~0.9m grasp standoff — it falls below the head camera's vertical FOV up
+#    close. Fix = raise camera tilt / widen standoff for short objects.
+# >> NEXT (non-gated): (1) RED short-can FOV fix; (2) EYES (ADR-002 VLM 2nd witness) grounded_rate over N for
+#    green/blue when the VLM net is stable (GT weld is the authority now; OpenRouter dropped connections
+#    intermittently this session); (3) near all-3-colours confirm. Then find-fetch is reliably closed;
+#    PLACE half remains CEO-gated (D106 receptacle oracle).
 # >> CEO gates still queued (do NOT cross — see Pending CEO gates below): S8 · S3c · S4 · S5 · S6 · D106 place oracle.
 
 # Vector OS — STATUS (resume anchor)
@@ -30,7 +32,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-29 · D112 — far end-to-end de-gated to ROUTING only: perception_grasp grounds (D111) + mobile_pick origin-phantom fixed -> fast object_not_found (D112).
+updated: 2026-06-29 · D113 — FAR FETCH CLOSES END-TO-END (campaign #1): green 5/5 + blue 1/1 GROUNDED via bare-cli+model (D111 face + D112 no-phantom + D113 routing). Red 0/1 = short-can FOV (next).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -40,16 +42,15 @@ phase:   FIND-AND-GRASP / FETCH campaign on `arch/plug-and-play` (find→navigat
 owns:    `skills/{perception_grasp,navigate_to_object,mobile_*}.py`, `perception/object_localizer.py`,
          `tools/acceptance/**` + `acceptance/**`, `docs/*`. Spine `vcli/cognitive/` is FROZEN
          (only-ever-stricter; untouched this campaign — see Standing facts).
-doing:   BOTH far skills now reliable — perception_grasp faces the seed + grounds (D111, 3/3 skill-direct);
-         mobile_pick's origin-phantom fixed -> fast object_not_found (D112, real-sim 61->11 lines). Far
-         end-to-end gate is now purely MODEL ROUTING (pick/re-route to perception_grasp). in-reach 0.8 baseline
-         steady; multi-object D108 sealed; eyes (ADR-002) are the per-round REAL-VERIFY (model-path GROUNDED-rate
-         + eyes pending a stable OpenRouter run — connections were dropping this session).
+doing:   FAR FETCH CLOSED END-TO-END (D113) — bare-cli + NL + model: green 5/5 + blue 1/1 GROUNDED (GT weld),
+         all routed perception_grasp via D111 (face seed) + D112 (no origin-phantom) + D113 (routing
+         descriptions). Red 0/1 = short-can FOV (a fresh, separate issue). in-reach 0.8 baseline steady;
+         multi-object D108 sealed; eyes (ADR-002) confirmation pending a stable-VLM run.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    (1) ROUTING — help the model prefer/re-route to perception_grasp for an out-of-reach fetch WITHOUT a
-         hardcoded table (skill descriptions / native producer guidance, native-is-the-design); (2) optional
-         far-localise for mobile_pick (un-gated object_localizer, needs world/base frame verification first);
-         (3) eyes grounded_rate over N once routing lands a perception_grasp far ground end-to-end.
+next:    (1) RED short-can FOV — raise camera tilt / widen standoff so a short can stays in the vertical FOV at
+         the grasp standoff (then red far grounds like green/blue); (2) EYES grounded_rate over N (green/blue)
+         when the VLM net is stable; (3) near all-3-colours confirm. find-fetch then reliably closed; PLACE
+         half remains CEO-gated (D106 receptacle oracle).
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
