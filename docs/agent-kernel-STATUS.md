@@ -1,4 +1,4 @@
-# >> FETCH HANDOFF — RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D99-D104 + git log -12.
+# >> FETCH HANDOFF — RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D99-D108 + git log -12.
 # >> EYES = per-round REAL-VERIFY (ADR-002, D99): tools/acceptance/measure_fetch_visual.py (GT oracle + visual
 #   witness + temporal). disagreements>0 => red-team BEFORE trusting grounded_rate. Eyes have a real COVERAGE GAP:
 #   the visual rubric is ORTHOGONAL to grasp authenticity (D101) — GT weld (holding_object) is the success authority.
@@ -25,17 +25,24 @@
 #   foreground probes REFUTED that (IK converges to z=0.10) and found the TRUE blocker = the LOADED arm COLLIDES
 #   with the table edge on descent (stalls z~0.30, bottle settles near table top, placed_count=0). A
 #   placed_count-GROUNDED place needs a receptacle-relative oracle = CEO GATE (queued, plan ## Decisions pending).
-# >> BACKLOG #4 DONE (D107, this round): SLOP CLEANUP. Removed dead _recenter_lateral (+ 3 orphaned
-#   _DOCK_LATERAL_* consts; superseded by _body_fine_position holonomic closure — dock test renamed+kept green);
-#   gated the 3 unconditional /tmp/pgrasp_*.png writes behind VECTOR_PGRASP_DEBUG (default off; mask compute
-#   untouched). INVESTIGATED + LEFT AS-IS (not slop): find_objects_by_category substring match is INTENTIONAL +
-#   tested (test_..._substring pins 'chair'->'office_chair'; navigate_to_object relies on it); the cv2 inline
-#   import is a deliberate optional-dep lazy import. Behavior-neutral: 109 skills unit tests + dock e2e green, no
-#   sim re-verify needed (no behavior/reliability claim).
-# >> NEXT (non-gated): the per-item backlog (#1-#4) is now EXHAUSTED — far-fetch is CEO-gated+plateaued (D100-D104),
-#   place placed_count is CEO-gated (D106), #2/#3/#4 shipped. Run a DECISION WORKFLOW to re-survey the frontier for
-#   the next non-gated chunk (research the SOTA mobile-manip / orchestration frontier, rank by ambition×feasibility);
-#   if it surfaces only gated work, light regression-watch + batch the queued CEO gates for Yusen's return.
+# >> BACKLOG #4 DONE (D107, committed d277081): SLOP CLEANUP — removed dead _recenter_lateral (+3 orphaned
+#   _DOCK_LATERAL_* consts; superseded by _body_fine_position; dock test renamed+green); gated the /tmp/pgrasp_*.png
+#   writes behind VECTOR_PGRASP_DEBUG (default off). Behavior-neutral, 109 skills units green. [Was uncommitted WIP
+#   from the prior round; this round's cold-start ORIENT finished + committed it before new work.]
+# >> NEW CAPABILITY DONE (D108, committed 96d9111): MULTI-OBJECT SEQUENTIAL FETCH proven — the first composed
+#   physical task. tests/vcli/test_native_loop_multi_object_fetch_pty.py (deterministic, network-free, REAL go2+Piper
+#   sim, untouched spine) PASSES 69s: "把绿色和蓝色的瓶子都拿过来" -> grasp green -> holding_object(green) GROUNDED+CAUSED
+#   -> gripper_open (release) -> walk backward (retreat) -> grasp blue -> holding_object(blue) GROUNDED+CAUSED. Set of
+#   grounded targets must == {green,blue}; two real GT welds, multi-object criterion asserted in the test (spine
+#   doesn't know "two"). ROOT CAUSE (probe): a grasp docks the dog too close (x~10.46, 0 px) to re-perceive the next
+#   object; retreat ~0.8 m to the standoff (x~9.7, ~490 px) restores view. Producer lever added (native_loop prompt:
+#   name>1 => one at a time, grasp->verify->gripper_open->back off->next). NON-gated, no spine/dep/interface change.
+# >> NEXT (non-gated, D108 follow-up = top priority): the LIVE bare-cli + NL multi-object run is the FULL acceptance,
+#   but measure_fetch_visual grades single-object only (green-only would count grounded) — so FIRST extend the eyes
+#   harness to require BOTH welds in the trace for a multi-object command, THEN run the live "把绿色和蓝色的瓶子都拿
+#   过来" via bare cli + real model and honestly tally. NO live multi-object reliability number is claimed yet (untested).
+#   After that: 3-object fetch / mixed-color sequencing. The Decision-Workflow "all gated" verdict was UNRELIABLE
+#   (all 3 recon agents died, pool_size=0) — do NOT trust it; real non-gated frontier remains (multi-object family).
 
 # Vector OS — STATUS (resume anchor)
 
