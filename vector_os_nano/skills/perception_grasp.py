@@ -362,6 +362,53 @@ _GRASP_DEFAULT_DOCK_POSE: tuple[float, float, float] | None = None
 _SCAN_MAX_LOCAL_M = 1.6
 _SCAN_STEP_RAD = 0.6            # ~34 deg per scan step
 _SCAN_MAX_STEPS = 6             # up to ~200 deg of sweep
+
+# --- Far-fetch recovery (skill-level, single-shot) ---------------------------------------
+# A colour target beyond the 2m front-workspace HSV gate (front_object._MAX_DEPTH) perceives
+# as 'no_detections' even though the UN-GATED open-vocab localizer (object_localizer.
+# localize_objects_3d — the path `look` uses, no 2m gate, no scene-graph dependency) can see
+# it. perception_grasp recovers ONCE: localize via that un-gated path, drive to the proven
+# 0.95m standoff via the FAR planner, then re-perceive FRESH at arrival (<2m, where the HSV
+# resolver works). SINGLE-SHOT — no loop / no landed-short bookkeeping; the native kernel and
+# the frozen verify spine are UNTOUCHED, the model still routed a single grasp. This makes the
+# skill honor its advertised "finds first, walks to it, grasps" charter beyond 1.6m.
+_FAR_RECOVERY_MAX_M = 8.0       # m; beyond this a localize is implausible -> honest no_detections
+_FAR_STANDOFF_M = 0.95          # m; mirrors navigate_to_object._VICINITY_CLEARANCE_M (asserted in tests)
+
+
+def _far_localize_and_approach(perception: Any, base: Any, query: str) -> bool:
+    """One-shot far recovery: un-gated localize -> drive to the standoff. Returns True iff it
+    localized a genuinely-far target in a sane band AND drove there (so the caller should
+    re-perceive fresh at arrival). Best-effort: ANY failure returns False, leaving the honest
+    ``no_detections`` to stand so the model can re-route. No loop, no replan bookkeeping."""
+    import math
+    if not all(callable(getattr(base, m, None)) for m in ("get_position", "get_heading", "navigate_to")):
+        return False
+    try:
+        from vector_os_nano.perception.object_localizer import localize_objects_3d
+        pts = localize_objects_3d(perception, [query])
+    except Exception:  # noqa: BLE001 — recovery is best-effort
+        return False
+    if not pts:
+        return False
+    _lbl, ox, oy, oz = pts[0]
+    try:
+        rpos = base.get_position()
+        rx, ry, ryaw = float(rpos[0]), float(rpos[1]), float(base.get_heading())
+    except Exception:  # noqa: BLE001
+        return False
+    d = math.hypot(ox - rx, oy - ry)
+    # Recover only a genuinely-far target in a plausible band: nearer is the in-reach
+    # self-approach's job; farther than _FAR_RECOVERY_MAX_M is an implausible localize.
+    if not (_SCAN_MAX_LOCAL_M < d <= _FAR_RECOVERY_MAX_M):
+        return False
+    sx, sy, _ = compute_approach_pose((ox, oy, oz), (rx, ry, ryaw), clearance=_FAR_STANDOFF_M)
+    logger.info("[PGRASP] far recovery: %r at (%.2f,%.2f) d=%.2fm -> standoff (%.2f,%.2f)",
+                query, ox, oy, d, sx, sy)
+    try:
+        return bool(base.navigate_to(sx, sy))
+    except Exception:  # noqa: BLE001
+        return False
 _SCAN_TURN_VYAW = 0.8           # rad/s
 
 
@@ -710,6 +757,20 @@ class PerceptionGraspSkill:
             # localizes the can by LOOKING for it, never by reading GT. On the
             # scripted-from-spawn path (can dead-ahead) the first sample is already
             # plausible, so the scan returns immediately — no D34-D51 regression.
+            gp, resolved, fail = self._perceive_with_scan(
+                perception, context.base, query, color=color
+            )
+        # Far-fetch recovery (single-shot, diagnosis-gated): a target beyond the 2m front-
+        # workspace HSV gate perceives as 'no_detections' even though the un-gated open-vocab
+        # localizer can see it. Recover ONCE: localize via that un-gated path -> drive to the
+        # 0.95m standoff (FAR planner) -> re-perceive FRESH at arrival (<2m, the resolver
+        # works). No loop / no kernel replan; the model still routed a single grasp.
+        if (
+            fail is not None
+            and (getattr(fail, "result_data", None) or {}).get("diagnosis") == "no_detections"
+            and context.base is not None
+            and _far_localize_and_approach(perception, context.base, query)
+        ):
             gp, resolved, fail = self._perceive_with_scan(
                 perception, context.base, query, color=color
             )
