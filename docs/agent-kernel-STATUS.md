@@ -26,10 +26,19 @@
 #   (LIVE-verified: "拿给我" runs no-crash to verdict). (3) far-fetch 60s nav timeout + diagnosis plumbing (still
 #   BLIND: StepVerdict doesn't serialize result_data -> diagnosis=null; needs an additive field, Round 2). Near
 #   baseline NOT regressed (2/3 GROUNDED+ACCEPT with the moat active). 269 unit tests green.
-# >> NEXT = ROUND 2 (routing fix, the real far-fetch lever): skill-condition the kernel prompt (native_loop.py
-#   ~1067) so an out-of-reach target -> navigate_to_object(name) -> perception_grasp; add result_data/diagnosis to
-#   StepVerdict (additive, Rule 6) so the far failure is skill-level diagnosable. CEO GATE: a STRUCTURAL
-#   verify->FAIL->replan addition to the native kernel ReAct loop = architectural plan.md -> PAUSE + exec summary.
+# >> ROUND 2 non-gated DONE (D103, commits ee22131/d582d33): (1) StepVerdict.diagnosis (bounded informational
+#   failure code; moat-untouched, verified==evidence_passed test added). (2) kernel grasp prompt CONDITIONAL
+#   recovery (no_detections -> navigate_to_object -> re-grasp; never preemptive; in-reach unaffected). REAL-VERIFY:
+#   far "拿过来" N=4 = 0/4, routing still CHAOTIC (detect/stop/perception_grasp, 1 SIGKILL) -> the PROMPT NUDGE IS
+#   INSUFFICIENT; near NOT regressed. Secondary: far failures are RAN (no fail-code -> diagnosis=null); near
+#   blue/red distractors confound the far-green fetch.
+# >> CEO GATE QUEUED (do NOT cross): the real far-fetch fix = a STRUCTURAL verify->FAIL->replan in the native
+#   kernel ReAct loop (deterministically inject navigate->grasp on a far no-weld) = architectural plan.md. Batch
+#   into an executive summary for Yusen on return. See docs/plan-find-grasp-refactor.md ## Decisions pending.
+# >> NEXT (non-gated, autonomous loop priority): (1) cleaner far scenario — move ALL bottles far (not just green)
+#   to remove the distractor confound + re-measure; (2) ran-no-weld diagnosis (the dominant far failure mode);
+#   (3) pick-and-place kind-leap (place skill exists, placed_count in frozen spine); (4) slop cleanup (dead
+#   _recenter_lateral, /tmp/pgrasp debug writes, inline hot-path imports) + find_objects substring hardening.
 
 # Vector OS — STATUS (resume anchor)
 

@@ -121,3 +121,15 @@ never used depth** — it passed object *names only*, so every object fell to `m
 Verify every step yourself (read diffs, re-run tests). **Sim verification only when Yusen frees
 the sim** (he tests manually). Offline unit tests are necessary but never acceptance — the real
 acceptance is bare `vector-cli` + NL in the sim. Don't touch the verify spine.
+
+## Decisions pending (CEO gate — batch into ONE executive summary for Yusen)
+
+- **[D103, 2026-06-29] Structural verify→FAIL→replan in the native kernel ReAct loop.**
+  The composed out-of-reach fetch grounds 0/N: the model's far routing is too variable, and the
+  non-gated prompt nudge (D103) did NOT fix it (far N=4 = 0/4, chaotic). The real fix is to make
+  the KERNEL deterministically inject `navigate_to_object(name) → perception_grasp` when a far grasp
+  returns no_detections / runs without a weld — the absent Rule-1 "recover" pillar — instead of
+  relying on the model self-directing. This is an architectural plan.md change → **CEO approval
+  required** (executive summary + ADR). Evidence: DECISIONS D100/D102/D103. Do NOT implement
+  autonomously. Non-gated work continues meanwhile (cleaner far scenario, ran-no-weld diagnosis,
+  pick-and-place, slop cleanup).
