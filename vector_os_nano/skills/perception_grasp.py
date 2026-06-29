@@ -376,21 +376,31 @@ _FAR_RECOVERY_MAX_M = 8.0       # m; beyond this a localize is implausible -> ho
 _FAR_STANDOFF_M = 0.95          # m; mirrors navigate_to_object._VICINITY_CLEARANCE_M (asserted in tests)
 
 
-def _far_localize_and_approach(perception: Any, base: Any, query: str) -> bool:
-    """One-shot far recovery: un-gated localize -> drive to the standoff. Returns True iff it
-    localized a genuinely-far target in a sane band AND drove there (so the caller should
+def _far_localize_and_approach(
+    perception: Any, base: Any, query: str,
+    seed_pts: list | None = None,
+) -> bool:
+    """One-shot far recovery: drive to the un-gated-localized target's standoff. Returns True
+    iff it has a genuinely-far target in a sane band AND drove there (so the caller should
     re-perceive fresh at arrival). Best-effort: ANY failure returns False, leaving the honest
-    ``no_detections`` to stand so the model can re-route. No loop, no replan bookkeeping."""
+    ``no_detections`` to stand so the model can re-route. No loop, no replan bookkeeping.
+
+    ``seed_pts`` = a localize result captured from the CLEAN FORWARD pose BEFORE the perceive
+    scan rotated the dog. Re-localizing AFTER the scan mislocalizes a phantom from a rotated
+    heading (observed: a real target at (13.9,3.0) -> (6.0,8.6)), so we localize once up front
+    and reuse it here. If absent, fall back to a (less reliable) localize from the current pose."""
     import math
     if not all(callable(getattr(base, m, None)) for m in ("get_position", "get_heading", "navigate_to")):
         logger.info("[PGRASP] far recovery SKIP: base not steerable")
         return False
-    try:
-        from vector_os_nano.perception.object_localizer import localize_objects_3d
-        pts = localize_objects_3d(perception, [query])
-    except Exception as exc:  # noqa: BLE001 — recovery is best-effort
-        logger.info("[PGRASP] far recovery SKIP: localize raised %s", exc)
-        return False
+    pts = seed_pts
+    if pts is None:
+        try:
+            from vector_os_nano.perception.object_localizer import localize_objects_3d
+            pts = localize_objects_3d(perception, [query])
+        except Exception as exc:  # noqa: BLE001 — recovery is best-effort
+            logger.info("[PGRASP] far recovery SKIP: localize raised %s", exc)
+            return False
     if not pts:
         logger.info("[PGRASP] far recovery SKIP: un-gated localize found nothing for %r", query)
         return False
@@ -743,6 +753,18 @@ class PerceptionGraspSkill:
         # re-perceive. The 3D math is identical (segment -> grasp_point_from_rgbd);
         # only the box SOURCE differs (passed vs self-detected). FAIL LOUD if the
         # passed box yields no depth points (never a GT fallback).
+        # Far-fetch SEED: localize the target with the UN-GATED open-vocab detector from THIS
+        # clean forward pose BEFORE _perceive_with_scan rotates the dog (re-localizing from a
+        # post-scan heading mislocalizes a phantom: a real target at (13.9,3.0) -> (6.0,8.6)).
+        # Cheap insurance — used ONLY if the scan then fails no_detections (the far case); the
+        # in-reach scan succeeds and ignores it.
+        _far_seed = None
+        if context.base is not None:
+            try:
+                from vector_os_nano.perception.object_localizer import localize_objects_3d as _loc3d
+                _far_seed = _loc3d(perception, [query])
+            except Exception:  # noqa: BLE001
+                _far_seed = None
         passed_box = self._resolve_passed_box(params, color)
         consumed_bbox = passed_box is not None
         if consumed_bbox:
@@ -776,7 +798,7 @@ class PerceptionGraspSkill:
             fail is not None
             and (getattr(fail, "result_data", None) or {}).get("diagnosis") == "no_detections"
             and context.base is not None
-            and _far_localize_and_approach(perception, context.base, query)
+            and _far_localize_and_approach(perception, context.base, query, seed_pts=_far_seed)
         ):
             gp, resolved, fail = self._perceive_with_scan(
                 perception, context.base, query, color=color
