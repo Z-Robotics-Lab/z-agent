@@ -9,13 +9,19 @@
 #   I read a grounded frame = real Go2+arm grasp at the table. CAVEAT (honest): temporal=None on all 4 grounded
 #   trials — the 1-step perception_grasp routing captures <2 strip frames, so the temporal motion witness fires
 #   only on the slower failed trial; GT weld (holding_object) + spatial vision still cover success.
-# >> BACKLOG-#1 FINDING (verify_fetch_cli N=3, GT-only): the FULL look->navigate->grasp chain does NOT route —
-#   the model collapses to grasp/handover. PROMPT VERB ROUTES DIFFERENTLY: "拿给我"(hand-to-me)=handover-centric,
-#   1/3=33%, FLAKY (run1 strategies=["handover"] ALONE, run2=["perception_grasp","handover"], run3=[]); vs
-#   "拿过来"(bring-over)=perception_grasp-centric, 0.8 thru eyes. RED-FLAG TO CHECK NEXT ROUND: run1 GROUNDED with
-#   ["handover"] ONLY (no grasp step) = false-green CANDIDATE (handover can't give an unheld object) — and the
-#   "拿给我"/handover path has NEVER been eyes-checked. NEXT ROUND: push "拿给我" thru measure_fetch_visual (the
-#   eyes) to test the handover-only grounding = real or false-green (the D91-D95 class the eyes exist to catch).
+# >> PROMPT-VERB ROUTING (eyes-checked, D99): "拿过来"=perception_grasp 0.8 / "拿给我"=handover 0.4; the
+#   handover-only GROUNDED was a false-green CANDIDATE but the eyes CLEARED it (real arm-on-bottle grab; handover
+#   grabs before it gives). All in-reach 1-step grasps; the FULL look->navigate->grasp never routed (object spawns
+#   in arm reach -> perception_grasp self-approaches the 0.88m gap).
+# >> THIS round (D100, commit d84aa5c): VECTOR_FETCH_FAR scenario knob — relocates the green target onto a new
+#   pick_table_far ~3m down the +X hall (13.88,3.0), beyond perception_grasp's 1.6m self-approach, so a 1-step
+#   grasp can't reach it. Additive/env-gated, default off = baseline preserved; verify spine reads live GT (honest).
+#   FINDING (far-fetch, verify_fetch_cli N=3): forces the model OFF the 1-step grasp (routes mobile_pick x2 /
+#   perception_grasp x1) and the dog PHYSICALLY navigates (eyes strip frame = dog mid-doorway), BUT grounds 0/3 —
+#   the composed out-of-reach fetch is BROKEN. The model never composes the explicit navigate_to_object->
+#   perception_grasp; mobile_pick navigates but fails to seat the grasp, bare perception_grasp can't reach (fails
+#   loud, no replan-to-navigate). NEXT ROUND (Debug Protocol): why mobile_pick doesn't weld at the far table +
+#   whether to steer routing toward navigate_to_object->perception_grasp. NOTE: far trials ~3-4min each (slow nav).
 # >> THIS round (backlog #3; commit e762f12): merge_object x=0/y=0 SENTINEL TRAP FIXED. Backlog #1 (live-model
 #   bare-cli full-fetch e2e, TOP priority) was NETWORK-BLOCKED — DeepSeek http=000 + GPT-4o 421 (VPN fake-IP);
 #   per loop discipline pivoted to the offline backlog #3 (same bug class as the D97 (0,0) catastrophe).
