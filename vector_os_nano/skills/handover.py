@@ -73,6 +73,27 @@ class HandoverSkill:
             .get("joint_values", _DEFAULT_HOME_JOINTS)
         )
 
+        # DoF-aware (Rule 11): the default home pose is the 5-DoF SO-101 pose.  A
+        # different arm (e.g. the 6-DoF Piper) has a different DoF, so a fixed-length
+        # pose is rejected by move_joints ("expected 6 positions, got 5") — the same
+        # bug already fixed in home.py (D96).  Mirror that fix here: if the configured
+        # pose length doesn't match THIS arm's DoF, fall back to the URDF-zero neutral
+        # home (`[0.0]*dof`).  SO-101 (5==5) is byte-identical — this branch never
+        # fires for it.
+        arm_dof = getattr(context.arm, "dof", None)
+        if arm_dof is None:
+            try:
+                arm_dof = len(context.arm.get_joint_positions())
+            except Exception:  # noqa: BLE001
+                arm_dof = len(home_joints)
+        if len(home_joints) != int(arm_dof):
+            home_joints = [0.0] * int(arm_dof)
+            logger.info(
+                "[HANDOVER] configured home pose len != arm DoF (%s); "
+                "using URDF-zero neutral home",
+                arm_dof,
+            )
+
         direction = params.get("direction", "right")
         # Rotate shoulder_pan: +90deg for right, -90deg for left
         rotation = 1.57 if direction == "right" else -1.57
