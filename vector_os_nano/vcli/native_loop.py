@@ -1108,8 +1108,12 @@ def _native_system_prompt(
         "holds only ONE object at a time. For each named object in turn: grasp it, verify "
         "holding_object('<that object>') PASSES, THEN call gripper_open to RELEASE it before "
         "moving to the next (a new grasp cannot succeed while the gripper is still holding the "
-        "previous object). Only call finish once EVERY named object has had its OWN passed "
-        "holding_object verify — never finish after grasping just one when more were named. "
+        "previous object). After releasing, the robot is left docked CLOSE to where it just "
+        "grasped — too close to see the next object — so before the NEXT grasp, back off to a "
+        "viewing distance: walk backward about 0.8 m (walk direction='backward' distance=1.0), "
+        "OR navigate_to_object('<next object>') if it returns no_detections. Only call finish "
+        "once EVERY named object has had its OWN passed holding_object verify — never finish "
+        "after grasping just one when more were named. "
         + object_vocab
         + locomotion_guidance
     )

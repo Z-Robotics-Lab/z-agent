@@ -150,6 +150,12 @@ def test_native_multi_object_fetch_grounds_both_welds(sim_cleanup) -> None:
             tool_turn(("verify", {"expr": f"holding_object('{_GREEN_TARGET}')"})),
             # RELEASE the green weld so the single gripper is free for the blue grasp.
             tool_turn(("gripper_open", {})),
+            # RETREAT to a perceiving standoff before the next grasp: the first grasp
+            # leaves the dog DOCKED close to the table (x~10.46), where NO table object
+            # is in the camera FOV (probed: both bottles -> 0 px at x=10.46, but ~490 px
+            # at the x~9.7 standoff). Backing off ~0.8 m restores visibility so the next
+            # perception_grasp can perceive + self-approach its target.
+            tool_turn(("walk", {"direction": "backward", "distance": 1.0})),
             tool_turn(("perception_grasp", {"query": _BLUE_QUERY})),
             tool_turn(("verify", {"expr": f"holding_object('{_BLUE_TARGET}')"})),
             tool_turn(end=True),
