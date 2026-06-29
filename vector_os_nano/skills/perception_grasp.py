@@ -383,13 +383,16 @@ def _far_localize_and_approach(perception: Any, base: Any, query: str) -> bool:
     ``no_detections`` to stand so the model can re-route. No loop, no replan bookkeeping."""
     import math
     if not all(callable(getattr(base, m, None)) for m in ("get_position", "get_heading", "navigate_to")):
+        logger.info("[PGRASP] far recovery SKIP: base not steerable")
         return False
     try:
         from vector_os_nano.perception.object_localizer import localize_objects_3d
         pts = localize_objects_3d(perception, [query])
-    except Exception:  # noqa: BLE001 — recovery is best-effort
+    except Exception as exc:  # noqa: BLE001 — recovery is best-effort
+        logger.info("[PGRASP] far recovery SKIP: localize raised %s", exc)
         return False
     if not pts:
+        logger.info("[PGRASP] far recovery SKIP: un-gated localize found nothing for %r", query)
         return False
     _lbl, ox, oy, oz = pts[0]
     try:
@@ -398,9 +401,13 @@ def _far_localize_and_approach(perception: Any, base: Any, query: str) -> bool:
     except Exception:  # noqa: BLE001
         return False
     d = math.hypot(ox - rx, oy - ry)
+    logger.info("[PGRASP] far recovery: localized %r at (%.2f,%.2f) d=%.2fm from dog (%.2f,%.2f)",
+                query, ox, oy, d, rx, ry)
     # Recover only a genuinely-far target in a plausible band: nearer is the in-reach
     # self-approach's job; farther than _FAR_RECOVERY_MAX_M is an implausible localize.
     if not (_SCAN_MAX_LOCAL_M < d <= _FAR_RECOVERY_MAX_M):
+        logger.info("[PGRASP] far recovery SKIP: d=%.2fm out of band (%.1f,%.1f]",
+                    d, _SCAN_MAX_LOCAL_M, _FAR_RECOVERY_MAX_M)
         return False
     sx, sy, _ = compute_approach_pose((ox, oy, oz), (rx, ry, ryaw), clearance=_FAR_STANDOFF_M)
     logger.info("[PGRASP] far recovery: %r at (%.2f,%.2f) d=%.2fm -> standoff (%.2f,%.2f)",

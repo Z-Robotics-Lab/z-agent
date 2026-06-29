@@ -55,6 +55,12 @@ def run_once(
         "VECTOR_NO_ROS2": "1",
         "VECTOR_SIM_LOCK": "1",
         "VECTOR_SNAPSHOT_STRIP": "1",  # Stage 3: per-step temporal frames + pose track
+        # The detector (grounding-dino) + segmenter (EdgeTAM) are CACHED locally; force the
+        # HF hub OFFLINE so a flaky network can't make perception (detect / the far-fetch
+        # recovery's localize) try to phone home to huggingface.co and fail (observed: the
+        # whole turn produced no verdict because detect/describe errored on a network blip).
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
     }
     if with_arm:
         env["VECTOR_SIM_WITH_ARM"] = "1"  # attach the in-process Piper for fetch/grasp turns
