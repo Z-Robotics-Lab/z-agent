@@ -34,10 +34,15 @@ def measure(command: str, *, n: int, snapshot_dir: str, timeout: float = 280.0) 
         recs.append(rec)
         _cleanup()
         t = rec.get("temporal", {})
+        # ``reason`` is the gate decision string; it captures the failure mode when
+        # the trial does NOT reach GROUNDED (e.g. the nav/grasp step that failed).
+        # Truncated to 80 chars so the trial line stays readable in the loop log.
+        diag = (rec.get("reason") or "")[:80]
         print(
             f"TRIAL {i + 1}/{n}: GT={rec['gt']['evidence']} verified={rec['gt']['verified']} "
             f"vision={rec['vision'].get('witness')} temporal={t.get('witness')} "
-            f"decision={rec['decision']} disagree={rec['disagreement']}",
+            f"decision={rec['decision']} disagree={rec['disagreement']} "
+            f"diag={diag!r}",
             flush=True,
         )
     grounded = sum(1 for r in recs if r["gt"]["verified"])
@@ -55,6 +60,10 @@ def measure(command: str, *, n: int, snapshot_dir: str, timeout: float = 280.0) 
         "disagreements": sum(1 for r in recs if r["gt"]["verified"] and r["disagreement"]),
         "accept": sum(1 for r in recs if r["decision"] == "ACCEPT"),
         "red_flag": sum(1 for r in recs if r["decision"] == "RED_FLAG"),
+        # Per-trial gate reason strings: diagnostic context for failed/red-flag trials
+        # (nav failure, grasp miss, perception fault, etc.). Non-empty only on failures;
+        # use to distinguish nav_failed vs grasp_missed vs no_detections without a sim run.
+        "diagnoses": [r.get("reason", "") for r in recs],
     }
     print("RESULT " + json.dumps(result, ensure_ascii=False))
     return result

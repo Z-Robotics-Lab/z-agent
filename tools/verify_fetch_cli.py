@@ -46,6 +46,44 @@ _N = int(os.environ.get("N", "3"))
 _PER_RUN_TIMEOUT = float(os.environ.get("PER_RUN_TIMEOUT", "420"))
 
 
+# ---------------------------------------------------------------------------
+# Pure rec-building helper (unit-testable; no sim / PTY / subprocess)
+# ---------------------------------------------------------------------------
+
+
+def _build_rec(i: int, verdict: dict, exit_code: int) -> dict:
+    """Map (trial_index, verdict_dict, exit_code) -> harness result record.
+
+    Pure function — no side effects, no I/O. Takes the parsed VECTOR_VERDICT
+    JSON payload and returns the per-run ``rec`` dict the harness appends to
+    its results list.
+
+    ``diagnosis`` is the most specific failure signal available:
+      1. The last per_step's ``result_data['diagnosis']`` (skill-level code,
+         e.g. 'nav_failed', 'no_detections', 'dock_not_converged', 'low_z').
+      2. Fall back to the top-level verdict ``error`` string.
+      3. None when neither is present (e.g. a successful GROUNDED turn).
+    """
+    per_step: list[dict] = verdict.get("per_step") or []
+    last_step: dict = per_step[-1] if per_step else {}
+    last_rd: dict = last_step.get("result_data") or {}
+    diagnosis = last_rd.get("diagnosis") or verdict.get("error") or None
+
+    return {
+        "i": i,
+        "evidence": verdict.get("evidence", "NO_TRACE"),
+        "verified": bool(verdict.get("verified", False)),
+        "strategies": [s.get("strategy", "") for s in per_step],
+        "exit": exit_code,
+        "diagnosis": diagnosis,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Sim cleanup
+# ---------------------------------------------------------------------------
+
+
 def _nuke() -> None:
     try:
         subprocess.run(["rosm", "nuke", "--yes"], timeout=30, capture_output=True)
@@ -73,6 +111,10 @@ def main() -> int:
                 extra_env={
                     "VECTOR_SIM_WITH_ARM": "1",
                     "MUJOCO_GL": "egl",
+                    # Serialize sims host-wide: the bare-cli child acquires the
+                    # global one-sim lock (ADR-002 Stage 0) so concurrent
+                    # autonomous rounds cannot double-drive the sim and OOM.
+                    "VECTOR_SIM_LOCK": "1",
                     # Lightweight fully-in-process path: skip the external ROS2 nav
                     # stack (navigate_to plans via in-process vgraph) so an
                     # unattended round does not OOM/SIGKILL (rc=137 guardrail).
@@ -89,16 +131,15 @@ def main() -> int:
                 extra_args=["--headless", "--native-loop"],
             )
             v = r.verdict or {}
-            per_step = v.get("per_step") or []
-            rec["evidence"] = v.get("evidence", "NO_TRACE")
-            rec["verified"] = bool(v.get("verified", False))
-            rec["strategies"] = [s.get("strategy", "") for s in per_step]
-            rec["exit"] = r.exit_code
+            rec.update(_build_rec(i, v, r.exit_code))
         except Exception as exc:  # noqa: BLE001 — a stall/timeout/no-verdict is a real failure mode
             rec["evidence"] = "ERROR"
             rec["error"] = f"{type(exc).__name__}: {str(exc)[:280]}"
         results.append(rec)
-        print(f"run {i + 1}/{_N}: {json.dumps(rec, ensure_ascii=False)}", flush=True)
+        print(
+            f"run {i + 1}/{_N}: {json.dumps(rec, ensure_ascii=False)}",
+            flush=True,
+        )
         _nuke()
 
     grounded = sum(1 for r in results if r.get("evidence") == "GROUNDED" and r.get("verified"))
