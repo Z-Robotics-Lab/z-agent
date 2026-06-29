@@ -54,6 +54,25 @@ EXIT_VERIFIED = 0
 EXIT_ERROR = 1
 EXIT_RAN_NOT_VERIFIED = 2
 
+# Max length of the informational per-step diagnosis on the contract line.
+_DIAGNOSIS_MAX = 64
+
+
+def _step_diagnosis(step: Any) -> str:
+    """A short, bounded, informational failure code for one StepRecord.
+
+    INFORMATIONAL ONLY — never feeds ``verified``/``evidence``. Prefers the
+    deterministic typed ``failure_class``; falls back to the skill's own
+    ``result_data['diagnosis']`` code. str-only + length-bounded so the
+    contract line never carries raw exception detail / paths / secrets (rule 10).
+    """
+    fc = (getattr(step, "failure_class", "") or "").strip()
+    if fc:
+        return fc[:_DIAGNOSIS_MAX]
+    rd = getattr(step, "result_data", None)
+    diag = rd.get("diagnosis") if isinstance(rd, dict) else None
+    return str(diag).strip()[:_DIAGNOSIS_MAX] if diag else ""
+
 
 @dataclass(frozen=True)
 class StepVerdict:
@@ -65,6 +84,15 @@ class StepVerdict:
     verify: str
     verify_result: bool
     evidence: str  # GROUNDED | RAN | FAILED (from classify_step_evidence)
+    # INFORMATIONAL ONLY — a short, bounded failure code for triage (e.g.
+    # 'nav_failed', 'no_detections', 'ik_fail'). NEVER feeds ``verified`` /
+    # ``evidence`` (the moat is untouched), it only surfaces WHY a non-GROUNDED
+    # step missed so a harness/loop can distinguish nav-vs-grasp-vs-perception
+    # without a sim re-run. Prefer the deterministic ``failure_class``; fall back
+    # to the skill's ``result_data['diagnosis']``. Bounded + str-only (rule 10:
+    # never raw exception detail / paths / secrets on the contract line).
+    # Additive + LAST + defaulted "" so every existing constructor is unaffected.
+    diagnosis: str = ""
 
 
 @dataclass(frozen=True)
@@ -128,6 +156,7 @@ class VerdictReport:
                     verify=verify_str,
                     verify_result=bool(s.verify_result),
                     evidence=ev,
+                    diagnosis=_step_diagnosis(s),
                 )
             )
 

@@ -165,3 +165,56 @@ def test_sentinel_line_roundtrips() -> None:
     assert isinstance(payload["oracle_names"], list)
     assert isinstance(payload["per_step"], list)
     assert payload["per_step"][0]["evidence"] == "GROUNDED"
+
+
+# ---------------------------------------------------------------------------
+# (5) DIAGNOSIS — informational per-step failure code, never feeds `verified`
+# ---------------------------------------------------------------------------
+
+
+def _trace_with_step(*, success, verify_result, result_data=None, failure_class=""):
+    sg = SubGoal(name="s1", description="d", verify="holding_object('x')", strategy="perception_grasp")
+    step = StepRecord(
+        sub_goal_name="s1",
+        strategy="perception_grasp",
+        success=success,
+        verify_result=verify_result,
+        duration_sec=0.1,
+        result_data=result_data or {},
+        failure_class=failure_class,
+    )
+    tree = GoalTree(goal="把瓶子拿过来", sub_goals=(sg,))
+    return ExecutionTrace(goal_tree=tree, steps=(step,), success=success, total_duration_sec=0.1)
+
+
+def test_diagnosis_surfaces_skill_result_data_code() -> None:
+    """A failed step's result_data['diagnosis'] reaches StepVerdict.diagnosis."""
+    trace = _trace_with_step(success=False, verify_result=False, result_data={"diagnosis": "no_detections"})
+    rep = VerdictReport.from_trace(trace, ORACLES)
+    assert rep.per_step[0].diagnosis == "no_detections"
+    assert rep.to_dict()["per_step"][0]["diagnosis"] == "no_detections"  # serialized on the contract line
+
+
+def test_diagnosis_prefers_deterministic_failure_class() -> None:
+    """The bounded failure_class wins over a raw result_data code."""
+    trace = _trace_with_step(
+        success=False, verify_result=False, failure_class="ik_fail", result_data={"diagnosis": "low_z"}
+    )
+    assert VerdictReport.from_trace(trace, ORACLES).per_step[0].diagnosis == "ik_fail"
+
+
+def test_diagnosis_empty_on_success_and_is_bounded() -> None:
+    """A successful step carries no diagnosis; an over-long code is truncated."""
+    ok = _trace_with_step(success=True, verify_result=True)
+    assert VerdictReport.from_trace(ok, ORACLES).per_step[0].diagnosis == ""
+    longcode = "x" * 200
+    bad = _trace_with_step(success=False, verify_result=False, result_data={"diagnosis": longcode})
+    assert len(VerdictReport.from_trace(bad, ORACLES).per_step[0].diagnosis) <= 64
+
+
+def test_diagnosis_never_changes_verified() -> None:
+    """The moat invariant: adding a diagnosis NEVER flips verified vs evidence_passed."""
+    trace = _trace_with_step(success=False, verify_result=False, result_data={"diagnosis": "no_detections"})
+    rep = VerdictReport.from_trace(trace, ORACLES)
+    assert rep.verified == evidence_passed(trace, ORACLES)
+    assert rep.verified is False

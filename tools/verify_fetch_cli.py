@@ -59,15 +59,21 @@ def _build_rec(i: int, verdict: dict, exit_code: int) -> dict:
     its results list.
 
     ``diagnosis`` is the most specific failure signal available:
-      1. The last per_step's ``result_data['diagnosis']`` (skill-level code,
-         e.g. 'nav_failed', 'no_detections', 'dock_not_converged', 'low_z').
-      2. Fall back to the top-level verdict ``error`` string.
-      3. None when neither is present (e.g. a successful GROUNDED turn).
+      1. The last per_step's flat ``diagnosis`` field (StepVerdict surfaces a
+         bounded skill-level code, e.g. 'nav_failed', 'no_detections', 'ik_fail').
+      2. The last per_step's ``result_data['diagnosis']`` (legacy / if present).
+      3. Fall back to the top-level verdict ``error`` string.
+      4. None when none is present (e.g. a successful GROUNDED turn).
     """
     per_step: list[dict] = verdict.get("per_step") or []
     last_step: dict = per_step[-1] if per_step else {}
     last_rd: dict = last_step.get("result_data") or {}
-    diagnosis = last_rd.get("diagnosis") or verdict.get("error") or None
+    diagnosis = (
+        last_step.get("diagnosis")
+        or last_rd.get("diagnosis")
+        or verdict.get("error")
+        or None
+    )
 
     return {
         "i": i,
