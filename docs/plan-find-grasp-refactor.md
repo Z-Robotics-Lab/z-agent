@@ -135,5 +135,18 @@ acceptance is bare `vector-cli` + NL in the sim. Don't touch the verify spine.
   returns no_detections / runs without a weld — the absent Rule-1 "recover" pillar — instead of
   relying on the model self-directing. This is an architectural plan.md change → **CEO approval
   required** (executive summary + ADR). Evidence: DECISIONS D100/D102/D103/D104. Do NOT implement
-  autonomously. Non-gated work continues meanwhile (ran-no-weld diagnosis, pick-and-place, slop
-  cleanup).
+  autonomously. Non-gated work continues meanwhile (ran-no-weld diagnosis ✅ D105, pick-and-place
+  ✅ D106, slop cleanup).
+
+- **[D106, 2026-06-29] Receptacle-relative place oracle (replace floor-only `placed_count`).**
+  The go2+arm pick→place WIRING is proven (grasp→GT-weld-release, test_go2_pick_place_composition).
+  But a `placed_count`-GROUNDED place is unreachable on a tall mobile manipulator at a table:
+  empirically (probe 2026-06-29) the loaded Piper COLLIDES with the table front edge on descent
+  (stalls z~0.30, the bottle settles near the table top, placed_count stays 0) — NOT an IK-reach
+  limit (collision-free IK converges to z=0.10). And even with clear floor, dropping an object on
+  the ground is the wrong task: the natural place target is a RECEPTACLE at height, which the
+  frozen `placed_count` (credits only z<0.10) structurally cannot grade. The fix is a
+  receptacle-relative resting predicate (object supported on/within a named receptacle's region,
+  any z) in `vcli/worlds/arm_sim_oracle.py` — a **spine semantics change = CEO gate** (the honest
+  -verify moat may only get stricter; a new oracle needs review it doesn't widen any ACCEPT path).
+  Until approved, go2+arm place ships as the honest grasp→release primitive only.

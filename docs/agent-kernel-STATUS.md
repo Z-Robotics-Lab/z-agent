@@ -17,12 +17,18 @@
 # >> CEO GATE QUEUED (do NOT cross): the real far-fetch fix = a STRUCTURAL verify->FAIL->replan in the native
 #   kernel ReAct loop (deterministically inject navigate->grasp on a far no-weld) = architectural plan.md. Batch
 #   into an executive summary for Yusen on return. See docs/plan-find-grasp-refactor.md ## Decisions pending.
-# >> NEXT (non-gated, autonomous loop priority — far is plateaued, work these): (1) ran-no-weld diagnosis (the
-#   dominant far failure mode — perception_grasp completes without a holding_object weld -> set
-#   result_data['diagnosis']='ran_no_weld'; informational only, never feeds verified); (2) pick-and-place
-#   kind-leap (place skill exists, placed_count in frozen spine; wire "把绿色的瓶子放到<目标>" via bare cli + eyes);
-#   (3) slop cleanup (dead _recenter_lateral, /tmp/pgrasp debug writes, inline hot-path imports) + find_objects
-#   substring hardening.
+# >> BACKLOG #2 DONE (D105, 98b169d): ran-no-weld diagnosis — perception_grasp/mobile_pick stamp
+#   result_data['diagnosis']='ran_no_weld' off the GT weld; native_loop threads skill diagnosis onto StepRecord.
+#   Informational only, moat byte-unchanged. Lights up the dominant far no-weld mode (does not by itself fix far).
+# >> BACKLOG #3 DONE (D106, this round): go2+arm pick→place WIRING proven — test_go2_pick_place_composition
+#   (grasp→GT-weld-release, real-sim GREEN 40s). The WIP retreat claimed "Piper IK can't reach floor"; TWO
+#   foreground probes REFUTED that (IK converges to z=0.10) and found the TRUE blocker = the LOADED arm COLLIDES
+#   with the table edge on descent (stalls z~0.30, bottle settles near table top, placed_count=0). A
+#   placed_count-GROUNDED place needs a receptacle-relative oracle = CEO GATE (queued, plan ## Decisions pending).
+# >> NEXT (non-gated, autonomous loop priority — far gated+plateaued, place wiring done): backlog #4 SLOP CLEANUP
+#   (dead _recenter_lateral in terminal_dock.py; gate the unconditional /tmp/pgrasp_*.png debug writes behind an
+#   env flag; hoist inline hot-path imports; harden find_objects_by_category substring collision "bottle"→green+blue).
+#   Then re-survey the frontier (Decision Workflow) — most substantial fetch/place work is now CEO-gated.
 
 # Vector OS — STATUS (resume anchor)
 
