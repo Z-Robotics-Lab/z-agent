@@ -1,44 +1,28 @@
-# >> REFACTOR HANDOFF — 2026-06-25 — find-and-grasp pipeline refactor in progress.
-# Sim is FREE now (no mujoco). RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D88-D99 + git log.
-# >> EYES NOW IN THE LOOP (ADR-002, D99): per-round REAL-VERIFY = tools/acceptance/measure_fetch_visual.py
-#   (GT oracle + visual witness + temporal). `disagreements>0` (a GROUNDED turn the eyes object to) => red-team
-#   BEFORE trusting grounded_rate. Gate semantics corrected: a GT-FAIL is NOT a vision disagreement (orthogonal
-#   rubric is silent on success) — only GT-PASS+vision-FAIL is. See DECISIONS D99.
-# >> LIVE EYES-VERIFIED BASELINE (2026-06-26, OpenRouter routing, N=5 "把绿色的瓶子拿过来"): grounded_rate=0.8
-#   (4/5), vision_pass=5, DISAGREEMENTS=0 (no false-greens — eyes agree with the GT oracle on every success);
-#   I read a grounded frame = real Go2+arm grasp at the table. CAVEAT (honest): temporal=None on all 4 grounded
-#   trials — the 1-step perception_grasp routing captures <2 strip frames, so the temporal motion witness fires
-#   only on the slower failed trial; GT weld (holding_object) + spatial vision still cover success.
-# >> PROMPT-VERB ROUTING ("拿过来"=perception_grasp 0.8 / "拿给我"=handover 0.4, GT-measured). CORRECTION (D101,
-#   adversarial review 2026-06-28): the handover-only GROUNDED was checked by the FROZEN GT WELD ORACLE + a human
-#   frame-read — NOT "cleared by the eyes". The ADR-002 visual rubric is ORTHOGONAL (rendered/upright/intact/
-#   in-frame) and STRUCTURALLY BLIND to grasp authenticity, so it can neither confirm nor refute a grasp; the eyes
-#   have NEVER caught a real false-green and cannot catch a grasp-fakery one with the current rubric (real coverage
-#   gap). The "拿给我" eyes run (0.4, disagreements=0) was TERMINAL-ONLY, never committed as a RESULT artifact.
-#   All in-reach 1-step grasps; the FULL look->navigate->grasp never routed (object spawns in arm reach).
-# >> FAR-FETCH (D100, commit d84aa5c): VECTOR_FETCH_FAR knob (env-gated, default off=baseline preserved) relocates
-#   the green target ~3m down the +X hall (pick_table_far) to force the composed fetch. Result: model routes
-#   mobile_pick OR perception_grasp, NEVER the working navigate_to_object->perception_grasp; grounds 0/N. The far
-#   failure is fundamentally a ROUTING problem (model doesn't compose the proven path), not (mostly) grasp-seating.
-# >> ROUND 1 honest-acceptance DONE (D102, commits 0db2abb/acdffb4/0ea72f8 + review-driven): (1) MOAT HOLE closed —
-#   object-goal gate now fires on 拿过来/拿给我/带过来/取过来/bring/give (anchored 取/带 so 读取/获取/带领/带我去 stay
-#   False; only-stricter, adversarial-reviewed — caught + fixed an over-match). (2) handover 6-DoF crash FIXED
-#   (LIVE-verified: "拿给我" runs no-crash to verdict). (3) far-fetch 60s nav timeout + diagnosis plumbing (still
-#   BLIND: StepVerdict doesn't serialize result_data -> diagnosis=null; needs an additive field, Round 2). Near
-#   baseline NOT regressed (2/3 GROUNDED+ACCEPT with the moat active). 269 unit tests green.
-# >> ROUND 2 non-gated DONE (D103, commits ee22131/d582d33): (1) StepVerdict.diagnosis (bounded informational
-#   failure code; moat-untouched, verified==evidence_passed test added). (2) kernel grasp prompt CONDITIONAL
-#   recovery (no_detections -> navigate_to_object -> re-grasp; never preemptive; in-reach unaffected). REAL-VERIFY:
-#   far "拿过来" N=4 = 0/4, routing still CHAOTIC (detect/stop/perception_grasp, 1 SIGKILL) -> the PROMPT NUDGE IS
-#   INSUFFICIENT; near NOT regressed. Secondary: far failures are RAN (no fail-code -> diagnosis=null); near
-#   blue/red distractors confound the far-green fetch.
+# >> FETCH HANDOFF — RESUME FROM: docs/plan-find-grasp-refactor.md + DECISIONS D99-D104 + git log -12.
+# >> EYES = per-round REAL-VERIFY (ADR-002, D99): tools/acceptance/measure_fetch_visual.py (GT oracle + visual
+#   witness + temporal). disagreements>0 => red-team BEFORE trusting grounded_rate. Eyes have a real COVERAGE GAP:
+#   the visual rubric is ORTHOGONAL to grasp authenticity (D101) — GT weld (holding_object) is the success authority.
+# >> IN-REACH baseline (D99, OpenRouter N=5 "把绿色的瓶子拿过来"): grounded_rate=0.8, disagreements=0. The full
+#   look->navigate->grasp never routes in-reach (green spawns 0.88m dead-ahead, perception_grasp self-approaches).
+# >> FAR-FETCH is the open problem, 0/N across D100/D102/D103/D104 (VECTOR_FETCH_FAR knob relocates pickables ~3m
+#   down the +X hall onto pick_table_far). Non-gated levers tried + EXHAUSTED: D102 60s nav timeout + moat hole
+#   close; D103 StepVerdict.diagnosis + conditional kernel recovery prompt (prompt nudge INSUFFICIENT, routing
+#   chaotic); D104 (THIS ROUND, 8dd79f8) cleaner far scene — knob now moves ALL THREE bottles far (not green
+#   alone) to kill the distractor confound. RESULT: the confound was NOT the cause — a clean-far turn STILL does
+#   not complete within budget; the model's free-form ReAct burns the 24-turn cap (_MAX_NATIVE_TURNS) on
+#   mis-sequenced nav/grasp attempts (each ~60s), running 10-20min past the ~280s acceptance budget without
+#   grounding. 4 far-scene unit tests GREEN; spine untouched; near baseline unaffected (knob default off).
+# >> CONCLUSION: far-fetch reliability is PLATEAUED on non-gated levers — the model will NOT self-compose the far
+#   fetch. The real fix is the CEO-GATED structural replan; per the loop plateau guidance, PIVOT down the backlog.
 # >> CEO GATE QUEUED (do NOT cross): the real far-fetch fix = a STRUCTURAL verify->FAIL->replan in the native
 #   kernel ReAct loop (deterministically inject navigate->grasp on a far no-weld) = architectural plan.md. Batch
 #   into an executive summary for Yusen on return. See docs/plan-find-grasp-refactor.md ## Decisions pending.
-# >> NEXT (non-gated, autonomous loop priority): (1) cleaner far scenario — move ALL bottles far (not just green)
-#   to remove the distractor confound + re-measure; (2) ran-no-weld diagnosis (the dominant far failure mode);
-#   (3) pick-and-place kind-leap (place skill exists, placed_count in frozen spine); (4) slop cleanup (dead
-#   _recenter_lateral, /tmp/pgrasp debug writes, inline hot-path imports) + find_objects substring hardening.
+# >> NEXT (non-gated, autonomous loop priority — far is plateaued, work these): (1) ran-no-weld diagnosis (the
+#   dominant far failure mode — perception_grasp completes without a holding_object weld -> set
+#   result_data['diagnosis']='ran_no_weld'; informational only, never feeds verified); (2) pick-and-place
+#   kind-leap (place skill exists, placed_count in frozen spine; wire "把绿色的瓶子放到<目标>" via bare cli + eyes);
+#   (3) slop cleanup (dead _recenter_lateral, /tmp/pgrasp debug writes, inline hot-path imports) + find_objects
+#   substring hardening.
 
 # Vector OS — STATUS (resume anchor)
 

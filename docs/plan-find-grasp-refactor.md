@@ -124,12 +124,16 @@ acceptance is bare `vector-cli` + NL in the sim. Don't touch the verify spine.
 
 ## Decisions pending (CEO gate — batch into ONE executive summary for Yusen)
 
-- **[D103, 2026-06-29] Structural verify→FAIL→replan in the native kernel ReAct loop.**
+- **[D103/D104, 2026-06-29] Structural verify→FAIL→replan in the native kernel ReAct loop.**
   The composed out-of-reach fetch grounds 0/N: the model's far routing is too variable, and the
-  non-gated prompt nudge (D103) did NOT fix it (far N=4 = 0/4, chaotic). The real fix is to make
-  the KERNEL deterministically inject `navigate_to_object(name) → perception_grasp` when a far grasp
+  non-gated prompt nudge (D103) did NOT fix it (far N=4 = 0/4, chaotic). D104 then RULED OUT the
+  last non-gated hypothesis — the near blue/red distractor confound — by moving ALL THREE bottles
+  far (clean scene): a clean-far turn STILL does not ground, the model burns the entire 24-turn
+  ReAct cap (_MAX_NATIVE_TURNS) on mis-sequenced nav/grasp attempts (>10 min, far past the ~280s
+  acceptance budget). The non-gated levers are now EXHAUSTED/PLATEAUED. The real fix is to make the
+  KERNEL deterministically inject `navigate_to_object(name) → perception_grasp` when a far grasp
   returns no_detections / runs without a weld — the absent Rule-1 "recover" pillar — instead of
   relying on the model self-directing. This is an architectural plan.md change → **CEO approval
-  required** (executive summary + ADR). Evidence: DECISIONS D100/D102/D103. Do NOT implement
-  autonomously. Non-gated work continues meanwhile (cleaner far scenario, ran-no-weld diagnosis,
-  pick-and-place, slop cleanup).
+  required** (executive summary + ADR). Evidence: DECISIONS D100/D102/D103/D104. Do NOT implement
+  autonomously. Non-gated work continues meanwhile (ran-no-weld diagnosis, pick-and-place, slop
+  cleanup).
