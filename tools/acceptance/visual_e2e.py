@@ -123,7 +123,13 @@ def run_once(
 
 
 def _cleanup() -> None:
-    os.system("rosm nuke --yes >/dev/null 2>&1; pkill -9 -f '[m]ujoco' 2>/dev/null")
+    # Target ONLY the bare-cli sim worker, NEVER 'mujoco'. An autonomous EvolvingLoop round runs
+    # as `claude -p "<goal>"` whose cmdline literally contains "mujoco" (the goal's rc=137 guardrail
+    # text), so `pkill -9 -f mujoco` SIGKILLs the ROUND ITSELF (rc=137 self-destruct → every round
+    # dies at the sim REAL-VERIFY step, committing un-eyes-verified code). The in-process sim lives
+    # inside the `python -m vector_os_nano.vcli.cli` child, so match that exact module path (absent
+    # from the round's cmdline) — same fix as tools/verify_fetch_cli.py._nuke.
+    os.system("rosm nuke --yes >/dev/null 2>&1; pkill -9 -f 'vector_os_nano.vcli.cli' 2>/dev/null")
 
 
 def main() -> int:
