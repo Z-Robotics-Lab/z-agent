@@ -75,6 +75,57 @@ def test_goal_has_object_intent(goal, expected) -> None:
 
 
 @pytest.mark.parametrize(
+    "goal",
+    [
+        # THE moat hole: the EXACT primary fetch commands the gate failed to fire on.
+        "把绿色的瓶子拿过来",
+        "把绿色的瓶子拿给我",
+        "拿给我那个瓶子",
+        "带过来",
+        "把那个杯子取过来",
+        "去取那个杯子",
+        "去把红色杯子拿来",
+        "bring me the bottle",
+        "give me the cup",
+    ],
+)
+def test_fetch_commands_are_object_intent(goal) -> None:
+    """A 拿/带过来/取过来/bring/give-me FETCH commands a physical possession -> must gate (True).
+
+    Before this fix ``_OBJECT_INTENT_RE`` only matched 拿起/拿住, so the primary fetch
+    phrasings ("把绿色的瓶子拿过来") slipped the gate — a moat hole an actor could exploit
+    by routing a real grasp through a weaker (non-manip) predicate. Stricter-only."""
+    assert goal_has_object_intent(goal) is True
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        # possession-free commands MUST stay False (gate fails open, classification stands).
+        "把瓶子放到盒子里",
+        "放好",
+        "去厨房",
+        "place it on the table",
+        "go to the kitchen",
+        "navigate to the door",
+        # OVER-MATCH GUARDS (adversarial review): bare 取/带 used to over-fire on these
+        # non-possession compounds, wrongly forcing the holding_object oracle on a
+        # nav/perception turn (-> false RED). The directional anchoring must keep them False.
+        "读取文件内容",      # 读取 (read) — not a grasp
+        "获取传感器数据",    # 获取 (acquire data) — not a grasp
+        "获取房间地图",      # perception/mapping — not a grasp
+        "取消任务",          # 取消 (cancel) — not a grasp
+        "选取区域",          # 选取 (select) — not a grasp
+        "带领机器人去客厅",  # 带领 (lead) — pure nav
+        "带我去客厅",        # 带我去 (take me to) — pure nav, not object possession
+    ],
+)
+def test_non_possession_commands_not_object_intent(goal) -> None:
+    """No grasp/fetch verb -> False (fail-open). Guards against the new verbs over-firing."""
+    assert goal_has_object_intent(goal) is False
+
+
+@pytest.mark.parametrize(
     "expr, expected",
     [
         ("holding_object('banana')", True),

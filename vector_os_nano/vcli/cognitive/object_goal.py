@@ -36,15 +36,25 @@ from __future__ import annotations
 import ast
 import re
 
-# Grasp / pick INTENT: the user commanded a physical grasp or pick-up of an object.
-# Mirrors ``coord_goal.goal_has_coordinate_intent`` — this detects INTENT only, it
-# NEVER extracts the target object (the oracle owns the canonical scene name). Covers
-# the Chinese grasp verbs (抓/夹/拿/握/捡) and the English ones (pick up, grasp, grab).
-# Deliberately does NOT match pure PLACE verbs (放/place/put/drop) — a place-only goal
-# carries no grasp intent and fails open, so a release-completion verify (e.g.
-# ``not holding_object()``) is never policed here.
+# Grasp / pick / FETCH INTENT: the user commanded a physical grasp, pick-up, or bring-to-me
+# of an object. Mirrors ``coord_goal.goal_has_coordinate_intent`` — this detects INTENT only,
+# it NEVER extracts the target object (the oracle owns the canonical scene name). Covers the
+# Chinese grasp/fetch verbs (抓/夹/拿/拿过来/拿来/拿给/带过来/取过来/握/捡) and the English ones
+# (pick up, grasp, grab, bring, give me). NOTE: 拿(过来|来|给)? + the DIRECTIONAL 带过来/取过来 +
+# bring/give-me were ADDED to close the moat hole where the primary fetch phrasings
+# ("把绿色的瓶子拿过来" / "拿给我那个瓶子") slipped the gate — an actor could route a real grasp
+# through a weaker (non-manip) predicate. CRITICAL: 取/带 are matched ONLY in fetch-directional
+# forms (取过来|取回|去取 · 带过来|带回|带走) — bare 取/带 are NOT matched because they over-fire on
+# non-grasp compounds (读取/获取/取消/选取 · 带领/携带/带我去), which would WRONGLY force the
+# holding_object oracle on a nav/perception turn and turn a correct turn into a false RED. bare 拿
+# is kept (rare non-grasp compounds). Deliberately does NOT match pure PLACE / nav verbs
+# (放/place/put/drop/去/go/navigate). ADD-only vs the original (rule 5): every original alternative
+# is retained verbatim; the additions only widen coverage (more turns gated -> stricter), and the
+# 取/带 anchoring keeps that widening from spilling onto non-possession commands.
 _OBJECT_INTENT_RE = re.compile(
-    r"抓|夹住|夹起|夹取|拿起|拿住|握住|捡起|pick\s*up|\bpick\b|grasp|grab|gripp",
+    r"抓|夹住|夹起|夹取|拿起|拿住|拿(过来|来|给)?|握住|捡起|"
+    r"带(过来|过去|回来|回去|走|来)|取(过来|过去|回来|回去|回|来|走|出来)|去取|"
+    r"pick\s*up|\bpick\b|grasp|grab|gripp|bring|give\s*me",
     re.IGNORECASE,
 )
 
