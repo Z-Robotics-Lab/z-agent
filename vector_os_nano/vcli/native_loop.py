@@ -1073,6 +1073,13 @@ def _native_system_prompt(
         "UNMET (you burn your turns moving/looking and never actually grasp). The single "
         "biggest mistake here is calling navigate or detect instead of the grasp skill: "
         "don't. Commit to the grasp skill on the FIRST action, then verify holding_object(...). "
+        "RECOVERY (only after a failure): if — and ONLY if — the grasp skill comes back "
+        "reporting it could NOT see or reach the target (a result such as 'no_detections', it "
+        "perceived nothing, or the object is too far to reach), then the object is out of reach "
+        "from where you stand: call navigate_to_object('<name>') ONCE to drive up to it, then "
+        "call the grasp skill again. Do this ONLY as recovery in response to that specific "
+        "failure — NEVER as a preemptive first step (a preemptive navigate/detect is still the "
+        "#1 way an in-reach grasp needlessly fails). "
         + object_vocab
         + locomotion_guidance
     )
