@@ -74,8 +74,15 @@ def main() -> int:
     ap.add_argument("--command", default="把绿色的瓶子拿过来")
     ap.add_argument("--n", type=int, default=5)
     ap.add_argument("--snapshot-dir", default="/tmp/vector_fetch_visual")
+    # An OUT-OF-REACH (VECTOR_FETCH_FAR) fetch is legitimately slow — the ~3.9 m nav leg +
+    # the perception_grasp recovery (localize -> drive -> face -> grasp) + the per-step
+    # snapshot-strip overhead push a far turn well past the in-reach ~280 s. A too-short
+    # timeout CLIPS the grasp mid-turn and records a false GT=RAN. Make it configurable;
+    # use e.g. --timeout 480 for a far fetch.
+    ap.add_argument("--timeout", type=float, default=280.0,
+                    help="per-trial seconds (far fetch needs ~480; default 280 fits in-reach)")
     args = ap.parse_args()
-    measure(args.command, n=args.n, snapshot_dir=args.snapshot_dir)
+    measure(args.command, n=args.n, snapshot_dir=args.snapshot_dir, timeout=args.timeout)
     return 0
 
 
