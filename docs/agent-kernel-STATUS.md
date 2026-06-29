@@ -9,10 +9,13 @@
 #   I read a grounded frame = real Go2+arm grasp at the table. CAVEAT (honest): temporal=None on all 4 grounded
 #   trials — the 1-step perception_grasp routing captures <2 strip frames, so the temporal motion witness fires
 #   only on the slower failed trial; GT weld (holding_object) + spatial vision still cover success.
-# >> PROMPT-VERB ROUTING (eyes-checked, D99): "拿过来"=perception_grasp 0.8 / "拿给我"=handover 0.4; the
-#   handover-only GROUNDED was a false-green CANDIDATE but the eyes CLEARED it (real arm-on-bottle grab; handover
-#   grabs before it gives). All in-reach 1-step grasps; the FULL look->navigate->grasp never routed (object spawns
-#   in arm reach -> perception_grasp self-approaches the 0.88m gap).
+# >> PROMPT-VERB ROUTING ("拿过来"=perception_grasp 0.8 / "拿给我"=handover 0.4, GT-measured). CORRECTION (D101,
+#   adversarial review 2026-06-28): the handover-only GROUNDED was checked by the FROZEN GT WELD ORACLE + a human
+#   frame-read — NOT "cleared by the eyes". The ADR-002 visual rubric is ORTHOGONAL (rendered/upright/intact/
+#   in-frame) and STRUCTURALLY BLIND to grasp authenticity, so it can neither confirm nor refute a grasp; the eyes
+#   have NEVER caught a real false-green and cannot catch a grasp-fakery one with the current rubric (real coverage
+#   gap). The "拿给我" eyes run (0.4, disagreements=0) was TERMINAL-ONLY, never committed as a RESULT artifact.
+#   All in-reach 1-step grasps; the FULL look->navigate->grasp never routed (object spawns in arm reach).
 # >> THIS round (D100, commit d84aa5c): VECTOR_FETCH_FAR scenario knob — relocates the green target onto a new
 #   pick_table_far ~3m down the +X hall (13.88,3.0), beyond perception_grasp's 1.6m self-approach, so a 1-step
 #   grasp can't reach it. Additive/env-gated, default off = baseline preserved; verify spine reads live GT (honest).
