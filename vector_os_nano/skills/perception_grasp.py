@@ -611,14 +611,18 @@ class PerceptionGraspSkill:
 
     name: str = "perception_grasp"
     description: str = (
-        "Grasp an object the robot must FIND first: detect it with the VLM, "
-        "segment it with EdgeTAM, compute the 3D grasp point from the depth "
-        "camera + mask, then top-down grasp with the Piper arm. Use this when "
-        "the object is NOT already in the world model (the normal case). The "
-        "grasp point is perceived, never read from ground truth. If an earlier "
-        "detect step already produced boxes, pass them via 'detections' (or a "
-        "single 'bbox') and this skill CONSUMES them — back-projecting the box to "
-        "a 3D grasp point — instead of re-perceiving (true producer->consumer)."
+        "THE default skill to FETCH/GRASP an object by natural language ('拿/抓/grab/"
+        "fetch the X'), whether it is within reach OR across the room. It FINDS the "
+        "object itself: detect with the VLM, segment with EdgeTAM, compute the 3D grasp "
+        "point from the depth camera + mask, then top-down grasp with the Piper arm. If "
+        "the target is OUT OF REACH, it SELF-NAVIGATES to it first (un-gated localize -> "
+        "drive to a standoff -> face the object -> grasp) — so it handles a far / "
+        "out-of-reach fetch without needing the object's position to be known in advance. "
+        "Use this when the object is NOT already localized in the world model (the normal "
+        "case for a fresh fetch command). The grasp point is perceived, never read from "
+        "ground truth. If an earlier detect step already produced boxes, pass them via "
+        "'detections' (or a single 'bbox') and this skill CONSUMES them — back-projecting "
+        "the box to a 3D grasp point — instead of re-perceiving (true producer->consumer)."
     )
     verify_hint: str = "holding_object('<object>')"
     parameters: dict = {

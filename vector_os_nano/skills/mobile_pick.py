@@ -118,10 +118,13 @@ class MobilePickSkill:
 
     name: str = "mobile_pick"
     description: str = (
-        "Walk the dog to a reachable pose near a known object and pick it "
-        "up with a top-down grasp. Object must be registered in the world "
-        "model. Uses navigate_to for approach, then delegates to "
-        "pick_top_down. (source: world_model)"
+        "Walk the dog to a reachable pose near an ALREADY-LOCALIZED object and pick it "
+        "up with a top-down grasp. REQUIRES the object's 3D position to already be known "
+        "in the world model (from a prior detect/look that obtained a 3D pose). It does "
+        "NOT find or self-localize a target it cannot yet 3D-place — for a fresh fetch, an "
+        "un-localized object, or an OUT-OF-REACH target, use perception_grasp instead "
+        "(it perceives AND self-navigates). Uses navigate_to for approach, then delegates "
+        "to pick_top_down. (source: world_model)"
     )
     parameters: dict = {
         "object_id": {
