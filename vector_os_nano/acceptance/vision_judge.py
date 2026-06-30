@@ -22,6 +22,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# Provider-agnostic judge endpoint. Default OpenRouter; override to any OpenAI-compatible
+# vision endpoint via VECTOR_JUDGE_BASE_URL (e.g. DashScope/阿里百炼:
+# https://dashscope.aliyuncs.com/compatible-mode/v1 with VECTOR_JUDGE_MODEL=qwen3-vl-plus +
+# VECTOR_JUDGE_API_KEY=$QWEN_API_KEY) — lets the eyes witness run off a provider whose credit
+# is NOT exhausted, independent of the routing brain.
+_JUDGE_BASE_URL = os.environ.get("VECTOR_JUDGE_BASE_URL", _OPENROUTER_BASE_URL).rstrip("/")
 # The judge model MUST differ from the routing brain (generator != evaluator). Default gpt-4o.
 _JUDGE_MODEL = os.environ.get("VECTOR_JUDGE_MODEL", "openai/gpt-4o")
 _RUBRIC_PATH = Path(__file__).resolve().parents[2] / "config" / "visual_acceptance_rubric.yaml"
@@ -119,7 +125,7 @@ def _call_vlm(image_b64: str, prompt: str, *, model: str, api_key: str | None, t
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     with httpx.Client(timeout=timeout) as client:
-        resp = client.post(f"{_OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
+        resp = client.post(f"{_JUDGE_BASE_URL}/chat/completions", json=payload, headers=headers)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"].get("content", "") or ""
 
@@ -176,7 +182,7 @@ def judge(
     """
     items = items if items is not None else load_rubric()
     model = model or _JUDGE_MODEL
-    api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    api_key = api_key or os.environ.get("VECTOR_JUDGE_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
     call = call or _call_vlm
     try:
         b64 = _encode_full_res(image_path)
@@ -208,7 +214,7 @@ def judge_attended(image_path, *, items=None, model=None, api_key=None, call=Non
     screen) folds to FAIL via ``simulator_window_present=no``."""
     items = items if items is not None else load_attended_rubric()
     model = model or _JUDGE_MODEL
-    api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    api_key = api_key or os.environ.get("VECTOR_JUDGE_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
     call = call or _call_vlm
     try:
         b64 = _encode_full_res(image_path)
@@ -239,7 +245,7 @@ def judge_temporal(montage_path, *, items=None, model=None, api_key=None, call=N
     motion narrator). Same fail-closed contract as ``judge``; never PASS on error."""
     items = items if items is not None else load_temporal_rubric()
     model = model or _JUDGE_MODEL
-    api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    api_key = api_key or os.environ.get("VECTOR_JUDGE_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
     call = call or _call_vlm
     try:
         b64 = _encode_full_res(montage_path)
