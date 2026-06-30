@@ -30,7 +30,13 @@ class CamSpec:
     lookat: tuple[float, float, float] = (10.5, 3.0, 0.3)
     azimuth: float = 135.0
     elevation: float = -22.0
-    distance: float = 3.2
+    # 2.0 (was 3.2): closer framing fills the frame with the robot+arm+object so the VLM judge can
+    # read upright/intact/object, AND — critically — clears the FAR table's doorframe occlusion
+    # (root-caused 2026-06-30: at 3.2 the agent-tracking cam sits back across the room↔hall doorway,
+    # so the doorframe pillars CROP the far-table dog -> the VLM FAILs an occluded frame despite a
+    # GT ground). Verified by rendering candidate cams on a real far grasp: 2.0 centres the dog with
+    # the pillars only at the edges. Near (in-room) frames are simply closer, still fully framed.
+    distance: float = 2.0
     width: int = 640
     height: int = 480
 
