@@ -67,7 +67,12 @@ _OBJECT_INTENT_RE = re.compile(
 # a pick-and-place may terminate on placed_count() or a release ``not holding_object()``).
 # Anything else (file_exists / describe_scene / path_contains / read_file) is the means'
 # own author-writable output, NOT a manipulation oracle, and cannot satisfy the gate.
-_MANIP_ORACLES: frozenset[str] = frozenset({"holding_object", "placed_count"})
+_MANIP_ORACLES: frozenset[str] = frozenset(
+    # holding_object / placed_count + the D106 receptacle place oracle
+    # (resting_on_receptacle — moat-proven D116, strictly stronger than placed_count):
+    # each proves physical possession/placement via GT the actor cannot author.
+    {"holding_object", "placed_count", "resting_on_receptacle"}
+)
 
 
 def goal_has_object_intent(goal_text: str | None) -> bool:

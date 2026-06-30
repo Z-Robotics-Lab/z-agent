@@ -62,6 +62,18 @@ _PREDICATE_ORACLES: frozenset[str] = frozenset(
         # supplies the substring goal; True only if the file actually contains
         # it) — same category as file_exists, so a bare call is GROUNDED.
         "path_contains",
+        # resting_on_receptacle() — the D106 CEO-APPROVED, D116 moat-proven place
+        # oracle, PRE-BOUND to the scene receptacle (zero "goal" args; robot.py wraps
+        # it arg-tolerant). Returns >=1 ONLY when a held->released object is AT REST on
+        # the receptacle at its rest height (xy in region AND |z-rest_z|<=band AND
+        # speed<at-rest AND not held) — strictly STRONGER than placed_count (which would
+        # also count a FLOOR drop in the same xy). A bare call is True only if the world
+        # reached the place goal, so it is GROUNDED like the other goal-conditioned
+        # predicates. RED-TEAMED: 0 before the place, 0 for a floor/mid-air/held object,
+        # 1 only after a real settled placement (D116 adversarial + D133 in-cli). This
+        # is the 2nd deliberate vcli/cognitive edit since D69 — additive, recognising the
+        # already-approved+moat-proven oracle so a bare-cli pick-AND-place can GROUND.
+        "resting_on_receptacle",
     }
 )
 
