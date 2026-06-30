@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-29 · D117 — EYES harness strip-segfault root-caused+fixed; FIRST eyes-verified grounded frame (near: GT weld + VLM PASS + human-read). Place oracle moat-proven (D116); far fetch routing-independent (D115).
+updated: 2026-06-29 · D118 — PLACE plumbing: scene receptacle added, grasp+release+oracle ready; place blocked by the arm-close DOCK (ik_unreachable — needs perception_grasp's jam-approach). Eyes path fixed (D117); far fetch routing-independent (D115).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -51,11 +51,13 @@ doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to p
          lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
          multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    EYES path now works (D117 strip-segfault fixed) — NEAR fetch EYES-verified (GT weld + VLM PASS). (1) FAR
-         eyes-rate over N when the routing-model net is stable (now unblocked); (2) PLACE plumbing (wire D116
-         oracle into verify namespace · add a height receptacle · arm↔table descent fix · ground a bare-cli
-         pick-AND-place); (3) FETCH planning-variance (nudge toward a single grasp step, NOT a hardcoded planner);
-         (4) RED short-can FOV; (5) EGL-context strip fix to restore the temporal witness. All non-gated.
+next:    PLACE (D118, network-independent, closest to ground): (1) give mobile_place perception_grasp's
+         jam-approach (_grasp_ready_repose -> _approach_object -> _face_object) to dock arm-close to the
+         receptacle before the release IK + tune place_bin geometry to be jammable/reachable -> skill-direct
+         PLACE_GROUND_PASS (resting_on_receptacle 0->1, released); (2) wire resting_on_receptacle into the verify
+         namespace (Rule-11 scene-config receptacle); (3) bare-cli model-path pick-and-place. FETCH: (4) FAR
+         eyes-rate over N when the routing net is stable; (5) planning-variance; (6) RED short-can FOV; (7)
+         EGL-context strip fix to restore the temporal witness. All non-gated.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
