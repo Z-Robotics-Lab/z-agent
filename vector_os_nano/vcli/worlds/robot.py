@@ -160,8 +160,18 @@ class RobotWorld:
                     make_resting_on_receptacle,
                 )
                 region, rest_z = rcp
-                ns["resting_on_receptacle"] = make_resting_on_receptacle(
+                _receptacle_oracle = make_resting_on_receptacle(
                     agent, region, rest_z
+                )
+                # ARG-TOLERANT wrapper (D133): the oracle is pre-bound to the scene
+                # receptacle (zero-arg), but the native model tends to author
+                # verify="resting_on_receptacle('obj', 'shelf')" (copying the
+                # holding_object('obj') pattern). Ignore any args the model passes so a
+                # GROUNDED place is never lost to a verify TypeError — the GT check is
+                # unchanged (still the same moat-proven oracle), so this only ever
+                # ACCEPTS the model's call shape, never loosens the gate.
+                ns["resting_on_receptacle"] = (
+                    lambda *_a, **_k: _receptacle_oracle()
                 )
 
         base = getattr(agent, "_base", None)

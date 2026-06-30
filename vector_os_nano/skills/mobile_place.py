@@ -103,12 +103,14 @@ def _wait_stable(
     return False
 
 
-def _scene_place_target(base: object) -> tuple[float, float, float] | None:
-    """``(cx, cy, rest_z)`` of the scene's flat place receptacle from the LIVE MJCF body,
-    or ``None``. Lets a bare-cli model route ``mobile_place`` with NO coordinates: the place
-    receptacle is static furniture, invisible to detect/describe (D133), so the model has no
-    way to author a target — the skill self-resolves the scene receptacle from the same live
-    geometry the verify oracle reads (config-from-scene, Rule 11). Fails safe to ``None``.
+def _scene_place_geom(base: object):
+    """``(cx, cy, rest_z, (x_min, y_min, x_max, y_max))`` of the scene's flat place receptacle
+    from the LIVE MJCF body, or ``None``. Lets a bare-cli model route ``mobile_place`` with NO
+    coordinates: the place receptacle is static furniture, invisible to detect/describe (D133),
+    so the model can't author a target — the skill self-resolves the scene receptacle from the
+    same live geometry the verify oracle reads (config-from-scene, Rule 11). The xy REGION is
+    returned too, so the safe-drop guard can accept any drop ON the (large, anisotropic)
+    receptacle, not just within a fixed radius of its centre. Fails safe to ``None``.
     """
     mjw = getattr(base, "_mj", None)
     model = getattr(mjw, "model", None)
@@ -124,10 +126,19 @@ def _scene_place_target(base: object) -> tuple[float, float, float] | None:
         bx, by, bz = (float(v) for v in model.body_pos[bid])
         gx, gy, gz = (float(v) for v in model.geom_pos[gid])
         sx, sy, sz = (float(v) for v in model.geom_size[gid])
-        return (bx + gx, by + gy, (bz + gz + sz) + _RECEPTACLE_OBJECT_HALF_Z)
+        cx, cy = bx + gx, by + gy
+        rest_z = (bz + gz + sz) + _RECEPTACLE_OBJECT_HALF_Z
+        region = (cx - sx, cy - sy, cx + sx, cy + sy)
+        return (cx, cy, rest_z, region)
     except Exception as exc:  # noqa: BLE001 — no receptacle resolvable is fine
         logger.debug("[MOBILE-PLACE] scene receptacle resolve failed: %s", exc)
         return None
+
+
+def _scene_place_target(base: object) -> tuple[float, float, float] | None:
+    """``(cx, cy, rest_z)`` of the scene place receptacle, or ``None`` (see _scene_place_geom)."""
+    geom = _scene_place_geom(base)
+    return geom[:3] if geom is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -339,9 +350,22 @@ class MobilePlaceSkill:
                 ee_xy = (float(ee_pos[0]), float(ee_pos[1]))
             except Exception as exc:  # noqa: BLE001 — no fk -> cannot confirm over-receptacle
                 logger.debug("[MOBILE-PLACE] fk for safe-drop failed: %s", exc)
-            over_receptacle = (
-                ee_xy is not None and _dist_xy(ee_xy[0], ee_xy[1], tx, ty) <= _DROP_XY_TOL
-            )
+            # Prefer the receptacle REGION (anisotropic, large) — drop iff the EE is actually ON
+            # the receptacle, not merely within a fixed radius of its centre. The jam-dock lands
+            # the EE near the receptacle's NEAR edge (in-region, but >_DROP_XY_TOL from centre on a
+            # 0.36x0.80 m top), so a centre-radius guard refuses valid in-region drops (D133).
+            geom = _scene_place_geom(base)
+            region = geom[3] if geom is not None else None
+            _m = 0.03  # small margin (m) so an EE right at the rim still counts as over
+            if ee_xy is not None and region is not None:
+                over_receptacle = (
+                    region[0] - _m <= ee_xy[0] <= region[2] + _m
+                    and region[1] - _m <= ee_xy[1] <= region[3] + _m
+                )
+            else:
+                over_receptacle = (
+                    ee_xy is not None and _dist_xy(ee_xy[0], ee_xy[1], tx, ty) <= _DROP_XY_TOL
+                )
             if over_receptacle:
                 logger.info(
                     "[MOBILE-PLACE] EE over receptacle (%.2f,%.2f ~ %.2f,%.2f) -> DROP-RELEASE",
