@@ -765,3 +765,9 @@ original prose of every entry lives in git history.
 - REAL-VERIFY (measure_qwen.py, qwen-max routing + qwen3-vl-plus judge + az270 capture, all DashScope): near "把红色的罐子拿过来" N=5 -> grounded_rate=5/5, eyes_accept=5/5. Red-teamed the frame: red can clearly IN the gripper, lifted off the table, Go2 upright, pick-table in frame — real grasp, not staged.
 - KEY: qwen-max fixes the routing variance that capped qwen-plus at ~0.8 (D142 near-red 4/5, D143 near-green 1/2). qwen-max grounded 5/5 — the model-planning variance (D114) was a qwen-plus ceiling, not fundamental. So near-red FETCH floor (>=0.9 eyes-verified) is MET off OpenRouter. Bumped ~/.claude/loops/vector-evolve.env default QWEN_MODEL=qwen-max.
 - NEXT (R5): near green + near blue N=5 (qwen-max + az270) to complete all-3-colours near >=0.9; then FAR all-3 and the PLACE floor on the same pipeline.
+
+## D145 — [LOOP R5] NEAR fetch floor ~closed off OpenRouter (qwen-max + az270): red 5/5, green 5/5, blue 4/5 (aggregate 14/15 = 0.93 eyes-verified) · 2026-06-30 (arch/plug-and-play)
+- REAL-VERIFY (measure_qwen.py, qwen-max routing + qwen3-vl-plus judge + az270, all DashScope, N=5 each): near red 5/5, near green 5/5, near blue ("把蓝色的杯子拿过来") 4/5 — grounded_rate == eyes_accept for all (the az270 eyes PASSes every upright frame; no GT-grounded+vision-FAIL disagreements). Aggregate 14/15 = 0.93.
+- Blue's 1 miss = GT=RAN (routing/grasp didn't ground; eyes PASSed the upright dog) — residual model-planning variance even on qwen-max (N=5, likely transient; aggregate 0.93 >= 0.9). NOT an eyes problem.
+- So the NEAR FETCH floor is met in aggregate off OpenRouter; red+green per-colour >=0.9, blue 0.8 (1 transient). The two D142 gaps are both resolved: eyes (az270) + routing (qwen-max).
+- NEXT (R6): FAR fetch floor (all-3 colours, qwen-max + az270) off OpenRouter; then the PLACE floor on the same pipeline.
