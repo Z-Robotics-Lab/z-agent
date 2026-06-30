@@ -170,6 +170,10 @@ def _wait_object_at_rest(arm: object, target_xy: tuple[float, float]) -> bool:
     if get_vel is None or get_pos is None:
         time.sleep(min(_SETTLE_CAP, 2.5))  # no GT velocity -> fall back to a bounded fixed wait
         return False
+    # require SUSTAINED rest (two consecutive sub-threshold reads) — a dropped object bounces, so a
+    # single sub-threshold reading can be a transient lull mid-bounce; returning on it leaves the
+    # object still moving at the verdict (sim-seen: resting=0 at verdict then 1 by +2 s, D159).
+    consecutive = 0
     while time.monotonic() < deadline:
         try:
             positions = get_pos()
@@ -194,7 +198,12 @@ def _wait_object_at_rest(arm: object, target_xy: tuple[float, float]) -> bool:
             except (TypeError, ValueError, IndexError):
                 speed = float("inf")
             if math.isfinite(speed) and speed < _AT_REST_SPEED:
-                return True
+                consecutive += 1
+                if consecutive >= 2:
+                    return True
+                time.sleep(_SETTLE_POLL_DT)
+                continue
+        consecutive = 0
         time.sleep(_SETTLE_POLL_DT)
     return False
 
