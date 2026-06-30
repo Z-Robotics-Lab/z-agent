@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D128 — FAR GREEN fetch EYES-VERIFIED 5/5 (grounded 5/5 + eyes_accept 5/5, zero red-flags) → the FETCH eyes-rate floor MET for green far. Closed by the D126 cache fix (real HOME) + D127 occlusion fix (side-view cam); the 0/5 was purely those two harness bugs. Remaining colours: blue (1/1, needs 5x) + red (FOV-blocked). PLACE capability 6/6 (D123), skill safe+honest (D125).
+updated: 2026-06-30 · D129 — FAR fetch EYES-VERIFIED for 2 of 3 colours: GREEN 5/5 (D128) + BLUE 4/5 (0.8, meets floor) — closed by the D126 cache fix + D127 side-view occlusion fix. RED still FOV-blocked (short can below the head-cam FOV at the close standoff). PLACE capability 6/6 (D123), skill safe+honest (D125). Harness per-trial stability is the measurement's noise source.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
