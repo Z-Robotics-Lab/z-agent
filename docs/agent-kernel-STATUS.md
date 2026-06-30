@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D130 — FAR fetch EYES-VERIFIED for ALL 3 COLOURS: GREEN 5/5 + BLUE 4/5 + RED 5/5 (each >=0.8, N=5) → the FETCH far floor MET. Red's D114 "FOV-blocked" was STALE (red can same height as bottles; far recovery grasps it, mask_px=2829). Closed by D126 cache + D127 occlusion fixes. REMAINING fetch: NEAR (>=0.9, 3 colours) not yet measured. PLACE capability 6/6 (D123), skill safe+honest (D125); place-design WF producing the bare-cli plan.
+updated: 2026-06-30 · D131/D132 — FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green 5/5 + blue 5/5 (>=0.9 MET), near RED 4/5 (0.8, gap — in-room red-furniture distractors). PLACE verify WIRING verified (D132): resting_on_receptacle in the bare-cli namespace from live geometry, grades a place 0->1 (WIRING_PASS) — bare-cli place now gradable. Remaining: near-red robustness + a bare-cli model-path place attempt (dock reliability).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
