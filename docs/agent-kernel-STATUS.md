@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D133 — FETCH: FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green+blue >=0.9, near-red 0.8 gap (D131). PLACE: capability 6/6 + skill safe/honest + verify wiring LIVE in bare-cli (resting_on_receptacle grades 0->1, D132). Bare-cli place attempt (D133): wiring live but the model HALLUCINATES the receptacle xy (place_bin not in describe_scene/world_model) -> receptacle DISCOVERY is the gap. Remaining: receptacle discovery + grasp/dock reliability + near-red.
+updated: 2026-06-30 · D134 — FETCH: FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green+blue >=0.9, near-red 0.8 gap (D131). PLACE: bare-cli model-path pipeline COMPLETE + proven end-to-end (D134): model routes grasp+mobile_place; grasp GROUNDS; mobile_place self-resolves the receptacle, region-guard drops, settles; resting_on_receptacle reads true (good-dock) + the evidence classifier now RECOGNISES it (2nd vcli/cognitive edit since D69, recognising the D106/D116 moat-proven oracle). Clean single full-ground capture gated by model-planning variance + ~50% drop-rest (dock lands EE near the -y edge -> bounce). Remaining: dock-depth reliability + capture + near-red.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
