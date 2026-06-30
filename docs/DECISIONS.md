@@ -775,3 +775,8 @@ original prose of every entry lives in git history.
 ## D146 — [LOOP R6 partial] FAR red 4/5 = 0.8 MEETS the FAR floor (>=0.8) off OpenRouter (qwen-max + az270) · 2026-06-30 (arch/plug-and-play)
 - REAL-VERIFY (measure_qwen.py FAR, qwen-max + qwen3-vl-plus + az270): FAR "把红色的罐子拿过来" N=5 -> grounded_rate=4/5, eyes_accept=4/5 (>=0.8 FAR floor). The 1 miss = GT=RAN + eyes=FAIL together (nav left the dog mid-hall, not at the far table -> no grasp AND the frame correctly FAILed — eyes + GT agree on the failure, good moat behaviour). FAR adds nav failure modes on top of grasp, so 0.8 not 1.0 — within the FAR floor.
 - IN-PROGRESS: FAR green + FAR blue N=5 to complete all-3 FAR.
+
+## D147 — [LOOP R6] FAR green 3/5=0.6 BELOW the 0.8 FAR floor — FAR nav variance is the limiter (not eyes) · 2026-06-30 (arch/plug-and-play)
+- REAL-VERIFY (measure_qwen.py FAR, qwen-max+az270): FAR green N=5 -> 3/5 (vs FAR red 4/5). The 2 misses = GT=RAN + eyes=FAIL TOGETHER (nav left the dog not-at-the-far-table -> no grasp AND the frame correctly FAILed: GT and eyes AGREE on the failure — the moat working, not an eyes miscalibration). So the FAR limiter is the nav/recovery reliability per D111, amplified by qwen-max's FAR decompose, NOT perception or eyes.
+- FAR so far: red 0.8 (meets), green 0.6 (below). FAR has inherent nav variance on top of grasp; N=5 swings ~1-2 trials. FAR blue in progress.
+- NEXT: complete FAR blue, then a FAR-nav reliability debug round (why the far standoff/recovery RANs ~20-40%) — this is the real FAR gap, distinct from the now-closed near floor.
