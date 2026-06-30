@@ -404,22 +404,6 @@ class MobilePlaceSkill:
                     ee_xy[0], ee_xy[1], tx, ty,
                 )
                 try:
-                    # GENTLE partial descent before release: the FULL top-down place IK is
-                    # unreachable at the receptacle, but a HIGHER intermediate EE pose often IS —
-                    # lower the EE as far as it reaches to cut the ~0.27 m carry->top fall that
-                    # bounces the wider can off the receptacle (D138). Best-effort; release from
-                    # wherever the descent stops (the dock pose if none reaches).
-                    try:
-                        for _z in (0.48, 0.44, 0.40, 0.37):
-                            _q = arm.ik_top_down((tx, ty, _z))
-                            if _q is not None:
-                                arm.move_joints(_q, duration=1.0)
-                                logger.info(
-                                    "[MOBILE-PLACE] gentle descent EE->z=%.2f before release", _z
-                                )
-                                break
-                    except Exception as _exc:  # noqa: BLE001 — descent is best-effort
-                        logger.debug("[MOBILE-PLACE] gentle descent skipped: %s", _exc)
                     gripper.open()
                     # Let the dropped object SETTLE before returning: the verdict checks
                     # resting_on_receptacle right after this step, and that oracle requires the
