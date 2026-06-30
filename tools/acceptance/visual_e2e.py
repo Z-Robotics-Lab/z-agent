@@ -54,7 +54,15 @@ def run_once(
         "MUJOCO_GL": "egl",
         "VECTOR_NO_ROS2": "1",
         "VECTOR_SIM_LOCK": "1",
-        "VECTOR_SNAPSHOT_STRIP": "1",  # Stage 3: per-step temporal frames + pose track
+        # Stage 3 per-step temporal strip is OPT-IN (default OFF). Isolated root-cause (2026-06-29):
+        # with VECTOR_SNAPSHOT_STRIP=1 a turn SEGFAULTS (NO_TRACE) / corrupts perception
+        # (no_detections) — the per-step strip render opens a NEW EGL Renderer context while
+        # perception_grasp's cam/depth/seg EGL renderers are live on the same thread (multiple EGL
+        # contexts MuJoCo can't co-host -> a C-level crash try/except cannot catch). The SAME turn
+        # GROUNDS verified=True with the strip OFF. The strip is a DOWNGRADE-ONLY temporal witness
+        # (bonus), so default it OFF — the core acceptance (GT weld + VLM judges the verdict frame)
+        # works without it. Re-enable via VECTOR_EYES_STRIP=1 once the GL-context sharing is fixed.
+        **({"VECTOR_SNAPSHOT_STRIP": "1"} if os.environ.get("VECTOR_EYES_STRIP") == "1" else {}),
         # The detector (grounding-dino) + segmenter (EdgeTAM) are CACHED locally; force the
         # HF hub OFFLINE so a flaky network can't make perception (detect / the far-fetch
         # recovery's localize) try to phone home to huggingface.co and fail (observed: the
