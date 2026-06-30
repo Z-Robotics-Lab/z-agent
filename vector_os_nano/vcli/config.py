@@ -134,6 +134,27 @@ def resolve_credentials(
     api_key = cli_api_key or ""
     provider = "anthropic"
     base_url = cli_base_url
+    _forced_provider = os.environ.get("VECTOR_PROVIDER", "").lower()
+
+    # Qwen / DashScope (阿里百炼) branch: OpenAI-compatible. Activated by VECTOR_PROVIDER=qwen
+    # (or config provider: qwen). Routing brain runs on Qwen text models via DashScope with the
+    # QWEN_API_KEY — used when DeepSeek-direct is network-blocked AND the OpenRouter credit is
+    # exhausted (the vision judge uses the same key/endpoint via VECTOR_JUDGE_*). China endpoint.
+    qwen_key = os.environ.get("QWEN_API_KEY", "") or config.get("qwen_api_key", "")
+    if not cli_api_key and _forced_provider == "qwen" and qwen_key:
+        qwen_model = (
+            cli_model
+            or os.environ.get("QWEN_MODEL")
+            or config.get("qwen_model")
+            or "qwen-plus"
+        )
+        qwen_base = (
+            cli_base_url
+            or os.environ.get("QWEN_BASE_URL")
+            or config.get("qwen_base_url")
+            or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+        return qwen_key, "openai_compat", qwen_model, qwen_base
 
     # DeepSeek branch: OpenAI-compatible provider (model ids carry no slash and must
     # NOT be mangled by the OpenRouter "anthropic/" prefix below).  Activated when:
