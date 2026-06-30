@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D120 — PICK-AND-PLACE GROUNDS through the moat-proven oracle (proven once: grasp→dock→release→rest in tray, resting_on_receptacle=1) but red-team caught it FLAKY (1/2: dock-depth variance + high-drop roll-off). Oracle moat-proven (D116); eyes path fixed (D117).
+updated: 2026-06-30 · D121 — PICK-AND-PLACE GROUNDS through the moat-proven oracle but ~50% over 4 runs; ROOT = carry-reach drops at the receptacle near edge + high-drop random bounce → fix is a GENTLE LOW RELEASE (arm-control, not bin geometry). Oracle moat-proven (D116); eyes path fixed (D117).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -51,13 +51,13 @@ doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to p
          lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
          multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    PLACE (D120, GROUNDS but FLAKY 1/2 — the drop primitive is right, reliability is the work): (1) robustify
-         to a reproducible PLACE_GROUND_PASS over N — a containment geometry the arm reaches on a SHALLOW dock
-         (arm reaches only ~0.01-0.11m past the jam face) + a GENTLE low-z release (no bounce/roll-off); (2)
-         mobile_place drop-release fallback (release at dock when the top-down IK is unreachable) so the SKILL
-         grounds; (3) wire resting_on_receptacle into the verify namespace; (4) bare-cli model-path pick-and-place.
-         FETCH: (5) FAR eyes-rate over N when the routing net is stable; (6) planning-variance; (7) RED short-can
-         FOV; (8) EGL-context strip fix. All non-gated.
+next:    PLACE (D121, GROUNDS ~50% — reliability blocked on arm-control, NOT oracle/scene): (1) GENTLE LOW RELEASE
+         — lower the carried bottle to z~0.32-0.40 before opening (direct joint-lower or relaxed-orientation IK;
+         the top-down IK is unreachable from the dock) so it settles instead of bouncing -> reproducible
+         PLACE_GROUND_PASS over N; (2) mobile_place drop-release fallback so the SKILL grounds; (3) wire
+         resting_on_receptacle into the verify namespace; (4) bare-cli model-path pick-and-place. FETCH: (5) FAR
+         eyes-rate over N when the routing net is stable; (6) planning-variance; (7) RED short-can FOV; (8) EGL
+         strip fix. All non-gated.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
