@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D123 — PICK-AND-PLACE RELIABLY GROUNDS 6/6 (N>=5) through the moat-proven oracle → the PLACE floor CLOSES (capability level). Fix = a big FLAT receptacle (no walls to bounce over) + dock + drop + settle. Oracle moat-proven (D116); eyes path fixed (D117).
+updated: 2026-06-30 · D124 — PLACE CAPABILITY reliable 6/6 (D123); mobile_place PRODUCTIONIZED (nav 0.9 + dock + drop-release) and GROUNDS via the SKILL (mp1) but FLAKY on the diagonal-approach drop position (mp4 off-table) — needs FRONT-on approach control. Oracle moat-proven (D116); eyes path fixed (D117).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -51,12 +51,12 @@ doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to p
          lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
          multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    PLACE half is CAPABILITY-COMPLETE (D123, 6/6 reliable via the moat-proven oracle). Remaining: (1)
-         mobile_place nav-to-receptacle + drop-release (release at the dock onto a flat receptacle when the
-         top-down IK is unreachable) -> bare-cli MODEL-PATH pick-and-place grounded; (2) wire
-         resting_on_receptacle into the verify namespace; (3) place grasp-retry hardening. FETCH eyes-rate floor
-         (still network-gated): (4) FAR eyes-rate over N when the routing net is stable; (5) planning-variance;
-         (6) RED short-can FOV; (7) EGL strip fix. All non-gated.
+next:    PLACE capability 6/6 (D123); mobile_place GROUNDS but flaky (D124). Remaining: (1) mobile_place FRONT-on
+         approach control (face + jam SQUARE to the receptacle so the drop lands reliably on it, like the manual
+         6/6 probe) -> reproducible SKILL place over N -> bare-cli MODEL-PATH pick-and-place; (2) grasp-retry that
+         resets the dog heading (a failed perceive leaves it rotated); (3) wire resting_on_receptacle into the
+         verify namespace. FETCH eyes-rate floor (network-gated): (4) FAR eyes-rate over N when the routing net is
+         stable; (5) planning-variance; (6) RED short-can FOV; (7) EGL strip fix. All non-gated.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
