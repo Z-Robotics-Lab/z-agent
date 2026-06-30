@@ -119,3 +119,64 @@ def test_placed_count_floor_behaviour_unchanged_by_the_new_oracle():
     assert make_placed_count(floor_obj, default_region=_REGION)() == 1
     # a receptacle-height object is NOT a floor placement -> placed_count stays 0 (unchanged)
     assert make_placed_count(recept_obj, default_region=_REGION)() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Moat-skeptic hardening: the AT-REST check is FAIL-SAFE TO REJECT, and a
+# receptacle too low for the held-check is REFUSED at construction.
+# --------------------------------------------------------------------------- #
+
+import math as _math
+
+import pytest
+
+
+class _FakeArmNoVelocity:
+    """An arm WITHOUT get_object_velocities (the common case — only MuJoCoPiper has it)."""
+    def __init__(self, objects, ee):
+        self._objects = objects
+        self._ee = ee
+        self._connected = True
+
+    def get_object_positions(self):
+        return self._objects
+
+    def get_joint_positions(self):
+        return [0.0]
+
+    def fk(self, _joints):
+        return (self._ee, None)
+    # NOTE: deliberately no get_object_velocities -> AttributeError when called.
+
+
+def test_rejects_when_velocity_accessor_is_absent():
+    """No get_object_velocities -> at-rest cannot be confirmed -> credit 0 (NOT a silent skip).
+    Without this an in-flight object on a non-Piper arm would false-green."""
+    arm = _FakeArmNoVelocity(objects={"cup": [0.5, 0.5, 0.30]}, ee=[0.0, 0.0, 0.26])
+    agent = _FakeAgent(arm, _FakeGripper(holding=False))
+    assert make_resting_on_receptacle(agent, _REGION, _REST_Z)() == 0
+
+
+def test_rejects_nan_or_inf_velocity():
+    """A NaN/inf speed must REJECT (nan > threshold is False in Python — the bypass the skeptic
+    found). Both NaN and inf -> not credited."""
+    nan_agent = _agent({"cup": [0.5, 0.5, 0.30]},
+                       velocities={"cup": [float("nan"), 0.0, 0.0]}, holding=False)
+    inf_agent = _agent({"cup": [0.5, 0.5, 0.30]},
+                       velocities={"cup": [float("inf"), 0.0, 0.0]}, holding=False)
+    assert make_resting_on_receptacle(nan_agent, _REGION, _REST_Z)() == 0
+    assert make_resting_on_receptacle(inf_agent, _REGION, _REST_Z)() == 0
+
+
+def test_refuses_a_receptacle_too_low_for_the_held_check():
+    """rest_z whose band dips below _LIFT_MIN_Z would let a HELD object read as released
+    (holding_object skips z < _LIFT_MIN_Z) -> the factory must REFUSE such a receptacle."""
+    agent = _agent({"cup": [0.5, 0.5, 0.05]}, holding=False)
+    with pytest.raises(ValueError):
+        make_resting_on_receptacle(agent, _REGION, 0.05)
+
+
+def test_high_receptacle_is_accepted_at_construction():
+    """A normal table/bin height (rest_z well above _LIFT_MIN_Z + band) constructs fine."""
+    agent = _agent({"cup": [0.5, 0.5, 0.30]}, holding=False)
+    assert make_resting_on_receptacle(agent, _REGION, 0.30)() == 1

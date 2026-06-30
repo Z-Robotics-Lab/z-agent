@@ -248,16 +248,32 @@ def make_resting_on_receptacle(
       1. xy STRICTLY inside the receptacle ``region`` (x_min<x<x_max, y_min<y<y_max),
       2. ``|z - rest_z| <= _RECEPTACLE_Z_BAND`` — supported at the receptacle height (NOT the
          floor below, NOT floating above),
-      3. world linear speed ``< _AT_REST_SPEED`` — AT REST, so an in-flight throw passing
-         through the rest height does NOT credit,
+      3. world linear speed is PRESENT, finite, and ``< _AT_REST_SPEED`` — AT REST, so an
+         in-flight throw passing through the rest height does NOT credit. This condition is
+         FAIL-SAFE TO REJECT (moat-skeptic finding): if the arm cannot report a finite velocity
+         for the object (accessor absent / raises / NaN / inf), the oracle CANNOT confirm
+         at-rest and so does NOT credit it — never "skip the check and credit anyway",
       4. the object is NOT currently held by the gripper (reuses the proven ``holding_object``
          oracle) — so a held-above object does NOT credit.
 
     Strictly MORE conditions than ``placed_count``; introduces no new self-reportable ACCEPT
     path. Reads GT; fails safe to 0 (never raises into the verifier).
+
+    Factory-time guard (moat-skeptic finding): ``holding_object`` only considers an object held
+    when its COM is at ``z >= _LIFT_MIN_Z``; a receptacle whose rest band dips below that would
+    let a HELD object read as released. So a receptacle low enough to break the released check is
+    REFUSED at construction (``rest_z - _RECEPTACLE_Z_BAND >= _LIFT_MIN_Z``) — fail loud, never a
+    silent false-green.
     """
-    parsed = _parse_region(region)
     rz = float(rest_z)
+    if rz - _RECEPTACLE_Z_BAND < _LIFT_MIN_Z:
+        raise ValueError(
+            f"receptacle rest_z={rz} too low: its band lower edge "
+            f"{rz - _RECEPTACLE_Z_BAND:.3f} < _LIFT_MIN_Z {_LIFT_MIN_Z} would break the "
+            f"held-object (released) check. Use a receptacle at rest_z >= "
+            f"{_LIFT_MIN_Z + _RECEPTACLE_Z_BAND:.3f} m."
+        )
+    parsed = _parse_region(region)
     _held = make_holding_object(agent)  # reuse the proven released-check oracle
 
     def resting_on_receptacle() -> int:
@@ -271,9 +287,9 @@ def make_resting_on_receptacle(
             return 0
         try:
             velocities = arm.get_object_velocities()
-        except Exception as exc:  # noqa: BLE001 — velocity is optional rigor; absent -> skip at-rest
+        except Exception as exc:  # noqa: BLE001 — accessor absent/raises -> NO at-rest proof
             logger.debug("sim-oracle get_object_velocities unavailable: %s", exc)
-            velocities = {}
+            velocities = {}  # every object -> no velocity entry -> rejected below (fail-safe)
         x_min, y_min, x_max, y_max = parsed
         count = 0
         for name, pos in objects.items():
@@ -285,16 +301,19 @@ def make_resting_on_receptacle(
                 continue  # not over the receptacle
             if abs(z - rz) > _RECEPTACLE_Z_BAND:
                 continue  # not supported at the receptacle height (floor / floating)
+            # AT-REST: REQUIRE a present, finite, sub-threshold speed. No velocity / NaN / inf /
+            # malformed -> cannot prove at-rest -> REJECT (never credit an unconfirmable object).
             v = velocities.get(name)
-            if v is not None:
-                try:
-                    speed = math.sqrt(
-                        float(v[0]) ** 2 + float(v[1]) ** 2 + float(v[2]) ** 2
-                    )
-                    if speed > _AT_REST_SPEED:
-                        continue  # in flight, not placed
-                except (TypeError, ValueError, IndexError):
-                    pass
+            if v is None:
+                continue
+            try:
+                speed = math.sqrt(
+                    float(v[0]) ** 2 + float(v[1]) ** 2 + float(v[2]) ** 2
+                )
+            except (TypeError, ValueError, IndexError):
+                continue
+            if not math.isfinite(speed) or speed > _AT_REST_SPEED:
+                continue  # in flight / unmeasurable, not placed
             if _held(name):
                 continue  # still held by the gripper, not released
             count += 1
