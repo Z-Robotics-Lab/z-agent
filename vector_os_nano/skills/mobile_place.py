@@ -40,6 +40,8 @@ _DEFAULT_CLEARANCE: float = 0.90  # m from receptacle to the nav approach. Large
 _APPROACH_XY_TOL: float = 0.10   # metres — within this → already_reachable
 _APPROACH_YAW_DEG: float = 20.0  # degrees — yaw tolerance for already_reachable
 _NAV_TIMEOUT: float = 20.0       # seconds for navigate_to
+_DROP_XY_TOL: float = 0.30       # m; drop-release only when the EE is within this of the target xy
+# (over the receptacle). The flat place receptacle is ~0.36 x 0.80 m, so 0.30 keeps the drop on it.
 _STABLE_MAX_SPEED: float = 0.05  # m/s — dog counts as stable below this
 _STABLE_SETTLE: float = 1.0      # seconds to remain stable
 _STABLE_TIMEOUT: float = 5.0     # maximum seconds to wait for stability
@@ -156,7 +158,7 @@ class MobilePlaceSkill:
         "no_base", "no_arm", "no_gripper",
         "receptacle_not_found", "invalid_target_xyz", "missing_target",
         "nav_failed", "wait_stable_timeout",
-        "ik_unreachable", "move_failed",
+        "ik_unreachable", "move_failed", "dock_off_receptacle", "drop_release",
     ]
 
     def __init__(self) -> None:
@@ -283,17 +285,45 @@ class MobilePlaceSkill:
             and (place_result.result_data or {}).get("diagnosis") == "ik_unreachable"
             and not skip_navigate
         ):
-            logger.info(
-                "[MOBILE-PLACE] place IK unreachable at the receptacle -> DROP-RELEASE at the dock"
-            )
+            # SAFE-DROP guard (D124): the jam-dock occasionally lands the arm OFF the receptacle
+            # (lateral variance); dropping there scatters the object off-target, yet gripper.open
+            # always "succeeds" -> a FALSE success report the bare-cli model would trust. So drop
+            # ONLY when the end-effector (where the held object hangs) is actually OVER the
+            # receptacle (within _DROP_XY_TOL of the target xy). Else DON'T drop -> honest failure
+            # (dock_off_receptacle), never a success-claim for a missed place. Reads the arm's own
+            # fk (the predicate the verify oracle also uses), not a self-report.
+            ee_xy = None
             try:
-                gripper.open()
-                place_result = SkillResult(
-                    success=True,
-                    result_data={"diagnosis": "drop_release", "drop_at": [tx, ty, tz]},
+                ee_pos, _rot = arm.fk(arm.get_joint_positions())
+                ee_xy = (float(ee_pos[0]), float(ee_pos[1]))
+            except Exception as exc:  # noqa: BLE001 — no fk -> cannot confirm over-receptacle
+                logger.debug("[MOBILE-PLACE] fk for safe-drop failed: %s", exc)
+            over_receptacle = (
+                ee_xy is not None and _dist_xy(ee_xy[0], ee_xy[1], tx, ty) <= _DROP_XY_TOL
+            )
+            if over_receptacle:
+                logger.info(
+                    "[MOBILE-PLACE] EE over receptacle (%.2f,%.2f ~ %.2f,%.2f) -> DROP-RELEASE",
+                    ee_xy[0], ee_xy[1], tx, ty,
                 )
-            except Exception as exc:  # noqa: BLE001 — release is best-effort
-                logger.warning("[MOBILE-PLACE] drop-release gripper.open raised: %s", exc)
+                try:
+                    gripper.open()
+                    place_result = SkillResult(
+                        success=True,
+                        result_data={"diagnosis": "drop_release", "drop_at": [tx, ty, tz]},
+                    )
+                except Exception as exc:  # noqa: BLE001 — release is best-effort
+                    logger.warning("[MOBILE-PLACE] drop-release gripper.open raised: %s", exc)
+            else:
+                logger.info(
+                    "[MOBILE-PLACE] dock left EE OFF the receptacle (ee=%s, target=%.2f,%.2f) "
+                    "-> NOT dropping (honest dock_off_receptacle)", ee_xy, tx, ty,
+                )
+                place_result = SkillResult(
+                    success=False,
+                    error_message="Jam-dock did not put the arm over the receptacle",
+                    result_data={"diagnosis": "dock_off_receptacle", "ee_xy": list(ee_xy or ())},
+                )
 
         # Step 8 — Return (propagate place failure or enrich success)
         mobile_meta = {

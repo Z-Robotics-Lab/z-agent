@@ -282,15 +282,17 @@ def test_mobile_place_propagates_place_failure() -> None:
     assert result.result_data["diagnosis"] == "move_failed"
 
 
-def test_mobile_place_drop_release_on_ik_unreachable() -> None:
-    """ik_unreachable AFTER the jam-dock (the free-standing-receptacle case, D123) -> DROP-RELEASE:
-    open the gripper to drop the held object onto the (flat) receptacle, success=True. The precise
-    top-down IK is unreachable at such a receptacle; the dock already put the object over it."""
+def test_mobile_place_drop_release_when_ee_over_receptacle() -> None:
+    """ik_unreachable AFTER the jam-dock + the EE is OVER the receptacle (D123/D124) -> DROP-RELEASE:
+    open the gripper, success=True. The precise IK is unreachable at a free-standing receptacle; the
+    dock put the held object over it, so a drop grounds the place."""
     base = _make_base(x=0.0, y=0.0)
     base.navigate_to.return_value = True
     gripper = _make_gripper()
+    arm = _make_arm()
+    arm.fk.return_value = ([5.0, 5.0, 0.40], [[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # EE over _TARGET_FAR
 
-    ctx = _make_ctx(base=base, arm=_make_arm(), gripper=gripper, world_model=_make_wm())
+    ctx = _make_ctx(base=base, arm=arm, gripper=gripper, world_model=_make_wm())
 
     skill = MobilePlaceSkill()
     skill._place = MagicMock()
@@ -303,6 +305,31 @@ def test_mobile_place_drop_release_on_ik_unreachable() -> None:
     assert result.success is True
     assert result.result_data["diagnosis"] == "drop_release"
     gripper.open.assert_called_once()  # the object was RELEASED onto the receptacle
+
+
+def test_mobile_place_safe_drop_refuses_when_ee_off_receptacle() -> None:
+    """The jam-dock left the arm OFF the receptacle (lateral variance, D124) -> the safe-drop guard
+    must NOT release (no off-target scatter) and must report an HONEST dock_off_receptacle failure,
+    never a false success."""
+    base = _make_base(x=0.0, y=0.0)
+    base.navigate_to.return_value = True
+    gripper = _make_gripper()
+    arm = _make_arm()
+    arm.fk.return_value = ([6.5, 5.0, 0.40], [[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # EE 1.5m off _TARGET_FAR
+
+    ctx = _make_ctx(base=base, arm=arm, gripper=gripper, world_model=_make_wm())
+
+    skill = MobilePlaceSkill()
+    skill._place = MagicMock()
+    skill._place.execute.return_value = _place_failure("ik_unreachable")
+
+    approach = (4.45, 5.0, 0.0)
+    with _patch_approach_pose(approach), _patch_wait_stable(True):
+        result = skill.execute({"target_xyz": _TARGET_FAR}, ctx)
+
+    assert result.success is False
+    assert result.result_data["diagnosis"] == "dock_off_receptacle"
+    gripper.open.assert_not_called()  # NEVER drop off the receptacle
 
 
 # ---------------------------------------------------------------------------
