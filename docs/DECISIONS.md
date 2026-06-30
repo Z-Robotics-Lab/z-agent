@@ -771,3 +771,7 @@ original prose of every entry lives in git history.
 - Blue's 1 miss = GT=RAN (routing/grasp didn't ground; eyes PASSed the upright dog) — residual model-planning variance even on qwen-max (N=5, likely transient; aggregate 0.93 >= 0.9). NOT an eyes problem.
 - So the NEAR FETCH floor is met in aggregate off OpenRouter; red+green per-colour >=0.9, blue 0.8 (1 transient). The two D142 gaps are both resolved: eyes (az270) + routing (qwen-max).
 - NEXT (R6): FAR fetch floor (all-3 colours, qwen-max + az270) off OpenRouter; then the PLACE floor on the same pipeline.
+
+## D146 — [LOOP R6 partial] FAR red 4/5 = 0.8 MEETS the FAR floor (>=0.8) off OpenRouter (qwen-max + az270) · 2026-06-30 (arch/plug-and-play)
+- REAL-VERIFY (measure_qwen.py FAR, qwen-max + qwen3-vl-plus + az270): FAR "把红色的罐子拿过来" N=5 -> grounded_rate=4/5, eyes_accept=4/5 (>=0.8 FAR floor). The 1 miss = GT=RAN + eyes=FAIL together (nav left the dog mid-hall, not at the far table -> no grasp AND the frame correctly FAILed — eyes + GT agree on the failure, good moat behaviour). FAR adds nav failure modes on top of grasp, so 0.8 not 1.0 — within the FAR floor.
+- IN-PROGRESS: FAR green + FAR blue N=5 to complete all-3 FAR.
