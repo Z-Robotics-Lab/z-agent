@@ -257,7 +257,13 @@ class VectorEngine:
         self._system_prompt: list[dict[str, Any]] = system_prompt or []
         self._permissions: PermissionContext = permissions or PermissionContext()
         self._max_turns: int = max_turns
-        self._max_tokens: int = max_tokens
+        # VECTOR_MAX_TOKENS overrides the per-request output cap — for smaller models or a
+        # credit-constrained provider key (OpenRouter returns HTTP 402 when the requested
+        # max_tokens exceeds the key's remaining weekly affordance). Fails safe to the default.
+        try:
+            self._max_tokens: int = int(os.environ.get("VECTOR_MAX_TOKENS", max_tokens))
+        except (TypeError, ValueError):
+            self._max_tokens = max_tokens
         self._intent_router = intent_router  # IntentRouter or None
         self._hooks = hooks                  # ToolHookRegistry or None
 
