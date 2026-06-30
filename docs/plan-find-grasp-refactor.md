@@ -117,4 +117,9 @@ acceptance is bare `vector-cli` + NL in the sim. Don't touch the verify spine.
   receptacle-relative resting predicate (object supported on/within a named receptacle's region,
   any z) in `vcli/worlds/arm_sim_oracle.py` — a **spine semantics change = CEO gate** (the honest
   -verify moat may only get stricter; a new oracle needs review it doesn't widen any ACCEPT path).
-  Until approved, go2+arm place ships as the honest grasp→release primitive only.
+  **[CEO APPROVED 2026-06-29 — "build it with the moat proof".]** Build ADDITIVELY: a NEW predicate
+  (`resting_on_receptacle`), leaving the floor-only `placed_count` BYTE-UNCHANGED so monotonicity
+  holds by construction. Credit ONLY: xy strictly inside the named receptacle region AND z within a
+  tight band of the receptacle top AND object AT REST (velocity ~0) AND RELEASED (gripper weld
+  broken) — all from independent GT. Prove with an adversarial moat-skeptic (no existing ACCEPT path
+  widened; held-above / near-but-not-on / in-flight must NOT credit) before merge.
