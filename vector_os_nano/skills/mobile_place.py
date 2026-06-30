@@ -484,13 +484,16 @@ class MobilePlaceSkill:
         if "receptacle_id" in params:
             rid: str = params["receptacle_id"]
             obj = wm.get_object(rid) if wm is not None else None
-            if obj is None:
-                return SkillResult(
-                    success=False,
-                    error_message=f"Receptacle {rid!r} not found in world model",
-                    result_data={"diagnosis": "receptacle_not_found", "receptacle_id": rid},
-                )
-            return (float(obj.x), float(obj.y), float(obj.z))
+            if obj is not None:
+                return (float(obj.x), float(obj.y), float(obj.z))
+            # The model often authors mobile_place(receptacle_id='shelf'/'table') for a
+            # receptacle that is NOT in the world model (it is static furniture, invisible
+            # to perception — D133). Rather than fail receptacle_not_found, FALL THROUGH to
+            # the scene's designated place receptacle below, so the bare-cli place still
+            # grounds whether the model passes no target, a bad receptacle_id, or coords.
+            logger.info(
+                "[MOBILE-PLACE] receptacle_id %r not in world model -> scene receptacle", rid
+            )
 
         # 3. Self-resolve the scene's designated place receptacle (D133): the receptacle
         # is static furniture invisible to the model's perception, so a bare-cli place

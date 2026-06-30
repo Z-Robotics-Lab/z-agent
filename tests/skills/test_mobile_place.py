@@ -465,11 +465,15 @@ def test_mobile_place_receptacle_id_resolves_correctly() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_mobile_place_receptacle_not_found() -> None:
+def test_mobile_place_bad_receptacle_id_falls_through_to_scene() -> None:
+    """A receptacle_id NOT in the world model FALLS THROUGH to the scene receptacle (D139:
+    the model often names a receptacle that is static furniture, absent from the world model)
+    rather than failing receptacle_not_found. With a mock base (no live scene receptacle to
+    resolve) the fall-through bottoms out at missing_target."""
     wm = _make_wm()  # get_object returns None
 
     ctx = _make_ctx(
-        base=_make_base(),
+        base=_make_base(),  # mock base -> _scene_place_target returns None
         arm=_make_arm(),
         gripper=_make_gripper(),
         world_model=wm,
@@ -478,7 +482,9 @@ def test_mobile_place_receptacle_not_found() -> None:
     result = MobilePlaceSkill().execute({"receptacle_id": "missing_tray"}, ctx)
 
     assert result.success is False
-    assert result.result_data["diagnosis"] == "receptacle_not_found"
+    # NOT receptacle_not_found anymore — it fell through to the scene resolver, which has
+    # nothing on a mock base, so the honest end state is missing_target.
+    assert result.result_data["diagnosis"] == "missing_target"
 
 
 # ---------------------------------------------------------------------------
