@@ -47,10 +47,9 @@ _STABLE_SETTLE: float = 1.0      # seconds to remain stable
 _STABLE_TIMEOUT: float = 5.0     # maximum seconds to wait for stability
 _RECEPTACLE_BODY: str = "place_bin"  # the scene's designated flat place receptacle
 _RECEPTACLE_OBJECT_HALF_Z: float = 0.04  # rest centre = receptacle top + object half-height
-_RECEPTACLE_SETTLE: float = 2.5  # s — let the dropped object come to REST before returning, so the
-# verdict's resting_on_receptacle (which requires AT-REST) sees a settled object, not one mid-fall.
-# (R12 tried 4.5s to convert late-settlers; sim-verify showed NO benefit — that run's RANs were
-# nav/dock failures, NOT late-settle — so reverted to the proven 2.5. See D158.)
+# Post-drop settle: the dropped object is waited to REST via _wait_object_at_rest (GT-polled, see
+# below), NOT a fixed sleep. (R12's fixed 2.5->4.5 s bump was refuted D158; D159 replaced the fixed
+# wait with the at-rest poll after sim-isolating a genuine placement graded RAN purely on timing.)
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +142,61 @@ def _scene_place_target(base: object) -> tuple[float, float, float] | None:
     """``(cx, cy, rest_z)`` of the scene place receptacle, or ``None`` (see _scene_place_geom)."""
     geom = _scene_place_geom(base)
     return geom[:3] if geom is not None else None
+
+
+_AT_REST_SPEED: float = 0.05  # m/s — mirrors arm_sim_oracle._AT_REST_SPEED (the at-rest gate the
+# verify oracle uses). The post-drop settle waits for THIS condition (read from GT), not a fixed time.
+_SETTLE_POLL_DT: float = 0.2  # s between at-rest polls
+_SETTLE_CAP: float = 5.0      # s — hard cap so a perpetually-rolling/lost object can't hang the skill
+
+
+def _wait_object_at_rest(arm: object, target_xy: tuple[float, float]) -> bool:
+    """Block until the dropped object NEAREST ``target_xy`` reports a finite speed below
+    ``_AT_REST_SPEED``, or ``_SETTLE_CAP`` elapses. Returns True iff it reached rest.
+
+    Replaces the old fixed ``time.sleep(_RECEPTACLE_SETTLE)``: the verdict's
+    ``resting_on_receptacle`` requires the object to be AT REST, and a freshly-dropped object is
+    still moving for a variable time (sim-verified: a genuine in-region placement was graded RAN
+    purely because it was still rolling at the fixed 2.5 s mark, D159). Polling the SAME GT at-rest
+    condition the oracle checks converts those genuine placements without blindly inflating EVERY
+    place (R12's fixed 4.5 s bump, refuted D158). Honest by construction: an object that rolls OUT
+    of the receptacle never becomes ``resting`` no matter how long we wait, so this only ever lets a
+    correctly-placed object settle — it cannot manufacture a success. Reads GT velocity; never
+    raises into the place path (fails to a short fixed wait if velocities are unavailable).
+    """
+    deadline = time.monotonic() + _SETTLE_CAP
+    get_vel = getattr(arm, "get_object_velocities", None)
+    get_pos = getattr(arm, "get_object_positions", None)
+    if get_vel is None or get_pos is None:
+        time.sleep(min(_SETTLE_CAP, 2.5))  # no GT velocity -> fall back to a bounded fixed wait
+        return False
+    while time.monotonic() < deadline:
+        try:
+            positions = get_pos()
+            velocities = get_vel()
+        except Exception:  # noqa: BLE001 — GT read failed this tick; retry until the cap
+            time.sleep(_SETTLE_POLL_DT)
+            continue
+        # the object closest to the drop xy is the one we just released
+        name = None
+        best = float("inf")
+        for nm, p in (positions or {}).items():
+            try:
+                d = _dist_xy(float(p[0]), float(p[1]), target_xy[0], target_xy[1])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if d < best:
+                best, name = d, nm
+        v = (velocities or {}).get(name) if name is not None else None
+        if v is not None:
+            try:
+                speed = math.sqrt(float(v[0]) ** 2 + float(v[1]) ** 2 + float(v[2]) ** 2)
+            except (TypeError, ValueError, IndexError):
+                speed = float("inf")
+            if math.isfinite(speed) and speed < _AT_REST_SPEED:
+                return True
+        time.sleep(_SETTLE_POLL_DT)
+    return False
 
 
 def _dump_place_diag(base: object, arm: object, target: tuple, geom) -> None:
@@ -247,6 +301,7 @@ class MobilePlaceSkill:
         "receptacle_not_found", "invalid_target_xyz", "missing_target",
         "nav_failed", "wait_stable_timeout",
         "ik_unreachable", "move_failed", "dock_off_receptacle", "drop_release",
+        "object_lost_in_transport",
     ]
     # The bare-cli verdict grades a PLACE by this predicate (D106/D116 moat-proven
     # oracle, wired into the verify namespace in robot.py from the live receptacle
@@ -444,19 +499,42 @@ class MobilePlaceSkill:
                 over_receptacle = (
                     ee_xy is not None and _dist_xy(ee_xy[0], ee_xy[1], tx, ty) <= _DROP_XY_TOL
                 )
-            if over_receptacle:
+            # HONESTY GATE (D159): the held object can be LOST IN TRANSPORT — the grasp weld breaks
+            # while the dog walks to the bin, and the bottle ends on the floor short of the
+            # receptacle (sim-verified: bottle at y=3.74,z=0.03 while the EE docked clean over the
+            # bin). Opening an empty gripper over the bin still "succeeds", so a transport-loss was
+            # being reported as a drop_release SUCCESS the bare-cli model would trust. Read the GT
+            # weld (gripper.is_holding — READ, never AUTHORED, the same oracle the grasp-retry gates
+            # on); if nothing is held at drop time, do NOT fake a place — report honestly so the
+            # diagnosis points at the real failure (transport), not a phantom drop.
+            holding_now = True
+            try:
+                holding_now = bool(gripper.is_holding())
+            except Exception as exc:  # noqa: BLE001 — cannot read weld -> assume held, drop as before
+                logger.debug("[MOBILE-PLACE] is_holding read failed pre-drop: %s", exc)
+            if over_receptacle and not holding_now:
+                logger.info(
+                    "[MOBILE-PLACE] EE over receptacle but NOTHING HELD (lost in transport) "
+                    "-> honest fail, no phantom drop"
+                )
+                place_result = SkillResult(
+                    success=False,
+                    error_message="Held object lost in transport before the place drop",
+                    result_data={"diagnosis": "object_lost_in_transport"},
+                )
+            elif over_receptacle:
                 logger.info(
                     "[MOBILE-PLACE] EE over receptacle (%.2f,%.2f ~ %.2f,%.2f) -> DROP-RELEASE",
                     ee_xy[0], ee_xy[1], tx, ty,
                 )
                 try:
                     gripper.open()
-                    # Let the dropped object SETTLE before returning: the verdict checks
-                    # resting_on_receptacle right after this step, and that oracle requires the
-                    # object to be AT REST. Without the wait a just-dropped object is still
-                    # falling/bouncing -> resting_on_receptacle reads 0 -> a GROUNDED place is
-                    # graded RAN (verified in-cli: drop_release but verify_result false, D133).
-                    time.sleep(_RECEPTACLE_SETTLE)
+                    # Wait for the dropped object to come to REST before returning (the verdict
+                    # checks resting_on_receptacle right after, and that oracle requires AT-REST).
+                    # Poll the SAME GT at-rest condition instead of a fixed sleep — converts a
+                    # genuine in-region placement that was still rolling at a fixed mark, without
+                    # inflating every place (D158/D159).
+                    _wait_object_at_rest(arm, (tx, ty))
                     place_result = SkillResult(
                         success=True,
                         result_data={"diagnosis": "drop_release", "drop_at": [tx, ty, tz]},
