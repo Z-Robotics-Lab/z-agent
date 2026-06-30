@@ -34,6 +34,45 @@ def _agent_has_camera(agent: Any) -> bool:
     return resolve_capability_profile(agent).camera
 
 
+_RECEPTACLE_BODY = "place_bin"  # the go2-room flat place receptacle (go2_room.xml)
+_OBJECT_HALF_Z = 0.04  # pickable cylinder half-height; rest centre = top + this
+
+
+def _place_receptacle_extent(agent: Any):
+    """Read ``(region, rest_z)`` for the scene's flat place receptacle from the LIVE
+    MJCF body, or ``None`` if there is no such receptacle / no sim model.
+
+    Rule 11 (config not code): the receptacle's xy footprint + top height come from
+    the scene the dog actually stands in — the ``place_bin`` static body's box geom —
+    never hardcoded coordinates. ``region`` = the box xy extent ``(x_min,y_min,x_max,
+    y_max)``; ``rest_z`` = the top surface + a resting object's half-height (the centre
+    height of an object placed ON the receptacle). Fails safe to ``None``.
+    """
+    base = getattr(agent, "_base", None)
+    mjw = getattr(base, "_mj", None)
+    model = getattr(mjw, "model", None)
+    if model is None:
+        return None
+    try:
+        import mujoco
+
+        bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, _RECEPTACLE_BODY)
+        if bid < 0 or int(model.body_geomnum[bid]) < 1:
+            return None
+        gid = int(model.body_geomadr[bid])  # first geom = the box top
+        # Static body (child of worldbody): body_pos is world; geom_pos is body-local.
+        bx, by, bz = (float(v) for v in model.body_pos[bid])
+        gx, gy, gz = (float(v) for v in model.geom_pos[gid])
+        sx, sy, sz = (float(v) for v in model.geom_size[gid])
+        cx, cy, cz = bx + gx, by + gy, bz + gz
+        region = (cx - sx, cy - sy, cx + sx, cy + sy)
+        rest_z = (cz + sz) + _OBJECT_HALF_Z
+        return region, rest_z
+    except Exception as exc:  # noqa: BLE001 — fail safe; no receptacle oracle is fine
+        logger.debug("place receptacle extent read failed: %s", exc)
+        return None
+
+
 # R5 CORRECTION (moat integrity): there is deliberately NO camera-no-arm
 # ``detect_objects`` verify oracle here. R4 added ``_make_perceived_detections``,
 # which built ``detect_objects()`` over ``agent._last_detection`` — the LEARNED
@@ -108,6 +147,22 @@ class RobotWorld:
                 "arm_at_home": make_arm_at_home(agent),
                 "placed_count": make_placed_count(agent),
             })
+            # Receptacle place oracle (D106/D116, moat-proven; D130 wiring). Bind
+            # resting_on_receptacle to the scene's flat place receptacle, with its
+            # region + rest height READ from the live MJCF body (Rule 11 — config,
+            # not hardcoded coords). Binds ONLY when a place receptacle exists, so
+            # scenes without one leave the namespace byte-identical. This is the
+            # zero-arg predicate mobile_place's verify_hint targets, so a bare-cli
+            # model-path PLACE is graded by the moat-proven oracle.
+            rcp = _place_receptacle_extent(agent)
+            if rcp is not None:
+                from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+                    make_resting_on_receptacle,
+                )
+                region, rest_z = rcp
+                ns["resting_on_receptacle"] = make_resting_on_receptacle(
+                    agent, region, rest_z
+                )
 
         base = getattr(agent, "_base", None)
         if (

@@ -160,6 +160,12 @@ class MobilePlaceSkill:
         "nav_failed", "wait_stable_timeout",
         "ik_unreachable", "move_failed", "dock_off_receptacle", "drop_release",
     ]
+    # The bare-cli verdict grades a PLACE by this predicate (D106/D116 moat-proven
+    # oracle, wired into the verify namespace in robot.py from the live receptacle
+    # geometry, D130). Zero-arg: the oracle is pre-bound to the scene's place
+    # receptacle, so the model authors verify="resting_on_receptacle() >= 1" with no
+    # coordinates to guess (consumed by vocab_from_registry via schema["verify_hint"]).
+    verify_hint: str = "resting_on_receptacle() >= 1"
 
     def __init__(self) -> None:
         from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
