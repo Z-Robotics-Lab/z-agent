@@ -54,6 +54,15 @@ def run_once(
         "MUJOCO_GL": "egl",
         "VECTOR_NO_ROS2": "1",
         "VECTOR_SIM_LOCK": "1",
+        # Use the REAL HOME so the OFFLINE model caches resolve (root-caused 2026-06-30: the PTY
+        # harness sets a temp HOME to isolate ~/.vector, but that also moves ~/.cache, so with
+        # HF_HUB_OFFLINE=1 the cached grounding-dino (~/.cache/huggingface) + EdgeTAM
+        # (Path.home()/.cache/vector_os/models) can't load -> the far recovery's localize returns
+        # nothing -> no_detections -> GT=RAN; the eyes harness scored 0/5 far while the DIRECT probe
+        # grounded). The native-loop turn does NOT use ~/.vector's goal_templates, so the real HOME
+        # is safe + makes the eyes harness match the (grounding) direct probe. extra_env overrides
+        # run_cli_turn's temp HOME (it documents this override hook).
+        "HOME": os.path.expanduser("~"),
         # Stage 3 per-step temporal strip is OPT-IN (default OFF). Isolated root-cause (2026-06-29):
         # with VECTOR_SNAPSHOT_STRIP=1 a turn SEGFAULTS (NO_TRACE) / corrupts perception
         # (no_detections) — the per-step strip render opens a NEW EGL Renderer context while
