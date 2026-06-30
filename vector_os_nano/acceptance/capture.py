@@ -21,6 +21,9 @@ import numpy as np
 # Below this mean pixel brightness a frame is treated as black / unrendered — a fail-closed
 # signal the witness must REJECT (nothing actually rendered), never silently accept.
 _BLACK_MEAN = 3.0
+# Agent x beyond this is the +X hall (the VECTOR_FETCH_FAR table at 13.95); the verdict snapshot
+# switches to a side view there to avoid the room->hall doorframe occluding a room-side view.
+_FAR_HALL_X = 11.8
 
 
 @dataclass(frozen=True)
@@ -138,7 +141,17 @@ def _render_agent_frame(agent, path: str, *, cam_spec: "CamSpec | None" = None):
 
     pose = _base_pose(base)
     if cam_spec is None:
-        cam_spec = CamSpec(lookat=(pose[0], pose[1], 0.3)) if pose else CamSpec()
+        if pose and pose[0] > _FAR_HALL_X:
+            # FAR table in the +X hall: a room-side (default az 135) view is CROPPED by the
+            # room->hall doorframe pillars (root-caused 2026-06-30; the VLM FAILs an occluded frame
+            # despite a GT ground). A SIDE view (az 270) sits in the open hall beside the dog — no
+            # doorframe between cam and robot — giving a clear full-body + gripper-object frame
+            # (verified by rendering candidate cams on a real far grasp). The go2-room scene is the
+            # acceptance harness's known world (this module already defaults its lookat to it).
+            cam_spec = CamSpec(lookat=(pose[0], pose[1], 0.3), azimuth=270.0,
+                               elevation=-18.0, distance=2.4)
+        else:
+            cam_spec = CamSpec(lookat=(pose[0], pose[1], 0.3)) if pose else CamSpec()
     data_copy = mj.MjData(model)
     n = min(len(data_copy.qpos), len(data.qpos))
     data_copy.qpos[:n] = np.asarray(data.qpos)[:n]
