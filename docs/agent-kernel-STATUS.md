@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-29 · D119 — PLACE dock fix lands the dog arm-NEAR the receptacle (0.55m→0.06m short); remaining = bin-geometry + nearest-reachable-target + grasp-retry (iterative manip tuning). Oracle moat-proven (D116); eyes path fixed (D117).
+updated: 2026-06-30 · D120 — PICK-AND-PLACE GROUNDS through the moat-proven oracle (proven once: grasp→dock→release→rest in tray, resting_on_receptacle=1) but red-team caught it FLAKY (1/2: dock-depth variance + high-drop roll-off). Oracle moat-proven (D116); eyes path fixed (D117).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -51,12 +51,13 @@ doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to p
          lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
          multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    PLACE (D119, dock DONE — 0.06m short of ground): (1) iterative manip tuning to PLACE_GROUND_PASS —
-         widen/position place_bin so the dog jams+reaches the tray (like the wide pick_table) · target the
-         NEAREST reachable point in the receptacle region (not centre) · retry-on-grasp-miss; (2) wire
-         resting_on_receptacle into the verify namespace (Rule-11 scene-config); (3) bare-cli model-path
-         pick-and-place. FETCH: (4) FAR eyes-rate over N when the routing net is stable; (5) planning-variance;
-         (6) RED short-can FOV; (7) EGL-context strip fix to restore the temporal witness. All non-gated.
+next:    PLACE (D120, GROUNDS but FLAKY 1/2 — the drop primitive is right, reliability is the work): (1) robustify
+         to a reproducible PLACE_GROUND_PASS over N — a containment geometry the arm reaches on a SHALLOW dock
+         (arm reaches only ~0.01-0.11m past the jam face) + a GENTLE low-z release (no bounce/roll-off); (2)
+         mobile_place drop-release fallback (release at dock when the top-down IK is unreachable) so the SKILL
+         grounds; (3) wire resting_on_receptacle into the verify namespace; (4) bare-cli model-path pick-and-place.
+         FETCH: (5) FAR eyes-rate over N when the routing net is stable; (6) planning-variance; (7) RED short-can
+         FOV; (8) EGL-context strip fix. All non-gated.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
