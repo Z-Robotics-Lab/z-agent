@@ -797,3 +797,10 @@ original prose of every entry lives in git history.
 - Mode 2 (caught by the standalone far_diag): GT=RAN + diagnosis=ik_unreachable — the dog DID reach + perceive but the arm couldn't reach (eyes would PASS, dog upright at table).
 - So FAR's 0.67 is mostly NAV reliability (mode 1), with a smaller grasp-reach tail (mode 2). The fix is NOT one constant; it needs a correlated run (per-step diagnosis + eyes verdict together) to size each mode, then: mode 1 -> nav/recovery to the far standoff; mode 2 -> approach/nudge reach. Kernel/moat untouched, skill-level.
 - This is the genuine remaining FETCH frontier (R8). NEAR floor stays MET off OpenRouter (0.93); the pipeline + eyes (az270) are solid.
+
+## D151 — [LOOP R8] PLACE floor NOT met on the new pipeline: 1/3 grounded + 1 eyes-disagreement · 2026-06-30 (arch/plug-and-play)
+- REAL-VERIFY (measure_qwen.py, qwen-max + qwen3-vl-plus + az270): "把绿色的瓶子放到架子上" N=3 -> grounded_rate=1/3, eyes_accept=0/3. t1 RAN+eyes-PASS, t2 GROUNDED+eyes-FAIL, t3 RAN+eyes-PASS.
+- DOMINANT issue = GT variance (1/3): the pick-and-place is unreliable via the qwen-max route (the 2-stage pick THEN place is more fragile than a single fetch; D135 grounded it on the OLD pipeline, D139 noted execution variance). RANs = the place didn't complete (bottle not resting_on_receptacle).
+- SECONDARY = the FIRST GT-grounded+vision-FAIL DISAGREEMENT (t2): looked at the frame — dog upright but a WIDE post-place stance + an ambiguous frame (arm raised, block on a table); the strict Qwen3-VL FAILed it though the GT placed it. The place verdict frame/pose is less clean than the grasp frame (the az270 timing catches a wide post-release stance). Eyes-side: a place-specific verdict pose/timing may be needed; GT-side: place reliability.
+- SCOREBOARD now: NEAR fetch 0.93 MET; FAR fetch 0.67 (2 modes, D150); PLACE 1/3 (routing/exec variance + post-place frame). Both FAR and PLACE are open gaps; pipeline + near-fetch + eyes(az270) solid.
+- NEXT: FAR nav/reach (R8/D150 plan) and PLACE reliability are the two remaining floors — each a debug round (correlated diagnosis -> skill-level fix).
