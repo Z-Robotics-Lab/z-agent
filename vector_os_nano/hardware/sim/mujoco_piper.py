@@ -319,6 +319,28 @@ class MuJoCoPiper:
                 result[name] = list(data.body(name).xpos)
         return result
 
+    def get_object_velocities(self) -> dict[str, list[float]]:
+        """Free-body object world LINEAR velocities {body_name: [vx, vy, vz]} from the live
+        go2 model — independent GT for the AT-REST half of the receptacle-place oracle (D106).
+        Mirrors get_object_positions' freejoint scan; a freejoint's first 3 qvel are its world
+        translational velocity. The actor cannot author this (it is the physics state)."""
+        self._require_connection()
+        mj = _get_mujoco()
+        model = self._go2._mj.model
+        data = self._go2._mj.data
+        result: dict[str, list[float]] = {}
+        for i in range(model.nbody):
+            name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, i)
+            if name is None:
+                continue
+            jadr = int(model.body_jntadr[i])
+            if jadr < 0:
+                continue
+            if model.jnt_type[jadr] == mj.mjtJoint.mjJNT_FREE:
+                dofadr = int(model.jnt_dofadr[jadr])
+                result[name] = list(data.qvel[dofadr:dofadr + 3])
+        return result
+
     # ------------------------------------------------------------------
     # Motion
     # ------------------------------------------------------------------

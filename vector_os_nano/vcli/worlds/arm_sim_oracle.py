@@ -52,6 +52,11 @@ _HOME_JOINTS: tuple[float, ...] = (-0.014, -1.238, 0.562, 0.858, 0.311)
 _HOME_TOL_RAD: float = 0.10
 _LIFT_MIN_Z: float = 0.10  # an object is "lifted" above this table-clearance z
 _NEAR_EE_RADIUS: float = 0.08  # an object within this of the EE is "at the gripper"
+# Receptacle-place oracle (D106, CEO-approved). |z - receptacle_rest_z| tolerance for "resting
+# ON the receptacle" and the world linear speed below which an object counts as AT REST (above
+# it the object is in flight — a throw passing through the rest height — and must NOT credit).
+_RECEPTACLE_Z_BAND: float = 0.06   # m
+_AT_REST_SPEED: float = 0.05       # m/s
 
 
 def _get_arm(agent: Any) -> Any | None:
@@ -227,6 +232,75 @@ def make_placed_count(agent: Any, default_region: Any = None) -> Callable[..., i
         return count
 
     return placed_count
+
+
+def make_resting_on_receptacle(
+    agent: Any, region: Any, rest_z: float
+) -> Callable[..., int]:
+    """Build ``resting_on_receptacle()`` — count objects PLACED ON a height receptacle (D106).
+
+    The floor-only ``placed_count`` (credits z < _LIFT_MIN_Z) structurally cannot grade the
+    natural "put it on the table / in the bin" task on a tall mobile manipulator. This is a
+    SEPARATE, ADDITIVE oracle (``make_placed_count`` above is BYTE-UNCHANGED, so monotonicity
+    holds by construction). It credits an object ONLY when ALL of the following hold — every
+    one read from DETERMINISTIC ground truth the actor CANNOT author:
+
+      1. xy STRICTLY inside the receptacle ``region`` (x_min<x<x_max, y_min<y<y_max),
+      2. ``|z - rest_z| <= _RECEPTACLE_Z_BAND`` — supported at the receptacle height (NOT the
+         floor below, NOT floating above),
+      3. world linear speed ``< _AT_REST_SPEED`` — AT REST, so an in-flight throw passing
+         through the rest height does NOT credit,
+      4. the object is NOT currently held by the gripper (reuses the proven ``holding_object``
+         oracle) — so a held-above object does NOT credit.
+
+    Strictly MORE conditions than ``placed_count``; introduces no new self-reportable ACCEPT
+    path. Reads GT; fails safe to 0 (never raises into the verifier).
+    """
+    parsed = _parse_region(region)
+    rz = float(rest_z)
+    _held = make_holding_object(agent)  # reuse the proven released-check oracle
+
+    def resting_on_receptacle() -> int:
+        arm = _get_arm(agent)
+        if arm is None or parsed is None:
+            return 0
+        try:
+            objects = arm.get_object_positions()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("sim-oracle get_object_positions failed: %s", exc)
+            return 0
+        try:
+            velocities = arm.get_object_velocities()
+        except Exception as exc:  # noqa: BLE001 — velocity is optional rigor; absent -> skip at-rest
+            logger.debug("sim-oracle get_object_velocities unavailable: %s", exc)
+            velocities = {}
+        x_min, y_min, x_max, y_max = parsed
+        count = 0
+        for name, pos in objects.items():
+            try:
+                x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if not (x_min < x < x_max and y_min < y < y_max):
+                continue  # not over the receptacle
+            if abs(z - rz) > _RECEPTACLE_Z_BAND:
+                continue  # not supported at the receptacle height (floor / floating)
+            v = velocities.get(name)
+            if v is not None:
+                try:
+                    speed = math.sqrt(
+                        float(v[0]) ** 2 + float(v[1]) ** 2 + float(v[2]) ** 2
+                    )
+                    if speed > _AT_REST_SPEED:
+                        continue  # in flight, not placed
+                except (TypeError, ValueError, IndexError):
+                    pass
+            if _held(name):
+                continue  # still held by the gripper, not released
+            count += 1
+        return count
+
+    return resting_on_receptacle
 
 
 def _parse_region(region: Any) -> tuple[float, float, float, float] | None:
