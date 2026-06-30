@@ -300,6 +300,18 @@ class MobilePlaceSkill:
 
         # Step 5 — Navigate (if needed)
         if not already_reachable and not skip_navigate:
+            # For the scene receptacle's -X approach, navigate in TWO legs (an L-path):
+            # first -X to the approach x at the dog's CURRENT y (a clear corridor -X of the
+            # receptacle), THEN +Y to the approach point. A single diagonal leg cuts the
+            # corner and STALLS against the receptacle/furniture inflation for some grasp
+            # poses (blue stalled 0.37 m short, D137) — the L-path keeps the dog -X of the
+            # obstruction the whole way, making the controlled approach colour-agnostic.
+            if is_scene_receptacle and abs(dog_pos[1] - approach_y) > _APPROACH_XY_TOL:
+                logger.info(
+                    "[MOBILE-PLACE] L-nav leg 1: -X corridor to (%.2f, %.2f)",
+                    approach_x, dog_pos[1],
+                )
+                base.navigate_to(approach_x, dog_pos[1], timeout=_NAV_TIMEOUT)
             logger.info(
                 "[MOBILE-PLACE] navigating to approach (%.3f, %.3f) timeout=%.0fs",
                 approach_x, approach_y, _NAV_TIMEOUT,
