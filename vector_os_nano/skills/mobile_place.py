@@ -243,6 +243,26 @@ class MobilePlaceSkill:
                 result_data={"diagnosis": "wait_stable_timeout"},
             )
 
+        # Step 6b — DOCK ARM-CLOSE (D118): navigate_to leaves the dog ~0.5 m short (the
+        # compute_approach_pose clearance + the in-process nav's terminal error), beyond the
+        # Piper's ~0.22 m top-down reach -> the release IK is unreachable. Reuse perception_grasp's
+        # PROVEN jam-approach (the same dock that makes the GRASP reachable): face the target ->
+        # forward-jam to the closest stall standoff -> tight final face. World-agnostic (duck-typed
+        # walk/get_position/get_heading); a benign no-op when the base lacks the surface or is
+        # already docked. Only then is the top-down release within reach.
+        if not skip_navigate:
+            try:
+                from vector_os_nano.skills.perception_grasp import (
+                    _approach_object,
+                    _face_object,
+                    _grasp_ready_repose,
+                )
+                _grasp_ready_repose(base, (tx, ty))
+                _approach_object(base, (tx, ty))
+                _face_object(base, (tx, ty))
+            except Exception as exc:  # noqa: BLE001 — dock is best-effort; the place IK still runs
+                logger.warning("[MOBILE-PLACE] dock approach raised (continuing): %s", exc)
+
         # Step 7 — Delegate to PlaceTopDownSkill with resolved target_xyz
         place_params = {**params, "target_xyz": [tx, ty, tz]}
         logger.info("[MOBILE-PLACE] delegating to PlaceTopDownSkill target=%s", [tx, ty, tz])
