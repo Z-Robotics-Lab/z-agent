@@ -47,6 +47,8 @@ _STABLE_SETTLE: float = 1.0      # seconds to remain stable
 _STABLE_TIMEOUT: float = 5.0     # maximum seconds to wait for stability
 _RECEPTACLE_BODY: str = "place_bin"  # the scene's designated flat place receptacle
 _RECEPTACLE_OBJECT_HALF_Z: float = 0.04  # rest centre = receptacle top + object half-height
+_RECEPTACLE_SETTLE: float = 2.5  # s — let the dropped object come to REST before returning, so the
+# verdict's resting_on_receptacle (which requires AT-REST) sees a settled object, not one mid-fall
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +375,12 @@ class MobilePlaceSkill:
                 )
                 try:
                     gripper.open()
+                    # Let the dropped object SETTLE before returning: the verdict checks
+                    # resting_on_receptacle right after this step, and that oracle requires the
+                    # object to be AT REST. Without the wait a just-dropped object is still
+                    # falling/bouncing -> resting_on_receptacle reads 0 -> a GROUNDED place is
+                    # graded RAN (verified in-cli: drop_release but verify_result false, D133).
+                    time.sleep(_RECEPTACLE_SETTLE)
                     place_result = SkillResult(
                         success=True,
                         result_data={"diagnosis": "drop_release", "drop_at": [tx, ty, tz]},
