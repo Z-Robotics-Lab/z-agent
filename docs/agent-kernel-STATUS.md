@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D136 — PLACE met AND reliable: bare-cli pick-AND-place GROUNDS end-to-end (D135, n_grounded=2/2 via moat-proven oracles) AND the place skill now RESTS 5/5 over N (D136, the -X controlled approach lands the EE centre vs the old ~50% near-edge bounce). FETCH: FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green+blue >=0.9, near-red 0.8 gap (D131). Remaining: bare-cli model-path place over N (credit-gated) + near-red >=0.9.
+updated: 2026-06-30 · D138 — PLACE grounds end-to-end (D135) + drop-rest reliable for bottles (green 5/5 D136, blue via L-path nav D138); nav now COLOUR-AGNOSTIC (L-path -X approach). RED-TEAM open items: wider RED CAN bounces ~half (needs gentler drop) + near-red perception robust but model-path eyes re-measures CREDIT-GATED (OpenRouter exhausted). FETCH: FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green+blue >=0.9, near-red 0.8 (routing, D131/D137). Remaining (net-indep): gentle drop for the can; (credit): eyes re-measures + near-red routing.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
