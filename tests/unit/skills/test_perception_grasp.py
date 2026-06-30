@@ -593,3 +593,65 @@ def test_no_ran_no_weld_diagnosis_when_weld_forms():
     rd = res.result_data
     assert rd.get("weld_formed") is True
     assert rd.get("diagnosis") != "ran_no_weld"
+
+
+# ---------------------------------------------------------------------------
+# Grasp-retry loop (R11) — the North-Star "recover automatically on failure"
+# applied at the grasp itself. A marginal grasp (ran_no_weld / residual
+# ik_unreachable) is re-attempted, gated on the GT weld (gripper.is_holding()
+# — an oracle the skill READS but never authors; the spine still grades
+# holding_object independently, so a never-welding grasp still RANs honestly).
+# ---------------------------------------------------------------------------
+
+
+class _NthAttemptGripper(FakeGripper):
+    """Welds only on the Nth close() — exercises the grasp-retry loop. Each
+    PickTopDownSkill.execute() calls close() exactly once, so close-count ==
+    grasp-attempt number."""
+
+    def __init__(self, weld_on_attempt: int):
+        super().__init__(holding_after_close=False)
+        self.closes = 0
+        self._weld_on = weld_on_attempt
+
+    def close(self):
+        self.closes += 1
+        self._closed = True
+        return True
+
+    def is_holding(self):
+        return self._closed and self.closes >= self._weld_on
+
+
+def test_grasp_retries_until_weld_forms():
+    """A grasp that misses the weld on the first attempt but would weld on the
+    second is RECOVERED by the retry loop -> weld_formed True, no ran_no_weld."""
+    from vector_os_nano.skills import perception_grasp as pg
+
+    perc = FakePerception()
+    gripper = _NthAttemptGripper(weld_on_attempt=2)
+    res = PerceptionGraspSkill().execute(
+        {"query": "banana"}, _ctx(perc, arm=FakeArm(), gripper=gripper))
+    rd = res.result_data
+    assert gripper.closes >= 2, (
+        f"expected a retry (>=2 grasp attempts), got {gripper.closes}")
+    assert rd.get("weld_formed") is True, "retry should have recovered the weld"
+    assert rd.get("diagnosis") != "ran_no_weld"
+    assert res.success
+
+
+def test_grasp_retry_loop_is_bounded_and_stays_honest():
+    """A grasp that NEVER welds is retried up to the bound, then RANs honestly
+    (weld_formed False, ran_no_weld) — the loop never fakes a weld."""
+    from vector_os_nano.skills import perception_grasp as pg
+
+    perc = FakePerception()
+    gripper = _NthAttemptGripper(weld_on_attempt=999)  # never welds
+    res = PerceptionGraspSkill().execute(
+        {"query": "banana"}, _ctx(perc, arm=FakeArm(), gripper=gripper))
+    rd = res.result_data
+    assert gripper.closes == pg._GRASP_MAX_ATTEMPTS, (
+        f"expected exactly {pg._GRASP_MAX_ATTEMPTS} bounded attempts, "
+        f"got {gripper.closes}")
+    assert rd.get("weld_formed") is False
+    assert rd.get("diagnosis") == "ran_no_weld"
