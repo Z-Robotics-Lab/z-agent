@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-29 · D114 — far fetch WORKS but ROUTING-GATED: honest green grounded_rate ≈9/12 (0.75) red-teamed (5/5 was a streak); perception_grasp 9/9 when routed, model picks mobile_pick ~25%. Robust fix = mobile_pick far-capable.
+updated: 2026-06-29 · D115 — routing-independent far fetch DONE (mobile_pick delegates to perception_grasp; DELEGATE_GROUND_PASS) + closed-loop recovery facing. Remaining gate = model PLANNING variance (multi-step find/detect plans that never grasp).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -43,16 +43,18 @@ phase:   FIND-AND-GRASP / FETCH campaign on `arch/plug-and-play` (find→navigat
 owns:    `skills/{perception_grasp,navigate_to_object,mobile_*}.py`, `perception/object_localizer.py`,
          `tools/acceptance/**` + `acceptance/**`, `docs/*`. Spine `vcli/cognitive/` is FROZEN
          (only-ever-stricter; untouched this campaign — see Standing facts).
-doing:   FAR FETCH WORKS but ROUTING-GATED (D111-D114). perception_grasp far grounds 9/9 when routed (D111 face
-         + D112 no-phantom + D113 routing-descriptions); RED-TEAM (D114): honest green grounded_rate ≈9/12 (0.75,
-         not the 5/5 streak) — model still routes mobile_pick ~25% -> no ground. Blue 1/1. Red 0/1 = short-can
-         FOV. in-reach 0.8 baseline steady; multi-object D108 sealed; eyes confirmation of a perception_grasp
-         far ground still pending (VLM works; ~75% routing means eyes N>=3 should catch one).
+doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to perception_grasp on an
+         un-localizable target (frame-correct, DELEGATE_GROUND_PASS) + the recovery facing is closed-loop
+         (_face_object, fixes the open-loop repose undershoot). So whichever skill the model picks, a clean
+         single grasp step grounds. REMAINING GATE = model PLANNING variance: the model sometimes emits a
+         MULTI-STEP find/detect/explore plan that never reaches a grasp (RAN) — D103/D104 residue, the next
+         lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
+         multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    (1) ROUTING-INDEPENDENT far fetch — give mobile_pick the same un-gated object_localizer far-acquire as
-         perception_grasp so EITHER routed skill grounds (rate -> ~1.0 regardless of routing; needs world/base
-         frame check, D112); (2) RED short-can FOV (raise cam tilt / widen standoff for short objects); (3) eyes
-         grounded over N. find-fetch then reliably closed; PLACE half remains CEO-gated (D106 receptacle oracle).
+next:    (1) reduce MULTI-STEP-PLAN variance — nudge the model toward a single grasp step for a simple fetch
+         (native producer guidance, NOT a hardcoded planner); (2) RED short-can FOV (raise cam tilt / widen
+         standoff for short objects); (3) eyes grounded over N. PLACE half CEO-gated (D106; CEO approved the
+         height-aware oracle but wants the full executive summary FIRST — prepare before any spine edit).
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
