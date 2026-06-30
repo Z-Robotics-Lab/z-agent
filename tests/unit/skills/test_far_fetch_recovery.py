@@ -79,6 +79,19 @@ def test_far_recovery_faces_target_when_arrival_heading_is_off(monkeypatch):
     assert turns, "recovery must turn to face the (known) target after driving to the standoff"
 
 
+def test_far_recovery_closes_the_loop_on_heading(monkeypatch):
+    """The repose turn is OPEN-LOOP and undershoots a large turn (~12deg residual observed),
+    enough to miss the bottle at the close standoff. The recovery must then CLOSE THE LOOP via
+    _face_object so the final heading faces the (known) target within _FACE_TOL_RAD."""
+    _patch_localize(monkeypatch, [("green bottle", 13.88, 3.0, 0.32)])
+    base = _FakeBase(pos=(10.0, 3.0), heading=math.pi)  # 180deg off
+    assert pg._far_localize_and_approach(object(), base, "green bottle") is True
+    # Base stays at (10,3) (the fake's navigate_to doesn't move it); bearing to the +X bottle ~0.
+    bearing = math.atan2(3.0 - base._pos[1], 13.88 - base._pos[0])
+    err = abs(math.atan2(math.sin(bearing - base._h), math.cos(bearing - base._h)))
+    assert err < pg._FACE_TOL_RAD, f"final heading must face the target (err={err:.3f} >= {pg._FACE_TOL_RAD})"
+
+
 def test_far_recovery_face_is_benign_when_already_head_on(monkeypatch):
     """Idempotent: when the dog already faces the +X bottle, the facing repose issues
     no turn (yaw error below the deadband) — no regression to the spawn-facing path."""

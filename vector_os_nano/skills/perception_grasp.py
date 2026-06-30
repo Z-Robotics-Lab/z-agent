@@ -436,6 +436,13 @@ def _far_localize_and_approach(
     # repose primitive, idempotent when already head-on) before the caller re-perceives
     # — no search, no luck.
     _grasp_ready_repose(base, (ox, oy), clearance=_FAR_STANDOFF_M)
+    # The repose turn is OPEN-LOOP (one walk-for-duration) and UNDERSHOOTS on a large turn
+    # (observed: a ~75deg facing command achieved ~63deg -> ~12deg residual heading -> the
+    # re-perceive at the close standoff missed the bottle, RAN/no_detections). _face_object
+    # CLOSES THE LOOP on actual heading (iterates to within _FACE_TOL_RAD ~0.08rad), the same
+    # repose->face pair _approach_object already uses pre-grasp. This tightens the facing so the
+    # re-perceive reliably sees the (already-known) target.
+    _face_object(base, (ox, oy))
     return True
 _SCAN_TURN_VYAW = 0.8           # rad/s
 
