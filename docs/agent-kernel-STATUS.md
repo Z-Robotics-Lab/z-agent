@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D135 — PLACE FLOOR MET: bare-cli model-path pick-AND-place GROUNDS end-to-end (NL "先拿起绿色的瓶子，然后放到架子上" -> verified=true, n_grounded=2/2: grasp via holding_object + place via resting_on_receptacle, both moat-proven; honest 0->1, red-teamed). FETCH: FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green+blue >=0.9, near-red 0.8 gap (D131). Reliability-over-N gated by model-planning + ~50% drop-rest + OpenRouter weekly credit limit (VECTOR_MAX_TOKENS added). Remaining: place reliability-over-N (dock-depth) + near-red >=0.9.
+updated: 2026-06-30 · D136 — PLACE met AND reliable: bare-cli pick-AND-place GROUNDS end-to-end (D135, n_grounded=2/2 via moat-proven oracles) AND the place skill now RESTS 5/5 over N (D136, the -X controlled approach lands the EE centre vs the old ~50% near-edge bounce). FETCH: FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green+blue >=0.9, near-red 0.8 gap (D131). Remaining: bare-cli model-path place over N (credit-gated) + near-red >=0.9.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
