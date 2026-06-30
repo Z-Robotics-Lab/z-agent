@@ -180,3 +180,11 @@ def test_high_receptacle_is_accepted_at_construction():
     """A normal table/bin height (rest_z well above _LIFT_MIN_Z + band) constructs fine."""
     agent = _agent({"cup": [0.5, 0.5, 0.30]}, holding=False)
     assert make_resting_on_receptacle(agent, _REGION, 0.30)() == 1
+
+
+def test_refuses_non_finite_rest_z():
+    """A NaN/inf rest_z (malformed scenario config) makes the z-band check vacuous -> refuse."""
+    agent = _agent({"cup": [0.5, 0.5, 0.30]}, holding=False)
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError):
+            make_resting_on_receptacle(agent, _REGION, bad)

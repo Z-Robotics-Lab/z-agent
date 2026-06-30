@@ -266,6 +266,10 @@ def make_resting_on_receptacle(
     silent false-green.
     """
     rz = float(rest_z)
+    if not math.isfinite(rz):
+        # A non-finite rest_z would make |z - rz| NaN/inf -> the z-band check vacuously passes
+        # (or always fails) for every object. Refuse a malformed receptacle config outright.
+        raise ValueError(f"receptacle rest_z must be finite, got {rest_z!r}")
     if rz - _RECEPTACLE_Z_BAND < _LIFT_MIN_Z:
         raise ValueError(
             f"receptacle rest_z={rz} too low: its band lower edge "
