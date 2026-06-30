@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D127 — FAR fetch is now EYES-VERIFIED: fixed the eyes-harness cache break (D126, real HOME → far GROUNDS) AND the far-snapshot doorframe OCCLUSION (D127, side-view cam for the hall) → an eyes far trial reads GT=GROUNDED + vision=PASS + ACCEPT (clean, no red-flag). Far GT grounded_rate ~0.8+ (4/4 across cache-fixed runs). N=5 eyes-verified rate measuring. PLACE capability 6/6 (D123), skill safe+honest (D125).
+updated: 2026-06-30 · D128 — FAR GREEN fetch EYES-VERIFIED 5/5 (grounded 5/5 + eyes_accept 5/5, zero red-flags) → the FETCH eyes-rate floor MET for green far. Closed by the D126 cache fix (real HOME) + D127 occlusion fix (side-view cam); the 0/5 was purely those two harness bugs. Remaining colours: blue (1/1, needs 5x) + red (FOV-blocked). PLACE capability 6/6 (D123), skill safe+honest (D125).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -51,12 +51,12 @@ doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to p
          lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
          multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    PLACE capability 6/6 (D123); mobile_place SAFE+HONEST (D125, never falsely claims a place). Remaining for
-         a RELIABLE skill place: (1) jam-dock QUALITY — land the EE over the receptacle CENTRE (lateral-centred
-         jam; or target the reachable near-edge + receptacle-extent-aware tolerance) -> reproducible SKILL place
-         over N -> bare-cli MODEL-PATH pick-and-place; (2) grasp-retry that resets the dog heading; (3) wire
-         resting_on_receptacle into the verify namespace. FETCH eyes-rate floor (network-gated): (4) FAR eyes-rate
-         over N when the routing net is stable; (5) planning-variance; (6) RED short-can FOV; (7) EGL strip fix.
+next:    FETCH: GREEN far eyes-verified 5/5 (D128). Remaining colours: (1) BLUE far 5x (likely fine, 1/1 D114);
+         (2) RED short-can FOV fix (mask~0 at the 0.9 m standoff — camera tilt/standoff for short objects);
+         (3) harness per-trial GPU/EGL teardown (so --n>1 doesn't SIGKILL trial 2). PLACE: capability 6/6 (D123),
+         mobile_place SAFE+HONEST (D125). Remaining for a RELIABLE skill place: (4) jam-dock QUALITY (land the EE
+         over the receptacle centre / receptacle-extent-aware tolerance) -> bare-cli MODEL-PATH pick-and-place;
+         (5) wire resting_on_receptacle into the verify namespace. All non-gated.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
