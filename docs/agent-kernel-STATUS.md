@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-29 · D115 — routing-independent far fetch DONE (mobile_pick delegates to perception_grasp; DELEGATE_GROUND_PASS) + closed-loop recovery facing. Remaining gate = model PLANNING variance (multi-step find/detect plans that never grasp).
+updated: 2026-06-29 · D116 — receptacle-place ORACLE built + ADVERSARIALLY MOAT-PROVEN (CEO-approved spine change; skeptic caught+fixed 2 false-greens). Far fetch routing-independent (D115); remaining far gate = model PLANNING variance.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
@@ -51,10 +51,11 @@ doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to p
          lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
          multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
 blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    (1) reduce MULTI-STEP-PLAN variance — nudge the model toward a single grasp step for a simple fetch
-         (native producer guidance, NOT a hardcoded planner); (2) RED short-can FOV (raise cam tilt / widen
-         standoff for short objects); (3) eyes grounded over N. PLACE half CEO-gated (D106; CEO approved the
-         height-aware oracle but wants the full executive summary FIRST — prepare before any spine edit).
+next:    PLACE oracle DONE + moat-proven (D116) — remaining PLACE plumbing (non-gated): wire oracle into the
+         verify namespace · add a height receptacle to the go2 scene · arm↔table descent fix · real-sim ground a
+         bare-cli pick-AND-place. FETCH reliability (CEO-chosen lever): (1) reduce MULTI-STEP-PLAN variance —
+         nudge the model toward a single grasp step (native producer guidance, NOT a hardcoded planner); (2) RED
+         short-can FOV; (3) eyes grounded over N. Both halves now non-gated.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
@@ -99,11 +100,12 @@ next:    (1) reduce MULTI-STEP-PLAN variance — nudge the model toward a single
   (`planner: far|vgraph`). GATED: new Planner interface + a `nav` robot.yaml field + the FAR external-dep
   formalization. Recommendation (ADR-001): DEFER until N≥3 planners/embodiments motivate the abstraction
   (YAGNI at N=2; no regression risk meanwhile). → Yusen go/no-go, batched.
-- **D106 — receptacle-relative place oracle** (spine semantics change = CEO gate). The go2+arm pick→place
-  WIRING is proven (grasp→GT-weld-release, test_go2_pick_place_composition), but a `placed_count`-GROUNDED place
-  is blocked by arm↔table collision under load + the floor-only oracle (z<0.10). A height-aware resting predicate
-  in `arm_sim_oracle.py` needs review that it widens no ACCEPT path. Until approved, place ships as the honest
-  grasp→release primitive only. Detail → plan-find-grasp-refactor.md ## Decisions pending.
+- **D106 — receptacle-relative place oracle: CEO-APPROVED + BUILT + MOAT-PROVEN (D116).** The height-aware
+  `make_resting_on_receptacle` oracle is in the spine (additive, `placed_count` byte-unchanged → monotonicity by
+  construction), adversarially moat-proven (skeptic caught+fixed 2 false-greens: velocity fail-safe-reject +
+  low-receptacle held-check guard). The CEO-gated spine piece is DONE. REMAINING (non-gated plumbing): wire it
+  into the verify namespace (robot.py) · add a height receptacle to the go2 scene · arm↔table descent fix ·
+  real-sim ground a bare-cli pick-AND-place. Until those land, place still ships as the grasp→release primitive.
 - Plug-and-play stage gates: S4 embodiment-registration interface · S5 `ControlPolicy` interface + convex_mpc dep
   · S6 side-effecting-capability permission/security. Plus: nav→FAR cmd_vel causation (SPINE D14) · strategy_params
   preservation (SPINE D52) · explore TARE · VLN SysNav. New deps / interfaces / hardware / security route here.
