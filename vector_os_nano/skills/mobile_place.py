@@ -47,8 +47,12 @@ _STABLE_SETTLE: float = 1.0      # seconds to remain stable
 _STABLE_TIMEOUT: float = 5.0     # maximum seconds to wait for stability
 _RECEPTACLE_BODY: str = "place_bin"  # the scene's designated flat place receptacle
 _RECEPTACLE_OBJECT_HALF_Z: float = 0.04  # rest centre = receptacle top + object half-height
-_RECEPTACLE_SETTLE: float = 2.5  # s — let the dropped object come to REST before returning, so the
-# verdict's resting_on_receptacle (which requires AT-REST) sees a settled object, not one mid-fall
+_RECEPTACLE_SETTLE: float = 4.5  # s — let the dropped object come to REST before returning, so the
+# verdict's resting_on_receptacle (which requires AT-REST) sees a settled object, not one mid-fall.
+# Bumped 2.5->4.5 (R12): a round bottle dropped from carry-z bounces+ROLLS on the bin top and was
+# often still moving (or rolling toward rest in-region) at 2.5s -> resting_on_receptacle read 0 -> RAN
+# (place ~0.6, D157). A longer settle lets the inward roll come to rest in-region. (Does NOT help a
+# bottle that rolls clean OFF the edge — that needs a lower drop, which IK-fails, D139.)
 
 
 # ---------------------------------------------------------------------------
