@@ -145,6 +145,44 @@ def _scene_place_target(base: object) -> tuple[float, float, float] | None:
     return geom[:3] if geom is not None else None
 
 
+def _dump_place_diag(base: object, arm: object, target: tuple, geom) -> None:
+    """Diagnostic-only: append one JSON line of post-dock geometry to ``$VECTOR_PLACE_DIAG``.
+
+    No-op unless that env var names a writable path. Records the dog's final base pose, the
+    end-effector xy (where the held object hangs), and the receptacle centre/region — so a place
+    reliability round can size the nav/dock miss (dog-to-receptacle and EE-to-receptacle) without a
+    heavy ``--verbose`` run. Reads the same fk/region the verify oracle uses; never raises into the
+    place path and never affects the verdict.
+    """
+    import os
+
+    path = os.environ.get("VECTOR_PLACE_DIAG")
+    if not path:
+        return
+    try:
+        tx, ty, _tz = target
+        dog = base.get_position()
+        rec = {
+            "tgt": [round(float(tx), 3), round(float(ty), 3)],
+            "dog": [round(float(dog[0]), 3), round(float(dog[1]), 3)],
+            "dog_d2tgt": round(_dist_xy(float(dog[0]), float(dog[1]), float(tx), float(ty)), 3),
+        }
+        try:
+            ee_pos, _rot = arm.fk(arm.get_joint_positions())
+            ex, ey = float(ee_pos[0]), float(ee_pos[1])
+            rec["ee"] = [round(ex, 3), round(ey, 3)]
+            rec["ee_d2tgt"] = round(_dist_xy(ex, ey, float(tx), float(ty)), 3)
+            if geom is not None:
+                rx0, ry0, rx1, ry1 = geom[3]
+                rec["ee_in_region"] = bool(rx0 <= ex <= rx1 and ry0 <= ey <= ry1)
+        except Exception:  # noqa: BLE001
+            rec["ee"] = None
+        with open(path, "a") as f:
+            f.write(__import__("json").dumps(rec) + "\n")
+    except Exception:  # noqa: BLE001 — diagnostics must never break the place path
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Skill
 # ---------------------------------------------------------------------------
@@ -353,6 +391,12 @@ class MobilePlaceSkill:
                 _face_object(base, (tx, ty))
             except Exception as exc:  # noqa: BLE001 — dock is best-effort; the place IK still runs
                 logger.warning("[MOBILE-PLACE] dock approach raised (continuing): %s", exc)
+
+        # Diagnostic-only (env-gated, no behaviour change): record where the dog + EE ended up
+        # relative to the receptacle right after the dock, so a place reliability round can size
+        # the nav/dock miss magnitude without a heavy --verbose run. Reads the same fk/region the
+        # verify oracle uses. Writes one JSON line to $VECTOR_PLACE_DIAG. Never affects the verdict.
+        _dump_place_diag(base, arm, (tx, ty, tz), _scene_place_geom(base))
 
         # Step 7 — Delegate to PlaceTopDownSkill with resolved target_xyz
         place_params = {**params, "target_xyz": [tx, ty, tz]}
