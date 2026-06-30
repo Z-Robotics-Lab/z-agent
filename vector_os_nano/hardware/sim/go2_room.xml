@@ -607,12 +607,12 @@
          a release at table-top height avoids the table-front-edge collision). In clear +y space so
          the dog navigates to it after a grasp. The 4 low walls (0.28->0.34) keep a dropped bottle
          inside the region so resting_on_receptacle credits it. Inert furniture (no freejoint). -->
-    <body name="place_bin" pos="10.95 4.20 0">
-      <geom type="box" pos="0 0 0.14"    size="0.15 0.15 0.14" material="mat_oak"/>
-      <geom type="box" pos="0.13 0 0.31"  size="0.02 0.15 0.03" material="mat_oak"/>
-      <geom type="box" pos="-0.13 0 0.31" size="0.02 0.15 0.03" material="mat_oak"/>
-      <geom type="box" pos="0 0.13 0.31"  size="0.15 0.02 0.03" material="mat_oak"/>
-      <geom type="box" pos="0 -0.13 0.31" size="0.15 0.02 0.03" material="mat_oak"/>
+    <body name="place_bin" pos="11.00 4.20 0">
+      <geom type="box" pos="0 0 0.14"    size="0.25 0.25 0.14" material="mat_oak"/>
+      <geom type="box" pos="0.23 0 0.31"  size="0.02 0.25 0.03" material="mat_oak"/>
+      <geom type="box" pos="-0.23 0 0.31" size="0.02 0.25 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 0.23 0.31"  size="0.25 0.02 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 -0.23 0.31" size="0.25 0.02 0.03" material="mat_oak"/>
     </body>
 
     <!-- Objects on the pedestal top (z_top=0.28 + 0.04 half-height = 0.32 centre).
