@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D131/D132 — FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green 5/5 + blue 5/5 (>=0.9 MET), near RED 4/5 (0.8, gap — in-room red-furniture distractors). PLACE verify WIRING verified (D132): resting_on_receptacle in the bare-cli namespace from live geometry, grades a place 0->1 (WIRING_PASS) — bare-cli place now gradable. Remaining: near-red robustness + a bare-cli model-path place attempt (dock reliability).
+updated: 2026-06-30 · D133 — FETCH: FAR all-3 eyes-verified >=0.8 (D128-130); NEAR green+blue >=0.9, near-red 0.8 gap (D131). PLACE: capability 6/6 + skill safe/honest + verify wiring LIVE in bare-cli (resting_on_receptacle grades 0->1, D132). Bare-cli place attempt (D133): wiring live but the model HALLUCINATES the receptacle xy (place_bin not in describe_scene/world_model) -> receptacle DISCOVERY is the gap. Remaining: receptacle discovery + grasp/dock reliability + near-red.
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
