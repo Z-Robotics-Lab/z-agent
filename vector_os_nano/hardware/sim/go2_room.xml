@@ -608,7 +608,17 @@
          the dog navigates to it after a grasp. The 4 low walls (0.28->0.34) keep a dropped bottle
          inside the region so resting_on_receptacle credits it. Inert furniture (no freejoint). -->
     <body name="place_bin" pos="10.95 4.60 0">
+      <!-- geom[0] = the flat top; BOTH the verify oracle (robot.py:62) and the skill's
+           _scene_place_geom read body_geomadr=geom[0] for the region+rest_z, so the 4 rim
+           walls below (added AFTER geom[0]) leave the moat byte-unchanged — they only
+           physically CONTAIN a dropped bottle so it can't roll off the narrow top (D159
+           dominant place RAN = edge roll-off). The walls were always documented above but
+           were missing from the body (restored D160). -->
       <geom type="box" pos="0 0 0.14" size="0.18 0.40 0.14" material="mat_oak"/>
+      <geom type="box" pos="0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="-0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 -0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
     </body>
 
     <!-- Objects on the pedestal top (z_top=0.28 + 0.04 half-height = 0.32 centre).

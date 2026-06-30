@@ -208,6 +208,56 @@ def _wait_object_at_rest(arm: object, target_xy: tuple[float, float]) -> bool:
     return False
 
 
+_CENTER_XY_TOL: float = 0.03  # m — EE already this close to the bin centre xy → no reposition
+
+
+def _center_over_receptacle(arm: object, geom) -> None:
+    """Before the drop-release, nudge the held object HORIZONTALLY toward the receptacle
+    CENTRE at the current carry height, so it drops onto the MIDDLE of the narrow bin instead
+    of the near third (D159 root cause: the jam-dock lands the EE in the near third — EE
+    x~10.80 on a bin whose top is x∈[10.77,11.13] — so a dropped round bottle rolls off the
+    near edge). Lands central → maximal margin to every edge + (with the restored rim walls)
+    can't escape.
+
+    Carry-z ONLY — never descends (a descent could drive the gripper into the rim walls and is
+    why the precise low place IK is unreachable here, D123). Tries top-down IK first (keeps the
+    held object upright; the weld is safe), then position-only IK as a fallback. Best-effort and
+    HONEST by construction: it only REPOSITIONS the arm; the existing safe-drop guard then
+    RE-READS the EE via fk and still refuses to drop if it is not over the receptacle, so this
+    can never manufacture a placement — at worst it is a no-op and the old near-third drop stands.
+    Never raises into the place path.
+    """
+    if geom is None:
+        return
+    try:
+        cx, cy = float(geom[0]), float(geom[1])
+        cur = arm.get_joint_positions()
+        ee_pos, _rot = arm.fk(cur)
+        ex, ey, ez = float(ee_pos[0]), float(ee_pos[1]), float(ee_pos[2])
+    except Exception as exc:  # noqa: BLE001 — can't read the arm → leave the dock pose as-is
+        logger.debug("[MOBILE-PLACE] center-over-receptacle read failed: %s", exc)
+        return
+    if _dist_xy(ex, ey, cx, cy) <= _CENTER_XY_TOL:
+        return  # already central
+    target = (cx, cy, ez)  # same carry height, centred xy
+    try:
+        q = arm.ik_top_down(target, current_joints=cur)
+        if q is None and hasattr(arm, "ik"):
+            q = arm.ik(target, current_joints=cur)
+        if q is not None:
+            arm.move_joints(q, duration=1.5)
+            logger.info(
+                "[MOBILE-PLACE] centred EE over receptacle: (%.2f,%.2f)->(%.2f,%.2f)",
+                ex, ey, cx, cy,
+            )
+        else:
+            logger.info(
+                "[MOBILE-PLACE] center-over-receptacle IK unreachable; keeping dock pose"
+            )
+    except Exception as exc:  # noqa: BLE001 — reposition is best-effort
+        logger.debug("[MOBILE-PLACE] center-over-receptacle move raised: %s", exc)
+
+
 def _dump_place_diag(base: object, arm: object, target: tuple, geom) -> None:
     """Diagnostic-only: append one JSON line of post-dock geometry to ``$VECTOR_PLACE_DIAG``.
 
@@ -479,6 +529,12 @@ class MobilePlaceSkill:
             and (place_result.result_data or {}).get("diagnosis") == "ik_unreachable"
             and not skip_navigate
         ):
+            # CENTRAL-DROP (D160): nudge the held object to the bin CENTRE before releasing, so it
+            # drops onto the middle of the narrow top (not the near third the jam-dock leaves it at)
+            # and can't roll off an edge. Best-effort, carry-z only; the safe-drop guard below
+            # re-reads the resulting EE, so this can only improve the landing, never fake a place.
+            _center_over_receptacle(arm, _scene_place_geom(base))
+
             # SAFE-DROP guard (D124): the jam-dock occasionally lands the arm OFF the receptacle
             # (lateral variance); dropping there scatters the object off-target, yet gripper.open
             # always "succeeds" -> a FALSE success report the bare-cli model would trust. So drop

@@ -577,3 +577,71 @@ def test_wait_stable_returns_false_on_timeout() -> None:
         result = _wait_stable(base, max_speed=0.05, settle_duration=1.0, timeout=5.0)
 
     assert result is False
+
+
+# ---------------------------------------------------------------------------
+# _center_over_receptacle (D160) — central-drop reposition before release
+# ---------------------------------------------------------------------------
+
+
+def _make_centering_arm(ee_xy: tuple[float, float], ee_z: float = 0.5,
+                        ik_ok: bool = True) -> MagicMock:
+    """Arm whose fk reports the EE at (ee_xy, ee_z); ik_top_down converges iff ik_ok."""
+    arm = MagicMock()
+    arm.get_joint_positions.return_value = [0.0] * 6
+    arm.fk.return_value = ([ee_xy[0], ee_xy[1], ee_z], [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    arm.ik_top_down.return_value = [0.2] * 6 if ik_ok else None
+    arm.ik.return_value = [0.3] * 6 if ik_ok else None
+    arm.move_joints.return_value = True
+    return arm
+
+
+def test_center_over_receptacle_moves_ee_toward_centre() -> None:
+    """EE at the near third → top-down IK is solved for the bin CENTRE and the arm moves."""
+    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+
+    # geom = (cx, cy, rest_z, region); centre (10.95, 4.60); EE docked at near third x=10.80.
+    geom = (10.95, 4.60, 0.32, (10.77, 4.20, 11.13, 5.00))
+    arm = _make_centering_arm(ee_xy=(10.80, 4.60), ee_z=0.5)
+
+    _center_over_receptacle(arm, geom)
+
+    arm.ik_top_down.assert_called_once()
+    tgt = arm.ik_top_down.call_args.args[0]
+    assert abs(tgt[0] - 10.95) < 1e-6 and abs(tgt[1] - 4.60) < 1e-6  # centre xy
+    assert abs(tgt[2] - 0.5) < 1e-6  # SAME carry height — never descends
+    arm.move_joints.assert_called_once()
+
+
+def test_center_over_receptacle_noop_when_already_central() -> None:
+    """EE already at the centre → no IK, no move (idempotent)."""
+    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+
+    geom = (10.95, 4.60, 0.32, (10.77, 4.20, 11.13, 5.00))
+    arm = _make_centering_arm(ee_xy=(10.95, 4.60), ee_z=0.5)
+
+    _center_over_receptacle(arm, geom)
+
+    arm.ik_top_down.assert_not_called()
+    arm.move_joints.assert_not_called()
+
+
+def test_center_over_receptacle_no_move_when_ik_unreachable() -> None:
+    """If neither top-down nor position IK converges, the dock pose is kept (no move, no raise)."""
+    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+
+    geom = (10.95, 4.60, 0.32, (10.77, 4.20, 11.13, 5.00))
+    arm = _make_centering_arm(ee_xy=(10.80, 4.60), ee_z=0.5, ik_ok=False)
+
+    _center_over_receptacle(arm, geom)  # must not raise
+
+    arm.move_joints.assert_not_called()
+
+
+def test_center_over_receptacle_safe_when_geom_none() -> None:
+    """geom None (no scene receptacle resolvable) → no-op, never raises."""
+    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+
+    arm = _make_centering_arm(ee_xy=(10.80, 4.60))
+    _center_over_receptacle(arm, None)
+    arm.ik_top_down.assert_not_called()
