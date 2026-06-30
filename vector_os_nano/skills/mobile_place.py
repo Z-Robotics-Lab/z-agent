@@ -45,6 +45,8 @@ _DROP_XY_TOL: float = 0.30       # m; drop-release only when the EE is within th
 _STABLE_MAX_SPEED: float = 0.05  # m/s — dog counts as stable below this
 _STABLE_SETTLE: float = 1.0      # seconds to remain stable
 _STABLE_TIMEOUT: float = 5.0     # maximum seconds to wait for stability
+_RECEPTACLE_BODY: str = "place_bin"  # the scene's designated flat place receptacle
+_RECEPTACLE_OBJECT_HALF_Z: float = 0.04  # rest centre = receptacle top + object half-height
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +103,33 @@ def _wait_stable(
     return False
 
 
+def _scene_place_target(base: object) -> tuple[float, float, float] | None:
+    """``(cx, cy, rest_z)`` of the scene's flat place receptacle from the LIVE MJCF body,
+    or ``None``. Lets a bare-cli model route ``mobile_place`` with NO coordinates: the place
+    receptacle is static furniture, invisible to detect/describe (D133), so the model has no
+    way to author a target — the skill self-resolves the scene receptacle from the same live
+    geometry the verify oracle reads (config-from-scene, Rule 11). Fails safe to ``None``.
+    """
+    mjw = getattr(base, "_mj", None)
+    model = getattr(mjw, "model", None)
+    if model is None:
+        return None
+    try:
+        import mujoco
+
+        bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, _RECEPTACLE_BODY)
+        if bid < 0 or int(model.body_geomnum[bid]) < 1:
+            return None
+        gid = int(model.body_geomadr[bid])
+        bx, by, bz = (float(v) for v in model.body_pos[bid])
+        gx, gy, gz = (float(v) for v in model.geom_pos[gid])
+        sx, sy, sz = (float(v) for v in model.geom_size[gid])
+        return (bx + gx, by + gy, (bz + gz + sz) + _RECEPTACLE_OBJECT_HALF_Z)
+    except Exception as exc:  # noqa: BLE001 — no receptacle resolvable is fine
+        logger.debug("[MOBILE-PLACE] scene receptacle resolve failed: %s", exc)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Skill
 # ---------------------------------------------------------------------------
@@ -108,20 +137,26 @@ def _wait_stable(
 
 @skill(
     aliases=[
-        "去放", "送到", "搬到", "拿去放",
-        "deliver", "put at", "carry to",
+        "去放", "送到", "搬到", "拿去放", "放到", "放在", "放下", "放好",
+        "放到架子上", "放到台子上", "放到盒子里",
+        "deliver", "put at", "carry to", "put on", "place on", "place it on",
+        "put it on the shelf", "set it down",
     ],
     direct=False,
 )
 class MobilePlaceSkill:
-    """Walk the dog to a reachable pose near a target location / receptacle,
-    then release the held object with a top-down drop. (source: world_model)
+    """PLACE the currently-held object ON the scene's place receptacle (shelf / table /
+    box). Walks the dog to it and releases with a drop. Use this for any "put / place X
+    on the shelf/table" command AFTER the object is grasped.
     """
 
     name: str = "mobile_place"
     description: str = (
-        "Walk the dog to a reachable pose near a target location / receptacle, "
-        "then release the held object with a top-down drop. (source: world_model)"
+        "PLACE the held object onto the scene's place receptacle (a shelf/table/box). "
+        "Use for 'put/place X on the shelf/table' (放到架子上/台子上) once the object is "
+        "in the gripper. target_xyz and receptacle_id are OPTIONAL — with neither, the "
+        "skill auto-resolves the scene's place receptacle, so just call mobile_place with "
+        "no arguments to place the held object on it. Walks there and drops."
     )
     parameters: dict = {
         "target_xyz": {
@@ -200,8 +235,8 @@ class MobilePlaceSkill:
                 result_data={"diagnosis": "no_gripper"},
             )
 
-        # Step 2 — Resolve target XYZ
-        resolved = self._resolve_target(params, wm)
+        # Step 2 — Resolve target XYZ (explicit / world-model receptacle / scene receptacle)
+        resolved = self._resolve_target(params, wm, base)
         if isinstance(resolved, SkillResult):
             return resolved
         tx, ty, tz = resolved
@@ -357,13 +392,16 @@ class MobilePlaceSkill:
         self,
         params: dict,
         wm: object,
+        base: object = None,
     ) -> tuple[float, float, float] | SkillResult:
         """Return (tx, ty, tz) or a failure SkillResult.
 
         Priority:
         1. target_xyz — explicit 3-float list.
         2. receptacle_id — ID in world model.
-        3. Neither → missing_target.
+        3. the SCENE's place receptacle, self-resolved from the live geometry (D133)
+           — so a bare-cli model routing mobile_place with no coords still places on it.
+        4. Neither → missing_target.
         """
         if "target_xyz" in params:
             raw = params["target_xyz"]
@@ -392,11 +430,22 @@ class MobilePlaceSkill:
                 )
             return (float(obj.x), float(obj.y), float(obj.z))
 
+        # 3. Self-resolve the scene's designated place receptacle (D133): the receptacle
+        # is static furniture invisible to the model's perception, so a bare-cli place
+        # command ("放到架子上") arrives with no coords — read the place_bin from the live
+        # geometry (the same source the verify oracle uses) and place there.
+        scene = _scene_place_target(base)
+        if scene is not None:
+            logger.info(
+                "[MOBILE-PLACE] no target given -> scene place receptacle at %s", scene
+            )
+            return scene
+
         return SkillResult(
             success=False,
             error_message=(
-                "Neither target_xyz nor receptacle_id provided; "
-                "cannot determine place location"
+                "Neither target_xyz nor receptacle_id provided and no scene place "
+                "receptacle resolvable; cannot determine place location"
             ),
             result_data={"diagnosis": "missing_target"},
         )
