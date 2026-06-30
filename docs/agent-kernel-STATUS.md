@@ -33,7 +33,7 @@ One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUD
 decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
 This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D125 — PLACE CAPABILITY reliable 6/6 (D123); mobile_place productionized + SAFE-DROP guard makes the skill report HONEST (no false success — drops only when EE over receptacle, else dock_off_receptacle). Residual reliability blocker = jam-dock QUALITY (EE lands off-centre). Oracle moat-proven (D116); eyes path fixed (D117).
+updated: 2026-06-30 · D126 — EYES harness far 0/5 was a TEMP-HOME cache break (offline grounding-dino/EdgeTAM can't load) → FIXED (real HOME); far fetch now GROUNDS through the eyes (GT=GROUNDED). Residual far eyes-VERIFIED: (a) GT rate model-routing-gated ~0.75, (b) far verdict snapshot OCCLUDED by doorframe → eyes ABSTAIN. PLACE capability 6/6 (D123), skill safe+honest (D125).
 goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
          policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
          acceptance face; the honest-verify spine is frozen.
