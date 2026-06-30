@@ -260,9 +260,27 @@ class MobilePlaceSkill:
         dog_pose = (dog_pos[0], dog_pos[1], dog_heading)
 
         clearance = float(cfg.get("clearance", _DEFAULT_CLEARANCE))
-        approach_x, approach_y, approach_yaw = compute_approach_pose(
-            (tx, ty, tz), dog_pose, clearance=clearance
+        # For the SCENE place receptacle, approach from -X facing +X — the controlled dock
+        # that lands the EE over the receptacle CENTRE (the 6/6-verified approach, D123/D135),
+        # instead of compute_approach_pose's dog-side diagonal which lands the EE at the near
+        # -Y edge so ~half the drops bounce off (D135). The -X side is the open/approachable
+        # face of the scene receptacle; this is what makes the place RELIABLE over N.
+        scene_geom = _scene_place_geom(base)
+        is_scene_receptacle = (
+            scene_geom is not None
+            and abs(tx - scene_geom[0]) < 0.02
+            and abs(ty - scene_geom[1]) < 0.02
         )
+        if is_scene_receptacle:
+            approach_x, approach_y, approach_yaw = (tx - clearance, ty, 0.0)
+            logger.info(
+                "[MOBILE-PLACE] scene receptacle: controlled -X approach at (%.2f,%.2f) facing +X",
+                approach_x, approach_y,
+            )
+        else:
+            approach_x, approach_y, approach_yaw = compute_approach_pose(
+                (tx, ty, tz), dog_pose, clearance=clearance
+            )
         nav_distance = _dist_xy(dog_pos[0], dog_pos[1], approach_x, approach_y)
 
         # Step 4 — Check already_reachable or skip_navigate
