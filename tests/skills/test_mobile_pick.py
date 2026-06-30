@@ -578,8 +578,9 @@ def test_mobile_pick_no_retry_when_perception_none():
     mock_pick.execute.assert_not_called()
 
 
-def test_mobile_pick_no_retry_when_calibration_none():
-    """context.calibration is None → no auto-detect retry → object_not_found."""
+def test_mobile_pick_no_retry_when_calibration_none_then_delegates():
+    """context.calibration is None → no auto-detect retry; the unlocalizable target then
+    DELEGATES to perception_grasp (D114 routing-independent far fetch), not object_not_found."""
     from vector_os_nano.core.world_model import WorldModel
 
     empty_wm = WorldModel()
@@ -599,17 +600,24 @@ def test_mobile_pick_no_retry_when_calibration_none():
         calibration=None,
     )
 
-    with patch("time.sleep"):
+    with (
+        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
+        patch("time.sleep"),
+    ):
+        MockPG.return_value.execute.return_value = SkillResult(
+            success=False, result_data={"diagnosis": "no_detections"})
         result = skill_inst.execute({"object_label": "blue bottle"}, ctx)
 
-    assert not result.success
-    assert result.result_data["diagnosis"] == "object_not_found"
+    # No auto-detect retry (calibration None) -> a single resolve attempt, then delegation.
     assert mock_pick._resolve_target.call_count == 1
-    mock_pick.execute.assert_not_called()
+    mock_pick.execute.assert_not_called()  # no top-down pick (target was never localized)
+    MockPG.return_value.execute.assert_called_once()  # delegated to perception_grasp
+    assert result.result_data["diagnosis"] == "no_detections"  # perception_grasp's honest verdict
 
 
-def test_mobile_pick_vlm_returns_empty_then_object_not_found():
-    """DetectSkill returns count=0 → _resolve_target still None → object_not_found."""
+def test_mobile_pick_vlm_returns_empty_then_delegates():
+    """DetectSkill returns count=0 → _resolve_target still None → DELEGATE to perception_grasp
+    (its independent grounding-dino path may still find the object). Autodetect still runs once."""
     from vector_os_nano.core.world_model import WorldModel
 
     empty_wm = WorldModel()
@@ -619,7 +627,6 @@ def test_mobile_pick_vlm_returns_empty_then_object_not_found():
 
     skill_inst = MobilePickSkill()
     mock_pick = MagicMock()
-    # Both calls to _resolve_target return None (no object added)
     mock_pick._resolve_target.return_value = None
     skill_inst._pick = mock_pick
 
@@ -640,18 +647,21 @@ def test_mobile_pick_vlm_returns_empty_then_object_not_found():
 
     with (
         patch("vector_os_nano.skills.detect.DetectSkill", return_value=fake_det_empty),
+        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
         patch("time.sleep"),
     ):
+        MockPG.return_value.execute.return_value = SkillResult(
+            success=False, result_data={"diagnosis": "no_detections"})
         result = skill_inst.execute({"object_label": "blue bottle"}, ctx)
 
-    assert not result.success
-    assert result.result_data["diagnosis"] == "object_not_found"
-    fake_det_empty.execute.assert_called_once()
+    fake_det_empty.execute.assert_called_once()  # autodetect still tried once
     mock_pick.execute.assert_not_called()
+    MockPG.return_value.execute.assert_called_once()  # then delegated
+    assert result.result_data["diagnosis"] == "no_detections"
 
 
 def test_mobile_pick_detect_crash_does_not_crash_skill():
-    """DetectSkill.execute raises RuntimeError → caught → object_not_found (graceful)."""
+    """DetectSkill.execute raises → caught (graceful, no raise) → DELEGATE to perception_grasp."""
     from vector_os_nano.core.world_model import WorldModel
 
     empty_wm = WorldModel()
@@ -678,14 +688,17 @@ def test_mobile_pick_detect_crash_does_not_crash_skill():
 
     with (
         patch("vector_os_nano.skills.detect.DetectSkill", return_value=crashing_det),
+        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
         patch("time.sleep"),
     ):
+        MockPG.return_value.execute.return_value = SkillResult(
+            success=False, result_data={"diagnosis": "no_detections"})
         result = skill_inst.execute({"object_label": "blue bottle"}, ctx)
 
-    # Must not raise — skill returns graceful failure
+    # Must not raise — autodetect crash is caught, then delegates gracefully.
     assert not result.success
-    assert result.result_data["diagnosis"] == "object_not_found"
     mock_pick.execute.assert_not_called()
+    MockPG.return_value.execute.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -742,3 +755,47 @@ def test_mobile_pick_keeps_ok_diagnosis_when_weld_forms():
     assert result.success
     assert result.result_data["weld_formed"] is True
     assert result.result_data["diagnosis"] != "ran_no_weld"
+
+
+# ---------------------------------------------------------------------------
+# Routing-independent far fetch: delegate to perception_grasp on a target that
+# cannot be localized in the world model (the FAR case). D114 follow-on.
+# ---------------------------------------------------------------------------
+
+
+def test_mobile_pick_delegates_to_perception_grasp_on_unlocalizable_target():
+    """A far/un-localizable target (resolve miss + autodetect can't 3D-place it) must DELEGATE to
+    perception_grasp — the find-AND-self-navigate fetch skill — instead of failing object_not_found,
+    so the far fetch is ROUTING-INDEPENDENT: whichever skill the model routes, the object is fetched.
+    Honest: perception_grasp still grounds only via the real GT weld."""
+    base = _make_base(pos=(10.0, 3.0, 0.28))
+    wm = _make_world_model()
+    skill, _mock_pick = _make_skill_with_mock_pick(pick_resolve_return=None)  # resolve miss
+    ctx = SkillContext(base=base, arm=MagicMock(), gripper=MagicMock(),
+                       perception=MagicMock(), world_model=wm, config={})
+    grounded = SkillResult(success=True, result_data={"diagnosis": "ok"})
+    with (
+        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
+        patch("vector_os_nano.skills.utils.run_autodetect_retry", return_value=0),
+    ):
+        MockPG.return_value.execute.return_value = grounded
+        result = skill.execute({"object_label": "green bottle"}, ctx)
+
+    MockPG.return_value.execute.assert_called_once()
+    passed_params = MockPG.return_value.execute.call_args[0][0]
+    assert passed_params.get("query") == "green bottle", "the NL query must flow to perception_grasp"
+    assert result is grounded, "the delegated grasp result is returned"
+
+
+def test_mobile_pick_no_delegate_without_perception_stays_object_not_found():
+    """No perception -> nothing to delegate to -> the honest object_not_found is preserved (no regression)."""
+    base = _make_base(pos=(10.0, 3.0, 0.28))
+    wm = _make_world_model()
+    skill, _mock_pick = _make_skill_with_mock_pick(pick_resolve_return=None)
+    ctx = SkillContext(base=base, arm=MagicMock(), gripper=MagicMock(),
+                       perception=None, world_model=wm, config={})
+    with patch("vector_os_nano.skills.utils.run_autodetect_retry", return_value=0):
+        result = skill.execute({"object_label": "green bottle"}, ctx)
+
+    assert result.success is False
+    assert result.result_data.get("diagnosis") == "object_not_found"

@@ -210,6 +210,25 @@ class MobilePickSkill:
 
         if target is None:
             query = params.get("object_label") or params.get("object_id") or ""
+            # Routing-independent far fetch (D114 follow-on): mobile_pick needs an ALREADY-localized
+            # 3D position, but a FAR object can't be 3D-placed by the tracker (no valid depth at
+            # range) -> it never enters the world model with a usable position. Rather than fail,
+            # DELEGATE to perception_grasp — the find-AND-self-navigate fetch skill (un-gated
+            # open-vocab localize in WORLD frame -> drive to a standoff -> face -> grasp). This makes
+            # the far fetch independent of WHICH skill the model routed: whichever it picks, the
+            # object gets fetched. Honest: perception_grasp grounds ONLY via the real GT weld, so a
+            # truly-absent or ungraspable object still fails loud there (no fake success).
+            if (
+                query
+                and getattr(context, "perception", None) is not None
+                and context.base is not None
+            ):
+                from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+                logger.info(
+                    "[MOBILE-PICK] %r not localizable in world model -> delegating to "
+                    "perception_grasp (find + self-navigate + grasp)", query,
+                )
+                return PerceptionGraspSkill().execute({"query": query}, context)
             known_labels = [
                 o.label for o in context.world_model.get_objects()
                 if o.object_id.startswith("pickable_")
