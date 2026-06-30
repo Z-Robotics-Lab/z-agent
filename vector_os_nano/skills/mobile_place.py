@@ -33,7 +33,10 @@ logger = logging.getLogger(__name__)
 # Module constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_CLEARANCE: float = 0.55  # metres from object to approach position
+_DEFAULT_CLEARANCE: float = 0.90  # m from receptacle to the nav approach. Larger than the ~0.22 m
+# reach ON PURPOSE: nav stops OUTSIDE the receptacle's obstacle inflation (a closer approach pose is
+# inside it -> navigate_to fails), then the Step-6b jam-approach DOCK closes the remaining gap
+# arm-close (D118/D123). A too-small clearance navigates into the inflated obstacle and nav_failed.
 _APPROACH_XY_TOL: float = 0.10   # metres — within this → already_reachable
 _APPROACH_YAW_DEG: float = 20.0  # degrees — yaw tolerance for already_reachable
 _NAV_TIMEOUT: float = 20.0       # seconds for navigate_to
@@ -267,6 +270,30 @@ class MobilePlaceSkill:
         place_params = {**params, "target_xyz": [tx, ty, tz]}
         logger.info("[MOBILE-PLACE] delegating to PlaceTopDownSkill target=%s", [tx, ty, tz])
         place_result = self._place.execute(place_params, context)
+
+        # Step 7b — DROP-RELEASE fallback (D123): the precise top-down place IK is UNREACHABLE at a
+        # free-standing receptacle (the arm reaches it only at carry-z, not the low place pose —
+        # unlike the tuned pick-table grasp). But after the Step-6b jam-dock the held object is
+        # already OVER the receptacle, so simply RELEASE there: open the gripper and let the object
+        # DROP onto the (flat) receptacle. This is the proven place primitive (skill-direct 6/6 onto
+        # a flat receptacle, D123). ONLY on the ik_unreachable failure after a real dock; a
+        # successful precise place is unchanged, and a genuinely-undocked failure is NOT masked.
+        if (
+            not place_result.success
+            and (place_result.result_data or {}).get("diagnosis") == "ik_unreachable"
+            and not skip_navigate
+        ):
+            logger.info(
+                "[MOBILE-PLACE] place IK unreachable at the receptacle -> DROP-RELEASE at the dock"
+            )
+            try:
+                gripper.open()
+                place_result = SkillResult(
+                    success=True,
+                    result_data={"diagnosis": "drop_release", "drop_at": [tx, ty, tz]},
+                )
+            except Exception as exc:  # noqa: BLE001 — release is best-effort
+                logger.warning("[MOBILE-PLACE] drop-release gripper.open raised: %s", exc)
 
         # Step 8 — Return (propagate place failure or enrich success)
         mobile_meta = {

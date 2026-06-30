@@ -259,7 +259,7 @@ def test_mobile_place_wait_stable_timeout_returns_wait_stable_timeout() -> None:
 
 
 def test_mobile_place_propagates_place_failure() -> None:
-    """_place.execute returns success=False with diagnosis=ik_unreachable → propagated."""
+    """A NON-recoverable place failure (e.g. move_failed) is propagated success=False."""
     base = _make_base(x=0.0, y=0.0)
     base.navigate_to.return_value = True
 
@@ -272,14 +272,37 @@ def test_mobile_place_propagates_place_failure() -> None:
 
     skill = MobilePlaceSkill()
     skill._place = MagicMock()
-    skill._place.execute.return_value = _place_failure("ik_unreachable")
+    skill._place.execute.return_value = _place_failure("move_failed")
 
     approach = (4.45, 5.0, 0.0)
     with _patch_approach_pose(approach), _patch_wait_stable(True):
         result = skill.execute({"target_xyz": _TARGET_FAR}, ctx)
 
     assert result.success is False
-    assert result.result_data["diagnosis"] == "ik_unreachable"
+    assert result.result_data["diagnosis"] == "move_failed"
+
+
+def test_mobile_place_drop_release_on_ik_unreachable() -> None:
+    """ik_unreachable AFTER the jam-dock (the free-standing-receptacle case, D123) -> DROP-RELEASE:
+    open the gripper to drop the held object onto the (flat) receptacle, success=True. The precise
+    top-down IK is unreachable at such a receptacle; the dock already put the object over it."""
+    base = _make_base(x=0.0, y=0.0)
+    base.navigate_to.return_value = True
+    gripper = _make_gripper()
+
+    ctx = _make_ctx(base=base, arm=_make_arm(), gripper=gripper, world_model=_make_wm())
+
+    skill = MobilePlaceSkill()
+    skill._place = MagicMock()
+    skill._place.execute.return_value = _place_failure("ik_unreachable")
+
+    approach = (4.45, 5.0, 0.0)
+    with _patch_approach_pose(approach), _patch_wait_stable(True):
+        result = skill.execute({"target_xyz": _TARGET_FAR}, ctx)
+
+    assert result.success is True
+    assert result.result_data["diagnosis"] == "drop_release"
+    gripper.open.assert_called_once()  # the object was RELEASED onto the receptacle
 
 
 # ---------------------------------------------------------------------------
