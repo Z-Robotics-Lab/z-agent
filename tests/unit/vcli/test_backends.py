@@ -906,6 +906,29 @@ class TestModelUnavailableError:
         assert "google/gemini-3.5-flash" in str(ei.value)
         assert "unknown" in str(ei.value).lower() or "endpoint" in str(ei.value).lower()
 
+    def test_400_invalid_model_id_is_model_unavailable(self) -> None:
+        """The most common BYO typo: a bad VECTOR_MODEL. OpenRouter rejects it with
+        400 'X is not a valid model ID' (not 404) — still user-actionable."""
+        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+
+        backend = self._backend()
+        exc = _make_status_error(400, "Error code: 400 - vector/does-not-exist-xyz is not a valid model ID")
+        self._raise_once(backend, exc)
+        with pytest.raises(ModelUnavailableError) as ei:
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert "valid model" in str(ei.value).lower()
+
+    def test_400_generic_still_raises_raw(self) -> None:
+        """A non-model 400 (e.g. a malformed request) is NOT model-unavailability."""
+        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+
+        backend = self._backend()
+        exc = _make_status_error(400, "Error code: 400 - messages: field required")
+        self._raise_once(backend, exc)
+        with pytest.raises(openai.APIStatusError) as ei:
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert not isinstance(ei.value, ModelUnavailableError)
+
     def test_recoverable_402_still_downshifts_not_unavailable(self) -> None:
         """Regression: the recoverable 'can only afford N' 402 must STILL retry at
         the affordable cap — it is NOT a ModelUnavailableError on the first hit."""

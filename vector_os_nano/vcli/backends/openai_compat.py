@@ -339,7 +339,10 @@ class OpenAICompatBackend:
 
         - 402 (any shape that reached here, i.e. a downshift could not save it) →
           hard credit exhaustion.
-        - 404 "no endpoints" / "not found" → unknown model id / no provider.
+        - 404 "no endpoints" / "not found" → the model id resolves but has no
+          provider endpoint on this account.
+        - 400 "not a valid model id" → a malformed / non-existent ``VECTOR_MODEL``
+          (the most common BYO-model typo; OpenRouter rejects it with 400, not 404).
         Every other status returns None so the caller re-raises it unchanged.
         """
         code = getattr(exc, "status_code", None)
@@ -355,6 +358,11 @@ class OpenAICompatBackend:
                 model=self._model, base_url=self._base_url,
                 reason="unknown model id or no available provider endpoint",
                 original=exc,
+            )
+        if code == 400 and "not a valid model" in low:
+            return ModelUnavailableError(
+                model=self._model, base_url=self._base_url,
+                reason="not a valid model id — check VECTOR_MODEL", original=exc,
             )
         return None
 
