@@ -3,35 +3,39 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · R-boundary (D170) — plug-and-play kernel↔world boundary now EXECUTABLE + a drift fixed. Offline substrate round; acceptance face STILL DOWN (billing).
+updated: 2026-07-01 · R-byo-example (46fb617) — plug-and-play now DEMONSTRATED (runnable example) + guard reaches
+the CLI entry. Offline substrate round; acceptance face STILL DOWN (billing).
 HARD BLOCKER (Yusen-only, NOT code): DashScope/Qwen account in ARREARS ("Arrearage", HTTP 400) — re-confirmed
-LIVE this round on BOTH qwen-max (planner) AND qwen3-vl-plus (eyes). The bare `vector-cli`+NL acceptance face —
-the ONLY face for CAPABILITY claims — cannot run until Yusen tops up Alibaba Cloud / DashScope. No capability
-re-verify possible; loop pivoted to non-gated OFFLINE substrate work (per discipline).
-DID this round (D170, d47460b — OFFLINE, no-LLM, ground truth = the import graph, not the actor): made Invariants
-3+4 EXECUTABLE. Found+fixed drift: worlds/__init__.py eagerly imported DevWorld+RobotWorld → importing the kernel
-leaked concrete worlds. Fix = LAZY PEP-562 re-exports (identity-equal, seam no longer drags in a world). NEW
-tests/vcli/test_plug_and_play_boundary.py (TDD RED→GREEN): fresh-subprocess kernel-import purity + a synthetic
-BYO world driven through every seam with ZERO kernel edits. Verify: boundary 5/5 + world/registry/capability 79/79
-green; all consumers import. NOT a capability re-acceptance (that stays billing-blocked).
+LIVE this round on qwen-max (planner). The bare `vector-cli`+NL acceptance face — the ONLY face for CAPABILITY
+claims — cannot run until Yusen tops up Alibaba Cloud / DashScope. No capability re-verify possible; loop pivoted
+to non-gated OFFLINE substrate work (per discipline). This is the ~6th consecutive billing-blocked round.
+DID this round (46fb617 — OFFLINE, no-LLM; ground truth = import graph + a runnable artifact, not the actor):
+closed D170's two queued offline items. (1) NEW examples/byo_world.py — a third-party SorterArmWorld defined
+ENTIRELY outside the kernel registers via the public seam (get_world_registry/resolve_world_named), resolves,
+and drives all 5 contribution points (persona/tools/verify/caps/vocab) with ZERO kernel edits; runs clean, exit 0,
+no LLM/sim. Plug-and-play is now DEMONSTRATED, not just tested. (2) extended the executable purity guard to
+`vcli.cli` (the acceptance-face entry module leaks no concrete world — Invariant 4 at the real entry, already
+green = regression-locked). (3) the example runs as a subprocess in the guard so it can't bit-rot. Boundary suite
+5->7 green; world/registry/capability suites green. ZERO kernel edits this round. NOT a capability re-acceptance.
 
 goal:    PLUG-AND-PLAY runtime for physical AI — bring your own robot/policy/skill/capability; plan·route·verify·
          recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
 phase:   BLOCKED for CAPABILITY work (billing). Substrate/architecture work proceeds offline.
-owns:    vcli/worlds/__init__.py (lazy re-exports), tests/vcli/test_plug_and_play_boundary.py (NEW boundary guard).
-         Spine vcli/cognitive/ + arm_sim_oracle verify predicates FROZEN. scratchpad/* harnesses unchanged.
+owns:    examples/byo_world.py (NEW, user-facing BYO-world demo), tests/vcli/test_plug_and_play_boundary.py
+         (7 guards). Spine vcli/cognitive/ + arm_sim_oracle verify predicates FROZEN. scratchpad/* unchanged.
 blocked: DashScope/Qwen ARREARS → capability acceptance face (planner+eyes) DOWN. Yusen must restore billing.
          Loop stays alive on offline substrate/design work. CEO gates queued below.
-next: (capability items #1-#3 need the ACCEPTANCE FACE = BLOCKED until billing; run scratchpad/repl_accept.py — it arrears-preflights, exit 4 fast)
+next: (capability items #1-#3 need the ACCEPTANCE FACE = BLOCKED until billing; run scratchpad/repl_accept.py — it
+      arrears-preflights, exit 4 fast)
   0. [UNBLOCK, Yusen] restore DashScope/Qwen billing. Verify: repl_accept.py preflight prints "LLM reachable".
-  1. [FIRM D169] combo N≥3 (eyes-frame already discharged) — needs the LLM.
+  1. [FIRM D169] combo N≥3 fetch-and-place (eyes-frame discharged) — needs the LLM.
   2. [FRONTIER] harder NL: relational place "放到X旁边" (near(a,b) predicate = spine-semantics gate); 2-object
      sequences; ambiguous-ref clarification — all need the LLM.
-  3. [FRONTIER] g1 2nd embodiment config-only — D170 PROVES the seam is genuinely open (BYO world, no kernel
-     edits). Registration mechanism = S4 gate; a pure config still needs the LLM face to REAL-VERIFY end-to-end.
-  4. [OFFLINE, if billing stays down] more substrate hardening: extend the boundary guard to cli.py's load path
-     (assert no domain-world leak); add a real BYO-world example under examples/; audit other import-time side
-     effects (mcp/__main__ runs on `-m` only = fine, but smokes must skip __main__).
+  3. [FRONTIER] g1 2nd embodiment config-only — D170/this round PROVE the seam is genuinely open (BYO world, no
+     kernel edits, demonstrated). Registration = S4 gate; a pure config still needs the LLM face to REAL-VERIFY.
+  4. [OFFLINE, remaining if billing stays down] DESIGN the object-blind receptacle identity+delta predicate +
+     write its executive summary (spine-semantics gate — design offline, present, don't cross); audit import-time
+     side effects across the package (assert no non-`__main__` kernel module has import side effects).
   5. [GATE — queued] resting_on_receptacle object-BLIND + absolute count≥1: identity+delta = stricter-only SPINE
      change → present as a gate (multi-object place moat weakness).
 tooling (scratchpad/, git-tracked): repl_accept.py (BARE-REPL pexpect driver — the true face; arrears-preflights →
