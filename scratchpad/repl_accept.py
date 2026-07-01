@@ -105,6 +105,39 @@ def _eyes_frame(snap: str, tag: str) -> None:
         print("[driver] no verdict_*.png emitted (snapshot_on_verdict yielded nothing)", flush=True)
 
 
+def _llm_preflight() -> None:
+    """Fail FAST if the DashScope/Qwen account is unusable (arrears / access denied), instead of
+    spawning the sim and burning an 8-min per-verdict timeout against a dead LLM (the whole
+    acceptance face — planner qwen-max AND eyes qwen3-vl — routes through this one key). A 400
+    'Arrearage'/'Access denied' means BILLING is down: a Yusen-only fix, not a code fault.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+    key = os.environ.get("QWEN_API_KEY", "")
+    if not key:
+        print("[driver] PREFLIGHT: no QWEN_API_KEY in env — cannot run the acceptance face.", flush=True)
+        sys.exit(3)
+    req = urllib.request.Request(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        data=_json.dumps({"model": os.environ.get("QWEN_MODEL", "qwen-max"),
+                          "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=30).read()
+        print("[driver] PREFLIGHT: DashScope LLM reachable.", flush=True)
+    except urllib.error.HTTPError as e:
+        body = e.read()[:300].decode(errors="replace")
+        if "Arrearage" in body or "Access denied" in body or "overdue" in body:
+            print(f"[driver] PREFLIGHT BLOCKED: DashScope account in ARREARS/denied ({e.code}). "
+                  f"Acceptance face is DOWN until billing is restored (Yusen-only). Body: {body}", flush=True)
+            sys.exit(4)
+        print(f"[driver] PREFLIGHT: DashScope HTTP {e.code} (non-arrears): {body} — proceeding.", flush=True)
+    except Exception as e:  # noqa: BLE001 — network flake shouldn't hard-block; let the run try
+        print(f"[driver] PREFLIGHT: probe error {type(e).__name__}: {e} — proceeding.", flush=True)
+
+
+_llm_preflight()
 print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim-go2); FETCH={FETCH!r} PLACE={PLACE!r}", flush=True)
 # Bare module invocation with --native-loop only (mirrors the wrapper, sans flags).
 child = pexpect.spawn(
