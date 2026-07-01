@@ -19,10 +19,13 @@ from dataclasses import FrozenInstanceError
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import openai
 import pytest
 
 from vector_os_nano.vcli.backends import LLMBackend, create_backend
 from vector_os_nano.vcli.backends.openai_compat import (
+    OpenAICompatBackend,
+    affordable_max_tokens,
     convert_messages,
     convert_system,
     convert_tools,
@@ -734,3 +737,108 @@ class TestOpenAICompatReasoningStream:
             max_tokens=128,
         )
         assert resp.text == "done"
+
+
+# ---------------------------------------------------------------------------
+# affordable_max_tokens — recoverable 402 balance-cap parser
+# ---------------------------------------------------------------------------
+
+
+class TestAffordableMaxTokens:
+    """Parse the OpenRouter/OpenAI-compat 402 'fewer max_tokens' balance error."""
+
+    def test_parses_afford_integer(self) -> None:
+        msg = (
+            "Error code: 402 - This request requires more credits, or fewer "
+            "max_tokens. You requested up to 8000 tokens, but can only afford 522."
+        )
+        assert affordable_max_tokens(msg) == 522
+
+    def test_case_insensitive(self) -> None:
+        assert affordable_max_tokens("Can Only Afford 6510 tokens") == 6510
+
+    def test_non_balance_error_returns_none(self) -> None:
+        assert affordable_max_tokens("Error code: 404 - No endpoints found") is None
+
+    def test_afford_wording_without_number_returns_none(self) -> None:
+        # Recognises the shape but no parseable cap -> caller re-raises.
+        assert affordable_max_tokens("you cannot afford this request") is None
+
+    def test_empty_string_returns_none(self) -> None:
+        assert affordable_max_tokens("") is None
+
+
+# ---------------------------------------------------------------------------
+# _call_with_retry — graceful 402 downshift
+# ---------------------------------------------------------------------------
+
+
+def _make_402(afford: int) -> Any:
+    """Build a real openai.APIStatusError with status_code 402 and an afford msg."""
+    import httpx
+
+    req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    resp = httpx.Response(402, request=req)
+    return openai.APIStatusError(
+        f"Error code: 402 - You requested up to 8000 tokens, but can only afford {afford}.",
+        response=resp,
+        body=None,
+    )
+
+
+class TestGraceful402Downshift:
+    """A low-balance account rejects the upfront max_tokens reservation with a
+    recoverable 402; the backend must retry ONCE at the affordable cap instead of
+    hard-failing, so a BYO model still runs. Every other status error re-raises."""
+
+    def _backend(self) -> Any:
+        with patch("openai.OpenAI"):
+            return OpenAICompatBackend(api_key="k", model="mistralai/mistral-medium-3-5")
+
+    def test_402_downshifts_and_succeeds(self) -> None:
+        backend = self._backend()
+        ok = LLMResponse(text="", tool_calls=[LLMToolCall(id="1", name="start_simulation", input={"sim_type": "g1"})], stop_reason="tool_use")
+        calls: list[int] = []
+
+        def _fake(messages, tools, max_tokens, on_text, on_reasoning=None):  # noqa: ANN001
+            calls.append(max_tokens)
+            if len(calls) == 1:
+                raise _make_402(522)
+            return ok
+
+        backend._call_streaming = _fake  # type: ignore[method-assign]
+        resp = backend.call(messages=[{"role": "user", "content": "启动 g1 仿真"}], tools=[], system=[], max_tokens=8000)
+        assert resp.tool_calls and resp.tool_calls[0].name == "start_simulation"
+        assert calls == [8000, 522]  # retried at the affordable cap
+
+    def test_402_downshifts_at_most_once_then_raises(self) -> None:
+        backend = self._backend()
+        calls: list[int] = []
+
+        def _always_402(messages, tools, max_tokens, on_text, on_reasoning=None):  # noqa: ANN001
+            calls.append(max_tokens)
+            raise _make_402(300)
+
+        backend._call_streaming = _always_402  # type: ignore[method-assign]
+        with pytest.raises(openai.APIStatusError):
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        # First at 8000, downshift to 300, then raise (no infinite loop).
+        assert calls == [8000, 300]
+
+    def test_non_402_status_error_still_raises_immediately(self) -> None:
+        backend = self._backend()
+        import httpx
+
+        req = httpx.Request("POST", "https://openrouter.ai/api/v1")
+        resp404 = httpx.Response(404, request=req)
+        exc404 = openai.APIStatusError("Error code: 404 - No endpoints found", response=resp404, body=None)
+        calls: list[int] = []
+
+        def _fake404(messages, tools, max_tokens, on_text, on_reasoning=None):  # noqa: ANN001
+            calls.append(max_tokens)
+            raise exc404
+
+        backend._call_streaming = _fake404  # type: ignore[method-assign]
+        with pytest.raises(openai.APIStatusError):
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert calls == [8000]  # no downshift retry for a non-402

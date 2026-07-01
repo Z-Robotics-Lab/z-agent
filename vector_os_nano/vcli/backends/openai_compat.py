@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any, Callable
 
@@ -36,6 +37,23 @@ _STOP_REASON_MAP: dict[str, str] = {
     "length": "max_tokens",
     "content_filter": "end_turn",
 }
+
+
+def affordable_max_tokens(exc_message: str) -> int | None:
+    """Parse an OpenRouter/OpenAI-compat 402 balance error for the affordable cap.
+
+    A budget / low-balance account rejects the UPFRONT max_tokens reservation with
+    HTTP 402 "This request requires more credits, or fewer max_tokens. You requested
+    up to 8000 tokens, but can only afford 522." — a RECOVERABLE condition: the
+    provider tells us the output-token cap the balance CAN cover. Returns that
+    integer, or None if the message is not this shape (so the caller re-raises and
+    behaviour for every other status/error is unchanged).
+    """
+    low = exc_message.lower()
+    if "afford" not in low and "fewer max_tokens" not in low:
+        return None
+    m = re.search(r"can only afford (\d+)", low)
+    return int(m.group(1)) if m else None
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +240,7 @@ class OpenAICompatBackend:
     ) -> LLMResponse:
         """Make the API call with exponential backoff retry."""
         last_exc: Exception | None = None
+        downshifted = False  # graceful 402: lower max_tokens at most once
 
         for attempt in range(self._max_retries):
             try:
@@ -252,7 +271,25 @@ class OpenAICompatBackend:
                     attempt + 1, self._max_retries, delay,
                 )
                 time.sleep(delay)
-            except openai.APIStatusError:
+            except openai.APIStatusError as exc:
+                # Graceful degradation for a recoverable 402: a low-balance / budget
+                # account rejects the upfront max_tokens reservation but tells us the
+                # cap it can afford. Retry ONCE at that cap so a BYO model still runs
+                # instead of hard-failing (plug-and-play robustness; the honest-verify
+                # spine is untouched). Every other status/error re-raises as before.
+                afford = (
+                    affordable_max_tokens(str(exc))
+                    if getattr(exc, "status_code", None) == 402
+                    else None
+                )
+                if afford and 0 < afford < max_tokens and not downshifted:
+                    logger.warning(
+                        "402 balance cap: max_tokens %d unaffordable, retrying at %d",
+                        max_tokens, afford,
+                    )
+                    max_tokens = afford
+                    downshifted = True
+                    continue
                 raise  # Non-retryable
 
         raise last_exc  # type: ignore[misc]
