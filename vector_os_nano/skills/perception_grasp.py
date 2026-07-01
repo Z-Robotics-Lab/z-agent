@@ -117,6 +117,60 @@ _COLOR_TO_SCENE: dict[str, str] = {
     "green": "pickable_bottle_green",
 }
 
+# D168 — colourless CATEGORY reference resolution against the scene OBJECT CATALOG.
+# A colourless category ("罐子" = "can") cannot be singled out perceptually when the
+# scene's pickables are near-identical cylinders: grounding-dino scores all three within
+# ~0.02 (noise), so max-confidence selection grabs a random one (observed: 罐子 grabbed
+# the blue bottle, red can knocked to the floor). Colour, by contrast, is a strong,
+# reliable discriminator (the colour path grounds 6/6, D167). The scene's object CATALOG
+# (the arm's GT object-name set — fixed config the actor CANNOT author) often makes a
+# category UNIQUE: exactly one "can" among {bottle, bottle, can}. When so, resolve the
+# reference to that single object AND its colour attribute, then drive the PROVEN colour-
+# selection path. Honest by construction: the verify oracle holding_object(...) is
+# BYTE-UNCHANGED and independently grades the GT weld, so this only chooses WHICH object
+# to grasp — it can never fake a verdict; an ambiguous category resolves to None (the
+# perception must then genuinely disambiguate, or the grasp honestly RANs).
+_CATEGORY_COLORS: tuple[str, ...] = ("red", "green", "blue")
+
+
+def _resolve_unique_category(
+    query: str, scene_names: Any
+) -> tuple[str | None, str] | None:
+    """Resolve a colourless category reference to ``(colour, scene_name)``.
+
+    Returns ``None`` when *query* names no known category noun, or the category is
+    absent / AMBIGUOUS (>1 match) in *scene_names* — in every such case the caller
+    leaves behaviour unchanged. On a UNIQUE match returns the object's catalog name
+    (the verify-oracle key, e.g. ``'pickable_can_red'``) and the colour attribute
+    parsed from that name (e.g. ``'red'``), or ``None`` colour when the name encodes
+    no known colour. Pure: reads only the query text + the scene's declared object
+    NAMES (never a pose, never the actor's output).
+    """
+    from vector_os_nano.perception.grounding_dino import _ZH_NOUN_EN
+
+    q = (query or "").strip().lower()
+    if not q:
+        return None
+    # english category noun for the query: zh→en map first, then english passthrough.
+    noun: str | None = None
+    for zh, en in _ZH_NOUN_EN.items():
+        if zh in q:
+            noun = en
+            break
+    if noun is None:
+        for en in set(_ZH_NOUN_EN.values()):
+            if en in q:
+                noun = en
+                break
+    if noun is None:
+        return None
+    matches = [str(n) for n in scene_names if noun in str(n).lower()]
+    if len(matches) != 1:
+        return None  # absent or ambiguous → honestly cannot single one out
+    name = matches[0]
+    color = next((c for c in _CATEGORY_COLORS if c in name.lower()), None)
+    return color, name
+
 
 # Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
 # object. MEASURED R17: the top-down EE reaches only ~0.22m forward of the dog centre
@@ -815,6 +869,28 @@ class PerceptionGraspSkill:
         # perceived from depth+mask). A deictic "前面的东西" parses no colour → unchanged.
         from vector_os_nano.perception.front_object import parse_color
         color = parse_color(query)
+
+        # D168 — COLOURLESS CATEGORY resolution. When the query names an object by
+        # category alone ("罐子"/"can") with no colour, near-identical cylinders defeat
+        # shape-only detection (grounding-dino scores them within noise). If the scene's
+        # object CATALOG makes that category UNIQUE, resolve it to the single object's
+        # colour attribute and drive the PROVEN colour path instead. Only fires when NO
+        # colour was parsed, so every colour query ("绿色的瓶子", 6/6) is byte-unchanged;
+        # the verify oracle is untouched (this picks the target, never grades it).
+        if color is None:
+            try:
+                scene_names = list(arm.get_object_positions().keys())
+            except Exception as exc:  # noqa: BLE001 — no catalog → leave behaviour unchanged
+                logger.debug("[PGRASP] category resolve: no object catalog (%s)", exc)
+                scene_names = []
+            cat = _resolve_unique_category(query, scene_names) if scene_names else None
+            if cat is not None and cat[0] is not None:
+                color = cat[0]
+                logger.info(
+                    "[PGRASP] colourless category %r → unique scene object %s "
+                    "(colour=%s) — driving the proven colour path",
+                    query, cat[1], color,
+                )
 
         # --- PRODUCER->CONSUMER composition (R37): if an earlier `detect` step
         # already produced boxes (flowed in via ${detect.output.detections} /
