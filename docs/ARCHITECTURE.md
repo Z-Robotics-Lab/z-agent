@@ -121,8 +121,8 @@ computes it itself. Verification is **only ever stricter, never looser** (Rule 5
 AST-sandbox predicate, no `eval`/`exec`, no import escape. An action step with no predicate
 **fails** the gate.
 
-A **second, independent witness** sits beside the GT oracle. The ADR-002 visual-acceptance layer
-(`acceptance/` + the `tools/acceptance/` harnesses, see `ADR-002-visual-acceptance.md`) runs a
+A **second, independent witness** sits beside the GT oracle. The visual-acceptance layer
+(`acceptance/` + the `tools/acceptance/` harnesses; honesty invariants in §6) runs a
 separate VLM over a same-process frame strip on **every** run and emits `PASS | FAIL | ABSTAIN`
 into a field that **never feeds `evidence_passed`** — an extension of the Verify contract,
 orthogonal to the GT oracle, not itself a gate. Its only action is to flag a disagreement
