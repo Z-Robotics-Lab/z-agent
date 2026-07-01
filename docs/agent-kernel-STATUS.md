@@ -12,9 +12,10 @@ crash; the real defect = a Rule 3/11 SPLIT-BRAIN (cli.py `--sim-go2` in-process 
 VECTOR_NO_ROS2 + always launches the ROS2 stack). Pipeline OpenRouter-INDEPENDENT: routing=Qwen(qwen-max) + eyes=
 Qwen3-VL-plus via DashScope (Clash RULE mode; DeepSeek-direct + OpenRouter dead). `~/.local/bin/vector-cli` = WRAPPER
 (backup `.orig`) → Qwen + VECTOR_MAX_TOKENS=8000 + --native-loop + sim env.
-TRACK A DONE (loop infra, in ~/.claude): supervisor now systemd --user (evolving-loop@<name>.service Restart=always,
-linger on) + per-round systemd-run scope (RuntimeMaxSec+MemoryMax) + per-DIR lock + NEVER-KILL-INFRA rule; code-reviewed
-(fd-flock blocker fixed) + verified. `loop-ctl.sh` manages loops. Loops STOPPED until C(b) re-acceptance lands.
+TRACK A DONE — the loop-driver is the maintainer's PRIVATE self-dev harness, OUTSIDE this repo; a clone neither has
+nor needs it (it only DRIVES development, it is not part of the shipped runtime). That harness was hardened (systemd
+--user supervisor, Restart=always + per-round scope + per-dir lock + never-kill rule), code-reviewed + verified.
+Loops STOPPED until C(b) re-acceptance lands.
 
 goal:    PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot/policy/skill/capability;
          plan · route · verify · recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen.
@@ -24,8 +25,9 @@ owns:    skills/{perception_grasp,navigate_to_object,mobile_*}.py, vcli/tools/si
          acceptance/**, docs/*. Spine vcli/cognitive/ FROZEN (stricter-only).
 blocked: bare-cli fetch/place — awaiting Track C(b) (D164). CEO gates queued below — do NOT cross.
 next (per D164, approved A->C->B; A DONE):
-  1. [DONE] Loop/self-dev setup made reliable — see D164 + ~/.claude REGISTRY (systemd Restart=always + scoped rounds
-     + per-dir lock + never-kill rule; verified). No loop RUNNING until step 2 re-acceptance lands.
+  1. [DONE] Self-dev loop-driver made reliable — the maintainer's PRIVATE loop harness lives OUTSIDE this repo (a
+     clone neither has nor needs it); systemd Restart=always + scoped rounds + per-dir lock + never-kill rule; verified.
+     No loop RUNNING until step 2 re-acceptance lands.
   2. [NEXT] CLOSE D163 via APPROVED (b)+hybrid: SINGLE-SOURCE extract cli.py's in-process go2+arm build (cli.py:747-888)
      into ONE shared helper; make sim_tool._start_go2 (sim_tool.py:476-654) call it when VECTOR_NO_ROS2=1 (NOT a copy —
      a copy re-splits the brain). Preserve the ROS2 path (explore/nav) + add a parity e2e; fix runtime.py:132/139
@@ -61,6 +63,22 @@ tooling (scratchpad/, git-tracked): place_probe.py + run_probe.sh (fast skill-di
 - `native_loop.run_turn_native` is the default model-driven producer (no keyword table); the legacy keyword
   producer is being strangled (delete at S8). Acceptance = bare `vector-cli` + NL only.
 - cross-MODEL (D48-D50) + the moat are LIVE on master (origin/master cd7029a).
+
+## find-and-grasp OPEN stages (migrated from plan-find-grasp-refactor.md — OPEN + CEO-gated, NOT done)
+- **#4 — external-explore integration + persist + rebuild (OPEN, CEO-gated).** Enable observe (with #1
+  localization) during the TARE/FAR explore so the scene graph populates with accurate objects; persist. Add a
+  `/rebuild` command (clear → explore → seed → save). (ExploreSkill today emits `tare_not_running` without the
+  external stack.)
+- **#5 — startup seed + world manifest + store unification (OPEN, CEO-gated).** Seed rooms at startup from
+  `config/room_layout.yaml` (today only lazy inside explore). Add `config/worlds/<world>.yaml`
+  (rooms/boundary/persistence/cameras — world-as-config, Rule 11; objects discovered not declared). Unify
+  SceneGraph as the single object store (bridge/retire WorldModel + the paused SysNav bridge).
+- Reuse (don't rebuild): `SceneGraph.save()/load()`→`~/.vector_os_nano/scene_graph.yaml`; `/clear_memory` (wipes
+  scene_graph.yaml + terrain_map.npz + graph); depth→world = `perception/{grasp_point,depth_projection}.py`; R12
+  grasp = `skills/perception_grasp.py` + `MuJoCoGo2.navigate_to` (vgraph).
+- Key files: `perception/object_localizer.py`, `skills/go2/{look,explore}.py`, `skills/navigate.py`,
+  `core/scene_graph.py`, `skills/perception_grasp.py`, `config/room_layout.yaml`, `vcli/cli.py` (/clear_memory +
+  startup wiring); external `~/Desktop/vector_navigation_stack` (TARE/FAR) + `scripts/launch_nav_explore.sh`.
 
 ## Pending CEO gates (decision queue — do NOT cross autonomously)
 - **S8 — retire the legacy keyword producer (READY for approval; all preconditions S5a/S5b/S5c done).**
