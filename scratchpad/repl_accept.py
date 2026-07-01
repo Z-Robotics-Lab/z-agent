@@ -158,11 +158,26 @@ try:
         # finish, then the post-hoc parser below collects EVERY verdict emitted.
         print("\n[driver] COMBO turn (single multi-clause utterance)...", flush=True)
         child.sendline(FETCH)
-        # Compound plan can grasp then place -> up to two long tool calls. Sync on the
-        # prompt returning rather than a single `grounded)` (there may be two).
-        wait_prompt(child, timeout=600)
+        # Sync on each `grounded)` verdict, NOT the prompt. wait_prompt matches `vector>`,
+        # which the just-ECHOED command line ("vector> 把红色…") matches INSTANTLY — that
+        # early-return aborted the turn mid-grasp (both prior combo runs). A compound plan
+        # emits one verdict per checked step (grasp, then place), with NO prompt between
+        # tool calls. So: wait ONLY for the first (grasp) verdict — do not offer vector>
+        # here or the echo matches it — then accept further verdicts until the prompt
+        # (turn finished) returns. Grasp+place pipelines are slow (perception+MPC+walk+
+        # grasp, then walk+place+12s settle), hence the long per-verdict timeouts.
+        n_verdicts = 0
+        if child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=480) == 0:
+            n_verdicts += 1
+            while n_verdicts < 4:
+                idx = child.expect([r"grounded\)", r"vector>", pexpect.TIMEOUT], timeout=480)
+                if idx == 0:
+                    n_verdicts += 1
+                else:
+                    break  # prompt returned (turn complete) or timed out
         _eyes_frame(SNAP, "combo")
-        print("\n[driver] combo turn done", flush=True)
+        wait_prompt(child, timeout=60)
+        print(f"\n[driver] combo turn done — saw {n_verdicts} verdict(s)", flush=True)
 
     child.sendline("quit")
     child.expect([pexpect.EOF, pexpect.TIMEOUT], timeout=30)
@@ -179,6 +194,9 @@ finally:
 try:
     raw = open(f"{SNAP}/repl.raw.log", encoding="utf-8", errors="replace").read()
     clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][0-9;]*|\x1b", "", raw)
+    # The braille spinner (U+2800-U+28FF) interleaves INTO the verdict text and breaks
+    # the regex (verified⠋=⠙True...); strip the glyphs so the verdict reads cleanly.
+    clean = re.sub(r"[⠀-⣿]", "", clean)
     verds = re.findall(r"verified\s*=\s*(True|False)\s*\((\d+)/(\d+)\s*grounded\)", clean)
     # Map emitted verdicts to the turns that ACTUALLY ran (mode-aware). In place-only
     # mode a single verdict is emitted — it is the PLACE verdict, NOT the fetch one
