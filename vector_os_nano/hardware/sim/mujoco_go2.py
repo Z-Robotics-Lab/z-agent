@@ -627,6 +627,18 @@ class MuJoCoGo2:
 
         mj.mj_forward(self._mj.model, self._mj.data)
 
+        # A GLFW passive viewer may open ONLY when the offscreen render backend is
+        # NOT egl — the two cannot coexist and the viewer would starve the
+        # perception renderer ('Failed to make the EGL context current'). The
+        # sim-launch path resolves this up front (go2_inprocess.reconcile_render_backend);
+        # this guard protects direct constructions (tests/probes) that pass gui=True
+        # under egl from silently breaking perception.
+        if self._gui and os.environ.get("MUJOCO_GL", "").lower() == "egl":
+            logger.warning(
+                "MuJoCoGo2: viewer suppressed under MUJOCO_GL=egl (would starve the "
+                "perception renderer); running headless. Use glfw for a viewer window."
+            )
+            self._gui = False
         if self._gui:
             try:
                 import mujoco.viewer  # noqa: PLC0415

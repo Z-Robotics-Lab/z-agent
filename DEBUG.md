@@ -34,4 +34,20 @@
 - E3: grasp_probe with PROBE_GUI=1 (gui=True, matching the bare-REPL) x3 — does it reproduce the failure? [RUNNING]
 
 ## CONCLUDE
-- (pending E3) — leading root cause H5: bare-REPL sim-launch gui=True starves perception EGL context.
+- E3 RESULT: gui=True (egl) grasp 0/3, ALL perceived=False/no_detections; gldiag confirmed the exact
+  error: `RuntimeError: Failed to make the EGL context current` when perception creates its offscreen
+  mj.Renderer while the GLFW viewer exists. gui=False (egl) renders fine (rgb mean=162).
+- FIX PROOF: MUJOCO_GL=glfw makes viewer(gui=True) + perception coexist — frame renders (mean 160.7)
+  AND the full grasp GROUNDS 2/2 (perceived+weld+held). mujoco binds the backend at import, so a
+  mid-process egl->glfw switch fails (verified) — the backend MUST be set before the first `import mujoco`.
+- ROOT CAUSE (H5 CONFIRMED): the bare-REPL sim-launch defaults gui=True while the offscreen render
+  backend is EGL; EGL + a GLFW passive viewer cannot coexist, so perception's renderer fails to make its
+  context current → get_camera_frame raises → detect returns no_detections → grasp RANs (actor=UNCAUSED)
+  → fetch/place grade verified=False. NOT a producer-plan gap (STATUS H1), NOT a skill defect (skill 5/5).
+- FIX: `reconcile_render_backend(gui)` in go2_inprocess.py runs BEFORE mujoco import: viewer wanted +
+  display -> bind glfw (viewer + perception coexist); else egl + no viewer (perception always keeps its
+  context). Wired into build_inprocess_go2_agent (both launchers). Defensive guard in MuJoCoGo2.connect()
+  suppresses a viewer under MUJOCO_GL=egl for direct constructions. 6 unit tests green.
+- File:line: vector_os_nano/hardware/sim/go2_inprocess.py (reconcile_render_backend + call);
+  vector_os_nano/hardware/sim/mujoco_go2.py connect() viewer guard.
+- Regression test: tests/hardware/sim/test_render_backend.py (6 cases). Verify: bare-REPL repl_accept N>=5.

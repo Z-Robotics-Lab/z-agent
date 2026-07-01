@@ -32,6 +32,49 @@ def _noop(_msg: str) -> None:  # pragma: no cover - trivial
     pass
 
 
+def reconcile_render_backend(gui: bool) -> bool:
+    """Reconcile the offscreen GL backend with the viewer request; return effective gui.
+
+    EGL (headless offscreen render) and a GLFW passive viewer CANNOT coexist in one
+    process: opening the viewer starves the perception renderer's context
+    ('Failed to make the EGL context current'), so fetch/place perceive nothing and
+    grade verified=False (verified 2026-07-01: egl+gui=True grasp 0/3 vs egl+headless
+    5/5 vs glfw+gui=True 2/2). A GLFW viewer may open ONLY when the offscreen backend
+    is glfw, which needs a display.
+
+    mujoco binds its GL backend at import time, so this MUST run before the first
+    ``import mujoco``. Policy:
+      * viewer wanted + display + backend not yet bound -> bind glfw, keep the viewer;
+      * backend already glfw + display               -> keep the viewer;
+      * otherwise (headless, no display, or egl already bound) -> egl, DROP the viewer
+        so perception always keeps its GL context.
+    """
+    import sys as _sys
+
+    display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    mujoco_bound = "mujoco" in _sys.modules
+    cur = os.environ.get("MUJOCO_GL", "").lower()
+
+    if gui and display:
+        if not mujoco_bound:
+            # Backend not yet bound: a viewer is requested and a display exists, so
+            # bind glfw (viewer + offscreen renderer coexist). Override even an
+            # explicit MUJOCO_GL=egl here — egl + a viewer is simply broken, and the
+            # caller asked for a window, so glfw is the only way to honour gui=True.
+            os.environ["MUJOCO_GL"] = "glfw"
+            return True
+        if cur == "glfw":
+            return True  # already glfw-bound -> viewer is safe
+    # Headless, no display, or egl already bound: protect perception, no viewer.
+    if gui:
+        logger.warning(
+            "MuJoCoGo2: GLFW viewer suppressed (no display or EGL backend already "
+            "bound) so the perception renderer keeps its GL context; running headless."
+        )
+    os.environ.setdefault("MUJOCO_GL", "egl")
+    return False
+
+
 def build_inprocess_go2_agent(
     *,
     gui: bool = True,
@@ -63,6 +106,12 @@ def build_inprocess_go2_agent(
     # base is built so the arm scene loads regardless of how the caller was
     # launched (the ROS2 path sets it on the child_env instead — same contract).
     os.environ["VECTOR_SIM_WITH_ARM"] = "1" if with_arm else "0"
+
+    # Reconcile the offscreen GL backend with the viewer request BEFORE mujoco is
+    # imported (it binds the backend at import). Without this, gui=True under the
+    # default egl backend starves the perception renderer and fetch/place perceive
+    # nothing (see reconcile_render_backend).
+    gui = reconcile_render_backend(gui)
 
     from vector_os_nano.core.agent import Agent  # type: ignore[import]
     from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # type: ignore[import]
