@@ -3,27 +3,28 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · D166 — D163 sim-launch split-brain CLOSED (C(b) done): the bare `vector-cli` REPL + NL now
-builds the PROVEN in-process MuJoCoGo2 via ONE shared helper (Rule 3/11); `launch_explore` EMPTY confirmed live.
-BUT re-acceptance surfaced a DEEPER gap: bare-REPL fetch/place EXECUTE in-process yet grade verified=False
-(fetch 0/1, place 0/2) — the native producer routes fetch to a lone perception_grasp with NO navigate/approach,
-so holding_object never trues. fetch/place are NOT re-accepted. Extraction proven faithful (deterministic build).
+updated: 2026-07-01 · R-glfw — root cause of the bare-REPL grounding gap FOUND + FIXED + FETCH RE-ACCEPTED.
+Gap was NOT the native-producer plan (STATUS H1 refuted: bottle 0.88m ahead, lone grasp is correct) — it was a
+GL-backend contention: sim-launch defaults gui=True while offscreen render is EGL; EGL+GLFW viewer can't coexist →
+perception renderer fails → detect no_detections → grasp RANs uncaused → verified=False. FIX: reconcile_render_backend
+(go2_inprocess.py) binds glfw when a viewer+display are wanted, else keeps egl headless — set BEFORE mujoco import.
+FETCH re-accepted on the BARE REPL (in-process, launch_explore EMPTY, post-fix 08:26-09:09): 6/6 True 1/1 across
+all 3 colours (green/blue/red × 2 campaigns); 2 eyes-confirmed (green→green, blue→blue in gripper, others untouched).
 
 goal:    PLUG-AND-PLAY runtime for physical AI — bring your own robot/policy/skill/capability; plan·route·verify·
          recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
-phase:   D163 gate CLOSED. Acceptance-face fetch/place grounding gap OPEN (native-producer plan, not sim-launch).
-owns:    hardware/sim/go2_inprocess.py (NEW, single-source builder), vcli/cli.py, vcli/tools/sim_tool.py,
-         hardware/ros2/runtime.py, tests/vcli/tools/**, scratchpad/**, docs/*. Spine vcli/cognitive/ FROZEN.
-blocked: none (next chunk is non-gated debugging). CEO gates queued below — do NOT cross.
+phase:   D163 gate CLOSED. glfw fix in. FETCH re-accepted on bare REPL. PLACE re-acceptance IN PROGRESS this round.
+owns:    hardware/sim/go2_inprocess.py (single-source builder + reconcile_render_backend), hardware/sim/mujoco_go2.py
+         (viewer guard), vcli/cli.py, vcli/tools/sim_tool.py, hardware/ros2/runtime.py, tests/**, scratchpad/**, docs/*.
+         Spine vcli/cognitive/ FROZEN.
+blocked: none. CEO gates queued below — do NOT cross.
 next:
-  1. [DONE] D163 C(b): single-source build_inprocess_go2_agent; sim_tool._start_go2 routes to it on VECTOR_NO_ROS2=1;
-     cli._init_agent uses it + keeps ROS2 tail; runtime.py teardown fix. Unit green; bare-REPL launch_explore EMPTY.
-  2. [NEXT] DEBUG the acceptance-face grounding gap (Hypothesis Loop). H1: native producer omits navigate_to_object
-     before perception_grasp (fetch was 1 step) — bottle across room, grasp misses. H2: perception_grasp gets no 3D
-     localize (look not run) → names-only, grasp to nowhere. H3: -p vgg path also 0/1 (1 slow sample, inconclusive).
-     Isolate: run navigate_to_object→perception_grasp directly (skill/-p), watch holding_object; then fix the native
-     plan so fetch = look→navigate→grasp. RE-ACCEPT on bare REPL: 3 colours N>=5, Qwen3-VL eyes, launch_explore EMPTY.
-  3. [THEN] Track B guardrails (G1..G5); frontier (robust find-fetch-place → place → VLN/SysNav → g1 → BYO model/skill).
+  1. [DONE] D163 C(b) single-source builder + runtime teardown fix (D166). Bare-REPL launch_explore EMPTY.
+  2. [DONE] Root-cause + fix the bare-REPL grounding gap = gui=True EGL/GLFW contention (DEBUG.md, commit adcd04b).
+     FETCH RE-ACCEPTED: 6/6 True across 3 colours, eyes-confirmed, in-process. Skill 5/5 (gui=F), glfw fix 2/2 coexist.
+  3. [IN PROGRESS] PLACE re-acceptance on bare REPL (place-only fresh sessions, 3 colours, resting_on_receptacle oracle +
+     Qwen3-VL eyes, launch_explore EMPTY). /tmp/place_campaign2.sh driving repl_accept.py MODE=place.
+  4. [THEN] Track B guardrails (G1..G5); frontier (robust find-fetch-place → VLN/SysNav → 2nd embodiment g1 → BYO model/skill).
 tooling (scratchpad/, git-tracked): repl_accept.py (BARE-REPL pexpect driver — the true acceptance face, no -p/flag),
   measure_qwen.py (-p probe, NOT the face), place_probe.py. GOTCHAS: `pgrep -f launch_explore` matches the loop's own
   claude -p argv (goal text) — match `launch_explore\.sh` + exclude claude; pexpect needs codec_errors='replace';
