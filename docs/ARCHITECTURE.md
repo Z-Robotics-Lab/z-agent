@@ -204,6 +204,34 @@ The architectural form of the CLAUDE.md Rules. Anything that violates them is a 
   driver, never a bespoke per-robot class; every body conforms uniformly to `BaseProtocol`.
   If adding a robot needs a kernel/driver edit, the difference belongs in config.
 
+**Vision-witness honesty (the L2 second witness of §4; formerly ADR-002).** The visual
+witness extends the Verify contract but can never soften the moat — seven non-negotiable
+invariants:
+
+- **Downgrade-only.** Vision may only DOWNGRADE, never UPGRADE; `evidence_passed` /
+  `classify_step_evidence` stays the SOLE path to GROUNDED — no vision field can flip a GT
+  FAIL/RAN to `verified` (contract-tested, mirroring `test_verdict_matches_evidence_passed`).
+- **Orthogonal to the oracle.** The rubric asks only perceptual/embodiment questions the
+  pose-reading oracle is blind to (upright-not-floating, rendered-not-black, target-in-frame,
+  gripper-enclosing, no teleport across the strip) — never "did it succeed?". Vision and GT
+  are independent by construction.
+- **Fail-closed ABSTAIN.** ABSTAIN / low-confidence / blank-or-stale frame / API-unavailable
+  all count as NOT-PASS and a red-team trigger — never a tie-break that loosens the gate.
+- **Same-instance frame.** The verification frame MUST come from the SAME sim process that
+  executed the bare-cli turn (the `VECTOR_SNAPSHOT_DIR` child hook, written just before the
+  `VECTOR_VERDICT` sentinel), with proof the real launcher + real VLM ran (token receipt;
+  non-black, non-stale frame). NEVER a second freshly-built in-process sim; NEVER a stub-VLM
+  on any acceptance path.
+- **No GT leak.** The frame and any Set-of-Marks annotation derive from the perception
+  pipeline/pixels, never a GT predicate; vision never sees the ground truth (verify anchors
+  stay invisible to the means).
+- **Generator ≠ evaluator.** The judge VLM is a different model family from the routing
+  brain, so the actor can never grade itself.
+- **Frozen-surface checksum.** The GT oracle, `verdict.py` / `trace_store.py` /
+  `actor_causation.py`, the VisionJudge rubric, the capture code, the gate, and the held-out
+  set are CI-checksum-pinned and read-only to any self-edit branch — a self-improver
+  physically cannot weaken its own gate.
+
 ---
 
 ## 7. Conceptual module map
