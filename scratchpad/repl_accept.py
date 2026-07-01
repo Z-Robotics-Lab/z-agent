@@ -166,12 +166,17 @@ try:
     raw = open(f"{SNAP}/repl.raw.log", encoding="utf-8", errors="replace").read()
     clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][0-9;]*|\x1b", "", raw)
     verds = re.findall(r"verified\s*=\s*(True|False)\s*\((\d+)/(\d+)\s*grounded\)", clean)
-    if len(verds) >= 1:
-        result["fetch_verified"] = verds[0][0] == "True"
-        result["fetch_grounded"] = f"{verds[0][1]}/{verds[0][2]}"
-    if len(verds) >= 2:
-        result["place_verified"] = verds[1][0] == "True"
-        result["place_grounded"] = f"{verds[1][1]}/{verds[1][2]}"
+    # Map emitted verdicts to the turns that ACTUALLY ran (mode-aware). In place-only
+    # mode a single verdict is emitted — it is the PLACE verdict, NOT the fetch one
+    # (the old positional parse mislabeled it fetch_verified, leaving place_verified=None).
+    turns = []
+    if MODE in ("both", "fetch"):
+        turns.append("fetch")
+    if MODE in ("both", "place"):
+        turns.append("place")
+    for turn, verd in zip(turns, verds):
+        result[f"{turn}_verified"] = verd[0] == "True"
+        result[f"{turn}_grounded"] = f"{verd[1]}/{verd[2]}"
 except Exception as exc:  # noqa: BLE001
     print(f"[driver] verdict parse failed: {exc}", flush=True)
 
