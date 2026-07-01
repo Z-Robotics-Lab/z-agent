@@ -1,15 +1,17 @@
-# SkillFlow — Declarative Skill Routing Protocol
+# SkillFlow — Skill Plug-in Protocol (+ legacy alias routing)
 
 **Version:** 1.0
-**Status:** Implemented
+**Status:** the `@skill` PLUG-IN protocol (declare a skill = one class + one decorator, no kernel edit) is LIVE. The alias / `auto_steps` / VGG-GoalDecomposer **keyword routing** it originally shipped with is **LEGACY — being strangled at S8 (pending CEO approval)**; the model-driven native producer routes now (see docs/cli-tool-system.md "当前 producer 架构" + docs/DECISIONS.md D62/D72–D74). Sections tagged **[LEGACY routing]** below describe that fallback path, kept for reference — NOT removed until S8 lands.
 
 ## Overview
 
-SkillFlow is Vector OS Nano's declarative skill routing protocol. It replaces all hard-coded command routing with a single `@skill` decorator that declares how each skill is discovered, matched, and executed.
+SkillFlow is Vector OS Nano's skill plug-in protocol: a `@skill` decorator declares how each skill is discovered, its params, and its pre/postconditions, so **adding a skill is one class + one decorator — no kernel or routing-code edits** (the North Star "bring a skill" contract). It originally also did all command routing by keyword-matching skill `aliases`; that routing layer is now legacy (see the status note above).
 
-The core principle: **skills describe themselves, the system routes automatically.**
+The core principle: **skills describe themselves.** (Routing is now the model's job, not alias matching.)
 
-## How It Works
+## How It Works [LEGACY routing]
+
+> Alias-match → `auto_steps` expansion (zero-LLM). Retiring at S8 (pending CEO approval); the model now routes by reading tool descriptions.
 
 ```
 User Input: "抓杯子"
@@ -35,6 +37,8 @@ Done. Zero LLM calls.
 ```
 
 ## The @skill Decorator
+
+> **LIVE plug-in protocol.** The decorator + its fields (`parameters`, `preconditions`, `postconditions`, `effects`) are how a skill declares itself and registers with zero kernel edits — this stays. Only the use of `aliases` / `auto_steps` as *routing triggers* is legacy (S8); the fields themselves still describe the skill.
 
 ```python
 from vector_os_nano.core.skill import skill, SkillContext
@@ -69,7 +73,9 @@ class PickSkill:
 | direct | bool | If True, execute immediately without any LLM call |
 | auto_steps | list[str] | Default skill chain for common patterns |
 
-## Routing Logic
+## Routing Logic [LEGACY routing]
+
+> The keyword cascade below (`registry.match` → direct / auto_steps / LLM) is the legacy `IntentRouter`-era path, being strangled at S8 (pending CEO approval). The native producer replaces it — the model reads tool descriptions and routes itself.
 
 ```
 User Input
@@ -107,13 +113,15 @@ The 10 arm skills below are available when an arm agent is connected (via `vecto
 | gripper_close | close, grip, 夹紧, 合上 | Yes | - |
 | handover | handover, give, 递, 递给 | No | - |
 
-### Auto-steps and SkillWrapperTool
+### Auto-steps and SkillWrapperTool [LEGACY routing]
 
-`pick` declares `__skill_auto_steps__ = ["scan", "detect", "pick"]`. When the agent calls the `pick` tool, `SkillWrapperTool.execute()` reads this attribute and expands the call into the full step chain before any LLM planning — zero additional LLM calls for the common case.
+`pick` declares `__skill_auto_steps__ = ["scan", "detect", "pick"]`. When the agent calls the `pick` tool, `SkillWrapperTool.execute()` reads this attribute and expands the call into the full step chain before any LLM planning — zero additional LLM calls for the common case. (Retiring at S8; the model now plans the chain.)
 
-### Complex / Long-chain Tasks
+### Complex / Long-chain Tasks [LEGACY routing]
 
-For multi-step or ambiguous goals (e.g. "把鸭子放到左前方", "整理桌面"), simple auto_steps expansion is insufficient. These route through the **VGG GoalDecomposer** in `vcli/cognitive/` (`goal_decomposer`, `goal_executor`, `goal_verifier`, `strategy_selector`, `vgg_harness`). The decomposer breaks the goal into a plan, verifies preconditions, and calls `agent.execute_skill()` for each step — this path may involve multiple LLM calls and is designed for robustness, not zero-LLM speed.
+> The **VGG GoalDecomposer** producer below is legacy, being strangled at S8 (pending CEO approval); the native model-driven producer handles multi-step goals now. Its files still exist as the fallback path.
+
+For multi-step or ambiguous goals (e.g. "把鸭子放到左前方", "整理桌面"), simple auto_steps expansion is insufficient. These route through the **VGG GoalDecomposer** in `vcli/cognitive/` (`goal_decomposer`, `goal_executor`, `goal_verifier`, `strategy_selector`, `vgg_harness`). The decomposer breaks the goal into a plan, verifies preconditions, and calls `agent.execute_skill()` for each step — this path may involve multiple LLM calls and is designed for robustness, not zero-LLM speed. Note: `goal_verifier` / the honest-verify spine is NOT part of this legacy layer — it is unchanged and shared by all producers.
 
 ## Adding a Custom Skill
 
@@ -151,7 +159,9 @@ agent.register_skill(WaveSkill())
 # "wave 5 times" → LLM plans with params
 ```
 
-## Multi-Stage Agent Pipeline
+## Multi-Stage Agent Pipeline [LEGACY routing]
+
+> The 6-stage keyword pipeline below is the legacy producer, being strangled at S8 (pending CEO approval). The native producer collapses MATCH/CLASSIFY/PLAN into the model's own tool-use loop.
 
 When alias matching can't handle the input, the full pipeline runs:
 
@@ -170,8 +180,8 @@ Complex tasks use the full pipeline.
 
 ## Design Principles
 
-1. Skills describe themselves — aliases, parameters, pre/postconditions
-2. Simple things should be fast — direct skills have zero LLM overhead
-3. LLM is for reasoning, not routing — alias matching handles 80% of inputs
-4. Adding a skill is one class + one decorator — zero routing code changes
-5. Chinese and English are first-class — aliases support both languages
+1. Skills describe themselves — aliases, parameters, pre/postconditions (LIVE)
+2. Adding a skill is one class + one decorator — zero kernel/routing code changes (LIVE plug-in contract)
+3. Chinese and English are first-class — aliases support both languages (LIVE)
+4. [LEGACY routing, S8] Simple things should be fast — `direct` skills had zero-LLM overhead
+5. [LEGACY routing, S8] "LLM is for reasoning, not routing — alias matching handles 80%" — superseded: the model now does the routing too

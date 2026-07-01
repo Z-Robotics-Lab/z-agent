@@ -1,176 +1,113 @@
 # Tricky Bugs — hidden-bug casebook
 
-**This doc records the IMPLICIT/hidden bugs hit during development** — the ones whose
-symptom pointed away from the cause, that survived a green test suite, or that hid behind
-"every component is correct in isolation". Append-only, newest case first. Keep entries
-SHORT: dot points, key facts only (symptom → why hidden → root cause → fix → lesson).
-Routine bugs do NOT belong here; git history covers those.
+Records the IMPLICIT/hidden bugs only — the ones whose symptom pointed AWAY from the cause,
+that survived a green test suite, or hid behind "every component is correct in isolation".
+Append-only, newest first. Entries are terse dot-points (symptom → why hidden → root → fix →
+lesson) — key facts only. Routine bugs (typos, missing imports, obvious config) do NOT belong
+here; git history covers them, and covers the full prose of these once trimmed.
 
 ---
 
-## Case 10 — FAKEABLE GRASP: "抓前面的东西" graded GROUNDED by a self-written marker file, not the gripper (2026-06-24, D69)
-- **Symptom:** a bare-cli + NL grasp on go2+arm graded GROUNDED (verified=True) without the gripper ever holding anything. The model wrote `grabbed.txt` via `file_write` and verified `file_exists('grabbed.txt')`.
-- **Why hidden / pointed away:** every component was "correct in isolation" and every existing moat gate fired correctly — for the WRONG reason. `file_exists` is a legitimate PREDICATE oracle (a dev `file_exists('/etc/passwd')` SHOULD ground for a dev task), so the structural classifier `classify_verify_expr` correctly returned GROUNDED. Actor-causation correctly returned NOT_GRADED (it only grades ROBOT predicates base/arm/gripper; `file_exists` isn't one). The D15/D16 coordinate turn-gate correctly failed OPEN (no coordinate goal). Three correct local decisions composed into one global false-green — the failure was the ABSENCE of a gate, not a bug in any present gate.
-- **Root cause (two enabling conditions, both needed):** (1) the native loop offered the kernel-generic mutating dev tool `file_write` as a "motor tool" in EVERY world including the robot world, so the model HAD a file-write action path to "do" a physical task; (2) no gate tied a physical-GRASP goal to a GT MANIPULATION oracle the way D15/D16 tie a coordinate goal to `at_position` — so any author-writable PREDICATE oracle (`file_exists`/`path_contains`) satisfied a grasp.
-- **Fix (two prongs, D69):** Prong 1 (routing) — a robot world DROPS file_write/file_edit/bash from the loop's action surface (keeps read-only file_read/glob/grep) + a persona binding "never fake a physical action with a file/shell". Prong 2 (the un-fakeable backstop) — a stricter-only object-goal turn-gate in `evidence_passed`: a grasp-intent goal must be GROUNDED via a NECESSARY `holding_object`/`placed_count` conjunct, else RAN. The fake now grades RAN; a real grasp (`holding_object` weld-CAUSED) stays GROUNDED.
-- **Lesson:** a PREDICATE oracle that is honest for one domain (a dev file check) is a FABRICATION VECTOR for another (a physical grasp) — the moat must bind the goal CATEGORY (coordinate / grasp / …) to the oracle that can only be true if THAT category of work happened, not merely require "some oracle classified GROUNDED". When a class of goal has a GT oracle the actor cannot author (here `holding_object`'s gripper weld), make that oracle MANDATORY for that goal class via a turn-gate; mirror the proven coord_goal D15/D16 pattern rather than inventing a new shape. And: a generic dev tool is not a generic ACTION — gate write/shell tools out of a domain where "writing a file" is never a legitimate way to perform the task.
+## Case 10 — Fakeable grasp graded GROUNDED by a self-written marker file, not the gripper (2026-06-24, D69)
+- Symptom: bare-cli NL grasp on go2+arm graded verified=True with the gripper empty — model wrote `grabbed.txt` via `file_write`, verified `file_exists('grabbed.txt')`.
+- Why hidden: every gate fired correctly for the WRONG reason. `file_exists` is a legit PREDICATE oracle → GROUNDED; actor-causation correctly NOT_GRADED (not a robot predicate); the coord turn-gate failed OPEN (no coord goal). The false-green was the ABSENCE of a gate, not a bug in any present one.
+- Root cause: (1) the kernel dev tool `file_write` was offered as a motor tool in the robot world; (2) no gate bound a physical-GRASP goal to a GT manipulation oracle the way D15/D16 bind a coord goal to `at_position`.
+- Fix (D69): robot world DROPS file_write/edit/bash from the action surface + persona "never fake a physical action with a file/shell"; stricter object-goal turn-gate in `evidence_passed` requires a NECESSARY `holding_object`/`placed_count` conjunct.
+- Lesson: an oracle honest for one domain is a FABRICATION VECTOR for another — bind the goal CATEGORY to an oracle only true if THAT work happened, and make an un-authorable GT oracle MANDATORY per goal class (mirror the coord D15/D16 pattern). A generic dev tool is not a generic ACTION.
 
-## Case 9 — go2+Piper IK base-sync read a LITERAL `qpos[0:19]` — broke when S3b's MjSpec.attach moved the go2 freejoint 0→21 (2026-06-24, S3b verification)
-- **Symptom:** none in unit/spike tests (all green; compiled model byte-identical) — but the grasp would silently target the WRONG frame once the dog moved off-spawn under the new attach scene.
-- **Why hidden:** a byte-identical COMPILED MODEL check (same nq/nv/names/class-defaults) CANNOT see a runtime absolute-qpos-INDEX assumption in a CONSUMER. `MuJoCoPiper._sync_ik_base_from_live` copied `live_qpos[0:19]` to seed the IK's base+legs — correct under the legacy `<include>` scene (go2 freejoint at qpos[0]); but under `MjSpec.attach` the room's 3 pickable freejoints occupy [0:21] and go2 sits at [21], so [0:19] copied PICKABLES → the IK ran FK on a stale/default base → wrong EE frame. At spawn it happened to match (both at default), so it only bites AFTER the dog moves.
-- **Caught by:** orchestrator verification (the build agent missed it — `mujoco_piper.py` was outside its diff). A blast-radius grep for absolute `qpos[N]`/`qvel[N]` reads across sim/perception/bridge after the reorder isolated this as the ONLY remaining consumer, then a race-free e2e (pause physics, move the dog to 12.5,4.0, sync, assert the IK base tracks it → got 12.5/4.0, not the default 10/3).
-- **Fix:** `_lo = go2._mj.layout.root_qpos_adr; _n = 7 + num_actuated; ik_data.qpos[_lo:_lo+_n] = live_qpos[_lo:_lo+_n]` — DofLayout-derived; byte-identical for the legacy build (lo=0).
-- **Lesson:** a byte-identical compiled MODEL does NOT imply byte-identical qpos ORDER. An attach reorder breaks EVERY absolute `qpos[N]` read in CONSUMERS, not just the driver. After any layout change, blast-radius-grep ALL qpos/qvel index reads AND e2e a MOVED (not spawn) pose — a spawn-only test passes even when broken. Sibling of Case 8.
+## Case 9 — Piper IK base-sync read a LITERAL `qpos[0:19]`; broke when attach moved the go2 freejoint 0→21 (2026-06-24, S3b)
+- Symptom: none in unit/spike (all green, compiled model byte-identical) — but the grasp silently targets the WRONG frame once the dog moves off-spawn under the new attach scene.
+- Why hidden: a byte-identical COMPILED-MODEL check (nq/nv/names/defaults) cannot see a runtime absolute-qpos-INDEX assumption in a CONSUMER. Under `MjSpec.attach` the room's 3 pickable freejoints occupy [0:21] and go2 sits at [21], so `live_qpos[0:19]` copied PICKABLES → IK ran FK on a stale base. At spawn both matched (default), so it only bites AFTER motion.
+- Fix: `_lo = go2._mj.layout.root_qpos_adr; _n = 7 + num_actuated; ik_data.qpos[_lo:_lo+_n] = live_qpos[_lo:_lo+_n]` (DofLayout-derived; byte-identical for legacy, lo=0).
+- Lesson: byte-identical compiled MODEL ≠ byte-identical qpos ORDER. After any layout change, blast-radius-grep ALL absolute `qpos[N]`/`qvel[N]` reads in CONSUMERS (not just the driver) and e2e a MOVED (not spawn) pose — a spawn-only test passes even when broken.
 
-## Case 8 — go2 arm-stow guarded on `model.nq >= 27` mis-fired for BARE go2 — the room's pickable free joints inflate nq (2026-06-24, S3b)
-- **Symptom:** surfaced only when S3b flipped go2's scene-build to `MjSpec.attach` — bare-go2 connect() raised `could not broadcast input array from shape (8,) into shape (0,)` at the arm-stow line. Pointed the finger at the new attach build / qpos reordering.
-- **Why hidden:** under the legacy `<include>` build, `qpos[19:27]` happened to be in-bounds (it landed on pickable qpos) and `_PIPER_STOW_QPOS` is all-zeros, so the mis-fire was a SILENT no-op (it zeroed 8 pickable-freejoint qpos values that get re-placed anyway). The attach build's reordering moved the slice out of bounds, turning the latent silent bug into a hard crash that finally exposed it.
-- **Root cause:** the guard `if model.nq >= 27` assumed "arm present ⇒ nq≥27, bare ⇒ nq=19". FALSE: the room's three `pickable_*` free joints (7 qpos each) put BARE go2 at nq=40 in BOTH build paths — qpos count is a SCENE property (room contents), not a robot-morphology discriminator — so `40>=27` fired for the bare model and tried to stow a nonexistent arm.
-- **Fix:** gate on `model.nu >= 19` (the arm adds exactly 7 ACTUATORS; nu = 12 bare / 19 arm, identical across both build paths and independent of scene contents); address the arm slice as `joint_qpos_start + num_actuated` (DofLayout-derived, order-agnostic).
-- **Lesson:** never discriminate ROBOT morphology by `nq` — qpos count is contaminated by SCENE free joints (pickables, doors, anything jointed). Use an actuator count (`nu`) or a named-element probe. And an in-bounds + all-zeros write is the textbook SILENT latent bug: it passes every test until a layout change moves it out of bounds.
+## Case 8 — arm-stow guarded on `model.nq >= 27` mis-fired for BARE go2 — room pickables inflate nq (2026-06-24, S3b)
+- Symptom: surfaced only when attach flipped the scene-build — bare-go2 connect() raised `broadcast (8,) into shape (0,)` at arm-stow. Blamed the new attach build.
+- Why hidden: under the legacy `<include>` build the slice was in-bounds and `_PIPER_STOW_QPOS` is all-zeros → a SILENT no-op (zeroed pickable qpos that get re-placed). Attach's reorder moved it out of bounds → the latent bug became a hard crash.
+- Root cause: `nq >= 27` assumed "arm ⇒ nq≥27". FALSE: the room's 3 `pickable_*` freejoints (7 qpos each) put BARE go2 at nq=40 in BOTH builds — qpos count is a SCENE property, not a robot-morphology discriminator.
+- Fix: gate on `model.nu >= 19` (arm adds exactly 7 ACTUATORS; nu=12 bare / 19 arm, scene-independent); address the slice as `joint_qpos_start + num_actuated`.
+- Lesson: never discriminate ROBOT morphology by `nq` (contaminated by scene freejoints) — use `nu` or a named-element probe. An in-bounds + all-zeros write is the textbook silent latent bug.
 
-## Case 7 — placed_count never grounds when placing onto the pedestal: `_LIFT_MIN_Z=0.10` excludes the z=0.32 table surface (2026-06-21)
+## Case 7 — placed_count never grounds on the pedestal: `_LIFT_MIN_Z=0.10` excludes the z=0.32 table top (2026-06-21)
+- Symptom (latent, caught by a design-probe before coding): the obvious place target (a clear spot on the pedestal top, ~z=0.32, as the brief itself suggested) makes a successful-LOOKING place (skill.success, weld released) grade the PLACE verify FALSE forever — `placed_count(region)` returns 0.
+- Why hidden: every component looks correct (arm reaches, gripper opens, object sits where asked). The failure lives in the ORACLE's resting-height gate: `make_placed_count` counts only objects with `z < _LIFT_MIN_Z` (0.10) = "on the floor"; a pedestal-top place stays above the gate → 0.
+- Compounding: D34 kinematics reach FURTHER the HIGHER it goes → biases toward placing high, exactly where placed_count can't ground.
+- Resolved by: an empirical reach-grid probe (not a guess) → the floor (z~0.05) IS reachable from the grasp standoff; place target = floor (10.60, 2.70, 0.05) settles to z~0.04 < 0.10 → placed_count==1, GROUNDED.
+- Lesson: a verify oracle encodes IMPLICIT geometry ("placed == on the floor"). Read the oracle's gate and MEASURE that a target satisfying BOTH reach AND the oracle exists — never trust the brief's suggested coordinate. Do NOT loosen the gate (rule 5: verify only ever stricter); probe first, geometry decides the design.
 
-- **Symptom (latent, caught by design-probe before coding):** the obvious place target — a "clear spot on the pedestal at a different y", e.g. (10.85, 2.7, **0.32**), as the task brief itself suggested — would make a *successful-looking* place (skill.success=True, placed_at reported, weld released) grade the PLACE verify FALSE forever: `placed_count(region)` returns **0**.
-- **Why hidden:** every component looks correct — the arm reaches the pedestal-top target, the gripper opens, the object sits where asked, skill.success=True. The failure is silent and lives in the ORACLE's resting-height gate, not in the place motion. `make_placed_count` (in arm_sim_oracle.py) only counts objects with `z < _LIFT_MIN_Z` (0.10) — "resting on the FLOOR". The green's pedestal top is z=0.28 (object centre 0.32), so a place back onto the pedestal leaves the object ABOVE the gate → counted as "still lifted / in flight" → 0. The brief's own suggested target was infeasible against the existing oracle.
-- **Compounding tension:** the D34 kinematics say the Piper reaches FURTHER the HIGHER it goes (~0.49 m fwd at z~0.32 vs ~0.22 m at z~0.25), which biases toward placing HIGH — exactly where placed_count can't ground. So "reach feasibility" and "placed_count semantics" pull opposite ways.
-- **Resolved by:** an empirical reach-grid probe (NOT a guess) before writing any code — measured that the FLOOR (z~0.05) IS reachable from the grasp standoff (dog jammed x~10.41) across a broad central corridor (tx 10.55-10.80, ty 2.70-3.40). Place target = floor (10.60, 2.70, 0.05); green settles to z~0.0399 < 0.10 → placed_count((10.45,2.55,10.75,2.85))==1, GROUNDED.
-- **Lesson:** a verify oracle encodes IMPLICIT geometric assumptions (here "placed == on the floor"). Before choosing a place target, read the oracle's gate (`_LIFT_MIN_Z`) and MEASURE that a target satisfying BOTH reach AND the oracle exists — never assume the task brief's suggested coordinate is oracle-valid. Do NOT "fix" it by loosening the gate (rule 5: verify only ever stricter). Probe first; the geometry decides the design.
+## Case 6 — nav+grasp "never grounds" = a MISSING declared dep + a model-API shape bug degrading EdgeTAM to a box-rect mask (2026-06-23, R39)
+- Symptom: the full nav→dock→perceive→grasp chain completed but holding_object stayed False; perceived grasp-z was LOW (0.13/0.044 vs true 0.32) so the gripper closed below the can. An A/B perceive probe showed a clean 2.8 cm grasp → pointed at "off-axis lateral IK", a red herring.
+- False trail: the A/B probe and the e2e chain ran the SAME perceive code, so "perception fine, residual is IK" looked airtight — they differed in ONE invisible way: whether EdgeTAM actually segmented.
+- Root cause (two layers): (1) `timm` declared in pyproject but absent from `.venv` → EdgeTAM failed to LOAD → box-rect fallback → depth centroid averaged can+table → z collapsed. (2) After installing timm, `float(object_score_logits[i])` raised (transformers≥5 returns (N,1)) → still box-rect. Tell: grep-able `[GO2-PERCEPT] EdgeTAM unavailable — box-rect fallback`, present in the e2e log but NOT the A/B log.
+- Lesson: when two runs of the SAME perception code disagree, suspect a SILENTLY-degrading optional model path before re-theorizing geometry. A box-rect mask is not an adequate substitute for a tight segmentation for depth-centroid grasping. Guards: make a segmenter-degrade LOUD at the grasp boundary; keep optional model deps env-synced.
 
-## Case 0 — Go2 won't walk (walk + explore "PASS" but dog stays put): casadi missing because `[all]` omitted `[go2]` (2026-06-18)
+## Case 5 — GREEN cylinder INVISIBLE (0 px): the TABLE's near top edge occluded it, not the arm (2026-06-20)
+- Symptom: after objects moved onto a tall pedestal (top z=0.28), the central GREEN rendered 0 px in the head cam while RED/BLUE (same z/distance) rendered fine → looked like arm self-occlusion again.
+- False trails (ruled out by probes): NOT the arm (green 0 px at every arm pose); NOT colour/saturation (depth at green's projected pixel read 3.708 m = the far doorway, i.e. camera saw THROUGH it). Green was physically present, just not on that line of sight.
+- Root cause: the d435 (z~0.38, shallow down-tilt) grazes the table top; an object within ~6 cm of the near TOP EDGE is occluded by the lip. Green at x=10.82 (2 cm on) → occluded; red/blue at x=10.90 (10 cm on) → clear. Empirically x≤10.82 → 0 px, x≥10.88 → ~1000 px.
+- Fix: object placement (not code) — keep objects ≥8 cm back from the near edge (final: near edge 10.80, green at 10.88).
+- Lesson: when ONE of several identical objects is invisible, sample DEPTH at its projected pixel before blaming the robot — depth ≫ object distance means a static-scene occluder (here the table's own edge). A taller support surface trades reach for self-occlusion of its own near edge.
 
-- **Symptom:** every `walk`/`explore` returns `[PASS]` but the dog doesn't move — stands and drifts ~0.15 m for a ~1 m command, body z destabilizes. Looked like a TARE/nav problem; it was not.
-- **Why hidden:** judged by the WRONG signals. `walk` returns PASS on a timer; the bridge `odom=N` is a *message count* (not motion); `nav=ON` + path-count climb regardless of real movement; the MPC solver error was swallowed per-tick. The whole stack reported success while the robot sat still. (Certified "gait works" twice off PASS/odom-count before measuring position.)
-- **Root cause:** the convex-MPC gait needs `casadi` (its QP solver). `pyproject` pinned casadi in the `[go2]` extra, but `all = [sim,perception,ik,mcp]` **omitted `go2`**, so a `.[all]` venv never installed casadi. casadi is imported LAZILY inside `convex_mpc.centroidal_mpc` on the first solve, so `connect()` set `_use_mpc=True` (convex_mpc + pinocchio import fine) and the QP then threw EVERY tick (`_MPC_DIAG: qp_ok=0, qp_fail=149`) → zero torque → no walk. "Worked before" = casadi was installed then; a venv rebuild dropped it.
-- **Cracked by:** measuring the actual base POSITION delta (0.149 m vs ~1 m), then `VECTOR_MPC_LOG=1` → `qp_fail=149/149`, then `import casadi` → ModuleNotFoundError.
-- **Fix:** (1) `pyproject` `all` now includes `go2` so casadi is always installed. (2) `MuJoCoGo2._init_mpc_stack` imports casadi EAGERLY → a missing dep raises at connect → clean fallback, never a silent per-tick stumble. (3) the auto→sinusoidal fallback log is now a WARNING naming the cause + `uv pip install -e .[go2]`. Verified: casadi present → `qp_ok=142, qp_fail=0`, walk delta 0.15 m → 0.57 m.
-- **Lesson:** NEVER certify robot motion from PASS / odom-count / nav-flag — measure the actual position/state delta (ground truth). A capability's HARD dep must be in the install set it ships in, or fail loud at connect — never a lazily-imported solver that fails silently every tick.
+## Case 4 — Grasp picked a brown table sliver, not the green cylinder: saturation-bridge blob FUSION (2026-06-20)
+- Symptom: the deictic grasp aimed ~12 cm off (a 116px brown sliver) only when the Piper arm was connected. 3 rounds chased it as robot SELF-OCCLUSION (arm in head cam) — every fix a no-op.
+- Why hidden: the symptom CORRELATED with connecting the arm, so it looked like an arm-view problem. It wasn't: the arm only nudges the dog's settle by mm, shifting WHICH brown sliver wins an already-broken selection. Green was lost in BOTH configs; one render let green win, faking a "go2-only works" contrast.
+- Root cause: `front_object._SAT_MIN=140` is BELOW the brown table's saturation (p90~146, max~160) → the table passes the mask in 1-3px chains that 8-connectivity FUSES cylinders+table into one blob, so central green stops being its own component and the "most-central blob" fallback grabs a table sliver.
+- Fix: morphological OPENING (erode→dilate, 3×3) on the salient mask before connected-components — severs sub-kernel bridges threshold-independently. Full-config: front=755px GREEN, grasp 2.3 cm (was 12.2).
+- Lesson: when a saliency THRESHOLD overlaps the background, the failure is a connected-component TOPOLOGY bug (blobs fuse), and the wrong winner drifts with tiny scene changes, faking "config A works, B doesn't". Dump the candidate blobs (area/centroid/colour); the central object simply not being in the list is the tell. Fix the topology, not the threshold.
 
-## Case 1 — Go2 explore gait instability (飘/瘸腿): two-clock skew (2026-06, fixed `d7e158b`)
-
-- **Symptom:** during explore the gait went unstable/limping, step size over/undershoot.
-  Worse on a loaded machine (GUI + RViz). Single `walk` skill commands looked fine.
-- **Why hidden:** every component was correct in isolation. Ruled out BY DATA before the
-  real cause: code regression (gait + bridge byte-identical to a known-good commit),
-  duplicate cmd sources (cmd log: single MainThread @19 Hz, smooth), duplicate physics
-  daemons (count=1), mujoco 3.1.6-vs-3.9, pinocchio 3.9-vs-4.0 (dynamics byte-identical),
-  swallowed QP failures (2645/2645 ok), solver tolerance, velocity smoothing.
-- **Root cause:** a CROSS-DOMAIN interaction invisible in either domain alone. The physics
-  daemon ran compute-bound at ~0.65× real-time, while `go2_vnav_bridge._follow_path`
-  ramped velocity by fixed per-tick increments on a 20 Hz WALL timer → the commanded
-  velocity profile slewed ~1.5× faster in the gait's own (sim) time than it was tuned
-  for → MPC gait destabilized.
-- **Cracked by:** measuring before theorizing — tiny env-gated diagnostics
-  (`VECTOR_PHYS_LOG` printed `sim/wall≈0.65x` + daemon count; `VECTOR_CMDVEL_LOG` proved
-  one clean command source). The ratio number WAS the diagnosis.
-- **Fix:** integrate every ramp/accumulator in `_follow_path` against actual sim-dt
-  (`hardware/sim/sim_clock.sim_tick_dt` + `MuJoCoGo2.get_sim_time()`); the wall-escape
-  state machine converted to sim time too (adversarial review caught the remaining mixed
-  time bases). sim/wall=1 → byte-identical; no sim clock (real HW) → nominal fallback.
-- **Lesson:** a wall-clock controller commanding a simulation must integrate by sim-dt.
-  "Sim runs slower than real-time" silently changes the meaning of every per-tick
-  constant — and no unit test catches it, because each side is correct alone.
+## Case 3 — Explore stack silently ran on the WRONG interpreter: dead PYTHONPATH (2026-06, `13a9429`)
+- Symptom: none at first — explore "worked", but on system python3 (mujoco 3.6) instead of the repo venv (mujoco 3.9) where the MPC fix was verified.
+- Why hidden: the uv rebuild renamed `.venv-nano`→`.venv`; scripts' PYTHONPATH pointed at the deleted dir. Python SILENTLY ignores nonexistent path entries and falls back to system site-packages. Venv path was hardcoded in 12+ scripts with no existence check.
+- Fix: all launch/test scripts prefer `.venv` with a `.venv-nano` fallback; single source.
+- Lesson: PYTHONPATH to a missing dir fails silent — when debugging "version mismatch" symptoms, print `module.__file__` to verify WHICH copy loaded.
 
 ## Case 2 — MPC "stands but won't walk": errors swallowed by `except: pass` (2026-06)
+- Symptom: the dog stood but never walked. No error, no warning, anywhere.
+- Why hidden: the per-tick QP fallback was a bare `except Exception: pass` — it ate the SAME exception every tick, so a hard dependency break presented as silent physical misbehavior, not a stack trace.
+- Root cause: external `convex_mpc` was written for numpy<2; the rebuilt venv had numpy 2.x, which hard-errors on `(N,1)`→scalar assignment → the solver threw every tick → PD-hold only.
+- Fix: shape-only fixes at source; the except clauses now count+log failures (`VECTOR_MPC_LOG`).
+- Lesson: `except: pass` on a control path converts loud failures into silent wrong behavior. Always count/log swallowed exceptions — "0 failures" must be provable.
 
-- **Symptom:** the dog stood up but never walked. No error, no warning, anywhere.
-- **Why hidden:** the QP fallback in the per-tick control loop was a bare
-  `except Exception: pass` — it ate the SAME exception every single tick, so a hard
-  dependency break presented as silent physical misbehavior instead of a stack trace.
-- **Root cause:** external `convex_mpc` was written for numpy<2; the rebuilt venv had
-  numpy 2.x, which hard-errors on `(N,1)`-array→scalar-slot assignment. The solver threw
-  on every tick → no torque ever computed → PD hold only.
-- **Fix:** shape-only fixes at the source (`compute_com_x_vec` → `(12,)`,
-  `compute_current_mask` → `(4,)`); the except clauses now count+log failures
-  (`VECTOR_MPC_LOG`). NOTE: convex_mpc is still not pinned in `pyproject.toml`.
-- **Lesson:** `except: pass` on a control path converts loud failures into silent wrong
-  behavior. Always count/log swallowed exceptions — "0 failures" must be provable.
+## Case 1 — Go2 explore gait instability (飘/瘸腿): two-clock skew (2026-06, `d7e158b`)
+- Symptom: during explore the gait went unstable/limping; worse on a loaded machine (GUI+RViz); single `walk` commands looked fine.
+- Why hidden: every component correct in isolation; ruled out BY DATA (byte-identical gait/bridge, single cmd source @19 Hz, one physics daemon, identical dynamics libs, 2645/2645 QP ok).
+- Root cause: a CROSS-DOMAIN interaction invisible in either domain alone — the physics daemon ran at ~0.65× real-time while `_follow_path` ramped velocity by fixed per-tick increments on a 20 Hz WALL timer, so the profile slewed ~1.5× faster in sim-time than tuned for → MPC destabilized.
+- Cracked by: measuring before theorizing (`VECTOR_PHYS_LOG` printed sim/wall≈0.65×; the ratio WAS the diagnosis).
+- Fix: integrate every ramp/accumulator against actual sim-dt (`sim_clock` + `get_sim_time()`); sim/wall=1 → byte-identical.
+- Lesson: a wall-clock controller commanding a simulation must integrate by sim-dt. "Sim slower than real-time" silently changes the meaning of every per-tick constant — no unit test catches it, each side is correct alone.
 
-## Case 3 — Explore stack silently ran on the WRONG interpreter: dead PYTHONPATH (2026-06, fixed `13a9429`)
+## Case 0 — Go2 won't walk (walk/explore "PASS" but dog stays put): casadi missing — `[all]` omitted `[go2]` (2026-06-18)
+- Symptom: every `walk`/`explore` returns [PASS] but the dog doesn't move (~0.15 m for a ~1 m command). Looked like a TARE/nav problem.
+- Why hidden: judged by the WRONG signals — `walk` PASSes on a timer, `odom=N` is a message count (not motion), `nav=ON` regardless of movement, the MPC error was swallowed per-tick. The whole stack reported success while the robot sat still (certified "gait works" twice off PASS/odom before measuring position).
+- Root cause: convex-MPC needs `casadi` (its QP solver), pinned only in the `[go2]` extra, but `all=[sim,perception,ik,mcp]` OMITTED `go2` → `.[all]` venv had no casadi. casadi imports LAZILY on first solve, so connect() set `_use_mpc=True` then the QP threw EVERY tick (qp_fail=149/149) → zero torque.
+- Fix: `all` now includes `go2`; `_init_mpc_stack` imports casadi EAGERLY (fails loud at connect, clean fallback); fallback log names the cause + install cmd.
+- Lesson: NEVER certify robot motion from PASS/odom-count/nav-flag — measure the actual position/state DELTA (ground truth). A capability's hard dep must be in the install set it ships in, or fail loud at connect — never a lazily-imported solver that fails silently every tick.
 
-- **Symptom:** none, at first — explore "worked", but on system python3 (mujoco 3.6)
-  instead of the repo venv (mujoco 3.9 / numpy 2.4.6 / pinocchio 4.0) where the MPC fix
-  had been verified.
-- **Why hidden:** the uv rebuild renamed `.venv-nano` → `.venv`; the launch scripts'
-  PYTHONPATH pointed at the deleted dir. Python silently ignores nonexistent path
-  entries and falls back to whatever system site-packages provide.
-- **Root cause:** the venv path was hardcoded in 12+ scripts with no existence check and
-  no single source.
-- **Fix:** all launch/test scripts + `vector-sim` + `verify_pick_top_down.py` prefer
-  `.venv` with a `.venv-nano` fallback; CLAUDE.md build line updated.
-- **Lesson:** PYTHONPATH to a missing dir fails silent — when debugging "version
-  mismatch" symptoms, print `module.__file__` to verify WHICH copy is actually loaded;
-  single-source interpreter resolution.
+## Case 11 — a verdict-time snapshot SIGSEGV'd the whole bare-cli turn: MuJoCo GL is THREAD-BOUND + a control thread was stepping live mjData (2026-06-26, ADR-002 Stage 1)
+- Symptom: adding a same-process snapshot hook in cli `_emit` (env-gated by `VECTOR_SNAPSHOT_DIR`) made a real `--sim-go2 --native-loop` turn die with exit=-11 (SIGSEGV) BEFORE `VECTOR_VERDICT`, on BOTH the ROS2 and in-process paths.
+- False trails (ruled out): NOT the heavy ROS2 stack (in-process crashed too); NOT "a 4th EGL context". Decisive probe: a CONTROL run with the hook OFF emitted a clean verdict → the segfault was specifically MY render.
+- Root cause (two thread-safety violations): (1) MuJoCo's GL context is THREAD-BOUND — the persistent `_cam_renderer`/`_seg_renderer` were created on a worker thread, so touching them from the emit (main) thread = cross-thread GL → segfault. (2) a control thread keeps stepping the LIVE `mjData`; rendering it concurrently = torn read → segfault.
+- Fix: render from an ISOLATED `MjData` copy with a FRESH `mj.Renderer` created ON the emit thread; wrap the hook so any failure returns None (a snapshot must never crash the verdict).
+- Lesson: when adding ANY render/observe call into an existing sim process, assume there is already a GL context owned by another thread AND a thread mutating `mjData`. Never reuse a renderer across threads, never render live data — copy `qpos` into a throwaway `MjData` and render that on your own thread. Isolate the crash with a hook-OFF CONTROL run before blaming context count.
 
-## Case 4 — Grasp picked a brown table sliver, not the green cylinder: saturation-bridge blob FUSION (2026-06-20, fixed in front_object.py `_open`)
+## Case (far-fetch) — "no_detections" was a nav TERMINAL-HEADING bug, not perception/colour (2026-06-29, arch/plug-and-play)
+- Symptom: model-routed far fetch (`把绿色的瓶子拿过来`, VECTOR_FETCH_FAR=1) intermittently ended `RAN / no_detections`. The string `no_detections` + "grounding-dino is English" history pointed at perception/colour.
+- False trails (ruled out by a logged probe): seed colour/query localized the real bottle every time; backend was MPC (casadi+pinocchio present); far-table geom byte-identical to the near table that masks fine.
+- Decisive probe: a faithful skill-direct repro with the CLI's EXACT sim config GROUNDED (2073 green px at standoff); the failing cli run masked 0 at a near-identical depth profile → the only thing that flips an identical-depth frame to 0 is the bottle being out of frame = a different arrival HEADING.
+- Root cause: FAR's `navigate_to` has NO terminal-heading control, so the dog arrives at an arbitrary heading; the re-perceive relies on a one-directional ~200° scan (6×0.6 rad, +vyaw only) → a bottle in the uncovered ~160° arc is never faced → mask=0 → no_detections. Grounds-or-not = luck of arrival heading.
+- Fix: the recovery KNOWS the target xy (the seed) — deterministically TURN TO FACE it via `_grasp_ready_repose` before re-perceiving (skill-level; kernel/moat untouched). 3/3 skill-direct.
+- Lesson: a perception-shaped error string can be a NAV-pose bug. When a "can't see it" failure is intermittent at a fixed location, suspect arrival HEADING before colour/detector/occlusion — prove it by comparing depth profiles (identical depth + different mask ⇒ framing/heading). When you KNOW the target xy, face it, don't search.
 
-- **Symptom:** the deictic grasp aimed ~12cm off — a 116px brown sliver between the green
-  and blue cylinders — only when the Piper arm was connected (go2+piper). 3 rounds chased
-  it as robot SELF-OCCLUSION (the arm in the head camera): site-alpha=0, geomgroup hide,
-  segmentation self-mask — every "fix" was a no-op because the cause was not the arm.
-- **Why hidden (pointed away from cause):** the symptom CORRELATED with connecting the arm,
-  so it looked like an arm-view problem. It wasn't: connecting the arm only nudges the dog's
-  settle by mm, which shifts WHICH brown table sliver wins the (already-broken) selection.
-  The green cylinder was being lost in BOTH configs; one earlier render happened to let green
-  win, manufacturing a false "go2-only works / full broken" contrast.
-- **Root cause:** `front_object.py` `_SAT_MIN=140` is BELOW the brown table's saturation
-  (med~132, **p90~146, max~160**). The table therefore passes the saliency mask in thin
-  1-3px chains that 8-connectivity FUSES the vivid cylinders + table into one giant blob —
-  so the central green cylinder stops existing as its own connected component, and the
-  "most-central blob" fallback grabs a brown table sliver. (Verified: at sat≥140 the
-  green-centre pixel lands in a 2105px blob spanning the whole table; at sat≥160 it becomes
-  a clean 757px blob.)
-- **Fix:** morphological OPENING (`_open`, erode→dilate, 3×3) on the salient mask before
-  connected components — severs sub-kernel bridges so each object survives as its own
-  component, threshold-independently (stable for sat_min 140-155; a raw threshold flips
-  central→wrong-object within ~5 sat units, and the table reaches 160). Honest, pose/colour/
-  group-agnostic. REAL-SIM full-config: front=755px GREEN, grasp **2.3cm** (was 12.2cm); full
-  motion EE reaches (10.97,3.01,0.31) over the green cylinder at (11,3).
-- **Lesson:** when a saliency THRESHOLD overlaps the background, the failure shows up as a
-  CONNECTED-COMPONENT topology bug (blobs fuse), not as a thresholding bug — and the wrong
-  winner drifts with tiny scene changes, faking a "config A works, config B doesn't" signal.
-  Before blaming an occluder, dump the actual candidate blobs (area/centroid/colour) the
-  selector considers; the central object simply not being in the list is the tell. Fix the
-  topology (opening) rather than chasing the threshold.
+## Case (mobile_pick) — far flail to the ORIGIN was a position-less detection stored at (0,0,0), not a nav bug (2026-06-29, arch/plug-and-play)
+- Symptom: a model-routed far fetch that picked `mobile_pick` failed `nav_failed`, dog driving toward ~(0.5, 0.15) = the ORIGIN, nowhere near the bottle at (13.86, 3.0). "nav_failed"+"drives to origin" pointed at navigation/frame.
+- False trail (ruled out by code-read): `_populate_pickables_from_mjcf` only runs under the heavy ROS2 GT path, not the VECTOR_NO_ROS2 rig the probe used.
+- Root cause (detect.py): DetectSkill defaults `x,y,z=0,0,0; has_3d=False`, then tries to read a 3D pose; a FAR object yields no depth → x,y,z stay at the (0,0,0) SENTINEL, and the object was ADDED to world_model ANYWAY. mobile_pick's `_resolve_target` found that phantom and navigated to origin. A 2D-only detection was stored as a TARGETABLE object at the origin.
+- Fix: additive `ObjectState.has_position` (default True); DetectSkill sets it False for a 2D-only detection and preserves any prior position; pick skips position-less objects → fast honest `object_not_found`.
+- Lesson: a "drives to origin / nav_failed" symptom is often a DEFAULT-SENTINEL leak — a struct field left at its 0-init default and then USED as if real. Never store a position-less observation as a positioned, targetable one; separate EXISTENCE from HAS-A-USABLE-POSITION.
 
-## Case 5 — GREEN cylinder INVISIBLE to perception (0 px): the TABLE's near top edge occluded it, not the arm (2026-06-20, fixed by object placement in go2_room.xml)
-- SYMPTOM: after R18 moved objects onto a TALL pick pedestal (top z=0.28) to make them arm-reachable, the central GREEN cylinder rendered **0 green pixels** in the d435 head cam while RED/BLUE (same z, same distance) rendered fine. front_object then picked a neighbour/table-sliver. Looked exactly like the D29-31 "arm self-occlusion" symptom again.
-- FALSE TRAILS (ruled out by probes): NOT the arm — green stayed 0 px at every arm pose (home / stow / folded). NOT a colour/saturation issue — at green's own projected pixel the depth read **3.708 m** (the far doorway), i.e. the camera saw straight THROUGH where green should be. Green was physically present at (10.82, 3.0, 0.32) (confirmed body xpos) — it just wasn't on that line of sight.
-- ROOT CAUSE: the d435 (z~0.38, shallow down-tilt) looks at the table top at a grazing angle. An object within ~6 cm of the table's NEAR TOP EDGE is OCCLUDED by that edge — the sightline to its body grazes the lip. Green at x=10.82 sat 2 cm onto a table whose near edge is 10.80 -> occluded; red/blue at x=10.90 (10 cm on) cleared it. Empirically: green at x<=10.82 -> 0 px; x>=10.88 -> ~1000 px. A TALL table makes this far worse than the old low table (a higher lip grazes more of the object).
-- FIX: object placement, not code — keep objects >=8 cm BACK from the near edge (final: near edge 10.80, green at 10.88). Tension with reach (objects must also be <= the EE's forward limit) + with no-knock (objects must be behind the dog's jammed bumper) resolved by a tall pedestal (object centre z=0.32 = reachable height) + 8 cm setback.
-- LESSON: when ONE object of several identical ones is invisible, sample the DEPTH at its projected pixel before blaming the robot's own body — depth >> object distance means a static-scene occluder (here the table's own edge), and the differentiator is the object's position relative to that edge, not anything about the robot. A taller support surface trades reach for self-occlusion of its own near edge.
-
-## Case 6 — nav+grasp "never grounds" was a MISSING DECLARED DEP + a model-API shape bug silently degrading EdgeTAM to a box-rect mask (z mislocalized low), NOT an off-axis IK / heading problem (2026-06-23, R39)
-- SYMPTOM: the full nav->dock->perceive->grasp chain completed but holding_object stayed False; the perceived grasp-z was LOW (0.13, 0.044 vs true 0.32) so the gripper closed below the can. A focused A/B perceive probe (run with EdgeTAM healthy) showed a clean 2.8cm grasp and pointed the diagnosis at "off-axis lateral IK after the dock" — a red herring.
-- FALSE TRAIL: the A/B probe and the end-to-end chain ran the SAME perceive code, so "perception is fine, the residual is IK/standoff" looked airtight. It wasn't — the two runs differed in ONE invisible way: whether EdgeTAM actually segmented.
-- ROOT CAUSE (two layers): (1) `timm` was declared in pyproject but absent from `.venv` -> EdgeTAM failed to LOAD -> box-rect fallback mask; the depth centroid then averaged the can with the table surface inside the loose box -> z collapsed toward the table. (2) After installing timm, EdgeTAM LOADED but `float(object_score_logits[i])` raised (transformers>=5 returns (N,1)) -> still box-rect every call. The grep-able log line `[GO2-PERCEPT] EdgeTAM unavailable (...) — box-rect fallback` was the tell, present in the end-to-end log but NOT in the A/B probe log.
-- LESSON: when two runs of the SAME perception code disagree, suspect a SILENTLY-DEGRADING optional model path before re-theorizing the geometry. A box-rect (whole-bbox) mask is NOT an adequate substitute for a tight segmentation mask for depth-centroid grasping — it drags z toward the nearest large surface (the table). Two reinforcing guards for R40: (a) make a segmenter-degrade LOUD at the grasp boundary (perception self-reports box-rect; the chain should flag/reject a low-z grasp rather than close on the table), and (b) keep optional model deps env-synced (a declared-but-uninstalled dep degrades quality with zero error at the call site).
-
-## Case 11 — a verdict-time visual snapshot SIGSEGV'd the whole bare-cli turn: MuJoCo GL contexts are THREAD-BOUND + a control thread was stepping live mjData, NOT "the render is too heavy / a 4th EGL context" (2026-06-26, ADR-002 Stage 1 visual acceptance)
-- SYMPTOM: adding a same-process snapshot hook in cli `_emit` (render a third-person frame at verdict time, env-gated by `VECTOR_SNAPSHOT_DIR`) made a real `--sim-go2 --native-loop` turn die with `exit=-11` (SIGSEGV) BEFORE emitting `VECTOR_VERDICT` — on BOTH the heavy ROS2 path and the lightweight `VECTOR_NO_ROS2=1` in-process path.
-- FALSE TRAILS (ruled out): NOT the heavy ROS2 nav stack (the in-process path crashed too). NOT "a 4th persistent EGL Renderer is one too many". The decisive probe was a CONTROL run — the identical turn with the hook OFF (no `VECTOR_SNAPSHOT_DIR`) emitted a clean verdict (RAN / exit 2), proving the sim + turn were fine and the segfault was specifically MY render.
-- ROOT CAUSE (two compounding thread-safety violations): (1) MuJoCo's GL context is THREAD-BOUND — the driver's persistent `_cam_renderer`/`_seg_renderer` were created on a worker/perception thread, so touching them from the verdict-emit (main) thread = cross-thread GL use -> segfault. (2) `MuJoCoGo2` keeps a control/physics thread stepping the LIVE `mjData`; rendering (or `mj_forward`'ing) that live data concurrently = torn read -> segfault (same class as Case 12 cross-thread torn read).
-- FIX: render from an ISOLATED copy with a FRESH renderer created ON THE EMIT THREAD — `data_copy = mj.MjData(model); data_copy.qpos[:] = data.qpos; mj.Renderer(model,H,W).update_scene(data_copy, camera=free_cam).render()`. The copy is untouched by any other thread (race-free); the fresh renderer binds its GL context to the calling thread. The hook is also wrapped so any failure returns None — a snapshot must NEVER crash the verdict.
-- LESSON: when adding ANY render/observe call into an existing sim process, assume there is already (a) a GL context owned by another thread and (b) a thread mutating `mjData`. NEVER reuse a renderer across threads, NEVER render live data — copy `qpos` into a throwaway `MjData` and render that on your own thread. And isolate the crash with a hook-OFF CONTROL run before blaming context count or "heaviness" (the control is what turned a vague "rendering segfaults" into "cross-thread GL on live data").
-
-## Case — far-fetch "no_detections" was a nav TERMINAL-HEADING bug, not perception/colour (2026-06-29, arch/plug-and-play)
-- SYMPTOM: the model-routed far fetch (`把绿色的瓶子拿过来`, VECTOR_FETCH_FAR=1) intermittently ended `RAN / diagnosis=no_detections` even though D110 had "closed the loop". The word `no_detections` + "grounding-dino is English" history pointed straight at perception / colour-query resolution.
-- FALSE TRAILS (ruled out by a logged probe — dedicated INFO handler on perception_grasp, propagate=False, so `[PGRASP] far seed/recovery` survived the cli's root-logger suppression): (1) seed colour/query — the seed localized the REAL bottle every time (`color=green`, even from a Chinese query, via the colour-English name). (2) backend sinusoidal fallback — casadi+pinocchio PRESENT, backend=auto→MPC. (3) far-table occlusion — far table geom is byte-identical to the near table that masks fine.
-- DECISIVE PROBE: the faithful skill-direct reproduction (PerceptionGraspSkill().execute() with the CLI's EXACT sim config — backend="auto", 640x480, VECTOR_NO_ROS2=1) GROUNDED, masking 2073 green px at the standoff; the failing cli run masked 0 — at a NEAR-IDENTICAL depth profile (d_min 0.74 vs 0.67, d_med 1.20 vs 1.28). The only thing that flips an identical-depth frame's green-mask to 0 is the bottle being out of frame = a different arrival HEADING.
-- ROOT CAUSE: the far-recovery drives to the 0.95m standoff POSITION but FAR's `navigate_to` has NO terminal-heading control, so the dog arrives at an arbitrary heading. The re-perceive then relies on a ONE-directional ~200deg scan (`_SCAN_MAX_STEPS=6 * _SCAN_STEP_RAD=0.6`, vyaw always +); a bottle in the uncovered ~160deg arc is never faced → mask=0 at all 6 steps → no_detections. Grounds-or-not = luck of the arrival heading = the dominant far reliability variance.
-- FIX: the recovery KNOWS the target xy (the seed) — deterministically TURN TO FACE it via the existing `_grasp_ready_repose(base, (ox,oy), clearance=_FAR_STANDOFF_M)` (idempotent when already head-on) before re-perceiving. Skill-level, kernel/moat untouched. Verified 3/3 skill-direct (facing turn fires −22..−26deg → heading ~0, then `perceive (no scan)` succeeds, real weld +0.23m).
-- LESSON: a perception-shaped error string (`no_detections`) can be a NAV-pose bug. When a "can't see it" failure is intermittent at a fixed location, suspect arrival HEADING before colour/detector/occlusion — and prove it by comparing the depth profile of a passing vs failing frame (identical depth + different mask ⇒ framing/heading, not perception). A position-only standoff with a one-directional search is non-deterministic; when you KNOW the target xy, face it, don't search.
-
-## Case — mobile_pick far flail to the ORIGIN was a position-less detection stored at (0,0,0), not a nav bug (2026-06-29, arch/plug-and-play)
-- SYMPTOM: a model-routed far fetch that picked `mobile_pick` (instead of the now-fixed perception_grasp) failed `nav_failed` and the dog drove toward ~(0.5, 0.15) — the ORIGIN — repeatedly (61-line ReAct flail), nowhere near the bottle at (13.86, 3.0). "nav_failed" + "drives to origin" pointed at navigation / a frame bug.
-- FALSE TRAIL (ruled out by code-read): `_populate_pickables_from_mjcf` (the static-MJCF GT scan) — that only runs under VECTOR_SIM_DEMO_GROUND_TRUTH=1 (the heavy ROS2 path), not the VECTOR_NO_ROS2 light rig the probe used. The world_model "starts empty, populated by perception at runtime."
-- ROOT CAUSE (detect.py): DetectSkill defaults `x,y,z = 0.0,0.0,0.0; has_3d=False`, then tries to read a 3D pose from the tracker. For a FAR object the tracker/depth yields NO pose (`tracked_objects[idx].pose is None`) — no valid depth points at ~3.9 m — so x,y,z stay at the (0,0,0) SENTINEL, and the object was ADDED TO world_model ANYWAY. mobile_pick's `_resolve_target` then found that phantom and navigated to the origin. A 2D-only detection (existence) was being stored as a TARGETABLE object at the origin.
-- FIX: additive `ObjectState.has_position` (defaults True). DetectSkill sets it False for a 2D-only detection and PRESERVES a previously-known position instead of clobbering it to origin; pick/`_resolve_target` skips position-less objects -> fast honest `object_not_found` (the model re-routes) instead of an origin flail. Real-sim: the far mobile_pick turn went from a 61-line origin flail (`nav_failed`) to an 11-line `object_not_found`.
-- LESSON: a "drives to the origin / nav_failed" symptom is often a DEFAULT-SENTINEL leak, not a nav/frame bug — a struct field left at its 0-init default and then USED as if real. When a perception->target pipeline points at (0,0,0), look for "detected but not 3D-localised, stored anyway at the zero default." Never store a position-less observation as a positioned, targetable one; separate EXISTENCE from HAS-A-USABLE-POSITION.
-
-## Case — a short object masks at 3.9m but VANISHES at the 0.9m grasp standoff (camera FOV, not colour) (2026-06-29, arch/plug-and-play)
-- SYMPTOM: the far fetch grounds for the green/blue BOTTLES but the red object returns no_detections at the re-perceive — and the instinct is "the HSV red hue gate (wrap-around [(0,12),(168,180)]) is the weak one".
-- FALSE TRAIL (ruled out by the depth+mask log): the HSV red mask is FINE — it fired mask_px~1000 on the red object during the 3.9m spawn scan, AND the open-vocab seed localized it, AND the facing turn fired. Red hue is not the problem.
-- ROOT CAUSE: the red object is a CAN — physically SHORTER than the green/blue bottles. mask_px went 1000@3.9m -> 0 at the ~0.9m grasp standoff (d_min=0.6m). A close, short object falls BELOW the head camera's downward vertical FOV (the camera looks OVER it); a taller bottle at the same standoff stays in frame. So the mask vanishes as the dog gets CLOSER — counter to the intuition that closer = easier to see.
-- FIX DIRECTION (seed, not yet done): for short objects raise the camera tilt or widen the grasp standoff so the object stays within the vertical FOV at grasp range. (Recorded as the next far-fetch seed.)
-- LESSON: "detected far, lost near" is a FOV/geometry signature, not a detector/colour weakness — check object HEIGHT vs camera pitch and the near-field vertical frustum before touching the colour gate. Mask px as a function of RANGE (rising then dropping to 0 as you approach) localizes it to FOV, not hue.
+## Case (FOV) — a short object masks at 3.9 m but VANISHES at the 0.9 m grasp standoff (camera FOV, not colour) (2026-06-29, arch/plug-and-play)
+- Symptom: far fetch grounds for the green/blue BOTTLES but the red object returns no_detections at re-perceive; instinct: "the HSV red wrap-around hue gate is the weak one".
+- False trail (ruled out by the depth+mask log): the red HSV mask fired ~1000 px on the red object at 3.9 m AND the seed localized it AND the facing turn fired. Red hue is fine.
+- Root cause: the red object is a CAN — physically SHORTER than the bottles. mask_px went 1000@3.9m → 0 at the ~0.9 m standoff: a close, short object falls BELOW the head camera's downward vertical FOV (the camera looks OVER it). So the mask VANISHES as the dog gets CLOSER — counter to intuition.
+- Fix direction (seed, not yet done): for short objects raise camera tilt or widen the grasp standoff to keep them in the vertical FOV at grasp range.
+- Lesson: "detected far, lost near" is a FOV/geometry signature, not a detector/colour weakness — check object HEIGHT vs camera pitch and the near-field vertical frustum before touching the colour gate. Mask px rising with range then dropping to 0 as you approach localizes it to FOV.
