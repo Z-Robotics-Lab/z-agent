@@ -8,8 +8,10 @@ with natural-language commands, exactly as a user would:
     <place NL>            -> native producer, renders `verdict ... verified=...`
 
 Proves the D163 fix: launch_explore.sh must be EMPTY throughout (in-process path).
-Captures verdict frames via VECTOR_SNAPSHOT_DIR + a viewer window screenshot for
-the Qwen3-VL eyes. Reads the console `verified=True/False` as the moat-oracle GT.
+Runs HEADLESS (no X display) so the sim uses egl offscreen rendering: perception grounds
+AND the honest same-process verdict snapshot (VECTOR_SNAPSHOT_DIR/verdict_*.png) renders —
+that offscreen 3rd-person frame is the Qwen3-VL eyes (no fragile desktop-window grab).
+Reads the console `verified=True/False` as the moat-oracle GT.
 
 Usage: python repl_accept.py <fetch_nl> <place_nl> <tag>
 Env must carry QWEN_API_KEY etc. (the loop env). Runs ONE sim, one colour.
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -51,6 +54,15 @@ env.update({
     "TRANSFORMERS_OFFLINE": "1",
     "VECTOR_SNAPSHOT_DIR": SNAP,
 })
+# HEADLESS acceptance (verified 2026-07-01): drop the X display so reconcile_render_backend
+# keeps egl (viewer suppressed). egl+headless is the reliable render path — perception grounds
+# (5/5 vs glfw+viewer 2/2, D166 DEBUG) AND the honest same-process verdict snapshot
+# (snapshot_on_verdict -> verdict_*.png) renders offscreen without main-thread GLFW context
+# contention. This is what makes the eyes frame the real 3rd-person sim render instead of a
+# fragile `import -window` desktop grab (which mis-grabbed the terminal AND hung the campaign
+# ~13 min in interactive click-to-select mode). A human on a desktop still gets glfw+viewer.
+env.pop("DISPLAY", None)
+env.pop("WAYLAND_DISPLAY", None)
 
 LOG = open(f"{SNAP}/session.log", "wb")
 
@@ -69,22 +81,28 @@ def wait_prompt(child, timeout=90):
     child.expect(r"vector>", timeout=timeout)
 
 
-def _grab_sim_window(snap: str, tag: str) -> None:
-    """Screenshot the ACTUAL MuJoCo viewer window (not the whole desktop).
+def _eyes_frame(snap: str, tag: str) -> None:
+    """Record the honest eyes-on-sim frame for turn ``tag``.
 
-    The passive viewer titles its window "MuJoCo : <model>". Find its X id via
-    xdotool and grab just that window; fall back to a root scrot only if the
-    lookup fails (a desktop capture is NOT eyes-on-sim, so we prefer the window).
+    The frame is the SAME-PROCESS offscreen 3rd-person render the verdict hook already
+    writes (``capture.snapshot_on_verdict`` -> ``$VECTOR_SNAPSHOT_DIR/verdict_<stamp>.png``)
+    — the actual ``MjModel``/``MjData`` the turn ran on, NOT a desktop screenshot. Because we
+    run headless (egl, no viewer), that offscreen render is reliable and needs no X server.
+    Here we simply COPY the newest verdict_*.png to a stable ``eyes_<tag>.png`` so each turn's
+    frame survives (the verdict hook reuses the dir). No `import -window` (it grabbed the wrong
+    window and hung the campaign in interactive select mode).
     """
-    out = f"{snap}/sim_{tag}.png"
-    # ImageMagick `import -window <name>` grabs a window by NAME (no xdotool needed).
-    # The passive viewer's window name contains "MuJoCo".
-    r = subprocess.run(["import", "-window", "MuJoCo", out], capture_output=True, text=True)
-    if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
-        print(f"[driver] grabbed MuJoCo window -> {out}", flush=True)
-        return
-    subprocess.run(["import", "-window", "root", f"{snap}/desktop_{tag}.png"], capture_output=True)
-    print(f"[driver] MuJoCo window grab failed ({r.stderr.strip()[:60]}); desktop fallback", flush=True)
+    out = f"{snap}/eyes_{tag}.png"
+    verdicts = sorted(
+        (f for f in os.listdir(snap) if f.startswith("verdict_") and f.endswith(".png")),
+        key=lambda f: os.path.getmtime(os.path.join(snap, f)),
+    )
+    if verdicts:
+        src = os.path.join(snap, verdicts[-1])
+        shutil.copyfile(src, out)
+        print(f"[driver] eyes frame (offscreen verdict render) -> {out}", flush=True)
+    else:
+        print("[driver] no verdict_*.png emitted (snapshot_on_verdict yielded nothing)", flush=True)
 
 
 print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim-go2); FETCH={FETCH!r} PLACE={PLACE!r}", flush=True)
@@ -120,7 +138,7 @@ try:
         print("\n[driver] FETCH turn...", flush=True)
         child.sendline(FETCH)
         child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
-        _grab_sim_window(SNAP, "fetch")
+        _eyes_frame(SNAP, "fetch")
         wait_prompt(child, timeout=60)
         print("\n[driver] fetch turn done", flush=True)
 
@@ -128,7 +146,7 @@ try:
         print("\n[driver] PLACE turn...", flush=True)
         child.sendline(PLACE)
         child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
-        _grab_sim_window(SNAP, "place")
+        _eyes_frame(SNAP, "place")
         wait_prompt(child, timeout=60)
         print("\n[driver] place turn done", flush=True)
 
