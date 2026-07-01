@@ -69,9 +69,11 @@ env.update({
 env.pop("DISPLAY", None)
 env.pop("WAYLAND_DISPLAY", None)
 
-# g1 sim-start GT marker: the SimStartTool result content `Started g1 simulation: ...`
-# (sim_tool.execute line ~282). Ground truth (tool completion), never the model's chat claim.
-G1_START_MARKER = "Started g1 simulation"
+# g1 sim-start GT marker: the CLI's compact tool-completion render `▸ sim start g1 ok 1.5s`
+# (mirrors go2's `sim start go2 ok` that repl_accept.py syncs on). Ground truth = the tool
+# actually completing, NEVER the model's chat claim ("已经启动了") which it can author without
+# the tool. The `▸ ... ok <t>s` line is emitted by the CLI only on a real SimStartTool success.
+G1_START_MARKER = "sim start g1 ok"
 
 
 def launch_explore_running() -> bool:
