@@ -25,10 +25,14 @@ the Protocol contract, neither of which the actor can author.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 from vector_os_nano.vcli.worlds import DecomposeVocab, World
 from vector_os_nano.vcli.worlds.registry import WorldRegistry
@@ -90,6 +94,24 @@ def test_kernel_import_leaks_no_concrete_world() -> None:
         "importing the kernel engine eagerly loaded concrete world module(s) "
         f"{leaked!r}; worlds must load only on resolution (Invariant 4 — the "
         "kernel never imports a world at module load)"
+    )
+
+
+def test_cli_entry_import_leaks_no_concrete_world() -> None:
+    """Importing the CLI entry module must not load any concrete world (Invariant 4).
+
+    ``vcli.cli`` is the *acceptance-face* module — the bare ``vector-cli`` REPL is
+    built from it. Guarding the engine alone is not enough: the property that
+    matters operationally is that importing the thing the user actually launches
+    stays world-free (worlds load only when one is resolved for a session).
+    """
+    leaked = _concrete_worlds_loaded_by_importing(
+        "vector_os_nano.vcli.cli", _CONCRETE_WORLD_MARKERS
+    )
+    assert leaked == [], (
+        "importing the CLI entry module eagerly loaded concrete world module(s) "
+        f"{leaked!r}; the acceptance-face entry point must stay world-free until a "
+        "world is resolved (Invariant 4)"
     )
 
 
@@ -217,3 +239,35 @@ def test_byo_world_is_driven_through_every_contribution_point() -> None:
     assert "verify_functions" in vocab.as_kwargs()
 
     assert world.derive_vocab_from_registry() is False
+
+
+# ---------------------------------------------------------------------------
+# Invariant 3 — the shipped BYO-world EXAMPLE stays runnable (no bit-rot)
+# ---------------------------------------------------------------------------
+
+
+def test_byo_world_example_runs_clean() -> None:
+    """``examples/byo_world.py`` runs end-to-end with ZERO kernel edits, no LLM.
+
+    The example is the user-facing demonstration of the plug-and-play promise: a
+    world defined entirely outside the kernel registers, resolves and is driven
+    through every seam. Running it here (in a fresh subprocess, no simulator, no
+    API key) keeps that artifact honest — if a kernel change breaks the public
+    seam the example uses, this goes RED instead of the example silently rotting.
+    """
+    example = _REPO_ROOT / "examples" / "byo_world.py"
+    assert example.is_file(), f"missing BYO-world example at {example}"
+    result = subprocess.run(
+        [sys.executable, str(example)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=str(_REPO_ROOT),
+        env={**os.environ, "PYTHONPATH": str(_REPO_ROOT)},
+    )
+    assert result.returncode == 0, (
+        f"BYO-world example exited {result.returncode}:\n{result.stderr}"
+    )
+    assert "ZERO kernel edits" in result.stdout, (
+        f"example did not print its proof line; stdout:\n{result.stdout}"
+    )
