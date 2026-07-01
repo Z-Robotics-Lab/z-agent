@@ -24,10 +24,7 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 os.environ.pop("DISPLAY", None)
 
 from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
-from vector_os_nano.vcli.cognitive.actor_causation import (
-    capture_actor_baseline,
-    grade,
-)
+from vector_os_nano.vcli.cognitive.actor_causation import capture, grade
 from vector_os_nano.vcli.worlds.go2_sim_oracle import make_at_position
 
 
@@ -51,9 +48,9 @@ def main() -> int:
     try:
         for tx, ty in _targets():
             p0 = g1.get_position()
-            base = capture_actor_baseline(agent)
+            base = capture(agent)
             res = g1.navigate_to(tx, ty)
-            post = capture_actor_baseline(agent)
+            post = capture(agent)
             pf = g1.get_position()
             verify = f"at_position({tx}, {ty})"
             actor = grade(base, post, verify, oracle_names)

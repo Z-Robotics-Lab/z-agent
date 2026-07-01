@@ -3,49 +3,48 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · D175 — g1 2ND EMBODIMENT ACCEPTED on the bare REPL by NL via DeepSeek (cross-embodiment ×
-cross-model on the true face). Root-caused + fixed the RAN-False: an armless g1 was offered the full manipulation
-surface (pick/place/…) because get_default_skills() registers them on every Agent — a frontier model chained a
-doomed pick ('No arm connected'), dragging an otherwise-GROUNDED detect turn to False. Fix = gate manipulation
-skills on has_arm in _build_motor_tools (Rule-11 single-source resolver, same as the has_base/navigate gate); go2+arm
-keeps the full surface. Plus a convergence steer (detect→verify→finish) + gate describe on armless (its scan
-auto-step needs an arm). NO spine change — evidence_passed stays strict (ALL checked steps GROUNDED).
-- REAL-VERIFY (bare vcli+NL, VECTOR_PROVIDER=deepseek→deepseek-v4-flash, VECTOR_NO_ROS2=1 in-process, sim BY NL,
-  nuke between): RED "找前面的红色的东西" → `detect → verify detection_matches_gt('红色的东西') == True ✓` →
-  verdict GROUNDED verified=True (1/1, clean trace). GREEN "找前面的绿色的东西" → 0/14 grounded → RAN False
-  (model hunted green hard; NOTHING grounded = honest refutation). launch_explore_seen=False throughout.
-- EYES (independent, g1_eyes.py fresh MuJoCoG1 + segmentation GT + head_rgb.png I read): red=920 seg px in g1's
-  head-cam view centroid≈(337,285); green=0 seg px (not in view). RGB shows a red cushion on the stool, no green.
-  Oracle + detector + eyes ALL agree: red present→GROUNDED, green absent→refuted.
-- RED-TEAM: bare REPL (pexpect `python -m vector_os_nano.vcli.cli --native-loop`, no -p/--sim, sim by NL GT marker
-  `▸ sim start g1 ok`); in-process (launch_explore empty); oracle = MuJoCo SEGMENTATION GT, detector sees RGB-only
-  (firewall) — not a self-read; refutation holds (green 0/14). RESIDUALS (flagged): actor=NOT_GRADED for perception
-  (armless has no displacement — honest weaker grade, grounding is the GT spatial-match); N=1 grounded (RED) + N=1
-  refuted (GREEN); driver's verdict_*.png eyes-copy did NOT fire on the g1 path (used g1_eyes.py instead — driver gap).
+updated: 2026-07-01 · D176 — g1 NAVIGATION (locomotion, g1's 2ND capability) ACCEPTED on the bare REPL by NL via
+DeepSeek — a leap in KIND from perception (D175). g1 already had a base + full in-process locomotion stack
+(navigate_to→g1_vgraph→_walk_to_waypoint→set_velocity) + get_position/heading (at_position binds). The ONE gap:
+MuJoCoG1 didn't expose cmd_motion() → actor_causation._capture_base read base_cmd_motion=None → nav fail-closed to
+UNCAUSED → could only reach RAN. FIX (DRIVER enrichment, spine grade() BYTE-UNCHANGED): set_velocity now accumulates
+|vx|+|vy|+|vyaw| into _cmd_motion + exposes cmd_motion() — the SAME honest signal go2 exposes. A no-op/teleport/
+blocked nav still grades UNCAUSED (proven by the GREEN refutation). g1 single-threaded → no _skill_ctrl_tid gate needed.
+- REAL-VERIFY (bare vcli+NL via generic g1_accept.py, VECTOR_PROVIDER=deepseek→deepseek-v4-flash, VECTOR_NO_ROS2=1
+  in-process, sim BY NL, nuke between): RED "走到坐标 x=9, y=3 的位置" → navigate→verify at_position(9,3) → verdict
+  GROUNDED verified=True (1/1). GREEN "走到坐标 x=15, y=3" (boxed-in/unreachable) → can't arrive → at_position False →
+  verdict RAN verified=False (honest refutation). launch_explore_seen=False throughout.
+- PROBE (scratchpad/g1_nav_probe.py, deterministic skill-direct 2nd witness — NOT acceptance): reachable
+  (9,3)/(10,4)/(8.5,2.5)/(3,3 @6.75m) → reached, z=0.77, dcmd_motion 36-113, at_position=True, actor=CAUSED → GROUNDED;
+  blocked (15,3)/(10,10) → planner None, robot still, at_position=False → RAN. Oracle discriminates by ARRIVAL, not distance.
+- RED-TEAM: DECISIVE anti-trivial — RED at_position(9,3,tol=0.5) is FALSE at spawn (10,3) (dist=1.0>0.5), so GROUNDED
+  REQUIRED real displacement; far-reachable grounds/blocked refutes → oracle reads true GT, not the model's claim;
+  in-process proven; actor=CAUSED = unchanged go2 signal. RESIDUALS (flagged): N=1 REPL RED + N=1 REPL GREEN (probe
+  corroborates 4/4+2/2); no verdict PNG for a nav turn (2nd witness = GT pos read + probe, not a frame); cmd_motion
+  driver change flagged for Yusen async review (enables a new GROUNDED capability; grade() spine byte-unchanged →
+  defensible as driver enrichment, NOT a spine gate — but flagged in case he deems it spine-adjacent).
 
-goal:    PLUG-AND-PLAY runtime for physical AI — bring your own robot/policy/skill/CAPABILITY/MODEL; plan·route·
-         verify·recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
-phase:   FETCH+PLACE firm 3 colours via DeepSeek (D172-174, go2+arm). g1 2ND EMBODIMENT (armless, camera-only)
-         accepted for perception on the bare face via DeepSeek (D175). BYO-robot × BYO-model both proven on the true face.
-owns:    vector_os_nano/vcli/native_loop.py (arm-gate + detect steer). scratchpad/g1_accept.py + g1_eyes.py (g1 driver).
-blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (I substitute by reading the offscreen render). NOT loop-blocking.
-         PRE-EXISTING: tests/unit/vcli/test_config_deepseek_provider.py 3 fails (provider naming openai_compat vs
-         openrouter) — predate this round, separate config drift, not touched.
+goal:    PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/CAPABILITY/MODEL; plan·route·verify·recover.
+         Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
+phase:   FETCH+PLACE 3 colours via DeepSeek (D172-174, go2+arm). g1 2ND EMBODIMENT: PERCEPTION (D175) + LOCOMOTION
+         (D176) both accepted on the true face. BYO-robot × BYO-model × 2 capability dimensions on g1, all in-process.
+owns:    vector_os_nano/hardware/sim/mujoco_g1.py (cmd_motion seam). scratchpad/g1_nav_probe.py + g1_accept.py (drivers).
+blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (substitute: read offscreen render / deterministic probe). NOT loop-blocking.
+         PRE-EXISTING: tests/unit/vcli/test_config_deepseek_provider.py 3 fails (provider naming drift) — untouched.
 next:
-  1. [FRONTIER] g1 richer tasks: a 2nd present colour for GROUNDED (add a green/blue in the head-cam view for N≥2),
-     then g1 NAVIGATION/VLN (it has a base) — walk-to + at_position on the true face.
-  2. [FRONTIER] arm-free `describe` path (caption via head-cam VLM, no scan auto-step) so a camera-only body can
-     describe — restores the gated capability honestly instead of just hiding it.
-  3. [SPINE, high-value] D168 place-oracle identity+delta — LOAD-BEARING (D174 place leans on object-blind
-     resting_on_receptacle). Top spine gate; queue for Yusen (spine-semantics gate).
+  1. [FRONTIER] g1 VLN/SysNav — chain detect→navigate ("走到红色的东西那里": perceive target, then walk to it) =
+     perception+locomotion COMPOUND on the true face. + firm nav N≥2 (2nd coord) + free-form NL ("往前走两米").
+  2. [FRONTIER] arm-free `describe` path (caption via head-cam VLM, no scan auto-step) — D175 next#ii, still open.
+  3. [SPINE, high-value] D168 place-oracle identity+delta — LOAD-BEARING (D174 place leans on it). CEO gate, queue for Yusen.
   4. [FRONTIER] OpenRouter 3rd brain (model-id 404) → 3-model plug-and-play on one face.
-tooling: scratchpad/g1_accept.py (BARE-REPL g1 driver: RED grounds / GREEN refutes; args red_nl green_nl tag;
-  VECTOR_PROVIDER=deepseek). scratchpad/g1_eyes.py (independent eyes: head-cam RGB + seg GT, run AFTER REPL exits).
-  scratchpad/repl_accept.py (go2 fetch/place driver, MODE=fetch|place|both|combo). GOTCHAS: `rosm nuke --yes` between
-  sims, NEVER pkill mujoco; NEVER kill supervisor/sibling; g1 run ~6min; DeepSeek verdict = post-hoc parse of the
-  ANSI-stripped log (live pexpect misses the ANSI-split `verified=`).
+tooling: scratchpad/g1_accept.py (BARE-REPL driver; generic [red_nl] [green_nl] [tag]; reused for nav — RED grounds/
+  GREEN refutes; VECTOR_PROVIDER=deepseek). scratchpad/g1_nav_probe.py (deterministic nav reach/refute + CAUSED grade).
+  GOTCHAS: `rosm nuke --yes` between sims, NEVER pkill mujoco; NEVER kill supervisor/sibling; g1 run ~4-6min; PYTHONPATH=ROOT
+  for scratchpad scripts; DeepSeek verdict = post-hoc parse of the ANSI-stripped log (live pexpect misses ANSI-split `verified=`).
 
 ## Pending CEO gates (decision queue — terse; do NOT cross autonomously)
+- **D176 cmd_motion driver seam** (flagged, likely non-gate): enables g1 nav GROUNDED; grade() spine byte-unchanged.
+  → Yusen async review — confirm it's a driver enrichment, not a spine-semantics change.
 - **D168 place-oracle** resting_on_receptacle object-BLIND + absolute-count → harden to identity+delta (stricter-only
   spine change). NOW LOAD-BEARING (D174 place leans on it). → go/no-go (spine-semantics gate).
 - **S8** retire legacy keyword producer (READY): delete IntentRouter/StrategySelector/_DIR_MAP + legacy GoalDecomposer;
