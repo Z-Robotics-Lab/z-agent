@@ -3,27 +3,30 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · D174 (IN FLIGHT) — PLACE compound now GROUNDS on the bare REPL via DeepSeek, REFUTING
-D171's "place routes to legacy VGG". D171's finding predated the D172 sim-start harness fix; on the FIXED harness a
-single compound utterance "把绿色的瓶子拿过来放到架子上" decomposes native perception_grasp→mobile_place and grounds.
-- REAL-VERIFY (bare vector-cli+NL, VECTOR_PROVIDER=deepseek→deepseek-chat, MODE=combo, in-process launch_explore=False,
-  sim torn down after): GREEN combo → `perception_grasp → holding_object('pickable_bottle_green') ✓ (actor=CAUSED)` +
-  `mobile_place → resting_on_receptacle() ✓ (actor=NOT_GRADED)` → `verdict GROUNDED verified=True (2/2)`. EYES
-  (verdict PNG, read by me): green rests on the receptacle/shelf, gripper EMPTY, blue+red still on source table —
-  oracle + eyes agree. BLUE + RED combos firming now (one sim at a time, nuke between).
-- RED-TEAM: bare REPL (no -p/--sim-go2, sim by NL); in-process proven; grasp verify is object-SPECIFIC + CAUSED;
-  DeepSeek live (pinged). RESIDUAL (honest, flagged): N=1 so far per colour; resting_on_receptacle is the object-BLIND
-  NOT_GRADED oracle (D168 gate below) — grounded on current spine, would tighten under D168.
+updated: 2026-07-01 · D174 — PLACE compound (fetch AND place in one NL command) GROUNDS on the bare REPL via
+DeepSeek across ALL 3 colours, REFUTING D171's "place routes to legacy VGG" (a pre-D172-fix harness artifact). On the
+FIXED harness DeepSeek's NATIVE loop decomposes "把<色>的{瓶子|罐子}拿过来放到架子上" → perception_grasp→mobile_place→grounds.
+- REAL-VERIFY (bare vector-cli+NL, VECTOR_PROVIDER=deepseek→deepseek-chat, MODE=combo, in-process launch_explore=False
+  every run, nuke between, one sim at a time): GREEN True(2/2) 1st try · RED-can True(2/2) 1st try · BLUE True(2/2) on
+  2nd try (1st = grasp transient holding_object UNCAUSED 0/1, never reached place; re-run grounded). Each grounded run:
+  `holding_object('pickable_<obj>') ✓ (actor=CAUSED)` + `resting_on_receptacle() ✓ (NOT_GRADED)` → GROUNDED verified=True.
+  EYES (verdict PNGs, read by me): correct-colour object rests on the RECEPTACLE, gripper EMPTY, others at source —
+  oracle+eyes agree on all 3; blue's failed run shows empty gripper (agrees with False).
+- RED-TEAM: bare REPL (no -p/--sim-go2, sim by NL); in-process proven; grasp verify object-SPECIFIC + CAUSED; DeepSeek
+  pinged live. RESIDUALS (flagged): resting_on_receptacle is object-BLIND/NOT_GRADED (D168 gate — now LOAD-BEARING);
+  1 grasp transient in 4 attempts; N=1 grounded/colour. Headline = "place grounds across 3 colours", NOT "N=3 flawless".
 
 goal:    PLUG-AND-PLAY runtime for physical AI — bring your own robot/policy/skill/CAPABILITY/MODEL; plan·route·
          verify·recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
-phase:   FETCH firm 3 colours (D172/D173); PLACE compound now grounds on the true face via DeepSeek (D171 refuted).
-owns:    scratchpad/repl_accept.py MODE=combo runs. No product code touched this round.
+phase:   FETCH firm 3 colours (D172/D173) + PLACE compound firm 3 colours (D174) — both accepted on the true face via
+         DeepSeek (BYO model holds for full fetch-and-place). D171 refuted. Next frontier = harder NL / D168 spine / 2nd model.
+owns:    scratchpad/repl_accept.py MODE=combo runs (guard the place compound). No product code touched this round.
 blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (I substitute by reading the offscreen render). NOT loop-blocking
          — DeepSeek carries the planner face. Yusen top-up restores VL 2nd-witness + a 2nd brain.
 next:
-  1. [FINISH D174] blue+red combo results in; if all 3 ground, PLACE is accepted across colours on the true face.
-  2. [FRONTIER] harder NL: relational near() place ("放到瓶子旁边" — spine-semantics gate), multi-object, negation.
+  1. [FRONTIER] harder NL: relational near() place ("放到瓶子旁边" — spine-semantics gate D169), multi-object, negation.
+  2. [SPINE, high-value] D168 place-oracle identity+delta — now LOAD-BEARING (D174 place leans on the object-blind
+     resting_on_receptacle); tightening it is the top spine gate. Queue for Yusen (spine-semantics gate).
   3. [FRONTIER] OpenRouter 3rd brain (model-id 404) → real multi-model plug-and-play on one face.
   4. [FRONTIER] g1 2nd embodiment config-only (seam proven open D170); BYO skill.
 tooling: scratchpad/repl_accept.py (BARE-REPL pexpect driver = the true face; args FETCH PLACE TAG MODE;
