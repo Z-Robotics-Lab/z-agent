@@ -22,6 +22,9 @@ sys.path.insert(0, ROOT)
 
 QUERY = sys.argv[1] if len(sys.argv) > 1 else "绿色的瓶子"
 TARGET = sys.argv[2] if len(sys.argv) > 2 else "pickable_bottle_green"
+# gui=True reproduces the bare-REPL sim-launch (SimStartTool default gui=True); the
+# GLFW viewer's GL context can starve the perception renderer's EGL context (D164).
+GUI = os.environ.get("PROBE_GUI", "0") not in ("", "0", "false", "no")
 
 
 class _StubVLM:
@@ -50,7 +53,8 @@ def main() -> int:
         from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
         from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
 
-        go2 = MuJoCoGo2(gui=False, room=True, backend="mpc"); go2.connect()
+        res["gui"] = GUI
+        go2 = MuJoCoGo2(gui=GUI, room=True, backend="mpc"); go2.connect()
         piper = MuJoCoPiper(go2); piper.connect()
         gripper = MuJoCoPiperGripper(go2); gripper.connect()
         perception = Go2GraspPerception(go2, width=320, height=240)
