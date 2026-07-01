@@ -38,6 +38,13 @@ TAG = sys.argv[3] if len(sys.argv) > 3 else "r"
 # fresh session so the bottle starts on the table, not pre-held by a prior fetch turn —
 # a pre-held bottle makes place-turn grasp UNCAUSED, corrupting the place verdict).
 MODE = sys.argv[4] if len(sys.argv) > 4 else "both"
+# Fail LOUD on a bad invocation. A wrong arg-order (e.g. passing a colour where MODE goes)
+# silently no-ops every action turn and quits immediately — wasting a full ~6-min sim with
+# no verdict (observed 2026-07-01: `... <tag> green place` set MODE="green", ran nothing).
+_VALID_MODES = ("both", "fetch", "place", "combo")
+if MODE not in _VALID_MODES:
+    sys.exit(f"[driver] FATAL: MODE={MODE!r} not in {_VALID_MODES}. "
+             f"Usage: repl_accept.py <fetch_nl> <place_nl> <tag> [mode]. Refusing to burn a sim.")
 SNAP = f"/tmp/repl_accept/{TAG}"
 os.system(f"rm -rf {SNAP}; mkdir -p {SNAP}")
 
@@ -220,7 +227,12 @@ try:
         drain_until_quiet(child, quiet=3.0, max_wait=30)
         print(f"\n[driver] sim not started on attempt {attempt} (model chatted/asked); re-issuing", flush=True)
     if not started:
-        print("\n[driver] SIM NEVER STARTED via NL after retries — aborting turn", flush=True)
+        # Ground truth: we only set started=True on the "sim start go2 ok" tool-completion
+        # marker — NEVER on the model's chat CLAIM ("已经启动完毕了"), which it can author
+        # without invoking the tool (Invariant 1: sync on GT the actor can't fake). No sim ->
+        # sending actions just times out 300s each against a dead prompt; abort honestly.
+        print("\n[driver] SIM NEVER STARTED via NL after retries — aborting turn (no fake verdict)", flush=True)
+        raise SystemExit("sim-never-started")
     if launch_explore_running():
         result["launch_explore_seen"] = True
         print("\n[driver] !!! launch_explore RUNNING — ROS2 stack path took (FIX FAILED)", flush=True)
