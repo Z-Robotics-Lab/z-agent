@@ -106,6 +106,29 @@ def wait_prompt(child, timeout=90):
     child.expect(r"vector>", timeout=timeout)
 
 
+def drain_until_quiet(child, quiet=3.0, max_wait=180):
+    """Block until the REPL output goes SILENT for ``quiet`` seconds (turn fully done).
+
+    The `vector>` prompt is echoed AND repainted constantly by prompt_toolkit, so
+    ``wait_prompt`` matches the just-typed command line instantly and returns BEFORE the
+    turn finishes — injecting the next command mid-turn, where prompt_toolkit eats/garbles
+    it (root cause of the D171 place-turn no-op; DEBUG.md H4). Instead of matching a
+    prompt, we wait for a quiet gap: keep reading with a short timeout; each chunk resets
+    the clock; when no output arrives for ``quiet`` s the turn has settled and it is safe
+    to send the next line. Bounded by ``max_wait``."""
+    waited = 0.0
+    while waited < max_wait:
+        try:
+            child.expect(r".+", timeout=quiet)  # any output resets the quiet window
+            waited = 0.0
+        except pexpect.TIMEOUT:
+            return True  # no output for `quiet` s -> settled
+        except pexpect.EOF:
+            return False
+        waited += quiet
+    return False
+
+
 def _eyes_frame(snap: str, tag: str) -> None:
     """Record the honest eyes-on-sim frame for turn ``tag``.
 
@@ -177,16 +200,20 @@ try:
     wait_prompt(child, timeout=60)
     print("\n[driver] REPL up. Starting sim by NL...", flush=True)
     child.sendline("启动带手臂的 go2 仿真")
-    # Sim build: MuJoCoGo2 connect + arm + perception + scene graph. Wait for prompt.
-    time.sleep(8)
+    # Sim build: MuJoCoGo2 connect + arm + perception + scene graph. Sync on the sim
+    # tool-completion marker, NOT the echoed `vector>` prompt (which matches instantly and
+    # made us inject the next command mid-turn — DEBUG.md H4). "sim start go2 ok" is the
+    # SimStartTool completion line; the model then streams a chat answer, so after the
+    # marker we drain until the output goes quiet (whole sim-start turn finished).
+    child.expect(r"sim start go2 ok", timeout=180)
     if launch_explore_running():
         result["launch_explore_seen"] = True
         print("\n[driver] !!! launch_explore RUNNING — ROS2 stack path took (FIX FAILED)", flush=True)
-    wait_prompt(child, timeout=120)
+    drain_until_quiet(child, quiet=3.0, max_wait=120)
     # Double-check after ready.
     if launch_explore_running():
         result["launch_explore_seen"] = True
-    print(f"\n[driver] sim ready. launch_explore_seen={result['launch_explore_seen']}", flush=True)
+    print(f"\n[driver] sim ready (drained to idle). launch_explore_seen={result['launch_explore_seen']}", flush=True)
 
     # Turns sync on the stable `grounded)` marker; booleans are parsed post-hoc from
     # the ANSI-stripped raw log (the live `verified=` regex fails because ANSI codes
@@ -196,7 +223,7 @@ try:
         child.sendline(FETCH)
         child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
         _eyes_frame(SNAP, "fetch")
-        wait_prompt(child, timeout=60)
+        drain_until_quiet(child, quiet=3.0, max_wait=90)
         print("\n[driver] fetch turn done", flush=True)
 
     if MODE in ("both", "place"):
@@ -204,7 +231,7 @@ try:
         child.sendline(PLACE)
         child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
         _eyes_frame(SNAP, "place")
-        wait_prompt(child, timeout=60)
+        drain_until_quiet(child, quiet=3.0, max_wait=90)
         print("\n[driver] place turn done", flush=True)
 
     if MODE == "combo":

@@ -1,46 +1,62 @@
-# DEBUG.md — category-only fetch/place does not ground (罐子 grasps the wrong object)
+# DEBUG.md — D171 "DeepSeek native floundered on the PLACE compound"
 
 ## OBSERVE
-- Repro (bare REPL, in-process, scratchpad/repl_accept.py MODE=fetch): "把罐子拿过来"
-  → verified=False (0/3). launch_explore EMPTY (in-process took). Model authored the
-  CORRECT verify label holding_object('pickable_can_red') (82× in trace) → disambiguation
-  at the verify level WORKS.
-- Eyes (verdict_*.png): the gripper holds the BLUE bottle; the red can is knocked to the
-  floor at far right. So the grasp secured the WRONG object → holding_object('pickable_can_red')
-  is honestly False. The gap is ACTOR-side object selection, not the verify.
-- Perception probe (scratchpad/dino_probe.py, real Go2GraspPerception frame):
-  objects blue y=2.78 (cx264), green y=3.0 (cx160), red_can y=3.22 (cx57).
-  grounding-dino for prompt "a can." (= query_to_prompt("罐子")):
-    red_can cx57 conf=0.537 · blue cx264 conf=0.522 · green cx160 conf=0.513.
-  The real can ranks first but by a NOISE-THIN 0.02 margin — all 3 pickables are near-identical
-  cylinders, so "a can." cannot reliably single out the can. Raw "罐子" → [] (dino is English).
-- Contrast: the colour path grounds 6/6 (D167) because HSV colour is a STRONG discriminator.
+- Repro A (direct, in-process): scratchpad/trace_place_native.py builds the in-process
+  go2+arm agent (VECTOR_NO_ROS2=1, headless egl), wires DeepSeek (deepseek-chat) backend,
+  calls engine.run_turn_native("把绿色的瓶子放到架子上") with an on_progress recorder.
+  RESULT: perception_grasp(query='green bottle') -> holding_object('pickable_bottle_green')
+  PASS actor=CAUSED -> mobile_place({}) -> resting_on_receptacle() PASS -> finish.
+  VERDICT verified=True n_grounded=2. CLEAN two-action compound.
+- Repro B (bare REPL acceptance face): scratchpad/repl_accept.py MODE=place
+  VECTOR_PROVIDER=deepseek. RESULT: place_verified=None, frames=[]. Raw REPL log
+  (/tmp/repl_accept/ds_place_g/repl.raw.log) shows ONLY the sim-start chat turn; the PLACE
+  utterance "把绿色的瓶子放到架子上" was NEVER echoed. grep of the cleaned log: 0 hits for
+  放到架子上/绿色/perception_grasp/mobile_place/grounded; only 8x"thinking" + 1x"answer" (all
+  from sim-start). The place turn never ran; the 300s grounded-expect timed out.
+- Recent changes: D171 (5e652e1, 0f7d498) recorded the "flounder" from an UNSAVED terminal
+  observation ("ran bash which walk grasp") — no on-disk trace. bash is DROPPED from the
+  native robot-world toolset (_MUTATING_CODE_TOOLS), so that description was impossible on the
+  native path — a tell the observation was a harness artifact, not a real model trace.
 
 ## HYPOTHESIZE
-| # | Hypothesis | Evidence |
-|---|-----------|----------|
-| H1 | verify label wrong (holding_object('罐子')) | REJECTED — model authored 'pickable_can_red' |
-| H2 | colourless perception picks wrong cylinder (max-conf among ~equal "can" boxes) | CONFIRMED — probe 0.537/0.522/0.513, eyes show blue grabbed |
-| H3 | grounding-dino can't handle Chinese | partial — raw 罐子→[]; but query_to_prompt maps 罐子→"a can." so the real path is English (not the cause) |
+| # | Hypothesis | Category | Evidence |
+|---|-----------|----------|----------|
+| H1 | DeepSeek tool-caller can't do the PLACE compound ("model-sensitivity") | model | D171 claim |
+| H2 | qwen-tuned native compound guidance doesn't generalize to DeepSeek | prompt | D171 A/B |
+| H3 | REPL routes place to legacy VGG (is_complex) not native -> "unmatched" FAIL | routing | D171 "unmatched" |
+| H4 | repl_accept.py sim-start wait matches the ECHOED command line -> PLACE sent while sim still building/streaming -> input mangled, place turn never runs | harness | Repro B: utterance absent from log; full-timeout runtime; combo-mode had SAME documented bug |
 
 ## EXPERIMENT
-- H2 check: dino_probe.py printed per-prompt boxes. "a can." gives all 3 cylinders ~0.51-0.54
-  (margin 0.02 = noise). _select_detection(color=None) = plain max-conf → effectively random
-  among the 3. → H2 CONFIRMED. Shape alone does not disambiguate identical cylinders.
+### H1 — DeepSeek incapable of the compound
+Direct run_turn_native on the exact utterance (Repro A) -> verified=True n_grounded=2,
+grasp then place, both GT-oracle grounded. **H1 REJECTED.**
+
+### H2 — guidance doesn't generalize to DeepSeek
+Same Repro A: deepseek-chat read the CURRENT _native_system_prompt place_guidance and
+correctly decomposed to grasp->verify->place->verify->finish. **H2 REJECTED.**
+
+### H3 — REPL routes place to legacy, floundering "unmatched"
+Repro B log shows the place utterance never reached ANY producer (native OR legacy) — no
+"unmatched" this run. Routing is moot: the turn never ran. With Repro A proving native
+handles a place command that DOES reach the turn loop, **H3 REJECTED (turn never ran).**
+
+### H4 — harness sim-start sync bug
+Repro B: after sendline("启动带手臂的 go2 仿真"), wait_prompt(120)'s `vector>` regex matches
+the just-ECHOED "vector> 启动..." line INSTANTLY (identical to the combo-mode bug the driver's
+own comment documents), so PLACE was sent while the sim build + sim-start chat answer were
+still streaming; prompt_toolkit ate/garbled the line and the place turn never dispatched. The
+utterance's total absence from the log + full-timeout runtime confirm it never became a turn.
+**H4 CONFIRMED.**
 
 ## CONCLUDE
-- Root cause: a colourless category reference ("罐子"=can) routes to grounding-dino "a can.",
-  which scores all 3 near-identical cylinders equally; max-confidence selection then grabs a
-  random one (blue observed). Colour is the reliable discriminator; category alone is not.
-- Fix (actor-side, non-gated, moat-safe): resolve a UNIQUE-category reference against the scene's
-  object catalog (the arm's GT object-name set — config the actor cannot author) to its single
-  matching object AND its colour attribute, then drive the PROVEN colour-selection path (HSV +
-  _COLOR_TO_SCENE). "罐子" → unique can = pickable_can_red (red) → colour path → reliable grasp.
-  Ambiguous categories ("瓶子" = 2 bottles) resolve to None → unchanged (honestly can't pick one).
-  The verify oracle holding_object(...) is BYTE-UNCHANGED and independently grades the GT weld —
-  the resolver can only change WHICH object is grasped, never fake a verdict (moat holds).
-- File:line: vector_os_nano/skills/perception_grasp.py (execute: colour resolution) +
-  grounding_dino._ZH_NOUN_EN (noun map, reused).
-- Regression test: unit test the category→(colour,name) resolver; then bare-REPL re-accept
-  category-only fetch "把罐子拿过来" grounds holding_object('pickable_can_red'), eyes-confirm,
-  launch_explore EMPTY; re-check colour cases un-regressed (resolver only fires when color is None).
+- Root cause: HARNESS bug in scratchpad/repl_accept.py — the sim-start->action handoff synced
+  on the bare `vector>` prompt, which matches the echoed command line immediately, so the
+  action command was injected before the REPL finished the sim-start turn and was lost. The
+  product (native producer + DeepSeek + compound guidance) is CORRECT (Repro A).
+- The D171 "model-sensitivity / DeepSeek floundered / routes to legacy VGG" finding is a
+  MISDIAGNOSIS caused by this harness artifact.
+- File: scratchpad/repl_accept.py — sim-start wait (was wait_prompt on `vector>`).
+- Fix: sync sim-start on the sim tool marker ("sim start go2 ok") THEN drain REPL output until
+  quiet before sending the action; drain before EVERY action command so none injects mid-turn.
+- Regression guard: re-run bare REPL MODE=place via DeepSeek -> must ground (verified=True).
+- Verify: VECTOR_PROVIDER=deepseek python scratchpad/repl_accept.py <fetch> <place> tag place
