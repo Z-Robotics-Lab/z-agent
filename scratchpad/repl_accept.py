@@ -136,6 +136,23 @@ def drain_until_quiet(child, quiet=3.0, max_wait=180):
     return False
 
 
+def _clean_log(snap: str) -> str:
+    """ANSI+spinner-stripped view of the raw REPL log (for ground-truth marker checks).
+
+    prompt_toolkit repaints the screen with cursor/colour escapes and a braille spinner that
+    interleave INTO marker text, so a LIVE ``child.expect(r"sim start go2 ok")`` on the raw PTY
+    stream never matches even when the marker really printed (observed 2026-07-01: the sim
+    genuinely started — ``▸ sim start go2 ok 4.2s`` was in the log — yet 4 live-expects timed
+    out and the driver falsely reported SIM NEVER STARTED). So sync GT markers the SAME way the
+    verdict parser does: strip escapes + spinner glyphs, then substring-check."""
+    try:
+        raw = open(f"{snap}/repl.raw.log", encoding="utf-8", errors="replace").read()
+    except OSError:
+        return ""
+    clean = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][0-9;]*|\x1b", "", raw)
+    return re.sub(r"[⠀-⣿]", "", clean)
+
+
 def _eyes_frame(snap: str, tag: str) -> None:
     """Record the honest eyes-on-sim frame for turn ``tag``.
 
@@ -220,11 +237,14 @@ try:
         msg = ("启动带手臂的 go2 仿真，现在就开始，直接执行不用问我" if attempt == 0
                else "是的，用带手臂模式，现在就启动仿真，直接执行")
         child.sendline(msg)
-        idx = child.expect([r"sim start go2 ok", pexpect.TIMEOUT], timeout=90)
-        if idx == 0:
+        # Let the WHOLE sim-start turn settle (tool call + chat tail), THEN check ground
+        # truth in the ANSI-stripped log. A live expect on the raw PTY stream misses the
+        # marker because prompt_toolkit's repaint/spinner splits it (see _clean_log). GT is
+        # the SimStartTool completion line "sim start go2 ok", NEVER the model's chat claim.
+        drain_until_quiet(child, quiet=4.0, max_wait=150)
+        if "sim start go2 ok" in _clean_log(SNAP):
             started = True
             break
-        drain_until_quiet(child, quiet=3.0, max_wait=30)
         print(f"\n[driver] sim not started on attempt {attempt} (model chatted/asked); re-issuing", flush=True)
     if not started:
         # Ground truth: we only set started=True on the "sim start go2 ok" tool-completion
