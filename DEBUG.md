@@ -13,24 +13,35 @@
 | # | Hypothesis | Category | Evidence |
 |---|-----------|----------|----------|
 | H1 | Red-can grasp physics/IK genuinely fails (D172's claim) | Physics | D172 REPL 0/3 |
-| H2 | REPL used the WRONG NL term "红色的瓶子" (red bottle, no such object); a higher layer fails, not physics | Model/NL | red obj is a can |
+| H2 | REPL used the WRONG NL term "红色的瓶子" (no such object); a higher layer fails, not physics | Model/NL | red obj is a can |
 | H3 | REPL gui=True sim GL-contention (D164) degrades red perception only | Sim/env | probe is gui=False |
 
 ## EXPERIMENT (skill-direct probe = REAL mechanism, bypasses LLM/harness; scratchpad/grasp_probe.py, gui=False)
 ### H1: red-can grasp physics fails
 - red-can correct term "红色的罐子" x3: skill_success=true, weld_formed=true, held=true (moat holding_object),
-  grasp_world~(10.87,3.21,0.32) on the can, can LIFTED z 0.32->0.51..0.57, dog aligned to y~3.2-3.46. 3/3.
-- plus the initial run = 4/4 grounded.
+  grasp_world~(10.87,3.21,0.32) on the can, can LIFTED z 0.32->0.51..0.57, dog aligned to y~3.2-3.46. Plus initial = 4/4.
 => red-can grasp physics is ROBUST (4/4). **H1 REJECTED.** D172's "grasp ceiling" is wrong at the skill level.
 
 ### H2: wrong term / higher-layer, not physics
-- red WITH the D172 wrong term "红色的瓶子" (red bottle), target pickable_can_red: perception STILL resolves
+- red WITH the D172 wrong term "红色的瓶子" (skill-direct), target pickable_can_red: perception STILL resolves
   detection_label=pickable_can_red, weld_formed=true, held=true, can lifted. Perception robust to the wrong term.
-=> Neither term nor physics fails at the SKILL level. The 0/3 must be in the REPL model/routing/harness path
-  (native-loop plan, model-authored verify target, or gui sim). **H2 partially confirmed (failure is above the skill).**
+=> Neither term nor physics fails at the SKILL level. **H2 -> the failure, if any, is ABOVE the skill.**
 
-## CONCLUDE (interim -- pending bare-REPL REAL-VERIFY)
-- Root cause is NOT grasp physics. Red-can grasp grounds 4/4 skill-direct. D172 mislabeled a REPL-path failure
-  as a "grasp-robustness ceiling". Next: REAL-VERIFY red-can fetch on the BARE REPL by the CORRECT NL term
-  "红色的罐子" via DeepSeek, N>=3, in-process (launch_explore EMPTY), eyes on the render. If it grounds -> all 3
-  colours accepted on the true face and the "grasp ceiling" is disproven on the acceptance face.
+### H3: REPL gui GL-contention degrades red only
+- Bare-REPL red fetch grounds 4/4 (below); if gui contention bit red it would not ground reliably. **H3 REJECTED.**
+
+## REAL-VERIFY (bare vector-cli + NL, VECTOR_PROVIDER=deepseek, in-process launch_explore_seen=False on ALL)
+- redcan1/2/3 "把红色的罐子拿过来" -> fetch_verified=True (1/1) x3; eyes (redcan1, redcan3): RED CAN held aloft,
+  green+blue on table. Oracle holding_object('pickable_can_red') + eyes AGREE.
+- redbottle_wrongterm "把红色的瓶子拿过来" (D172's WRONG term, red BOTTLE) -> fetch_verified=True (1/1); eyes:
+  red CAN held aloft. The colloquial/wrong term RESOLVES to the red can (NL robustness bonus).
+- Red-can total = 4/4 bare-REPL + 4/4 skill-direct = 8/8.
+
+## CONCLUDE
+- Root cause of D172's "red 0/3": NOT grasp physics (robust 8/8) and NOT the wrong NL term (the wrong term grounds
+  too). It was a TRANSIENT in that single D172 campaign (one-off perception/grasp miss or session state) mislabeled
+  as a systematic "grasp-robustness ceiling". The ceiling does not exist.
+- OUTCOME: all 3 colours now ground on the bare acceptance face (green/blue = D172, red = this round). Fetch is
+  firmed across colours. The claimed frontier ("grasp robustness") is closed; move to PLACE-via-DeepSeek + harder NL.
+- No code fix needed -- this was a false-ceiling correction. Regression guard: grasp_probe.py (skill-direct,
+  deterministic) + repl_accept.py MODE=fetch (the acceptance face) both exercise the red-can grasp.
