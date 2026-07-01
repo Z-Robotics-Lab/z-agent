@@ -1,53 +1,46 @@
-# DEBUG.md — bare-REPL fetch/place grade verified=False (perception_grasp ran_no_weld)
+# DEBUG.md — category-only fetch/place does not ground (罐子 grasps the wrong object)
 
 ## OBSERVE
-- Repro (bare REPL, in-process, no -p/flag): `启动带手臂的 go2 仿真` → `把绿色的瓶子拿过来`.
-- Verdict (dbg1, raw log): `perception_grasp → verify holding_object('pickable_bottle_green') · (actor=UNCAUSED)`
-  → `RAN verified=False (0/1 grounded)`. Place likewise: grasp UNCAUSED → mobile_place NOT_GRADED → 0/2.
-- Producer trace: model called `perception_grasp (query=绿色的瓶子)` as the SOLE action then finish — EXACTLY
-  as native_loop.py:1090-1105 instructs (grasp-first, do NOT navigate; perception_grasp self-approaches).
-- Geometry (go2_room.xml + mujoco_go2.py:374): spawn (10.0,3.0); green bottle (10.88,3.00,0.320) →
-  planar dist ~0.88 m, WELL inside perception_grasp's ~1.6 m self-approach reach. Object IS in reach.
-  → REFUTES STATUS H1 ("bottle across the room, needs navigate"): default scene is near, lone grasp is correct.
-- Root symptom: perception_grasp RUNS to completion but forms no gripper weld → holding_object stays False
-  (result_data diagnosis 'ran_no_weld', perception_grasp.py:1052). D156 measured this exact near geometry at 0.93;
-  D166's bare-REPL 0/1 was N=1.
+- Repro (bare REPL, in-process, scratchpad/repl_accept.py MODE=fetch): "把罐子拿过来"
+  → verified=False (0/3). launch_explore EMPTY (in-process took). Model authored the
+  CORRECT verify label holding_object('pickable_can_red') (82× in trace) → disambiguation
+  at the verify level WORKS.
+- Eyes (verdict_*.png): the gripper holds the BLUE bottle; the red can is knocked to the
+  floor at far right. So the grasp secured the WRONG object → holding_object('pickable_can_red')
+  is honestly False. The gap is ACTOR-side object selection, not the verify.
+- Perception probe (scratchpad/dino_probe.py, real Go2GraspPerception frame):
+  objects blue y=2.78 (cx264), green y=3.0 (cx160), red_can y=3.22 (cx57).
+  grounding-dino for prompt "a can." (= query_to_prompt("罐子")):
+    red_can cx57 conf=0.537 · blue cx264 conf=0.522 · green cx160 conf=0.513.
+  The real can ranks first but by a NOISE-THIN 0.02 margin — all 3 pickables are near-identical
+  cylinders, so "a can." cannot reliably single out the can. Raw "罐子" → [] (dino is English).
+- Contrast: the colour path grounds 6/6 (D167) because HSV colour is a STRONG discriminator.
 
 ## HYPOTHESIZE
-| # | Hypothesis | Category | Evidence |
-|---|-----------|----------|----------|
-| H1 | Missing navigate before grasp (far object) | plan | REFUTED a priori: bottle 0.88 m ahead, in reach; lone grasp is by-design for near |
-| H2 | perception (Moondream detect) misses green bottle some runs → no_detections | perception | grasp is perception-driven; stochastic VLM |
-| H3 | perceived+approached but weld misses by a few mm (ik/grasp-radius residual) → ran_no_weld | grasp reliability | diagnosis 'ran_no_weld'; skill has retry/nudge for exactly this |
-| H4 | True rate ~0.9 (D156) and bare-REPL 0/1 was N=1 noise | measurement | D156 0.93 on same geometry; single sample |
+| # | Hypothesis | Evidence |
+|---|-----------|----------|
+| H1 | verify label wrong (holding_object('罐子')) | REJECTED — model authored 'pickable_can_red' |
+| H2 | colourless perception picks wrong cylinder (max-conf among ~equal "can" boxes) | CONFIRMED — probe 0.537/0.522/0.513, eyes show blue grabbed |
+| H3 | grounding-dino can't handle Chinese | partial — raw 罐子→[]; but query_to_prompt maps 罐子→"a can." so the real path is English (not the cause) |
 
 ## EXPERIMENT
-- E1: skill-direct grasp_probe (gui=FALSE, no LLM) x5 on the exact acceptance geometry+query.
-  → RESULT: **5/5 GROUNDED** (weld_formed+held all true, bottle lifted 0.32→0.56, ~30-35s, diagnosis=ok).
-  So the GRASP SKILL is rock-solid on this geometry. H2/H3 REJECTED as the dominant cause; H4 (skill fine) supported.
-  ⇒ The bare-REPL 0/1 is NOT a skill defect. The failure is in the bare-REPL PATH, not the skill.
-- E2: what differs in the bare-REPL path? Found: SimStartTool._start_go2 + build_inprocess_go2_agent DEFAULT
-  **gui=True** (sim_tool.py:166, go2_inprocess.py:37) → a GLFW viewer window whose GL context can starve the
-  perception renderer's EGL context (D164: "Failed to make the EGL context current"). My probe used gui=False.
-  New H5: gui=True degrades perception → grasp point off / mask degraded → grasp RANs (actor=UNCAUSED with a
-  grasp_world, consistent with the bare-REPL trace: it perceived+approached but no weld).
-- E3: grasp_probe with PROBE_GUI=1 (gui=True, matching the bare-REPL) x3 — does it reproduce the failure? [RUNNING]
+- H2 check: dino_probe.py printed per-prompt boxes. "a can." gives all 3 cylinders ~0.51-0.54
+  (margin 0.02 = noise). _select_detection(color=None) = plain max-conf → effectively random
+  among the 3. → H2 CONFIRMED. Shape alone does not disambiguate identical cylinders.
 
 ## CONCLUDE
-- E3 RESULT: gui=True (egl) grasp 0/3, ALL perceived=False/no_detections; gldiag confirmed the exact
-  error: `RuntimeError: Failed to make the EGL context current` when perception creates its offscreen
-  mj.Renderer while the GLFW viewer exists. gui=False (egl) renders fine (rgb mean=162).
-- FIX PROOF: MUJOCO_GL=glfw makes viewer(gui=True) + perception coexist — frame renders (mean 160.7)
-  AND the full grasp GROUNDS 2/2 (perceived+weld+held). mujoco binds the backend at import, so a
-  mid-process egl->glfw switch fails (verified) — the backend MUST be set before the first `import mujoco`.
-- ROOT CAUSE (H5 CONFIRMED): the bare-REPL sim-launch defaults gui=True while the offscreen render
-  backend is EGL; EGL + a GLFW passive viewer cannot coexist, so perception's renderer fails to make its
-  context current → get_camera_frame raises → detect returns no_detections → grasp RANs (actor=UNCAUSED)
-  → fetch/place grade verified=False. NOT a producer-plan gap (STATUS H1), NOT a skill defect (skill 5/5).
-- FIX: `reconcile_render_backend(gui)` in go2_inprocess.py runs BEFORE mujoco import: viewer wanted +
-  display -> bind glfw (viewer + perception coexist); else egl + no viewer (perception always keeps its
-  context). Wired into build_inprocess_go2_agent (both launchers). Defensive guard in MuJoCoGo2.connect()
-  suppresses a viewer under MUJOCO_GL=egl for direct constructions. 6 unit tests green.
-- File:line: vector_os_nano/hardware/sim/go2_inprocess.py (reconcile_render_backend + call);
-  vector_os_nano/hardware/sim/mujoco_go2.py connect() viewer guard.
-- Regression test: tests/hardware/sim/test_render_backend.py (6 cases). Verify: bare-REPL repl_accept N>=5.
+- Root cause: a colourless category reference ("罐子"=can) routes to grounding-dino "a can.",
+  which scores all 3 near-identical cylinders equally; max-confidence selection then grabs a
+  random one (blue observed). Colour is the reliable discriminator; category alone is not.
+- Fix (actor-side, non-gated, moat-safe): resolve a UNIQUE-category reference against the scene's
+  object catalog (the arm's GT object-name set — config the actor cannot author) to its single
+  matching object AND its colour attribute, then drive the PROVEN colour-selection path (HSV +
+  _COLOR_TO_SCENE). "罐子" → unique can = pickable_can_red (red) → colour path → reliable grasp.
+  Ambiguous categories ("瓶子" = 2 bottles) resolve to None → unchanged (honestly can't pick one).
+  The verify oracle holding_object(...) is BYTE-UNCHANGED and independently grades the GT weld —
+  the resolver can only change WHICH object is grasped, never fake a verdict (moat holds).
+- File:line: vector_os_nano/skills/perception_grasp.py (execute: colour resolution) +
+  grounding_dino._ZH_NOUN_EN (noun map, reused).
+- Regression test: unit test the category→(colour,name) resolver; then bare-REPL re-accept
+  category-only fetch "把罐子拿过来" grounds holding_object('pickable_can_red'), eyes-confirm,
+  launch_explore EMPTY; re-check colour cases un-regressed (resolver only fires when color is None).
