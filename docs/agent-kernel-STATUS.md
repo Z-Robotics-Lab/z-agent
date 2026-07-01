@@ -25,9 +25,11 @@ owns:    scratchpad/repl_accept.py (provider-agnostic driver; unchanged this rou
 blocked: qwen/DashScope ARREARS → Qwen3-VL EYES still down (I substitute by reading the render). Yusen: qwen top-up
          restores VL eyes + a 2nd brain. NOT loop-blocking anymore — DeepSeek carries the planner face.
 next:
-  1. [DEBUG PROTOCOL] WHY does place-led NL route to legacy VGG under DeepSeek while fetch takes native?
-     (should_attempt_native vs should_use_vgg × provider/phrasing). Intertwined w/ S8 legacy-producer retirement.
-     Fix, then re-attempt PLACE via DeepSeek → full fetch+place BYO-model acceptance.
+  1. [DEBUG PROTOCOL] Route is NATIVE-FIRST (offline A/B: both utterances should_use_vgg=True, but PLACE
+     is_complex=True). DeepSeek native FLOUNDERED on the is_complex place compound (ran `bash which walk grasp`,
+     never called perception_grasp/mobile_place) → fell back to legacy VGG "unmatched" FAIL. Root: qwen-tuned
+     _native_system_prompt / tool-schema doesn't generalize to DeepSeek's tool-caller on the compound. Trace-level
+     Hypothesis Loop; make native compound guidance provider-robust; then re-attempt PLACE via DeepSeek. (S8-linked.)
   2. [FIRM] DeepSeek FETCH N≥3 + 3 colours (red/blue/green) to firm the N=1.
   3. [FRONTIER] OpenRouter as a 3rd brain (fix the model-id 404) → real multi-model plug-and-play on one face.
   4. [FRONTIER, needs LLM face — now available] combo N≥3 (D169), harder NL (relational near() gate), g1 2nd
