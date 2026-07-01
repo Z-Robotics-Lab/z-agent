@@ -1,62 +1,38 @@
-# >> FETCH-CAMPAIGN HANDOFF — cold-read: docs/plan-find-grasp-refactor.md + DECISIONS D99-D110 + git log -15.
-# >> EYES = per-round REAL-VERIFY (ADR-002, D99/D101): tools/acceptance/measure_fetch_visual.py is a 2nd VLM
-#    witness beside the GT oracle — emits PASS|FAIL|ABSTAIN, NEVER feeds evidence_passed, flags only
-#    GT-PASS+vision-FAIL for red-team. Coverage gap (D101): BLIND to grasp authenticity -> the GT weld
-#    (holding_object) is the success authority. disagreements>0 => red-team before trusting any grounded_rate.
-# >> IN-REACH fetch: grounded_rate ~0.8 (D99, frozen weld+lift oracle, three consistent runs) — steady baseline.
-# >> FAR fetch (out-of-reach) via perception_grasp is now RELIABLE (D111, 7756132): the D110 "sometimes
-#    no_detections" variance was ROOT-CAUSED (logged probe) to a NAV terminal-heading bug, not perception —
-#    FAR's navigate_to leaves the dog mis-faced at the standoff and the one-directional ~200deg re-perceive
-#    scan misses the bottle. FIX (skill-level, kernel/moat untouched): the recovery faces the KNOWN seed xy
-#    via _grasp_ready_repose before re-perceiving. Verified 3/3 skill-direct (real weld +0.23m each).
-#    Mechanism still = SKILL-LEVEL recovery in perception_grasp (D109, CEO Gate A — NOT a kernel replan).
-# >> FAR FETCH WORKS but is ROUTING-GATED (D111-D114, campaign #1). perception_grasp far is RELIABLE when
-#    routed (D111 face-the-seed: 9/9 grounds); D112 mobile_pick fast-fails honestly; D113 routing-descriptions
-#    shifted routing toward perception_grasp. RED-TEAM (D114, the key honesty catch): the early "5/5" was a
-#    routing STREAK — honest far-green grounded_rate ≈ 9/12 (0.75) over 12 model-path samples (GT weld), because
-#    the model STILL picks mobile_pick ~25% of the time (-> fast object_not_found, no ground). 0.75 is just
-#    BELOW the >=0.8 target; the binding constraint is now ROUTING CONSISTENCY, not any single skill. Blue 1/1
-#    grounded. RED 0/1 = a separate FOV issue (below). Pre-all-fixes the same command was 0/N.
-# >> RED short-can FOV (next seed): the red object is a CAN, shorter than the bottles; its mask is ~1000px
-#    at the 3.9m scan but 0 at the ~0.9m grasp standoff — it falls below the head camera's vertical FOV up
-#    close. Fix = raise camera tilt / widen standoff for short objects.
-# >> NEXT (non-gated): (1) RED short-can FOV fix; (2) EYES (ADR-002 VLM 2nd witness) grounded_rate over N for
-#    green/blue when the VLM net is stable (GT weld is the authority now; OpenRouter dropped connections
-#    intermittently this session); (3) near all-3-colours confirm. Then find-fetch is reliably closed;
-#    PLACE half remains CEO-gated (D106 receptacle oracle).
-# >> CEO gates still queued (do NOT cross — see Pending CEO gates below): S8 · S3c · S4 · S5 · S6 · D106 place oracle.
-
 # Vector OS — STATUS (resume anchor)
 
-One-page "where are we / what's next". Read this FIRST; the GOAL is in [../CLAUDE.md](../CLAUDE.md)
-→ North Star; durable design = [ARCHITECTURE.md](ARCHITECTURE.md); how to start = [getting-started.md](getting-started.md);
-decision history = [DECISIONS.md](DECISIONS.md); hidden-bug lessons = [tricky-bugs.md](tricky-bugs.md).
-This is a SNAPSHOT, not a log — the round-by-round history lives in DECISIONS + git.
+One-page "where are we / what's next". Read FIRST. GOAL = [../CLAUDE.md](../CLAUDE.md) North Star; durable
+design = [ARCHITECTURE.md](ARCHITECTURE.md); decisions = [DECISIONS.md](DECISIONS.md); hidden bugs =
+[tricky-bugs.md](tricky-bugs.md). SNAPSHOT, not a log — round history lives in DECISIONS + git.
 
-updated: 2026-06-30 · D163 — ⚠️ ACCEPTANCE-FACE GAP (honest): the FETCH 0.93/0.87 + PLACE 8/8/3/3 numbers are all on the FLAG-GATED `--sim-go2` IN-PROCESS sim (no ROS2), NOT the bare `vector-cli` REPL + NL path Yusen actually tests. On the REPL, NL '启动带手臂的 go2 仿真' launches the FULL ROS2 STACK subprocess (scripts/launch_explore.sh + Go2/PiperROS2Proxy) which FAILS fetch/place (RAN 0/2, rclpy 'cannot schedule futures after shutdown'). Per the rule 'behind a flag = NOT done', fetch/place are NOT yet done on the true acceptance face. FIXED already: ~/.local/bin/vector-cli wrapper (backup .orig) → Qwen(qwen-max)+VECTOR_MAX_TOKENS=8000+Qwen3-VL judge+sim env+--native-loop, so bare vector-cli runs on Qwen (DeepSeek-direct blocked). PENDING CEO DECISION (architecture fork, D163): (a) fix the ROS2-stack fetch/place [deep, keeps real-robot path] or (b) point NL '启动 go2 仿真' at the proven in-process sim [fast working bare-cli face]. Recommended (b). Prior in-process results stand as skill-level truth (perception_grasp retry R11, place central-drop R14 + settle R15, moat resting_on_receptacle). target #3 frontier after the acceptance face works. EVERY ROUND: git commit.
-goal:    a PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot (urdf+mesh+config),
-         policy, skill, capability; plan · route · verify · recover. Bare `vector-cli` + NL is the only
-         acceptance face; the honest-verify spine is frozen.
-phase:   FIND-AND-GRASP / FETCH campaign on `arch/plug-and-play` (find→navigate→grasp, in- and out-of-reach).
-         The plug-and-play platform refactor's S1/S2/S3a/S3b/S5a landed (durable status → ARCHITECTURE §3);
-         remaining stage work (S4/S5/S6/S8/S3c) is CEO-gated.
-owns:    `skills/{perception_grasp,navigate_to_object,mobile_*}.py`, `perception/object_localizer.py`,
-         `tools/acceptance/**` + `acceptance/**`, `docs/*`. Spine `vcli/cognitive/` is FROZEN
-         (only-ever-stricter; untouched this campaign — see Standing facts).
-doing:   FAR FETCH is ROUTING-INDEPENDENT now (D115): mobile_pick DELEGATES to perception_grasp on an
-         un-localizable target (frame-correct, DELEGATE_GROUND_PASS) + the recovery facing is closed-loop
-         (_face_object, fixes the open-loop repose undershoot). So whichever skill the model picks, a clean
-         single grasp step grounds. REMAINING GATE = model PLANNING variance: the model sometimes emits a
-         MULTI-STEP find/detect/explore plan that never reaches a grasp (RAN) — D103/D104 residue, the next
-         lever. perception_grasp far grounds 9/9 when a single grasp step is emitted. in-reach 0.8 steady;
-         multi-object D108 sealed; eyes far-confirmation still pending a clean grounded trial.
-blocked: none non-gated. CEO gates queued (do NOT cross) — see Pending CEO gates.
-next:    PLACE rate lever (D159, the dominant EDGE ROLL-OFF): land the drop CENTRAL on the narrow bin so
-         it can't roll off — (A) extend the arm FORWARD ~0.12m at carry-z to the bin centre (10.95) before
-         release [reach/collision test via place_probe]; (B) contained/wider receptacle (scene; oracle
-         unchanged); (C) gentler/lower release to kill roll energy. Transport-drop: tuck to a stable carry
-         pose before nav-to-bin (weld survives the walk) and/or a re-grasp recovery. Verify FAST with
-         scratchpad/place_probe.py, then bare-cli for acceptance. FETCH floor CLOSED (D156) — don't redo.
+updated: 2026-07-01 · D163 — ⚠️ #1 OPEN ITEM = ACCEPTANCE-FACE GAP. Every FETCH (near 0.93 / far 0.87) + PLACE
+(skill 8/8, e2e 3/3) number this session was on the FLAG-GATED `--sim-go2` IN-PROCESS sim (no ROS2), NOT the
+bare `vector-cli` REPL + NL path Yusen actually tests. On the REPL, NL "启动带手臂的 go2 仿真" launches the FULL
+ROS2 STACK subprocess (scripts/launch_explore.sh + Go2/PiperROS2Proxy) which CRASHES (rcl context invalid,
+/tmp/vector_vnav.log) → fetch/place RAN 0/2. Per "behind a flag = NOT done", fetch/place are NOT done on the
+true acceptance face. Pipeline is OpenRouter-INDEPENDENT: routing=Qwen(qwen-max) + eyes=Qwen3-VL-plus via
+DashScope (needs Clash RULE mode; DeepSeek-direct + OpenRouter both dead). `~/.local/bin/vector-cli` is now a
+WRAPPER (backup `.orig`) → Qwen + VECTOR_MAX_TOKENS=8000 + --native-loop + sim env, so bare vector-cli runs on Qwen.
+
+goal:    PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot/policy/skill/capability;
+         plan · route · verify · recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen.
+phase:   Post-fetch-place. The SKILLS work in-process (perception_grasp + R11 grasp-retry; mobile_place + R14
+         central-drop + R15 12s-settle; moat resting_on_receptacle D106/D116). The gap is the acceptance FACE (D163).
+owns:    skills/{perception_grasp,navigate_to_object,mobile_*}.py, vcli/tools/sim_tool.py, tools/acceptance/**,
+         acceptance/**, docs/*. Spine vcli/cognitive/ FROZEN (stricter-only).
+blocked: bare-cli fetch/place (ROS2-stack sim crash, D163). CEO gates queued below — do NOT cross.
+next (NEXT SESSION — Yusen's plan):
+  1. FIX THE LOOP / SELF-DEV SETUP. The unattended supervisor (~/.claude/bin/evolving-loop.sh) STALLED 10.6h
+     (a hung round wedged it, no self-heal); the /goal Stop hook spammed. Make the self-dev flow reliable, or
+     retire it for interactive driving. Loop files: ~/.claude/loops/vector-evolve.* (STOPPED; REGISTRY marks it).
+  2. CLOSE D163 — make bare-cli + NL fetch/place actually work: (a) fix the ROS2-stack sim crash [keeps the
+     real-robot path] OR (b) point NL "启动 go2 仿真" at the proven IN-PROCESS sim (sim_tool.SimStartTool._start_go2
+     launches the ROS2 subprocess; cli.py `--sim-go2` builds it in-process). Recommend (b) first. Then RE-VERIFY
+     fetch/place on the bare REPL (not `-p`/`--sim-go2`), all 3 colours, N>=5, Qwen3-VL eyes.
+  3. target #3 frontier (more objects / harder NL / g1 2nd embodiment / real VLA) — ONLY after the acceptance face works.
+tooling (scratchpad/, git-tracked): place_probe.py + run_probe.sh (fast skill-direct place ~120s/trial, no LLM,
+  reads moat oracle + bottle xyz); measure_qwen.py + run_measure_qwen.sh (bare-cli fetch/place rate + Qwen3-VL eyes).
+  GOTCHAS: inline sim cmds must NOT pre-`pkill 'vector_os_nano.vcli.cli'` (self-kills the bash -c shell); `rosm nuke`
+  between sims, NEVER pkill mujoco; serialize sims. EVERY change: git commit.
 
 ## The 5 plug-and-play contracts (the refactor's structural spine — R11; detail → ARCHITECTURE.md)
 - **Embodiment**: urdf+mesh+`robot.yaml` → drivers READ it via `DofLayout` (S1 schema + S2 wired; S4 = one generic driver class).
