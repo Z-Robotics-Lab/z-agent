@@ -15,7 +15,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/MuJoCo-3.6-green" alt="MuJoCo">
-  <img src="https://img.shields.io/badge/Claude-LLM_Brain-blueviolet?logo=anthropic&logoColor=white" alt="Claude">
+  <img src="https://img.shields.io/badge/Qwen-LLM_Brain-orange?logo=alibabacloud&logoColor=white" alt="Qwen via DashScope">
   <img src="https://img.shields.io/badge/ROS2_Jazzy-Navigation-blue?logo=ros&logoColor=white" alt="ROS2">
 </p>
 
@@ -49,19 +49,22 @@ source .venv/bin/activate
 uv pip install -e ".[all]"
 ```
 
-**Configure API key** — copy the example and add your key:
+**Configure API key** — copy the example and set the live provider (Qwen via Alibaba DashScope):
 
 ```bash
 cp .env.example .env
-# then open .env and fill in one provider key:
-#   DEEPSEEK_API_KEY=sk-...      # default (deepseek-v4-flash)
-#   OPENROUTER_API_KEY=sk-or-... # multi-model fallback
-#   ANTHROPIC_API_KEY=sk-ant-... # direct Anthropic
+# then open .env and set:
+#   QWEN_API_KEY=sk-...      # required
+#   VECTOR_PROVIDER=qwen     # select the Qwen / DashScope path
 ```
 
-`.env` is git-ignored. One provider key is enough. DeepSeek `deepseek-v4-flash` is the default; OpenRouter is the multi-model fallback.
+`.env` is git-ignored. The **live path is Qwen over Alibaba DashScope**: `qwen-max` runs the routing
+brain and **Qwen3-VL-plus** is the vision layer (the eyes), both through the DashScope
+OpenAI-compatible endpoint. Set `QWEN_API_KEY` and `VECTOR_PROVIDER=qwen` and you're done.
+(DeepSeek-direct and OpenRouter remain as optional code-level provider branches, but are not the
+live path.)
 
-**Run:**
+**Run** — bare `vector-cli` + natural language is the whole interface:
 
 ```bash
 vector-cli                  # interactive AI agent REPL
@@ -69,6 +72,38 @@ vector-cli --sim            # SO-101 arm in MuJoCo (natural language: "wave", "p
 vector-cli --sim-go2        # Go2 quadruped in MuJoCo
 #                             then by NL: "switch to g1" / "切换到 g1" → Unitree G1 humanoid (same room)
 ```
+
+You can launch a sim, command it, and switch embodiments entirely by NL — no flags needed:
+`启动 go2 仿真` · `走到桌子那边` · `切换到 g1`. The honest verdict prints back in the conversation.
+
+**Add a skill** — drop a file in `vector_os_nano/skills/` and decorate it; no routing code to touch:
+
+```python
+from vector_os_nano.core.skill import skill, SkillContext
+from vector_os_nano.core.types import SkillResult
+
+@skill(aliases=["wave", "挥手"], direct=True)
+class WaveSkill:
+    name = "wave"
+    description = "Wave the arm to greet"
+    def execute(self, params: dict, context: SkillContext) -> SkillResult:
+        ...
+        return SkillResult(success=True)
+```
+
+A skill may wrap an external **VLA / VLM** or a classical **grasp / nav** stack — full protocol in
+[docs/skill-protocol.md](docs/skill-protocol.md).
+
+**Bring your own robot** — a robot is a **config bundle, not code**. You provide:
+
+```
+embodiments/<id>/robot.yaml            # spawn · stance (by joint name) · sensors · root_body · capabilities
+embodiments/<id>/<model>.urdf + meshes/
+embodiments/<id>/policy.pt + policy spec   # gait/control: observation library, action map, rate
+```
+
+Then `> 启动 <id> 仿真` — one generic driver stands it up, no per-robot Python. (`go2` and `g1` ship
+as configs today; the generic driver that reads any bundle is landing on `arch/plug-and-play`.)
 
 ---
 
