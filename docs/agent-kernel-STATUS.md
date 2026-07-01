@@ -3,48 +3,41 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · D171 — ACCEPTANCE FACE UN-BLOCKED via bring-your-own model (DeepSeek). FETCH re-accepted
-on the bare REPL by NL with a NON-qwen brain; PLACE compound is model-sensitive (routes to legacy VGG). Two sims.
-UNBLOCK (no Yusen action needed): qwen/DashScope STILL in arrears (live 400 Arrearage), BUT last round's
-provider-agnostic driver (VECTOR_PROVIDER) + a live provider ping found DeepSeek LIVE. The bare `vector-cli`+NL
-acceptance face now RUNS via `VECTOR_PROVIDER=deepseek` — the North Star "bring your own model" proven on the true face.
-DID this round (REAL-VERIFY, in-process, launch_explore EMPTY):
- (1) FETCH GROUNDED via DeepSeek — "把绿色的瓶子拿过来" → perception_grasp → holding_object('pickable_bottle_green')
-     verified=True (1/1), actor=CAUSED; EYES: I read the offscreen verdict frame — green bottle in gripper, others on
-     table. Oracle+eyes agree. Red-team: DeepSeek by elimination (qwen 400 can't ground); GT oracle not self-report;
-     in-process. RESIDUAL: N=1; eyes read by me not automated VL (VL provider down) — flagged.
- (2) PLACE compound "把绿色的瓶子放到架子上" via DeepSeek = 0 verdicts: routed to LEGACY VGG
-     (find_green_bottle/place_bottle_on_shelf → "no strategy matched for 'unmatched'" → VGG FAIL), NOT native ReAct.
-     Model-sensitivity + routing finding (native prompt/route tuned on qwen); spine never reached, nothing faked.
+updated: 2026-07-01 · D172 — the acceptance-face "flakiness" was a HARNESS bug, not model/billing. Root-caused
++ fixed; FETCH firmed on the bare REPL via DeepSeek across 3 colours (green✓ blue✓ red✗-grasp), eyes+oracle agree.
+- ROOT CAUSE (Hypothesis Loop): sim-start synced on a LIVE `child.expect("sim start go2 ok")` against the raw PTY
+  stream, which prompt_toolkit's repaint+braille-spinner splits with ANSI → the marker NEVER matched even though
+  the sim really started (`▸ sim start go2 ok 4.2s` was in the log). Drove ~2-3 rounds of false "SIM NEVER STARTED".
+- FIXED (scratchpad/repl_accept.py, harness-only, NON-gated): sim-start drains-to-quiet then greps the ANSI-STRIPPED
+  log for the GT tool marker (never the model's chat CLAIM); reverted the harmful `_UP` chat-phrase broadening; loud
+  MODE guard (bad arg-order no longer burns a 6-min sim); honest early-abort when the sim never starts.
+- REAL-VERIFY (bare vector-cli+NL, VECTOR_PROVIDER=deepseek, in-process — launch_explore EMPTY ×3, nuke between):
+  GREEN verified=True(1/1) eyes: green held aloft ✓ · BLUE verified=True(1/1) eyes: blue held ✓ ·
+  RED verified=False(0/3): detect+route CORRECT (perception_grasp(red can)), GRASP physics failed — honest ✗.
 
 goal:    PLUG-AND-PLAY runtime for physical AI — bring your own robot/policy/skill/CAPABILITY/MODEL; plan·route·
          verify·recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
-phase:   UN-BLOCKED (DeepSeek brain). Capability re-verify RESUMES. FETCH re-accepted; PLACE routing to fix next.
-owns:    scratchpad/repl_accept.py (provider-agnostic driver; unchanged this round). Spine vcli/cognitive/ +
-         arm_sim_oracle verify predicates FROZEN. No code edits this round (verify + record only).
-blocked: qwen/DashScope ARREARS → Qwen3-VL EYES still down (I substitute by reading the render). Yusen: qwen top-up
-         restores VL eyes + a 2nd brain. NOT loop-blocking anymore — DeepSeek carries the planner face.
+phase:   UN-BLOCKED (DeepSeek brain) + acceptance HARNESS now reliable. FETCH re-accepted (2/3 colours grounded).
+owns:    scratchpad/repl_accept.py (harness: GT-only sim-start, MODE guard). Spine vcli/cognitive/ + arm_sim_oracle
+         predicates FROZEN (untouched). No kernel/interface edits this round.
+blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (I substitute by reading the offscreen render). NOT loop-blocking
+         — DeepSeek carries the planner face. Yusen top-up restores VL 2nd-witness + a 2nd brain.
 next:
-  1. [DEBUG PROTOCOL] Route is NATIVE-FIRST (offline A/B: both utterances should_use_vgg=True, but PLACE
-     is_complex=True). DeepSeek native FLOUNDERED on the is_complex place compound (ran `bash which walk grasp`,
-     never called perception_grasp/mobile_place) → fell back to legacy VGG "unmatched" FAIL. Root: qwen-tuned
-     _native_system_prompt / tool-schema doesn't generalize to DeepSeek's tool-caller on the compound. Trace-level
-     Hypothesis Loop; make native compound guidance provider-robust; then re-attempt PLACE via DeepSeek. (S8-linked.)
-  2. [FIRM] DeepSeek FETCH N≥3 + 3 colours (red/blue/green) to firm the N=1.
-  3. [FRONTIER] OpenRouter as a 3rd brain (fix the model-id 404) → real multi-model plug-and-play on one face.
-  4. [FRONTIER, needs LLM face — now available] combo N≥3 (D169), harder NL (relational near() gate), g1 2nd
-     embodiment config-only, BYO skill.
-  5. [OFFLINE] object-blind receptacle identity+delta predicate design + exec summary (spine-semantics gate).
-tooling (scratchpad/, git-tracked): repl_accept.py (BARE-REPL pexpect driver — the true face; VECTOR_PROVIDER picks
-  the brain: qwen|deepseek|openrouter; MODE=fetch|place|both|combo; combo captures multi-step verdicts). Driver
-  stdout has the [RESULT] line — REDIRECT it to a file (parent pipe is lost for orphaned runs); repl.raw.log =
-  REPL child output only. GOTCHAS: `rosm nuke --yes` between sims, NEVER pkill mujoco; NEVER kill supervisor/sibling/
-  session MCP; a cold-start may find a prior tick's sim still live — OBSERVE it, don't double-drive.
+  1. [FRONTIER — the honest red 0/3 exposes it] GRASP ROBUSTNESS: why green/blue grasp but red-can 0/3 (pose/IK
+     reach). Investigate + firm each colour to N≥3 on the bare face. Grasp, not routing/model/harness, is the ceiling.
+  2. [PLACE, harness now reliable] re-run PLACE via DeepSeek (MODE=place then combo) — D171's place run PREDATES the
+     sim-start fix, so its "routes to legacy VGG" finding must be re-checked on the fixed harness before trusting it.
+  3. [FRONTIER] OpenRouter 3rd brain (model-id 404) → real multi-model plug-and-play on one face.
+  4. [FRONTIER] harder NL (relational near() gate) · g1 2nd embodiment config-only · BYO skill.
+tooling: scratchpad/repl_accept.py (BARE-REPL pexpect driver — the true face). VECTOR_PROVIDER=qwen|deepseek|openrouter;
+  MODE=fetch|place|both|combo (VALIDATED — bad mode exits 1). Redirect stdout to a file (parent pipe lost for orphans);
+  eyes frame = /tmp/repl_accept/<tag>/eyes_<mode>.png (offscreen verdict render — READ it). GOTCHAS: `rosm nuke --yes`
+  between sims, NEVER pkill mujoco; NEVER kill supervisor/sibling; a cold-start may find a prior tick's sim live — OBSERVE.
 
 ## Pending CEO gates (decision queue — terse; do NOT cross autonomously)
-- **S8** retire legacy keyword producer (READY; now ALSO implicated in D171 place-routing): delete IntentRouter/
-  StrategySelector/_DIR_MAP + legacy GoalDecomposer; rewire 4 should_use_vgg sites onto should_attempt_native (D74);
-  keep VECTOR_LEGACY_TURN hatch. → go/no-go. (Place-compound routed here under DeepSeek — retiring it may fix D171.)
+- **S8** retire legacy keyword producer (READY): delete IntentRouter/StrategySelector/_DIR_MAP + legacy GoalDecomposer;
+  rewire 4 should_use_vgg sites onto should_attempt_native (D74); keep VECTOR_LEGACY_TURN hatch. → go/no-go. (D171
+  place-routing was implicated, BUT re-check on the fixed harness first — next#2 — before acting.)
 - **relational-place near(a,b) predicate** (D169): NEW verify predicate for "放到X旁边" → spine-semantics gate.
 - **D168 place-oracle** resting_on_receptacle object-BLIND + absolute-count → harden to identity+delta (stricter-only
   spine change) so multi-object place can't credit a pre-existing/wrong object. → go/no-go (spine-semantics gate).
