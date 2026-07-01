@@ -13,8 +13,11 @@ AND the honest same-process verdict snapshot (VECTOR_SNAPSHOT_DIR/verdict_*.png)
 that offscreen 3rd-person frame is the Qwen3-VL eyes (no fragile desktop-window grab).
 Reads the console `verified=True/False` as the moat-oracle GT.
 
-Usage: python repl_accept.py <fetch_nl> <place_nl> <tag>
-Env must carry QWEN_API_KEY etc. (the loop env). Runs ONE sim, one colour.
+Usage: python repl_accept.py <fetch_nl> <place_nl> <tag> [mode]
+Provider-agnostic: VECTOR_PROVIDER selects the routing brain (qwen|deepseek|openrouter),
+resolved by vcli.config from the .env keys. Default qwen (byte-compatible with history);
+set VECTOR_PROVIDER=deepseek to drive the SAME bare REPL when qwen is in arrears. Runs ONE
+sim, one colour.
 """
 from __future__ import annotations
 
@@ -38,21 +41,43 @@ MODE = sys.argv[4] if len(sys.argv) > 4 else "both"
 SNAP = f"/tmp/repl_accept/{TAG}"
 os.system(f"rm -rf {SNAP}; mkdir -p {SNAP}")
 
+# Provider-agnostic acceptance (plug-and-play model seam — North Star: bring your own
+# model, no kernel edits). VECTOR_PROVIDER selects the routing brain; vcli.config already
+# supports qwen / deepseek / openrouter (all OpenAI-compatible). Defaults reproduce the
+# historical qwen wiring EXACTLY when nothing is overridden (byte-compatible). When qwen is
+# in arrears, drive the SAME bare REPL through a reachable provider (e.g. deepseek-chat).
+PROVIDER = os.environ.get("VECTOR_PROVIDER", "qwen").lower()
+# Per-provider planner model env (only the selected provider's var is injected; a caller may
+# still override via the real env var, which os.environ.get picks up as the default here).
+_PLANNER = {
+    "qwen": {"QWEN_MODEL": os.environ.get("QWEN_MODEL", "qwen-max")},
+    "deepseek": {"DEEPSEEK_MODEL": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")},
+    "openrouter": {"VECTOR_MODEL": os.environ.get("VECTOR_MODEL", "anthropic/claude-3.5-sonnet")},
+}.get(PROVIDER, {})
+# Eyes second-witness (vision judge). Default: qwen3-vl on DashScope (historical). Override
+# via VECTOR_JUDGE_* to any OpenAI-compatible VLM whose credit is NOT exhausted (e.g. an
+# OpenRouter VLM). NOTE: the AUTHORITATIVE acceptance is the GT moat oracle + the offscreen
+# eyes_*.png this driver reads back — the judge is a secondary witness, never the moat.
+_JUDGE = {
+    "VECTOR_JUDGE_BASE_URL": os.environ.get(
+        "VECTOR_JUDGE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+    "VECTOR_JUDGE_MODEL": os.environ.get("VECTOR_JUDGE_MODEL", "qwen3-vl-plus"),
+    "VECTOR_JUDGE_API_KEY": os.environ.get(
+        "VECTOR_JUDGE_API_KEY", os.environ.get("QWEN_API_KEY", "")),
+}
 env = dict(os.environ)
 env.update({
     "PATH": "/usr/bin:" + os.environ.get("PATH", ""),
-    "VECTOR_PROVIDER": "qwen",
-    "QWEN_MODEL": os.environ.get("QWEN_MODEL", "qwen-max"),
-    "VECTOR_MAX_TOKENS": "8000",
-    "VECTOR_JUDGE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "VECTOR_JUDGE_MODEL": "qwen3-vl-plus",
-    "VECTOR_JUDGE_API_KEY": os.environ.get("QWEN_API_KEY", ""),
+    "VECTOR_PROVIDER": PROVIDER,
+    "VECTOR_MAX_TOKENS": os.environ.get("VECTOR_MAX_TOKENS", "8000"),
     "VECTOR_SIM_WITH_ARM": "1",
     "VECTOR_NO_ROS2": "1",
     "MUJOCO_GL": "egl",
     "HF_HUB_OFFLINE": "1",
     "TRANSFORMERS_OFFLINE": "1",
     "VECTOR_SNAPSHOT_DIR": SNAP,
+    **_PLANNER,
+    **_JUDGE,
 })
 # HEADLESS acceptance (verified 2026-07-01): drop the X display so reconcile_render_backend
 # keeps egl (viewer suppressed). egl+headless is the reliable render path — perception grounds
@@ -106,35 +131,34 @@ def _eyes_frame(snap: str, tag: str) -> None:
 
 
 def _llm_preflight() -> None:
-    """Fail FAST if the DashScope/Qwen account is unusable (arrears / access denied), instead of
-    spawning the sim and burning an 8-min per-verdict timeout against a dead LLM (the whole
-    acceptance face — planner qwen-max AND eyes qwen3-vl — routes through this one key). A 400
-    'Arrearage'/'Access denied' means BILLING is down: a Yusen-only fix, not a code fault.
-    """
-    import json as _json
-    import urllib.error
-    import urllib.request
-    key = os.environ.get("QWEN_API_KEY", "")
-    if not key:
-        print("[driver] PREFLIGHT: no QWEN_API_KEY in env — cannot run the acceptance face.", flush=True)
-        sys.exit(3)
-    req = urllib.request.Request(
-        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-        data=_json.dumps({"model": os.environ.get("QWEN_MODEL", "qwen-max"),
-                          "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}).encode(),
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    """Fail FAST if the RESOLVED planner provider is unusable (arrears/denied/no key), instead of
+    spawning the sim and burning an 8-min per-verdict timeout against a dead LLM. Provider-agnostic:
+    it probes EXACTLY what the bare REPL will resolve via vcli.config (qwen / deepseek / openrouter —
+    the plug-and-play model seam), NOT a hardcoded DashScope endpoint. A billing/'Arrearage' error
+    means that provider is down (Yusen-only fix) — pick another provider (VECTOR_PROVIDER=…)."""
+    sys.path.insert(0, ROOT)
     try:
-        urllib.request.urlopen(req, timeout=30).read()
-        print("[driver] PREFLIGHT: DashScope LLM reachable.", flush=True)
-    except urllib.error.HTTPError as e:
-        body = e.read()[:300].decode(errors="replace")
-        if "Arrearage" in body or "Access denied" in body or "overdue" in body:
-            print(f"[driver] PREFLIGHT BLOCKED: DashScope account in ARREARS/denied ({e.code}). "
-                  f"Acceptance face is DOWN until billing is restored (Yusen-only). Body: {body}", flush=True)
+        from vector_os_nano.vcli.config import resolve_credentials  # noqa: PLC0415
+        key, provider, model, base_url = resolve_credentials()
+    except Exception as e:  # noqa: BLE001
+        print(f"[driver] PREFLIGHT: resolve_credentials failed ({e}); proceeding blind.", flush=True)
+        return
+    if not key:
+        print(f"[driver] PREFLIGHT: no API key resolved for provider={provider} — cannot run.", flush=True)
+        sys.exit(3)
+    try:
+        from openai import OpenAI  # noqa: PLC0415
+        c = OpenAI(api_key=key, base_url=base_url or None)
+        c.chat.completions.create(model=model, messages=[{"role": "user", "content": "hi"}], max_tokens=1)
+        print(f"[driver] PREFLIGHT: planner reachable (provider={provider} model={model}).", flush=True)
+    except Exception as e:  # noqa: BLE001
+        body = str(e)
+        low = body.lower()
+        if "arrearage" in low or "access denied" in low or "overdue" in low or "insufficient" in low:
+            print(f"[driver] PREFLIGHT BLOCKED: provider={provider} model={model} account unusable "
+                  f"(billing). Try another VECTOR_PROVIDER. {body[:220]}", flush=True)
             sys.exit(4)
-        print(f"[driver] PREFLIGHT: DashScope HTTP {e.code} (non-arrears): {body} — proceeding.", flush=True)
-    except Exception as e:  # noqa: BLE001 — network flake shouldn't hard-block; let the run try
-        print(f"[driver] PREFLIGHT: probe error {type(e).__name__}: {e} — proceeding.", flush=True)
+        print(f"[driver] PREFLIGHT: probe error {type(e).__name__}: {body[:220]} — proceeding.", flush=True)
 
 
 _llm_preflight()
