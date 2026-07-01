@@ -22,10 +22,15 @@ next:
   2. [DONE] glfw fix (gui=True EGL/GLFW contention, adcd04b). FETCH RE-ACCEPTED 6/6 across 3 colours, eyes, in-process.
   3. [DONE] PLACE RE-ACCEPTED on bare REPL: 6/6 verified=True (2/2), 3 colours × 2, resting_on_receptacle GT oracle,
      launch_explore EMPTY + no leak, eyes-confirmed. Both floors now met on the true face (D167).
-  4. [NOW — FRONTIER] Bar is met → RAISE it. Candidates: (a) ROBUST find-fetch-place under harder NL (multi-object
-     scenes, ambiguous refs, "把桌上的东西收好"); (b) VLN / SysNav (multi-room, navigate-to-then-act); (c) 2nd
-     embodiment g1 via config-only registration (Invariant 3 test); (d) BYO model/skill plug-in path. Pick via a
-     Decision Workflow if torn. Track B guardrails (G1..G5) still queued (G3↔C(b) VECTOR_NO_ROS2 reconcile noted).
+  4. [NOW — FRONTIER, probe done] Bar is met → RAISED it: harder-NL probe "把罐子放到架子上" (category-only, no colour,
+     must disambiguate the unique 罐子 among 3 objects). HONEST result: disambiguation WORKS (resolved → pickable_can_red
+     correctly); but verified=False (1/2) — resting_on_receptacle(can_red,'shelf')✓ passed while holding_object did NOT
+     ground → the can rests on the shelf where it likely already sat, so the full pick+move did not ground (honest
+     partial, not a fake). SEED next round: harden find-fetch-place so category-only refs get a full grounded pick+place
+     — investigate (i) did the pick stage fail for the can, (ii) does "架子" resolve to the can's CURRENT surface making
+     the place predicate trivially satisfied (receptacle-resolution gap). Then N≥5 3-colour category-only re-accept.
+  5. [LATER FRONTIER] (b) VLN/SysNav multi-room; (c) 2nd embodiment g1 config-only registration (Invariant 3 test, S4
+     gate); (d) BYO model/skill. Track B guardrails (G1..G5) still queued (G3↔C(b) VECTOR_NO_ROS2 reconcile noted).
 tooling (scratchpad/, git-tracked): repl_accept.py (BARE-REPL pexpect driver — the true acceptance face, no -p/flag),
   measure_qwen.py (-p probe, NOT the face), place_probe.py. GOTCHAS: `pgrep -f launch_explore` matches the loop's own
   claude -p argv (goal text) — match `launch_explore\.sh` + exclude claude; pexpect needs codec_errors='replace';
