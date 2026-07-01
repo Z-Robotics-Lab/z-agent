@@ -1164,6 +1164,22 @@ class MuJoCoG1:
             d.cam_xmat[cam_id].copy(),
         )
 
+    def get_camera_fovy(self) -> float:
+        """Return the head camera's vertical field of view (degrees).
+
+        Paired with get_camera_pose() this gives the pinhole intrinsics/extrinsics a
+        ground-plane projection needs to turn a detected pixel into a world (x, y).
+        """
+        self._require_connection()
+        mj = _get_mujoco()
+        m = self._model
+        assert m is not None
+        try:
+            cam_id = m.cam(_SCENE_CAM_NAME).id
+        except Exception:  # noqa: BLE001
+            cam_id = 0
+        return float(m.cam_fovy[cam_id])
+
     # ------------------------------------------------------------------
     # Ground truth (SIM-side; INVISIBLE to the detector)
     # ------------------------------------------------------------------
