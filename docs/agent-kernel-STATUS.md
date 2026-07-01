@@ -3,55 +3,51 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · D179 — BYO-MODEL boundary MAPPED (red-teamed). VLN #1 stays CEO-gated (near_object spine
-allowlist), so this round pivoted to the non-gated frontier "N≥4 BYO-MODEL" and honestly bounded it: the MODEL
-seam is zero-kernel-edit for 3 more families, but end-to-end acceptance is model-capability-bound. The moat held.
-- SEAM (proven, ZERO code changed): llama-3.3-70b, gemini-3.5-flash, mistral-medium-3-5 each plug into the bare
-  `vector-cli` REPL with only `VECTOR_PROVIDER=openrouter VECTOR_MODEL=<id>` — no kernel/driver edit.
-- ACCEPTANCE (honest negative, `scratchpad/g1_accept.py`, g1 in-process, RED-grounds/GREEN-refutes):
-  * llama-3.3-70b — starts g1 by NL, chains detect→verify, but emits a MALFORMED verify (`detection_matches_gt(`,
-    unclosed) → SyntaxError → RAN (2/2 runs, systematic). Moat REFUSED it, no false green.
-  * gemini-3.5-flash & mistral-medium-3-5 — won't emit the sim-start tool call by NL (chat/ask, 4 retries) → g1
-    never starts. Root cause (over-caution vs OpenRouter tool-schema translation) NOT isolated (llama DID tool-call).
-- MOAT held CROSS-MODEL: no weak/malformed model faked a GROUNDED verdict (invariant 1, empirically). N=3 accepted
-  families (Anthropic · DeepSeek · OpenAI gpt-4o-mini) stands; N≥4 NOT earned. No overclaim.
+updated: 2026-07-01 · D180 — BYO-MODEL seam HARDENED + D179 "over-caution" REFUTED (positive control). Both
+provider paths were billing-blocked this round (DashScope Arrearage on qwen-max + qwen3-vl-plus eyes; OpenRouter
+down to ~$0.0007 residual), so full sim acceptance was externally gated → pivoted to the non-gated seam frontier
+and did code-only, error-path-verifiable work. ZERO credit spent (all failures reject pre-generation).
+- REFUTED D179: `mistral-small-3.2-24b-instruct` (a MISTRAL family model) tool-calls the sim-start NL PERFECTLY on
+  the identical prompt. gemini-3.5-flash / mistral-medium-3-5 fail with `402 "Prompt tokens limit exceeded 1114>428"`
+  = the PROMPT exceeds residual credit; the model never ran. "over-caution" was drained-credit/stale-id, NOT behavior.
+- BUILT (TDD, non-gate; grade()/spine byte-unchanged): `ModelUnavailableError` (subclass of APIStatusError) turns the
+  3 non-recoverable BYO failures (402 hard credit-exhaustion · 404 no-endpoints · 400 invalid model id) into ONE clean
+  line "Model '<id>' unavailable via <provider>: <reason>. Check VECTOR_MODEL and credits." Recoverable 402 STILL
+  downshifts once then escalates. Closes the cli.py:497 swallow that made D179 misread balance failures as no-action.
+- REAL-VERIFIED on the BARE REPL (scratchpad/model_unavailable_accept.py, PTY, no flag): 3 shapes × both routes
+  (native "model unavailable:" + legacy "Error:") surface the clean message; NO raw JSON/traceback; red-teamed.
+  73 backend + 93 cli/native unit tests green.
 
 goal:    PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/CAPABILITY/MODEL; plan·route·verify·recover.
          Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
-phase:   VLN GROUNDED accept gated (near_object spine allowlist). BYO-MODEL seam proven ×6 families, end-to-end
-         acceptance ×3 (moat gates the weaker 3). BYO-ROBOT go2+g1.
-owns:    docs only this round (DECISIONS D179 + STATUS). No code touched. Evidence in /tmp/g1_accept/{llama,llama2,gemini,mistral}.
-blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (OpenRouter is the substitute VLM path). NOT loop-blocking.
-         PRE-EXISTING: tests/unit/vcli/test_config_deepseek_provider.py 3 fails (provider naming drift) — untouched.
+phase:   BYO-MODEL seam robust (clean unavailable-surfacing, 3 shapes). N=3 accepted families stands; N≥4 blocked ONLY
+         by external credit (mistral-small ready). VLN GROUNDED accept still CEO-gated (near_object spine allowlist).
+owns:    vcli/backends/openai_compat.py (ModelUnavailableError) + cli.py native catch + tests/unit/vcli/test_backends.py.
+blocked: BILLING (external, CEO): DashScope arrears (qwen orchestration + qwen3-vl eyes down) + OpenRouter ~$0.0007
+         residual → full sim acceptance + N≥4 gated on a top-up. PRE-EXISTING: test_config_deepseek_provider.py 3 fails.
 next:
-  1. [FRONTIER, non-gated] Robustify BYO-MODEL tool-calling across families so N≥4 EARNS acceptance:
-     (a) gemini/mistral no-tool-call DIAGNOSED (this round, read-only): NOT plumbing — openai_compat.py passes
-     `tools` and sets NO `tool_choice` (defaults `auto`); llama tool-called through the SAME path, so gemini/mistral
-     CHOOSE text under `auto` = model over-caution. Fix path = persona/tool-instructions nudge (must re-verify the
-     passing 3 don't regress); `tool_choice=auto` is already implicit so forcing it won't help. (b) verify-expr
-     robustness — a weak model dropping `==True` or malforming the
-     expr is the #2 failure; connects to the plug-and-play-predicate gate (below).
-  2. [GATE-THEN-BUILD] VLN GROUNDED accept on near_object approval (see gate queue). The RECURRING gate root cause
-     is `_PREDICATE_ORACLES` being a hardcoded KERNEL list (evidence_classifier.py:52 flags R2) — the North-Star-
-     aligned fix is world-declared predicate metadata (one meta-decision resolves D178 near_object + D169 near +
-     the D179 verify-expr brittleness). Fold into ONE exec summary when Yusen returns; it's a spine gate — don't cross.
-  3. [FRONTIER, non-gated] arm-free `describe` for g1 (native_loop.py:109 flags it) via OpenRouter VLM caption +
-     a GT-backed g1 `describe_scene` oracle (state-oracle, NON-gated — not a new _PREDICATE_ORACLES name).
-  4. [SPINE] D168 place-oracle identity+delta — LOAD-BEARING (D174 place leans on it). CEO gate, queue for Yusen.
+  1. [EXTERNAL/CEO] Credit top-up (OpenRouter + DashScope) is the ONLY blocker to (a) earning N≥4 acceptance
+     (mistral-small-3.2-24b proven tool-calls) and (b) any full-sim REAL-VERIFY round. Queue for Yusen.
+  2. [FRONTIER, non-gated] verify-expr robustness — a weak model dropping `==True` / malforming the expr is the #2
+     BYO failure; connects to the plug-and-play-predicate META gate (below). Buildable + unit-verifiable now.
+  3. [FRONTIER, non-gated] arm-free `describe` for g1 via VLM caption + GT-backed `describe_scene` state-oracle —
+     BLOCKED on a working VLM (qwen3-vl down, OpenRouter VLM needs credit). Defer until billing restored.
+  4. [GATE-THEN-BUILD] VLN GROUNDED accept on near_object approval (see gate queue). Root cause = hardcoded kernel
+     `_PREDICATE_ORACLES` (evidence_classifier.py:52) → META plug-and-play-predicate gate subsumes it.
 
 ## Pending CEO gates (decision queue — terse; do NOT cross autonomously)
-- **META (recommended framing): plug-and-play verify-predicates** — `_PREDICATE_ORACLES` is a hardcoded kernel list
+- **BILLING (external, NEW)**: OpenRouter credit exhausted (~$0.0007) + DashScope arrears — blocks all full-sim
+  acceptance + N≥4. Not a code fix; needs an account top-up. Batch into the return exec summary.
+- **META: plug-and-play verify-predicates** — `_PREDICATE_ORACLES` is a hardcoded kernel list
   (evidence_classifier.py:52 self-flags "R2 should derive from metadata"); every new predicate (D178 near_object,
-  D169 near) is therefore a spine gate, which VIOLATES the North Star "bring a verify-predicate — no kernel edits".
-  Proposed resolution: world-declared predicate metadata (stricter-only; worlds already register verify bindings).
-  ONE decision subsumes the per-predicate gates below. Spine-semantics gate → go/no-go.
-- **D178 near_object VLN predicate** (CONFIRMED gate, EXEC SUMMARY in DECISIONS D178): world-side
-  `near_object(colour,radius)` GT oracle + list in kernel allowlist `_PREDICATE_ORACLES`. Same category as
-  `resting_on_receptacle` (D106-approved). grade() byte-unchanged, stricter-only. → go/no-go.
-- **D176 cmd_motion driver seam** (flagged, likely non-gate): enables g1 nav GROUNDED; grade() spine byte-unchanged.
-- **D168 place-oracle** resting_on_receptacle object-BLIND + absolute-count → harden to identity+delta (stricter-only). LOAD-BEARING. → go/no-go.
+  D169 near) is a spine gate → VIOLATES "bring a verify-predicate — no kernel edits". Resolution: world-declared
+  predicate metadata (stricter-only). ONE decision subsumes the per-predicate gates below. Spine-semantics gate.
+- **D178 near_object VLN predicate** (CONFIRMED gate, exec summary in DECISIONS D178): world-side GT oracle + kernel
+  allowlist entry; same category as `resting_on_receptacle` (D106-approved). grade() byte-unchanged. → go/no-go.
+- **D176 cmd_motion driver seam** (likely non-gate): enables g1 nav GROUNDED; grade() spine byte-unchanged.
+- **D168 place-oracle** resting_on_receptacle object-BLIND+absolute-count → harden to identity+delta. LOAD-BEARING. → go/no-go.
 - **S8** retire legacy keyword producer (READY): delete IntentRouter/StrategySelector/_DIR_MAP + legacy GoalDecomposer;
   rewire 4 should_use_vgg → should_attempt_native (D74); keep VECTOR_LEGACY_TURN hatch. → go/no-go.
-- **relational-place near(a,b) predicate** (D169): NEW verify predicate for "放到X旁边" → spine-semantics gate (subsumed by META above).
+- **relational-place near(a,b)** (D169): NEW verify predicate → spine-semantics gate (subsumed by META above).
 - **Stage gates:** S4 embodiment-registration · S5 ControlPolicy + convex_mpc dep · S6 capability perm/security ·
   nav→FAR causation (D14) · strategy_params (D52) · explore TARE · VLN SysNav. New deps/interfaces/hw/sec here.

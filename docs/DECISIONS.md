@@ -1077,3 +1077,29 @@ family plugs in with only `VECTOR_PROVIDER=openrouter VECTOR_MODEL=<id>`.
   no-tool-call (persona/tool-instructions nudge vs openrouter tool path); (2) verify-expr robustness — registering
   detection_matches_gt as a predicate-oracle so a bare call grounds would cut the `==True` boilerplate weak models drop
   (connects to the D178 plug-and-play-predicate gate: the recurring gate is the same root cause).
+
+## D180 — [LOOP, VERIFY+RED-TEAM] BYO-MODEL seam hardened: model-unavailable now surfaces clearly (not silent legacy-degrade); D179 "over-caution" REFUTED with a positive control (2026-07-01)
+Both provider paths were billing-blocked this round (qwen-max + qwen3-vl-plus = DashScope Arrearage;
+OpenRouter down to ~$0.0007 residual), so full sim acceptance was externally gated — pivoted to the
+non-gated BYO-MODEL seam frontier and did code-only, error-path-verifiable work.
+- REFUTED D179 (positive control, cheap probe): `mistralai/mistral-small-3.2-24b-instruct` — a MISTRAL
+  family model — tool-calls the sim-start NL PERFECTLY on the identical turn-1 prompt. gemini-3.5-flash &
+  mistral-medium-3-5 failed with `402 "Prompt tokens limit exceeded: 1114 > 428"` = the PROMPT exceeds the
+  residual-credit budget, so the model never ran. D179's "gemini/mistral = model over-caution" was
+  CONFOUNDED by drained credit / a stale 404 id — NOT model behavior. (caab965 already flagged this from the
+  other side; now double-confirmed with a same-family positive control.) mistral-small is a ready N≥4
+  candidate the moment credit is restored.
+- BUILT (TDD, non-gate — internal error typing, grade()/verify spine byte-unchanged): `ModelUnavailableError`
+  (subclass of openai.APIStatusError so every existing catch still holds) classifies the 3 NON-recoverable,
+  user-actionable BYO failures — 402 hard credit-exhaustion (downshift can't save it), 404 no-endpoints, 400
+  "not a valid model id" — into ONE clean line "Model '<id>' unavailable via <provider>: <reason>. Check
+  VECTOR_MODEL and provider credits." The recoverable "can only afford N" 402 STILL downshifts once, then
+  escalates. This closes the exact swallow (cli.py:497 trace=None → "native took no action → fall back to
+  legacy") that let D179 misread balance/routing failures as "the model chose not to act". 7 new unit tests.
+- REAL-VERIFIED on the BARE REPL (scratchpad/model_unavailable_accept.py, PTY, no flag): all 3 failure shapes
+  × both routes (native `_repl_attempt_native` "model unavailable:" + legacy "Error:") surface the clean
+  actionable message; NO raw JSON/traceback leaks; ZERO credit spent (all rejected pre-generation, so
+  verifiable under the billing block). red-team: native catch prefix confirmed fired; old behavior leaked
+  raw "Error code: 400 - {...}" JSON.
+- GATE QUEUED (external, not code): OpenRouter credit top-up + DashScope arrears are a billing/CEO matter —
+  the ONLY remaining blocker to earning N≥4 acceptance (the seam + weaker-model handling are ready).
