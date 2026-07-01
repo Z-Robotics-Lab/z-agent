@@ -465,6 +465,7 @@ def _repl_attempt_native(
     session text, so the scratch session loses no routing context — and an embodiment
     switch done on a prior (legacy) turn is already reflected on the engine.
     """
+    from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
     from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
     from vector_os_nano.vcli.verdict import VerdictReport
 
@@ -494,6 +495,14 @@ def _repl_attempt_native(
                     user_input, agent=agent, session=scratch, app_state=app_state,
                     on_progress=_on_progress,
                 )
+            except ModelUnavailableError as exc:
+                # A BYO model that CANNOT run (out of credit / unknown id) is
+                # user-actionable — surface it clearly and OWN the turn instead of
+                # silently degrading to legacy, which would re-hit the same failure
+                # and (D179) read as "model chose not to act". console.print writes
+                # to stdout, unaffected by the stderr redirect; the finally restores.
+                console.print(f"  [yellow]model unavailable:[/] {exc}")
+                return True  # turn handled (reported) — do NOT fall through to legacy
             except Exception:  # noqa: BLE001 — native errored -> treat as no-action
                 trace = None
     finally:

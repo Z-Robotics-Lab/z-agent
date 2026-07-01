@@ -842,3 +842,111 @@ class TestGraceful402Downshift:
         with pytest.raises(openai.APIStatusError):
             backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
         assert calls == [8000]  # no downshift retry for a non-402
+
+
+# ---------------------------------------------------------------------------
+# ModelUnavailableError — NON-recoverable, user-actionable BYO-model failures
+# (D180: surface 'this model can't run' clearly instead of silently degrading
+# to legacy — the swallow at cli.py that made D179 misread balance/routing
+# failures as 'model over-caution'). A subclass of APIStatusError so every
+# existing catch still holds; adds .model / .reason for a clean one-liner.
+# ---------------------------------------------------------------------------
+
+
+def _make_status_error(code: int, message: str) -> Any:
+    """Build a real openai.APIStatusError with a given status_code + message."""
+    import httpx
+
+    req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    resp = httpx.Response(code, request=req)
+    return openai.APIStatusError(message, response=resp, body=None)
+
+
+class TestModelUnavailableError:
+    def _backend(self) -> Any:
+        with patch("openai.OpenAI"):
+            return OpenAICompatBackend(api_key="k", model="google/gemini-3.5-flash")
+
+    def _raise_once(self, backend: Any, exc: Any) -> list[int]:
+        calls: list[int] = []
+
+        def _fake(messages, tools, max_tokens, on_text, on_reasoning=None):  # noqa: ANN001
+            calls.append(max_tokens)
+            raise exc
+
+        backend._call_streaming = _fake  # type: ignore[method-assign]
+        return calls
+
+    def test_hard_402_prompt_exceeds_budget_is_model_unavailable(self) -> None:
+        """The prompt itself is unaffordable ('Prompt tokens limit exceeded:
+        1114 > 428') — a downshift of max_tokens cannot help, so it must become a
+        clear ModelUnavailableError, not a raw 402 (or a silent no-action)."""
+        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+
+        backend = self._backend()
+        exc = _make_status_error(402, "Error code: 402 - Prompt tokens limit exceeded: 1114 > 428.")
+        calls = self._raise_once(backend, exc)
+        with pytest.raises(ModelUnavailableError) as ei:
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert ei.value.model == "google/gemini-3.5-flash"
+        assert "credit" in str(ei.value).lower() or "balance" in str(ei.value).lower()
+        assert calls == [8000]  # no phantom downshift — the prompt, not max_tokens, is the problem
+        assert isinstance(ei.value, openai.APIStatusError)  # existing catches still hold
+
+    def test_404_no_endpoints_is_model_unavailable(self) -> None:
+        """A bad / unknown model id (404 'No endpoints found for X') is
+        user-actionable — surface it as ModelUnavailableError naming the model."""
+        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+
+        backend = self._backend()
+        exc = _make_status_error(404, "Error code: 404 - No endpoints found for google/gemini-3.5-flash.")
+        self._raise_once(backend, exc)
+        with pytest.raises(ModelUnavailableError) as ei:
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert "google/gemini-3.5-flash" in str(ei.value)
+        assert "unknown" in str(ei.value).lower() or "endpoint" in str(ei.value).lower()
+
+    def test_recoverable_402_still_downshifts_not_unavailable(self) -> None:
+        """Regression: the recoverable 'can only afford N' 402 must STILL retry at
+        the affordable cap — it is NOT a ModelUnavailableError on the first hit."""
+        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+
+        backend = self._backend()
+        ok = LLMResponse(text="ok", stop_reason="end_turn")
+        calls: list[int] = []
+
+        def _fake(messages, tools, max_tokens, on_text, on_reasoning=None):  # noqa: ANN001
+            calls.append(max_tokens)
+            if len(calls) == 1:
+                raise _make_402(522)
+            return ok
+
+        backend._call_streaming = _fake  # type: ignore[method-assign]
+        resp = backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert resp.text == "ok"
+        assert calls == [8000, 522]
+        assert not isinstance(resp, ModelUnavailableError)
+
+    def test_persistent_recoverable_402_becomes_unavailable_after_downshift(self) -> None:
+        """A 'can only afford N' 402 that persists AFTER the one allowed downshift is
+        genuine credit exhaustion — it must escalate to ModelUnavailableError, not a
+        raw 402 traceback."""
+        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+
+        backend = self._backend()
+        calls = self._raise_once(backend, _make_402(300))
+        with pytest.raises(ModelUnavailableError):
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert calls == [8000, 300]  # tried the downshift once, then escalated
+
+    def test_other_status_error_still_raises_raw(self) -> None:
+        """A non-402/404 status error (e.g. 403 auth) is NOT model-unavailability —
+        it must re-raise the raw APIStatusError, unchanged."""
+        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+
+        backend = self._backend()
+        exc = _make_status_error(403, "Error code: 403 - Forbidden: bad api key")
+        self._raise_once(backend, exc)
+        with pytest.raises(openai.APIStatusError) as ei:
+            backend.call(messages=[{"role": "user", "content": "x"}], tools=[], system=[], max_tokens=8000)
+        assert not isinstance(ei.value, ModelUnavailableError)

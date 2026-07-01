@@ -27,6 +27,37 @@ from vector_os_nano.vcli.session import TokenUsage
 
 logger = logging.getLogger(__name__)
 
+
+class ModelUnavailableError(openai.APIStatusError):
+    """A BYO model cannot run for a NON-recoverable, user-actionable reason.
+
+    Two cases, both distinct from a transient error (retried) AND from a model that
+    simply CHOSE not to act (returns text):
+      - hard credit exhaustion: a 402 that a max_tokens downshift cannot fix (the
+        prompt itself is unaffordable, or the balance is empty after the one allowed
+        downshift);
+      - unknown model id: a 404 "No endpoints found" (bad ``VECTOR_MODEL`` / a model
+        with no provider on this account).
+
+    Surfaced as ONE clear operator-actionable line instead of a raw traceback — and,
+    critically, instead of being swallowed into "native took no action → fall back to
+    legacy", which is exactly what made D179 misread balance/routing failures as
+    "model over-caution". Subclasses ``APIStatusError`` so every existing catch of the
+    OpenAI error type keeps working; adds ``.model`` / ``.reason`` for callers.
+    """
+
+    def __init__(self, *, model: str, base_url: str, reason: str,
+                 original: openai.APIStatusError) -> None:
+        self.model = model
+        self.base_url = base_url
+        self.reason = reason
+        message = (
+            f"Model '{model}' unavailable via {base_url}: {reason}. "
+            f"Check VECTOR_MODEL and provider credits."
+        )
+        super().__init__(message, response=original.response, body=original.body)
+
+
 # ---------------------------------------------------------------------------
 # Stop reason mapping: OpenAI → canonical
 # ---------------------------------------------------------------------------
@@ -206,6 +237,7 @@ class OpenAICompatBackend:
     ) -> None:
         self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
+        self._base_url = base_url
         self._max_retries = max_retries
 
     def call(
@@ -290,9 +322,41 @@ class OpenAICompatBackend:
                     max_tokens = afford
                     downshifted = True
                     continue
-                raise  # Non-retryable
+                # NON-recoverable, user-actionable failures → a clear typed error so
+                # the operator fixes VECTOR_MODEL / credits and the caller never
+                # misreads "unavailable" as "the model chose not to act" (D179/D180).
+                unavailable = self._classify_unavailable(exc)
+                if unavailable is not None:
+                    raise unavailable from exc
+                raise  # Non-retryable, not model-unavailability
 
         raise last_exc  # type: ignore[misc]
+
+    def _classify_unavailable(
+        self, exc: openai.APIStatusError
+    ) -> ModelUnavailableError | None:
+        """Map a NON-recoverable APIStatusError to a ModelUnavailableError, or None.
+
+        - 402 (any shape that reached here, i.e. a downshift could not save it) →
+          hard credit exhaustion.
+        - 404 "no endpoints" / "not found" → unknown model id / no provider.
+        Every other status returns None so the caller re-raises it unchanged.
+        """
+        code = getattr(exc, "status_code", None)
+        low = str(exc).lower()
+        if code == 402:
+            return ModelUnavailableError(
+                model=self._model, base_url=self._base_url,
+                reason="out of credit / account balance exhausted", original=exc,
+            )
+        if code == 404 and ("no endpoint" in low or "not found" in low
+                            or "no allowed provider" in low):
+            return ModelUnavailableError(
+                model=self._model, base_url=self._base_url,
+                reason="unknown model id or no available provider endpoint",
+                original=exc,
+            )
+        return None
 
     def _call_streaming(
         self,
