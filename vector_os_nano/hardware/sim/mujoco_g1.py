@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -532,6 +533,18 @@ class MuJoCoG1:
 
         self._reset_to_stance()
 
+        # A GLFW passive viewer may open ONLY when the offscreen render backend is NOT
+        # egl — the two cannot coexist (the viewer would starve the perception renderer)
+        # and under MUJOCO_GL=egl with no DISPLAY, launch_passive hard-fails GLFW init
+        # ("could not initialize GLFW"). The go2 driver resolves this identically
+        # (MuJoCoGo2.connect); mirror it here so the bare-REPL acceptance face (headless
+        # egl) can start g1 by NL. A human on a desktop (glfw backend) still gets a window.
+        if self._gui and os.environ.get("MUJOCO_GL", "").lower() == "egl":
+            logger.info(
+                "MuJoCoG1: viewer suppressed under MUJOCO_GL=egl (would starve the "
+                "perception renderer); running headless. Use glfw for a viewer window."
+            )
+            self._gui = False
         if self._gui:
             try:
                 self._viewer = mj.viewer.launch_passive(self._model, self._data)
