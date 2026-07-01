@@ -199,13 +199,28 @@ result = {"launch_explore_seen": False, "fetch_verified": None, "place_verified"
 try:
     wait_prompt(child, timeout=60)
     print("\n[driver] REPL up. Starting sim by NL...", flush=True)
-    child.sendline("启动带手臂的 go2 仿真")
     # Sim build: MuJoCoGo2 connect + arm + perception + scene graph. Sync on the sim
-    # tool-completion marker, NOT the echoed `vector>` prompt (which matches instantly and
-    # made us inject the next command mid-turn — DEBUG.md H4). "sim start go2 ok" is the
-    # SimStartTool completion line; the model then streams a chat answer, so after the
-    # marker we drain until the output goes quiet (whole sim-start turn finished).
-    child.expect(r"sim start go2 ok", timeout=180)
+    # tool-completion marker "sim start go2 ok", NOT the echoed `vector>` prompt (which
+    # matches instantly and made us inject the next command mid-turn — DEBUG.md H4).
+    # The sim-start NL is MODEL-routed and non-deterministic: some brains invoke the
+    # SimStartTool directly, some reply with a clarifying question (deepseek-chat asked
+    # "你要用带臂模式对吗?" instead of starting). So: send an imperative start, and if the
+    # tool marker doesn't appear, ANSWER the model's question with NL (acceptance-face-legal
+    # — still bare cli + NL) and retry, up to a few rounds. Once the marker appears, drain
+    # until the whole sim-start turn (tool + chat tail) goes quiet before the action.
+    started = False
+    for attempt in range(4):
+        msg = ("启动带手臂的 go2 仿真，现在就开始，直接执行不用问我" if attempt == 0
+               else "是的，用带手臂模式，现在就启动仿真，直接执行")
+        child.sendline(msg)
+        idx = child.expect([r"sim start go2 ok", pexpect.TIMEOUT], timeout=90)
+        if idx == 0:
+            started = True
+            break
+        drain_until_quiet(child, quiet=3.0, max_wait=30)
+        print(f"\n[driver] sim not started on attempt {attempt} (model chatted/asked); re-issuing", flush=True)
+    if not started:
+        print("\n[driver] SIM NEVER STARTED via NL after retries — aborting turn", flush=True)
     if launch_explore_running():
         result["launch_explore_seen"] = True
         print("\n[driver] !!! launch_explore RUNNING — ROS2 stack path took (FIX FAILED)", flush=True)
@@ -213,7 +228,7 @@ try:
     # Double-check after ready.
     if launch_explore_running():
         result["launch_explore_seen"] = True
-    print(f"\n[driver] sim ready (drained to idle). launch_explore_seen={result['launch_explore_seen']}", flush=True)
+    print(f"\n[driver] sim ready={started} (drained to idle). launch_explore_seen={result['launch_explore_seen']}", flush=True)
 
     # Turns sync on the stable `grounded)` marker; booleans are parsed post-hoc from
     # the ANSI-stripped raw log (the live `verified=` regex fails because ANSI codes
