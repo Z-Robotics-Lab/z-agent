@@ -534,6 +534,14 @@ def _repl_attempt_native(
     except Exception as exc:  # noqa: BLE001 — fail closed (display only)
         console.print(f"  [yellow]verdict unavailable:[/] {exc}")
 
+    # ADR-002 visual acceptance: the SAME env-gated PNG snapshot the -p path fires (see
+    # _emit). Inert by construction — handed ONLY the agent (never the report), never
+    # raises, and only fires on a turn carrying a connected sim agent. Wired here so the
+    # BARE-REPL acceptance face captures the honest 3rd-person sim frame for the eyes,
+    # instead of a desktop-window grab. NEVER reorder before the verdict is computed.
+    if agent is not None:
+        _safe_verdict_snapshot(agent)
+
     # Append a CLEAN summary to the REAL session (not the native scaffolding) so a
     # follow-up turn has context, mirroring the legacy VGG path's session record.
     try:

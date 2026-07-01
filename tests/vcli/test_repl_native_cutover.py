@@ -200,6 +200,42 @@ def test_repl_attempt_native_true_and_records_when_acted(monkeypatch) -> None:
     assert len(session.asst) == 1 and "native executed" in session.asst[0]
 
 
+def test_repl_attempt_native_captures_verdict_snapshot_when_acted(monkeypatch) -> None:
+    # The bare-REPL native path (the TRUE acceptance face) must fire the SAME env-gated
+    # visual snapshot the -p path does (cli.py _emit -> _safe_verdict_snapshot), so an
+    # honest 3rd-person sim frame is captured for the eyes — NOT a desktop-window grab.
+    # Inert: handed ONLY the agent, never the report; only fires on a turn that acted.
+    _stub_oracle(monkeypatch)
+    calls: list[object] = []
+    monkeypatch.setattr(cli, "_safe_verdict_snapshot", lambda agent: calls.append(agent))
+    trace = _acted_trace(
+        "g", strategy="perception_grasp",
+        verify="holding_object('pickable_bottle_green')", verified_pose=True,
+    )
+    engine = _FakeEngine(trace)
+    sentinel = object()
+    engine._vgg_agent = sentinel
+
+    acted = cli._repl_attempt_native(engine, "把绿色的瓶子拿过来", _FakeSession(), {}, _FakeConsole())
+
+    assert acted is True
+    assert calls == [sentinel], "native REPL verdict must snapshot the honest sim frame with the agent"
+
+
+def test_repl_attempt_native_no_snapshot_when_no_action(monkeypatch) -> None:
+    # A no-action native trace falls back to legacy BEFORE the verdict/snapshot -> no frame.
+    _stub_oracle(monkeypatch)
+    calls: list[object] = []
+    monkeypatch.setattr(cli, "_safe_verdict_snapshot", lambda agent: calls.append(agent))
+    engine = _FakeEngine(_noaction_trace("g"))
+    engine._vgg_agent = object()
+
+    acted = cli._repl_attempt_native(engine, "启动 go2 仿真", _FakeSession(), {}, _FakeConsole())
+
+    assert acted is False
+    assert calls == [], "no-action turn must not fire the visual snapshot"
+
+
 def test_repl_attempt_native_false_and_clean_when_no_action(monkeypatch) -> None:
     _stub_oracle(monkeypatch)
     engine = _FakeEngine(_noaction_trace("g"))
