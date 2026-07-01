@@ -482,6 +482,32 @@ class SimStartTool:
         from vector_os_nano.core.agent import Agent  # type: ignore[import]
         from vector_os_nano.core.config import load_config
 
+        # D163/D164 C(b): the bare-REPL NL acceptance face. When VECTOR_NO_ROS2=1
+        # build the PROVEN fully-in-process MuJoCoGo2 agent via the ONE shared
+        # helper that `vector-cli --sim-go2` also uses (Rule 3/11) — no external
+        # ROS2 launch_explore.sh stack, no Go2ROS2Proxy. The ROS2-stack path below
+        # is preserved (D164 C: (a) preserved-deferred) for explore/navigate-point.
+        if os.environ.get("VECTOR_NO_ROS2", "0") == "1":
+            from vector_os_nano.hardware.sim.go2_inprocess import (
+                build_inprocess_go2_agent,
+            )
+            repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__)
+            ))))
+            cfg_path = os.path.join(repo, "config", "user.yaml")
+            cfg = load_config(cfg_path) if os.path.exists(cfg_path) else {}
+            api_key = (
+                cfg.get("llm", {}).get("api_key")
+                or os.environ.get("OPENROUTER_API_KEY", "")
+            )
+            logger.info(
+                "[sim_tool] VECTOR_NO_ROS2=1 -> in-process MuJoCoGo2 "
+                "(with_arm=%s, gui=%s); ROS2 stack skipped", with_arm, gui,
+            )
+            return build_inprocess_go2_agent(
+                gui=gui, with_arm=with_arm, api_key=api_key, config=cfg,
+            )
+
         # Launch full stack as SEPARATE PROCESS (stable gait — no GIL contention)
         # This is the same architecture as run.py --sim-go2 --explore
         repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(

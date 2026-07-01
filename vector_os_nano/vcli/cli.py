@@ -765,10 +765,8 @@ def _init_agent(args: argparse.Namespace) -> Any:
             )
 
         # --- Go2 full stack: MuJoCo + ROS2 bridge + nav stack + VLM + Rerun ---
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # type: ignore[import]
         import os
 
-        console.print(f"[dim]  Starting Go2 MuJoCo simulation...[/dim]")
         # Honor --headless: open the GLFW viewer window only when NOT headless. A
         # headless run (e.g. the R2a PTY acceptance harness, or CI) drives the REAL
         # MuJoCo physics with no on-screen window — the viewer's glXSwapBuffers
@@ -776,9 +774,6 @@ def _init_agent(args: argparse.Namespace) -> Any:
         # it is never needed for a non-interactive turn. Interactive desktop use
         # (no --headless) is byte-identical: gui=True as before.
         _go2_gui = not getattr(args, "headless", False)
-        base = MuJoCoGo2(gui=_go2_gui, room=True, backend="auto")
-        base.connect()
-        base.stand()
 
         # Load config for API key
         from vector_os_nano.core.config import load_config
@@ -792,84 +787,19 @@ def _init_agent(args: argparse.Namespace) -> Any:
             or os.environ.get("OPENROUTER_API_KEY", "")
         )
 
-        # Attach the in-process Piper arm when the go2_piper attach scene was
-        # selected (VECTOR_SIM_WITH_ARM=1) so the lightweight in-process --sim-go2
-        # path is manipulation-capable — same capability the heavier ROS2 NL path
-        # (sim_tool._start_go2(with_arm=True)) already provides. Without this the
-        # full fetch (look -> navigate_to_object -> perception_grasp) is
-        # unreachable from `vector-cli --sim-go2`, and "a capability behind a flag
-        # is NOT done" (North Star). The arm/gripper classes mirror the in-process
-        # rig the fetch harnesses build.
+        # The in-process Piper arm is attached when the go2_piper attach scene
+        # was selected (VECTOR_SIM_WITH_ARM=1) so this lightweight --sim-go2 path
+        # is manipulation-capable — same capability the bare-REPL NL path
+        # (sim_tool._start_go2 under VECTOR_NO_ROS2=1) provides. Both build the
+        # agent through the SAME helper (Rule 3/11) so they can never drift.
         _with_arm = os.environ.get("VECTOR_SIM_WITH_ARM", "0") == "1"
-        piper_arm = piper_gripper = None
-        if _with_arm:
-            try:
-                from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-                from vector_os_nano.hardware.sim.mujoco_piper_gripper import (
-                    MuJoCoPiperGripper,
-                )
-                piper_arm = MuJoCoPiper(base)
-                piper_arm.connect()
-                piper_gripper = MuJoCoPiperGripper(base)
-                piper_gripper.connect()
-                console.print(f"[dim]  Piper arm attached (in-process)[/dim]")
-            except Exception as exc:
-                console.print(f"[yellow]  Piper arm unavailable: {exc}[/yellow]")
-                piper_arm = piper_gripper = None
-
-        agent = Agent(base=base, arm=piper_arm, gripper=piper_gripper,
-                      llm_api_key=api_key, config=cfg)
-
-        # Register Go2 skills
-        from vector_os_nano.skills.go2 import get_go2_skills
-        for skill in get_go2_skills():
-            agent._skill_registry.register(skill)
-
-        # Manipulation (Piper pick/place + perception-grasp) — single-sourced with
-        # the ROS2 NL path so the two launchers never drift (Rule 3/11).
-        if piper_arm is not None:
-            from vector_os_nano.skills.manipulation_setup import (
-                register_manipulation_skills,
-            )
-            if register_manipulation_skills(agent, base):
-                console.print(f"[dim]  Manipulation: perception_grasp + pick/place[/dim]")
-
-        # VLM perception (GPT-4o via OpenRouter)
-        if api_key:
-            try:
-                from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
-                agent._vlm = Go2VLMPerception(config={"api_key": api_key})
-                console.print(f"[dim]  VLM: GPT-4o via OpenRouter[/dim]")
-            except Exception:
-                agent._vlm = None
-
-        # Real RGB-D + detector + segmenter perception over the in-process base
-        # so look/explore can depth-localize VLM-named objects to accurate world
-        # (x, y, z).  Single-sourced with the ROS2 NL launcher via
-        # _build_go2_perception (Rule 3/11) — guarded: leaves perception None
-        # when the base has no camera, never crashing the launch.
-        from vector_os_nano.vcli.tools.sim_tool import _build_go2_perception
-        agent._perception = _build_go2_perception(base)
-        if agent._perception is not None:
-            console.print(f"[dim]  Perception: RGB-D detector + segmenter[/dim]")
-
-
-        # Scene graph (SysNav-style) with persistence
-        import os as _os
-        from vector_os_nano.core.scene_graph import SceneGraph
-        _sg_path = _os.path.expanduser("~/.vector_os_nano/scene_graph.yaml")
-        _os.makedirs(_os.path.dirname(_sg_path), exist_ok=True)
-        _sg = SceneGraph(persist_path=_sg_path)
-        _sg.load()
-        _sg_stats = _sg.stats()
-        if _sg_stats["rooms"] > 0:
-            console.print(
-                f"[dim]  Memory: scene graph restored "
-                f"({_sg_stats['rooms']} rooms, {_sg_stats['objects']} objects)[/dim]"
-            )
-        else:
-            console.print(f"[dim]  Memory: scene graph (rooms -> viewpoints -> objects)[/dim]")
-        agent._spatial_memory = _sg
+        from vector_os_nano.hardware.sim.go2_inprocess import (
+            build_inprocess_go2_agent,
+        )
+        agent = build_inprocess_go2_agent(
+            gui=_go2_gui, with_arm=_with_arm, api_key=api_key, config=cfg,
+            status=lambda m: console.print(f"[dim]  {m}[/dim]"),
+        )
 
         # ROS2 bridge + nav stack (background). OPTIONAL: navigate_to_object plans
         # in-process via MuJoCoGo2.navigate_to (visibility-graph), so the external
@@ -879,7 +809,7 @@ def _init_agent(args: argparse.Namespace) -> Any:
         # multi-process stack OOM/SIGKILLs an unattended round). Default unchanged.
         if _should_launch_ros2_stack():
             try:
-                _launch_ros2_stack(base)
+                _launch_ros2_stack(agent._base)
                 console.print(f"[dim]  ROS2: bridge + nav stack launched[/dim]")
             except Exception as exc:
                 console.print(f"[dim]  ROS2: not available ({exc})[/dim]")

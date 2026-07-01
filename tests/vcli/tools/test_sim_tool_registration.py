@@ -42,23 +42,33 @@ def test_manipulation_skills_importable_and_instantiable() -> None:
     MobilePlaceSkill()
 
 
-def test_sim_tool_module_contains_all_manipulation_registrations() -> None:
-    """Sanity: the sim_tool source text imports and registers all 4 skill
-    classes inside the piper_arm guard block. Not a behaviour test but catches
-    most typos and missing lines that would break runtime registration.
+def test_sim_tool_registers_manipulation_via_single_source() -> None:
+    """Sanity: the with_arm path registers manipulation skills through the ONE
+    shared helper register_manipulation_skills (Rule 3/11), single-sourced with
+    the --sim-go2 launcher. The 4 skill classes are no longer named individually
+    in sim_tool — they live behind that helper — so this guards the current
+    contract (a missing call means with_arm gets no pick/place/grasp).
     """
     from vector_os_nano.vcli.tools import sim_tool
 
     src = inspect.getsource(sim_tool)
 
-    expected_classes = (
-        "PickTopDownSkill",
-        "PlaceTopDownSkill",
-        "MobilePickSkill",
-        "MobilePlaceSkill",
+    assert "register_manipulation_skills" in src, (
+        "sim_tool must import/call register_manipulation_skills — the "
+        "single-source manipulation registration for the with_arm path"
     )
-    for cls in expected_classes:
-        assert f"{cls}()" in src, (
-            f"{cls}() not found in sim_tool.py — "
-            "skill will not be registered when with_arm=True"
+    assert "register_manipulation_skills(agent, base)" in src, (
+        "sim_tool must call register_manipulation_skills(agent, base) so "
+        "perception_grasp + pick/place are wired when with_arm=True"
+    )
+
+    # And the helper itself actually wires the 4 skills — verified where they
+    # now live (single source), so the guard still catches a broken registrar.
+    from vector_os_nano.skills import manipulation_setup
+
+    helper_src = inspect.getsource(manipulation_setup)
+    for cls in ("PickTopDownSkill", "PlaceTopDownSkill",
+                "MobilePickSkill", "MobilePlaceSkill"):
+        assert cls in helper_src, (
+            f"{cls} not wired in manipulation_setup — with_arm loses the skill"
         )

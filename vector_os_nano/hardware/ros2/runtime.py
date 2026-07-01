@@ -87,7 +87,7 @@ class Ros2Runtime:
             # --- spin thread ---
             if self._spin_thread is None:
                 self._spin_thread = threading.Thread(
-                    target=self._executor.spin,
+                    target=self._spin_loop,
                     daemon=True,
                     name="ros2-runtime-spin",
                 )
@@ -105,6 +105,25 @@ class Ros2Runtime:
                 self._executor.add_node(node)
                 self._nodes.add(node)
                 logger.debug("Node added: %s", node)
+
+    def _spin_loop(self) -> None:
+        """Spin-thread body: run the executor, swallowing the post-shutdown race.
+
+        When :meth:`shutdown` calls ``executor.shutdown()``, the executor's
+        internal thread pool is torn down while this thread may still be mid
+        ``spin_once`` and about to submit a callback — rclpy then raises
+        ``RuntimeError: cannot schedule new futures after shutdown``. Because
+        ``shutdown`` clears ``_is_running`` FIRST, that exception is expected
+        teardown noise (debug), not a crash (warning).
+        """
+        executor = self._executor
+        try:
+            executor.spin()
+        except Exception:  # noqa: BLE001 — see docstring
+            if self._is_running:
+                logger.warning("Spin thread crashed while running", exc_info=True)
+            else:
+                logger.debug("Spin thread exited during shutdown", exc_info=True)
 
     def remove_node(self, node: Any) -> None:
         """Unregister *node* from the executor.
@@ -127,6 +146,12 @@ class Ros2Runtime:
             executor = self._executor
             spin_thread = self._spin_thread
 
+            # Mark not-running FIRST so _spin_loop treats the RuntimeError that
+            # executor.shutdown() races into the spinning thread ("cannot
+            # schedule new futures after shutdown") as expected teardown noise,
+            # not a crash.
+            self._is_running = False
+
             if executor is not None:
                 try:
                     executor.shutdown()
@@ -135,6 +160,8 @@ class Ros2Runtime:
                     logger.warning("Exception during executor.shutdown()", exc_info=True)
                 self._executor = None
 
+            # Join AFTER executor.shutdown() (which is what makes spin() return);
+            # the wrapper has by now swallowed any post-shutdown RuntimeError.
             if spin_thread is not None:
                 spin_thread.join(timeout=2.0)
                 self._spin_thread = None
