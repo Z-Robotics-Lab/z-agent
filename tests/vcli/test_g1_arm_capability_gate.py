@@ -60,9 +60,11 @@ class _Engine:
     _registry = None
 
 
-# The default skills that reference the arm (grep-verified) — the gate's target set.
-_MANIP = {"pick", "place", "home", "wave", "scan", "handover", "gripper_open", "gripper_close"}
-_PERCEPTION = {"describe", "detect"}  # armless — must survive the gate
+# The default skills that need an arm (grep-verified) — the gate's target set. ``describe``
+# is included because it auto-runs ``scan`` (auto_steps), which needs an arm, so it fails
+# "No arm connected" on a camera-only body and false-FAILS the perception turn.
+_MANIP = {"pick", "place", "home", "wave", "scan", "handover", "gripper_open",
+          "gripper_close", "describe"}
 
 
 def test_arm_requiring_set_covers_manipulation_defaults():
@@ -70,12 +72,10 @@ def test_arm_requiring_set_covers_manipulation_defaults():
     assert _MANIP <= _ARM_REQUIRING_SKILLS
 
 
-def test_armless_g1_drops_manipulation_skills():
+def test_armless_g1_drops_arm_requiring_skills():
     tools = _build_motor_tools(_Agent(arm=None), _Engine())
     for name in _MANIP:
-        assert name not in tools, f"armless g1 must not be offered manipulation skill {name!r}"
-    # Perception skills are embodiment-agnostic -> kept on the camera-only body.
-    assert "describe" in tools
+        assert name not in tools, f"armless g1 must not be offered arm-requiring skill {name!r}"
     # g1 has a base -> the avoidance navigate route survives (existing has_base gate).
     assert "navigate" in tools
 
@@ -83,6 +83,5 @@ def test_armless_g1_drops_manipulation_skills():
 def test_go2_arm_keeps_full_manipulation_surface():
     tools = _build_motor_tools(_Agent(arm=object()), _Engine())
     for name in _MANIP:
-        assert name in tools, f"go2+arm must keep manipulation skill {name!r} (no regression)"
-    assert "describe" in tools
+        assert name in tools, f"go2+arm must keep arm-requiring skill {name!r} (no regression)"
     assert "navigate" in tools

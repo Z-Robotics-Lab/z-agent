@@ -102,7 +102,12 @@ _MUTATING_CODE_TOOLS: frozenset[str] = frozenset({"file_write", "file_edit", "ba
 # Perception skills (describe/detect) are embodiment-agnostic and are NEVER gated here.
 _ARM_REQUIRING_SKILLS: frozenset[str] = frozenset(
     {"pick", "place", "pick_top_down", "place_top_down", "mobile_place",
-     "home", "wave", "scan", "handover", "gripper_open", "gripper_close"}
+     "home", "wave", "scan", "handover", "gripper_open", "gripper_close",
+     # ``describe`` auto-runs ``scan`` first (auto_steps=["scan","describe"]) and scan
+     # needs an arm -> on an armless body describe fails "No arm connected", adding a
+     # non-GROUNDED checked step that false-FAILS an otherwise-clean perception turn.
+     # Gated on armless only (go2+arm keeps it). Frontier: an arm-free describe path.
+     "describe"}
 )
 
 # at_position tolerance (metres) — single-sourced for the system-prompt vocab from
@@ -318,7 +323,11 @@ class _NativeDetectTool:
         return ToolResult(
             content=(
                 f"detect({query!r}): grounding-dino localized {len(boxes)} object(s); "
-                f"top {first}. Call {hint} to confirm."
+                f"top {first}. To COMPLETE this perception task call EXACTLY {hint} — it "
+                f"is the ONLY grounding oracle here. If it returns True the task is DONE: "
+                f"call finish immediately. Do NOT call detect again and do NOT invent other "
+                f"verify predicates (find_object/detect_objects/describe_scene are not oracles "
+                f"and will not ground)."
             )
         )
 
