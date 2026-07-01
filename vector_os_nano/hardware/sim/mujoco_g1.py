@@ -468,6 +468,14 @@ class MuJoCoG1:
         self._counter: int = 0
         # Velocity command [vx, vy, vyaw]
         self._cmd = np.zeros(3, dtype=np.float32)
+        # R2b actor-causation seam (mirrors MuJoCoGo2._cmd_motion): the cumulative
+        # |vx|+|vy|+|vyaw| MAGNITUDE commanded via set_velocity. ``_capture_base``
+        # snapshots it via cmd_motion(); a base-predicate step (at_position/facing)
+        # grades CAUSED only when this ADVANCED >= MOTION_EPS AND the base displaced.
+        # g1 is single-threaded synchronous (no bridge/nav daemon), so every
+        # set_velocity IS a genuine skill-thread command — no _skill_ctrl_tid gate is
+        # needed (unlike go2, which must exclude bridge-thread cmd_vel writes).
+        self._cmd_motion: float = 0.0
         # Sensor cache
         self._last_scan: Any = None
         self._last_pointcloud: list[tuple[float, float, float, float]] = []
@@ -694,10 +702,27 @@ class MuJoCoG1:
     # ------------------------------------------------------------------
 
     def set_velocity(self, vx: float, vy: float = 0.0, vyaw: float = 0.0) -> None:
-        """Set the current velocity command [vx, vy, vyaw]."""
-        self._cmd[0] = float(vx)
-        self._cmd[1] = float(vy)
-        self._cmd[2] = float(vyaw)
+        """Set the current velocity command [vx, vy, vyaw].
+
+        Accumulates the commanded magnitude into ``_cmd_motion`` (R2b actor-causation).
+        A stop (0,0,0) adds zero magnitude, so a step that only stopped never satisfies
+        the grader's MOTION_EPS. Mirrors MuJoCoGo2.set_velocity's counter.
+        """
+        cvx, cvy, cvyaw = float(vx), float(vy), float(vyaw)
+        self._cmd[0] = cvx
+        self._cmd[1] = cvy
+        self._cmd[2] = cvyaw
+        self._cmd_motion += abs(cvx) + abs(cvy) + abs(cvyaw)
+
+    def cmd_motion(self) -> float:
+        """Cumulative commanded-velocity magnitude (R2b actor-causation seam).
+
+        The sum of ``|vx|+|vy|+|vyaw|`` over every ``set_velocity`` call — the SAME
+        honest signal MuJoCoGo2.cmd_motion() exposes, so ``actor_causation._capture_base``
+        grades g1 base steps by the UNCHANGED spine. Monotonically non-decreasing; a
+        terminal stop contributes nothing.
+        """
+        return float(self._cmd_motion)
 
     def stop(self) -> None:
         """Zero the velocity command."""
