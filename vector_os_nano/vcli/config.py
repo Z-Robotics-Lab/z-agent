@@ -195,7 +195,20 @@ def resolve_credentials(
     if _forced_provider == "openrouter" and not cli_api_key:
         or_key = os.environ.get("OPENROUTER_API_KEY", "") or config.get("openrouter_api_key", "")
         if or_key:
-            or_model = cli_model or os.environ.get("VECTOR_MODEL") or config.get("model", "claude-sonnet-4-6")
+            # Default to a broadly-available OpenRouter model that actually has
+            # endpoints on a stock key. The prior default ("claude-sonnet-4-6")
+            # auto-prefixed to "anthropic/claude-sonnet-4-6", which returns
+            # 404 "No endpoints found" on this account (the D172-era openrouter
+            # blocker). openai/gpt-4o-mini is a cheap, always-on, strong
+            # tool-caller — a sane BYO-MODEL default; override via VECTOR_MODEL.
+            or_model = (
+                cli_model
+                or os.environ.get("VECTOR_MODEL")
+                or config.get("openrouter_model")
+                or "openai/gpt-4o-mini"
+            )
+            # Only anthropic-family bare ids get the anthropic/ prefix; a bare id
+            # for another family must be passed fully-qualified (e.g. openai/...).
             if "/" not in or_model:
                 or_model = f"anthropic/{or_model}"
             or_base = cli_base_url or config.get("base_url", "") or "https://openrouter.ai/api/v1"

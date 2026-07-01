@@ -87,6 +87,30 @@ def test_vector_provider_openrouter_opts_out_of_deepseek(isolated):
     assert key == "or-test-key"
 
 
+def test_forced_openrouter_default_model_has_endpoints(isolated):
+    """VECTOR_PROVIDER=openrouter with no VECTOR_MODEL must default to a model that
+    actually has OpenRouter endpoints, NOT the old anthropic/claude-sonnet-4-6 that
+    returned 404 'No endpoints found' (the third-brain blocker). The default is a
+    fully-qualified, cross-family id (openai/...), never bare-anthropic-prefixed."""
+    isolated.setenv("OPENROUTER_API_KEY", "or-test-key")
+    isolated.setenv("VECTOR_PROVIDER", "openrouter")
+    _, provider, model, base = cfg.resolve_credentials()
+    assert provider == "openrouter"
+    assert model == "openai/gpt-4o-mini"
+    assert not model.startswith("anthropic/")  # the 404 default is gone
+    assert base == "https://openrouter.ai/api/v1"
+
+
+def test_forced_openrouter_respects_explicit_vector_model(isolated):
+    """An explicit VECTOR_MODEL still wins over the new default (BYO any model)."""
+    isolated.setenv("OPENROUTER_API_KEY", "or-test-key")
+    isolated.setenv("VECTOR_PROVIDER", "openrouter")
+    isolated.setenv("VECTOR_MODEL", "meta-llama/llama-3.3-70b-instruct")
+    _, provider, model, _ = cfg.resolve_credentials()
+    assert provider == "openrouter"
+    assert model == "meta-llama/llama-3.3-70b-instruct"
+
+
 def test_anthropic_api_key_env(isolated):
     isolated.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     key, provider, model, _ = cfg.resolve_credentials()

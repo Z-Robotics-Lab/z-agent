@@ -49,7 +49,7 @@ PROVIDER = os.environ.get("VECTOR_PROVIDER", "deepseek").lower()
 _PLANNER = {
     "qwen": {"QWEN_MODEL": os.environ.get("QWEN_MODEL", "qwen-max")},
     "deepseek": {"DEEPSEEK_MODEL": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")},
-    "openrouter": {"VECTOR_MODEL": os.environ.get("VECTOR_MODEL", "anthropic/claude-3.5-sonnet")},
+    "openrouter": {"VECTOR_MODEL": os.environ.get("VECTOR_MODEL", "openai/gpt-4o-mini")},
 }.get(PROVIDER, {})
 
 env = dict(os.environ)
