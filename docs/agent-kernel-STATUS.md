@@ -3,50 +3,53 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · D178 — g1 VLN (perception-DRIVING-locomotion) infrastructure LANDED + the honest-grounding
-blocker turned from a flagged guess into a HARD, evidenced CEO gate. Non-gated pieces shipped + real-verified; the
-GROUNDED bare-REPL acceptance is one approved spine-allowlist line away.
-- SHIPPED (non-gated, reproducible from git): (1) scene_builder gains additive `extra_geoms` (default ()→go2 byte-unchanged);
-  g1 injects a blue VLN target mat (12.6,3) in the +x head-cam FOV (visible ~3800px, planner arrives 0.28m). (2) pure
-  ground-projection util `project_pixel_to_ground` (5 unit tests incl. live-probe regression) turns a detected blob pixel
-  into a world (x,y) via sim-owned intrinsics/extrinsics the actor cannot author. (3) `MuJoCoG1.get_camera_fovy()`.
-- REAL-VERIFY (deterministic chain probe, ONE sim, nuked): detect(head-cam)→ground-project→navigate lands **0.18m from the
-  mat GT**, actor=CAUSED. RED-TEAMED: projected target TRACKS the mat (y follows 3.0/2.2/3.8 as the mat moves; bbox NOT
-  degenerate) ⇒ perception genuinely load-bearing, NOT a fixed forward walk. Projection err 0.37–2.33m (bottom-centre
-  heuristic degrades for close/tall boxes) — honest limit.
-- CONFIRMED BLOCKER (was D177's flagged guess): honest VLN GROUNDING on the bare REPL REQUIRES a GT-backed
-  `near_object(colour)` predicate added to the KERNEL allowlist `vcli/cognitive/evidence_classifier._PREDICATE_ORACLES`
-  (precedent: `resting_on_receptacle` was such an edit, D106 CEO-APPROVED) ⇒ honest-verify-SPINE gate, do NOT self-cross.
-  WHY needed: raw grounding-dino is NOT colour-selective on the mat (boxes it for BOTH blue & green) → the raw box is not a
-  moat; only the GT object-pos oracle + actor-causation guard can honestly ground/refute. `at_position(projected_xy)` is
-  CIRCULAR (actor authors the coord) → rejected as a moat.
+updated: 2026-07-01 · D179 — BYO-MODEL boundary MAPPED (red-teamed). VLN #1 stays CEO-gated (near_object spine
+allowlist), so this round pivoted to the non-gated frontier "N≥4 BYO-MODEL" and honestly bounded it: the MODEL
+seam is zero-kernel-edit for 3 more families, but end-to-end acceptance is model-capability-bound. The moat held.
+- SEAM (proven, ZERO code changed): llama-3.3-70b, gemini-3.5-flash, mistral-medium-3-5 each plug into the bare
+  `vector-cli` REPL with only `VECTOR_PROVIDER=openrouter VECTOR_MODEL=<id>` — no kernel/driver edit.
+- ACCEPTANCE (honest negative, `scratchpad/g1_accept.py`, g1 in-process, RED-grounds/GREEN-refutes):
+  * llama-3.3-70b — starts g1 by NL, chains detect→verify, but emits a MALFORMED verify (`detection_matches_gt(`,
+    unclosed) → SyntaxError → RAN (2/2 runs, systematic). Moat REFUSED it, no false green.
+  * gemini-3.5-flash & mistral-medium-3-5 — won't emit the sim-start tool call by NL (chat/ask, 4 retries) → g1
+    never starts. Root cause (over-caution vs OpenRouter tool-schema translation) NOT isolated (llama DID tool-call).
+- MOAT held CROSS-MODEL: no weak/malformed model faked a GROUNDED verdict (invariant 1, empirically). N=3 accepted
+  families (Anthropic · DeepSeek · OpenAI gpt-4o-mini) stands; N≥4 NOT earned. No overclaim.
 
 goal:    PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/CAPABILITY/MODEL; plan·route·verify·recover.
          Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
-phase:   VLN (g1's 3rd capability = perception-driving-action) infra landed + chain real-verified; GROUNDED accept
-         gated on ONE approved spine-allowlist predicate. BYO-MODEL proven ×3 families; BYO-ROBOT go2+g1.
-owns:    hardware/sim/scene_builder.py (extra_geoms), hardware/sim/mujoco_g1.py (mat const + get_camera_fovy),
-         perception/ground_projection.py (+test), scratchpad/g1_{vln_probe,mat_probe,vln_chain_probe,vln_redteam}.py.
-blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (substitute: seg-GT oracle / deterministic probe). NOT loop-blocking.
+phase:   VLN GROUNDED accept gated (near_object spine allowlist). BYO-MODEL seam proven ×6 families, end-to-end
+         acceptance ×3 (moat gates the weaker 3). BYO-ROBOT go2+g1.
+owns:    docs only this round (DECISIONS D179 + STATUS). No code touched. Evidence in /tmp/g1_accept/{llama,llama2,gemini,mistral}.
+blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (OpenRouter is the substitute VLM path). NOT loop-blocking.
          PRE-EXISTING: tests/unit/vcli/test_config_deepseek_provider.py 3 fails (provider naming drift) — untouched.
 next:
-  1. [GATE-THEN-BUILD] On near_object approval: register world-side near_object(colour) oracle (reads coloured-geom GT xy
-     + robot GT pos) + add to _PREDICATE_ORACLES; wire an `approach(query)` native tool (detect→project→navigate, gated on
-     has_base+camera, verify_hint near_object); ACCEPT g1 VLN on the bare REPL by NL ("走到蓝色的东西那里" GROUNDS via
-     blue-mat GT + actor CAUSED; a no-such-colour / no-move command REFUTES). red-team the number.
-  2. [FRONTIER, non-gated] 4th model family meta-llama/llama-3.3-70b via OpenRouter (preflighted OK) → N=4 plug-and-play.
-  3. [FRONTIER, non-gated] arm-free `describe` via OpenRouter VLM (VisionJudge already OpenRouter-wired) — new g1 caption capability.
+  1. [FRONTIER, non-gated] Robustify BYO-MODEL tool-calling across families so N≥4 EARNS acceptance:
+     (a) diagnose why gemini/mistral don't tool-call sim-start by NL — is it model over-caution (fix: persona /
+     tool-instructions nudge, re-verify the passing 3 don't regress) or the openrouter tool-schema path? llama
+     DID tool-call, so isolate. (b) verify-expr robustness — a weak model dropping `==True` or malforming the
+     expr is the #2 failure; connects to the plug-and-play-predicate gate (below).
+  2. [GATE-THEN-BUILD] VLN GROUNDED accept on near_object approval (see gate queue). The RECURRING gate root cause
+     is `_PREDICATE_ORACLES` being a hardcoded KERNEL list (evidence_classifier.py:52 flags R2) — the North-Star-
+     aligned fix is world-declared predicate metadata (one meta-decision resolves D178 near_object + D169 near +
+     the D179 verify-expr brittleness). Fold into ONE exec summary when Yusen returns; it's a spine gate — don't cross.
+  3. [FRONTIER, non-gated] arm-free `describe` for g1 (native_loop.py:109 flags it) via OpenRouter VLM caption +
+     a GT-backed g1 `describe_scene` oracle (state-oracle, NON-gated — not a new _PREDICATE_ORACLES name).
   4. [SPINE] D168 place-oracle identity+delta — LOAD-BEARING (D174 place leans on it). CEO gate, queue for Yusen.
 
 ## Pending CEO gates (decision queue — terse; do NOT cross autonomously)
-- **D178 near_object VLN predicate** (CONFIRMED gate, EXEC SUMMARY in DECISIONS D178): add a world-side
-  `near_object(colour,radius)` verify oracle (coloured-object GT pos vs robot GT pos — actor-unauthored) AND list it in the
-  kernel allowlist `evidence_classifier._PREDICATE_ORACLES`. Same category as `resting_on_receptacle` (D106-approved).
-  grade() logic byte-unchanged; stricter-only. Unblocks a GROUNDED bare-REPL g1 VLN acceptance. → go/no-go.
+- **META (recommended framing): plug-and-play verify-predicates** — `_PREDICATE_ORACLES` is a hardcoded kernel list
+  (evidence_classifier.py:52 self-flags "R2 should derive from metadata"); every new predicate (D178 near_object,
+  D169 near) is therefore a spine gate, which VIOLATES the North Star "bring a verify-predicate — no kernel edits".
+  Proposed resolution: world-declared predicate metadata (stricter-only; worlds already register verify bindings).
+  ONE decision subsumes the per-predicate gates below. Spine-semantics gate → go/no-go.
+- **D178 near_object VLN predicate** (CONFIRMED gate, EXEC SUMMARY in DECISIONS D178): world-side
+  `near_object(colour,radius)` GT oracle + list in kernel allowlist `_PREDICATE_ORACLES`. Same category as
+  `resting_on_receptacle` (D106-approved). grade() byte-unchanged, stricter-only. → go/no-go.
 - **D176 cmd_motion driver seam** (flagged, likely non-gate): enables g1 nav GROUNDED; grade() spine byte-unchanged.
 - **D168 place-oracle** resting_on_receptacle object-BLIND + absolute-count → harden to identity+delta (stricter-only). LOAD-BEARING. → go/no-go.
 - **S8** retire legacy keyword producer (READY): delete IntentRouter/StrategySelector/_DIR_MAP + legacy GoalDecomposer;
   rewire 4 should_use_vgg → should_attempt_native (D74); keep VECTOR_LEGACY_TURN hatch. → go/no-go.
-- **relational-place near(a,b) predicate** (D169): NEW verify predicate for "放到X旁边" → spine-semantics gate.
+- **relational-place near(a,b) predicate** (D169): NEW verify predicate for "放到X旁边" → spine-semantics gate (subsumed by META above).
 - **Stage gates:** S4 embodiment-registration · S5 ControlPolicy + convex_mpc dep · S6 capability perm/security ·
   nav→FAR causation (D14) · strategy_params (D52) · explore TARE · VLN SysNav. New deps/interfaces/hw/sec here.

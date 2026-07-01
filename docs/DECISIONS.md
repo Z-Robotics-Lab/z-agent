@@ -1057,3 +1057,23 @@ tool (non-gated, plug-and-play). No new msg/srv/action, no new dep, no cross-pac
 **Risks:** a mis-scoped near_object could over-ground (e.g. counting a same-colour object the command didn't mean) — mitigated
 by the actor-causation guard (no-move ⇒ UNCAUSED ⇒ not grounded) and a tight radius; will be red-teamed on the bare face.
 **Attachments:** ground_projection + chain/red-team probes (in git), full design on request.
+
+## D179 — [LOOP, VERIFY+RED-TEAM] BYO-MODEL boundary mapped: the MODEL seam is zero-kernel-edit, but end-to-end acceptance is model-capability-bound; the moat held cross-model (2026-07-01)
+Pivoted off the CEO-gated VLN #1 to the non-gated frontier "N≥4 BYO-MODEL". Confirmed empirically (bare `vector-cli`
+REPL + NL, `scratchpad/g1_accept.py`, g1 in-process perception RED-grounds/GREEN-refutes) — ZERO code changed: a new
+family plugs in with only `VECTOR_PROVIDER=openrouter VECTOR_MODEL=<id>`.
+- SEAM (positive, proven): llama-3.3-70b, gemini-3.5-flash, mistral-medium-3-5 ALL plug into the bare REPL via env only —
+  no kernel/driver edit. The "bring any model, no kernel edits" contract holds at the plumbing level for 3 more families.
+- ACCEPTANCE (honest negative): NONE of the 3 new families passed the true-face g1 perception acceptance —
+  * llama-3.3-70b: starts g1 by NL, chains detect→verify, but emits a MALFORMED verify (`detection_matches_gt(`, unclosed
+    paren) → `ast.parse` SyntaxError → classifier grades RAN (2/2 runs, systematic, NOT a transient). The moat REFUSED it.
+  * gemini-3.5-flash & mistral-medium-3-5: refuse to emit the sim-start tool call by NL (chat/ask despite 4 forceful
+    retries) → g1 never starts (no fake verdict emitted). Root cause (model over-caution vs OpenRouter tool-schema
+    translation for non-OpenAI-format families) NOT yet isolated — llama DID tool-call, so plumbing works for ≥1 new family.
+- MOAT (the load-bearing positive): across every failure the honest-verify spine produced NO false green — a weak/malformed
+  model could not fake a GROUNDED verdict. "Verify is the moat" (invariant 1) holds CROSS-MODEL, empirically. N=3 accepted
+  families (Anthropic · DeepSeek · OpenAI gpt-4o-mini) stands; N≥4 acceptance NOT yet earned — recorded honestly, no overclaim.
+- NEXT FRONTIER (non-gated): robustify BYO-MODEL tool-calling across families — (1) diagnose gemini/mistral sim-start
+  no-tool-call (persona/tool-instructions nudge vs openrouter tool path); (2) verify-expr robustness — registering
+  detection_matches_gt as a predicate-oracle so a bare call grounds would cut the `==True` boilerplate weak models drop
+  (connects to the D178 plug-and-play-predicate gate: the recurring gate is the same root cause).
