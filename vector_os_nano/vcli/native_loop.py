@@ -93,6 +93,18 @@ _CODE_TOOL_CATEGORY = "code"
 # reaches a file oracle another way; this prong removes the easy path by construction.
 _MUTATING_CODE_TOOLS: frozenset[str] = frozenset({"file_write", "file_edit", "bash"})
 
+# Manipulation skills that REQUIRE an arm to do anything (grep-verified: each references
+# ctx.arm / the gripper). A camera-only body (g1: ``has_arm`` False) must NOT be offered
+# these — a frontier model would otherwise chain a doomed ``pick`` on an armless robot and
+# false-FAIL the honest verdict (the g1 detect step GROUNDS, then a chained pick with "No
+# arm connected" drags the compound to RAN-False). Gated on the SAME single-source
+# ``resolve_capability_profile`` as the has_base/navigate gate so the two can't drift.
+# Perception skills (describe/detect) are embodiment-agnostic and are NEVER gated here.
+_ARM_REQUIRING_SKILLS: frozenset[str] = frozenset(
+    {"pick", "place", "pick_top_down", "place_top_down", "mobile_place",
+     "home", "wave", "scan", "handover", "gripper_open", "gripper_close"}
+)
+
 # at_position tolerance (metres) — single-sourced for the system-prompt vocab from
 # the go2 oracle so the model's verify expr and the verifier agree. Read live with
 # a safe fallback so this module never hard-depends on the oracle's private const.
@@ -883,12 +895,17 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
     # world's own ``navigate`` skill (door-chain walk, NOT lidar avoidance) stays
     # excluded; our coordinate ``navigate`` above is the planner/avoidance route.
     if agent is not None:
+        # Capability gate (Rule 11 single-source): a body without an arm is not offered
+        # manipulation skills — same resolver the navigate/base gate reads above.
+        has_arm = resolve_capability_profile(agent).has_arm
         try:
             for skill_tool in wrap_skills(agent):
                 if skill_tool.name == "navigate":
                     continue  # world room-navigate is door-chain walk; ours is the avoidance route
                 if skill_tool.name == "detect" and "detect" in tools:
                     continue  # the learned grounding-dino route (Source 4) wins over the classical DetectSkill
+                if not has_arm and skill_tool.name in _ARM_REQUIRING_SKILLS:
+                    continue  # armless embodiment (g1): no manipulation tools it can't execute
                 tools[skill_tool.name] = skill_tool
         except Exception as exc:  # noqa: BLE001
             logger.debug("native_loop: wrap_skills failed: %s", exc)
