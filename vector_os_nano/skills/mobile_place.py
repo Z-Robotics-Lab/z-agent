@@ -147,7 +147,11 @@ def _scene_place_target(base: object) -> tuple[float, float, float] | None:
 _AT_REST_SPEED: float = 0.05  # m/s — mirrors arm_sim_oracle._AT_REST_SPEED (the at-rest gate the
 # verify oracle uses). The post-drop settle waits for THIS condition (read from GT), not a fixed time.
 _SETTLE_POLL_DT: float = 0.2  # s between at-rest polls
-_SETTLE_CAP: float = 5.0      # s — hard cap so a perpetually-rolling/lost object can't hang the skill
+_SETTLE_CAP: float = 12.0     # s — hard cap so a perpetually-rolling/lost object can't hang the skill.
+# Bumped 5->12 (R15/D161): after the R14 central-drop killed roll-off (D160), the residual RAN is 100%
+# SETTLING — a round bottle dropped from carry-z bounces/rolls on the flat bin top and is still moving
+# (speed 0.075-0.16 > the 0.05 at-rest gate) at the 5s cap. The restored rim walls CONTAIN it, so it
+# reaches rest given time; 12s lets the contained bounce die out before the verdict. Still bounded.
 
 
 def _wait_object_at_rest(arm: object, target_xy: tuple[float, float]) -> bool:
