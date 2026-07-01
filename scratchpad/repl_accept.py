@@ -150,6 +150,20 @@ try:
         wait_prompt(child, timeout=60)
         print("\n[driver] place turn done", flush=True)
 
+    if MODE == "combo":
+        # Frontier probe: ONE multi-clause utterance (fetch AND place in a single
+        # command, e.g. "把红色的罐子拿过来放到架子上"). The producer must decompose it
+        # into grasp->place; both step verdicts render before the prompt returns. We
+        # send FETCH as the whole utterance, wait a long time for the compound plan to
+        # finish, then the post-hoc parser below collects EVERY verdict emitted.
+        print("\n[driver] COMBO turn (single multi-clause utterance)...", flush=True)
+        child.sendline(FETCH)
+        # Compound plan can grasp then place -> up to two long tool calls. Sync on the
+        # prompt returning rather than a single `grounded)` (there may be two).
+        wait_prompt(child, timeout=600)
+        _eyes_frame(SNAP, "combo")
+        print("\n[driver] combo turn done", flush=True)
+
     child.sendline("quit")
     child.expect([pexpect.EOF, pexpect.TIMEOUT], timeout=30)
 except Exception as exc:  # noqa: BLE001
@@ -169,19 +183,33 @@ try:
     # Map emitted verdicts to the turns that ACTUALLY ran (mode-aware). In place-only
     # mode a single verdict is emitted — it is the PLACE verdict, NOT the fetch one
     # (the old positional parse mislabeled it fetch_verified, leaving place_verified=None).
-    turns = []
-    if MODE in ("both", "fetch"):
-        turns.append("fetch")
-    if MODE in ("both", "place"):
-        turns.append("place")
-    for turn, verd in zip(turns, verds):
-        result[f"{turn}_verified"] = verd[0] == "True"
-        result[f"{turn}_grounded"] = f"{verd[1]}/{verd[2]}"
+    if MODE == "combo":
+        # A single compound utterance emits N verdicts (typically grasp then place).
+        # Report EVERY verdict verbatim — the frontier claim is "all steps grounded".
+        result["combo_verdicts"] = [f"{v[0]}({v[1]}/{v[2]})" for v in verds]
+        result["combo_all_true"] = bool(verds) and all(v[0] == "True" for v in verds)
+    else:
+        # Map emitted verdicts to the turns that ACTUALLY ran (mode-aware). In place-only
+        # mode a single verdict is emitted — it is the PLACE verdict, NOT the fetch one
+        # (the old positional parse mislabeled it fetch_verified, leaving place_verified=None).
+        turns = []
+        if MODE in ("both", "fetch"):
+            turns.append("fetch")
+        if MODE in ("both", "place"):
+            turns.append("place")
+        for turn, verd in zip(turns, verds):
+            result[f"{turn}_verified"] = verd[0] == "True"
+            result[f"{turn}_grounded"] = f"{verd[1]}/{verd[2]}"
 except Exception as exc:  # noqa: BLE001
     print(f"[driver] verdict parse failed: {exc}", flush=True)
 
 frames = sorted(f for f in os.listdir(SNAP) if f.endswith(".png"))
-print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
-      f"fetch_verified={result['fetch_verified']} ({result.get('fetch_grounded')}) "
-      f"place_verified={result['place_verified']} ({result.get('place_grounded')}) "
-      f"frames={frames}", flush=True)
+if MODE == "combo":
+    print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
+          f"combo_all_true={result.get('combo_all_true')} "
+          f"verdicts={result.get('combo_verdicts')} frames={frames}", flush=True)
+else:
+    print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
+          f"fetch_verified={result['fetch_verified']} ({result.get('fetch_grounded')}) "
+          f"place_verified={result['place_verified']} ({result.get('place_grounded')}) "
+          f"frames={frames}", flush=True)
