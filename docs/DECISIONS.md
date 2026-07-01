@@ -1017,3 +1017,43 @@ original prose of every entry lives in git history.
 - FRONTIER RESEARCH (this round's outward finding, recorded for the next VLN round — NOT shipped): a scene probe (scratchpad/g1_scene_probe.py) established that a clean, honest, perception-LOAD-BEARING g1 VLN ("走到红色的东西那里") is genuinely MULTI-ROUND-blocked on the current scene, by THREE compounding facts: (1) the head-cam PROJECTION GAP — `detect` returns pixel boxes only, no world coord, so the model cannot derive a nav target FROM vision (the same reason D175 used segmentation, not world_to_pixel); (2) VISIBLE-red ≠ NAVIGABLE-red — the 920-seg-px red in g1's spawn view is not cleanly the red it can reach; (3) the coloured PICKABLES' xy sit INSIDE table-obstacle inflation (planner gets 1.36/1.54/1.74 m but res=False), while the genuinely reachable coloured targets are floor RUGS (some below-floor, not perceivable). Any workaround (GT-seed the SceneGraph / a GT `locate` tool) makes perception DECORATIVE for the nav coordinate — a hollow "VLN". HONEST NEXT-FRONTIER DESIGN: either (a) a visual-servo `approach(query)` skill (detect→horizontal-bearing→step→re-detect; horizontal pixel→yaw is reliable even though full pinhole isn't) + a new world-side `near_object(colour,radius)` verify predicate (reads object GT pos + robot GT pos; spine-untouched, flag for async review like cmd_motion), OR (b) curate the scene so a perceivable coloured object is also planner-reachable. This is a proper multi-round frontier, correctly NOT forced this round.
 - OUTCOME: the North Star's BYO-MODEL axis now holds across THREE distinct model families on the ONE acceptance face — Qwen (D≤171), DeepSeek (D172-176), and now OpenAI GPT-4o-mini via OpenRouter (D177) — every one honest-verified by the SAME frozen moat, no per-model kernel code. Plug-and-play breadth: BYO-robot (go2, g1) × BYO-model (qwen, deepseek, openai) on the bare `vector-cli` REPL. Regression guards: test_config_env_credentials.py +2 (default-has-endpoints + explicit-VECTOR_MODEL-wins). Pre-existing unrelated fails: test_config_deepseek_provider.py (3, provider-naming drift) — untouched.
 - NEXT: (i) g1 VLN — execute the honest design above (visual-servo approach + near_object predicate, spine-untouched, flagged) OR scene-curate; a proper leap-in-kind next round. (ii) 4th family via OpenRouter (meta-llama/llama-3.3-70b, preflighted OK) — cheap to add for N=4. (iii) firm the model breadth with a NON-perception task on the 3rd brain (nav at_position via gpt-4o-mini) if desired. (iv) arm-free describe (D175 next#ii, open). (v) D168 place-oracle identity+delta (LOAD-BEARING spine gate, queue for Yusen).
+
+## D178 — g1 VLN (perception-driving-locomotion) infra LANDED; honest GROUNDING confirmed a spine-allowlist CEO gate (2026-07-01)
+FRONTIER round toward the North-Star capability: perception DRIVING action (VLN), g1's 3rd capability after perception
+(D175) and blind locomotion (D176). Cold-ORIENT + a fresh per-geom probe turned D177's qualitative "VLN is multi-round
+blocked" into hard evidence and then LANDED the non-gated half of the capability.
+- FINDING (why VLN was blocked at spawn): the only forward-visible red is UNREACHABLE furniture — stool1 (16,2.8, 637px)
+  + stool2 (18,2.8, 281px); the reachable hall rug is at y=5 (side, out of the +x head-cam FOV). "visible-red ≠
+  navigable-red" is literally true. Clean unblock = SCENE CURATION (sanctioned in STATUS): a reachable+visible target.
+- SHIPPED (non-gated, reproducible from git — invariant 3 worlds-are-config):
+  (a) `scene_builder.build_room_scene(..., extra_geoms=())` — additive param, default empty ⇒ go2/other callers byte-unchanged;
+      g1 injects `vln_mat_blue` (12.6,3), a blue floor mat in the +x FOV (blue is otherwise ABSENT from the forward view, so
+      the task is unambiguous; the shared go2 room is untouched so go2 blue-bottle detection stays clean).
+  (b) `perception/ground_projection.project_pixel_to_ground()` — pure pinhole pixel→floor projection (5 unit tests incl. a
+      live-probe regression); intrinsics(fovy)+extrinsics(cam_xpos/xmat) are sim-owned, actor-unauthored.
+  (c) `MuJoCoG1.get_camera_fovy()` accessor.
+- REAL-VERIFY (deterministic chain probe, ONE sim, nuked; grounding-dino on the head cam): detect→project→navigate lands
+  **0.18 m from the mat GT**, actor=CAUSED. RED-TEAM (mandatory, before believing): relocated the mat to 4 xy — the projected
+  target TRACKS it (y follows 3.0/2.2/3.8; bbox NOT full-frame, frac 0.01–0.21) ⇒ perception genuinely LOAD-BEARING, not a
+  fixed forward walk. Honest limits recorded: projection err 0.37–2.33 m (bottom-centre heuristic degrades for close/tall
+  boxes); grounding-dino is NOT colour-selective on the flat mat (boxes it for both blue & green) ⇒ the RAW detector box is
+  NOT a moat.
+- DECISION / GATE (do NOT self-cross): honest VLN GROUNDING on the bare REPL needs a GT-backed `near_object(colour,radius)`
+  verify predicate — reads the true coloured-object world pos (actor cannot author) + the actor-causation guard — AND that
+  predicate must be listed in the KERNEL allowlist `vcli/cognitive/evidence_classifier._PREDICATE_ORACLES` for a bare call
+  to classify GROUNDED. That allowlist edit is honest-verify-SPINE semantics (same category as `resting_on_receptacle`,
+  CEO-approved at D106). `at_position(projected_xy)` is CIRCULAR (the actor authors the coordinate) and is rejected as a
+  moat. So VLN grounding is queued for Yusen; the approach-skill wiring + bare-REPL acceptance run the round AFTER approval.
+
+### EXECUTIVE SUMMARY — Review Request: near_object VLN grounding predicate (D178)
+**One-liner:** add a GT-backed `near_object(colour,radius)` verify predicate so a bare-REPL NL command "walk to the blue
+thing" can honestly GROUND (robot reached the real blue object) — the last piece before g1 VLN is acceptable on the true face.
+**Key decision (CEO call):** approve registering `near_object` as a world-side oracle AND listing it in the kernel
+allowlist `_PREDICATE_ORACLES`. Recommended YES — it is strictly STRICTER (reads sim GT the actor can't author, guarded by
+actor-causation), the grade() logic is byte-unchanged, and it is the same category as the already-approved
+`resting_on_receptacle` (D106). Without it, VLN can only reach a hollow/circular ground.
+**Impact:** 1 new world verify oracle (g1 world) + 1 name added to the kernel classifier allowlist + a new `approach` native
+tool (non-gated, plug-and-play). No new msg/srv/action, no new dep, no cross-package data-flow. Spine grade() unchanged.
+**Risks:** a mis-scoped near_object could over-ground (e.g. counting a same-colour object the command didn't mean) — mitigated
+by the actor-causation guard (no-move ⇒ UNCAUSED ⇒ not grounded) and a tight radius; will be red-teamed on the bare face.
+**Attachments:** ground_projection + chain/red-team probes (in git), full design on request.
