@@ -25,9 +25,11 @@ blocked: qwen/DashScope ARREARS → Qwen3-VL EYES down (OpenRouter is the substi
          PRE-EXISTING: tests/unit/vcli/test_config_deepseek_provider.py 3 fails (provider naming drift) — untouched.
 next:
   1. [FRONTIER, non-gated] Robustify BYO-MODEL tool-calling across families so N≥4 EARNS acceptance:
-     (a) diagnose why gemini/mistral don't tool-call sim-start by NL — is it model over-caution (fix: persona /
-     tool-instructions nudge, re-verify the passing 3 don't regress) or the openrouter tool-schema path? llama
-     DID tool-call, so isolate. (b) verify-expr robustness — a weak model dropping `==True` or malforming the
+     (a) gemini/mistral no-tool-call DIAGNOSED (this round, read-only): NOT plumbing — openai_compat.py passes
+     `tools` and sets NO `tool_choice` (defaults `auto`); llama tool-called through the SAME path, so gemini/mistral
+     CHOOSE text under `auto` = model over-caution. Fix path = persona/tool-instructions nudge (must re-verify the
+     passing 3 don't regress); `tool_choice=auto` is already implicit so forcing it won't help. (b) verify-expr
+     robustness — a weak model dropping `==True` or malforming the
      expr is the #2 failure; connects to the plug-and-play-predicate gate (below).
   2. [GATE-THEN-BUILD] VLN GROUNDED accept on near_object approval (see gate queue). The RECURRING gate root cause
      is `_PREDICATE_ORACLES` being a hardcoded KERNEL list (evidence_classifier.py:52 flags R2) — the North-Star-
