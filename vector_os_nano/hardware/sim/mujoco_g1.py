@@ -78,6 +78,23 @@ _G1_SPAWN_X: float = 10.0
 _G1_SPAWN_Y: float = 3.0
 _G1_PELVIS_Z: float = 0.793  # from g1_12dof default stance height
 
+# VLN navigation target: a blue floor mat directly ahead of the g1 spawn in the +x hall,
+# on open floor between spawn (10,3) and the stools (16,2.8). Blue is otherwise ABSENT from
+# the forward head-cam view, so "走到蓝色的东西那里" is an unambiguous perception-load-bearing
+# navigation task. g1-ONLY (injected via extra_geoms) — the shared go2 room is untouched, so
+# go2's blue-bottle detection stays unambiguous. Verified: visible ~3800 head-cam px, planner
+# arrives within 0.28 m, ground-projection of the blob lands ~0.4 m of GT (scratchpad/g1_mat_probe.py).
+_G1_VLN_MAT_XY: tuple[float, float] = (12.6, 3.0)
+_G1_EXTRA_GEOMS: tuple[dict, ...] = (
+    {
+        "name": "vln_mat_blue",
+        "type": "box",
+        "pos": [_G1_VLN_MAT_XY[0], _G1_VLN_MAT_XY[1], 0.011],
+        "size": [0.55, 0.55, 0.01],
+        "rgba": [0.12, 0.3, 0.92, 1.0],
+    },
+)
+
 # Camera name in the compiled scene (attach prefix "g1_" + camera name "head_rgb")
 _SCENE_CAM_NAME: str = "g1_head_rgb"
 
@@ -342,6 +359,7 @@ def _build_g1_room_scene_xml() -> Path:
             "pos": [0.04, 0.0, 0.42],
             "xyaxes": [0, -1, 0, 0, 0, 1],
         },
+        extra_geoms=_G1_EXTRA_GEOMS,
     )
     assert scene_path is not None
     logger.info("G1-12dof room scene written to %s", scene_path)

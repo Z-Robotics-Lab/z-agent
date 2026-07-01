@@ -103,6 +103,7 @@ def build_room_scene(
     out_path: Path | str | None = None,
     robot_meshes_dir: Path | str | None = None,
     camera: Mapping[str, Any] | None = None,
+    extra_geoms: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[Any, Path | None]:
     """Attach a robot model into the go2 house room; return ``(MjModel, scene_path)``.
 
@@ -125,6 +126,10 @@ def build_room_scene(
             with already-absolute mesh paths (go2_piper.xml) are unaffected.
         camera: optional ``{mount_body, name, pos, xyaxes}`` head camera added to
             the named robot body before attach.
+        extra_geoms: optional world-frame static geoms added to the room worldbody
+            before compile (e.g. a g1-only VLN navigation target mat). Each mapping
+            is ``{name, pos, size, rgba}`` with an optional ``type`` (default "box");
+            defaults empty so go2 / other callers are byte-unchanged.
 
     Returns:
         ``(compiled MjModel, out_path or None)``.
@@ -152,6 +157,17 @@ def build_room_scene(
         body.add_camera(
             name=camera["name"], pos=list(camera["pos"]), xyaxes=list(camera["xyaxes"])
         )
+
+    for g in extra_geoms:
+        geom = room_spec.worldbody.add_geom()
+        geom.name = str(g["name"])
+        geom.type = getattr(mj.mjtGeom, "mjGEOM_" + str(g.get("type", "box")).upper())
+        geom.pos = [float(v) for v in g["pos"]]
+        geom.size = [float(v) for v in g["size"]]
+        geom.rgba = [float(v) for v in g["rgba"]]
+        # Decorative/target geom — no collision (contype/conaffinity 0), like the room rugs.
+        geom.contype = 0
+        geom.conaffinity = 0
 
     frame = room_spec.worldbody.add_frame(pos=[float(spawn_xy[0]), float(spawn_xy[1]), 0.0])
     room_spec.attach(robot_spec, prefix=attach_prefix, frame=frame)
