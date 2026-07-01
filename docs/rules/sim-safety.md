@@ -17,6 +17,11 @@ Host = 64 GB RAM SHARED across every session/loop. A leaked/duplicate sim is the
 - Speed commands are the ONLY control interface; assert ONLY observable outputs (pos/heading/lidar/camera),
   never joint angles/gait/controller state. Don't assert exact displacement — assert it did NOT fall.
 
+## Sim vs real (one interface, two backends)
+- Same API both sides — assert only interface-level observables so tests hold on both:
+  sim = `MuJoCoGo2` (`set_velocity`→`_cmd_vel` thread, PD stand/sit, `mj_ray` lidar, `mj.Renderer` cam);
+  real = `Go2ROS2Proxy` (ROS2 `/cmd_vel`, odometry pos/heading, Livox MID360, RealSense D435).
+
 ## Physics bounds
 - Standing z∈[0.20,0.45]; sitting z<0.35; not-fallen z>0.15.
 
