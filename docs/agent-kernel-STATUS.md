@@ -4,14 +4,17 @@ One-page "where are we / what's next". Read FIRST. GOAL = [../CLAUDE.md](../CLAU
 design = [ARCHITECTURE.md](ARCHITECTURE.md); decisions = [DECISIONS.md](DECISIONS.md); hidden bugs =
 [tricky-bugs.md](tricky-bugs.md). SNAPSHOT, not a log — round history lives in DECISIONS + git.
 
-updated: 2026-07-01 · D163 — ⚠️ #1 OPEN ITEM = ACCEPTANCE-FACE GAP. Every FETCH (near 0.93 / far 0.87) + PLACE
-(skill 8/8, e2e 3/3) number this session was on the FLAG-GATED `--sim-go2` IN-PROCESS sim (no ROS2), NOT the
-bare `vector-cli` REPL + NL path Yusen actually tests. On the REPL, NL "启动带手臂的 go2 仿真" launches the FULL
-ROS2 STACK subprocess (scripts/launch_explore.sh + Go2/PiperROS2Proxy) which CRASHES (rcl context invalid,
-/tmp/vector_vnav.log) → fetch/place RAN 0/2. Per "behind a flag = NOT done", fetch/place are NOT done on the
-true acceptance face. Pipeline is OpenRouter-INDEPENDENT: routing=Qwen(qwen-max) + eyes=Qwen3-VL-plus via
-DashScope (needs Clash RULE mode; DeepSeek-direct + OpenRouter both dead). `~/.local/bin/vector-cli` is now a
-WRAPPER (backup `.orig`) → Qwen + VECTOR_MAX_TOKENS=8000 + --native-loop + sim env, so bare vector-cli runs on Qwen.
+updated: 2026-07-01 · D164 — TRIAGE done + 3 CEO decisions APPROVED (A->C->B). #1 OPEN ITEM = ACCEPTANCE-FACE GAP.
+Prior FETCH (0.93/0.87) + PLACE (8/8, e2e 3/3) numbers were on the FLAG-GATED `--sim-go2` IN-PROCESS sim, NOT the
+bare `vector-cli` REPL + NL face → DOWNGRADED to "not yet re-accepted" (approved). D163's crash claim CORRECTED: the
+ROS2 stack comes up HEALTHY (~53s FAR/TARE) then dies on TEARDOWN — "rcl context invalid" is teardown noise, not a
+crash; the real defect = a Rule 3/11 SPLIT-BRAIN (cli.py `--sim-go2` in-process vs sim_tool._start_go2 which ignores
+VECTOR_NO_ROS2 + always launches the ROS2 stack). Pipeline OpenRouter-INDEPENDENT: routing=Qwen(qwen-max) + eyes=
+Qwen3-VL-plus via DashScope (Clash RULE mode; DeepSeek-direct + OpenRouter dead). `~/.local/bin/vector-cli` = WRAPPER
+(backup `.orig`) → Qwen + VECTOR_MAX_TOKENS=8000 + --native-loop + sim env.
+TRACK A DONE (loop infra, in ~/.claude): supervisor now systemd --user (evolving-loop@<name>.service Restart=always,
+linger on) + per-round systemd-run scope (RuntimeMaxSec+MemoryMax) + per-DIR lock + NEVER-KILL-INFRA rule; code-reviewed
+(fd-flock blocker fixed) + verified. `loop-ctl.sh` manages loops. Loops STOPPED until C(b) re-acceptance lands.
 
 goal:    PLUG-AND-PLAY agent-orchestration runtime for physical AI — bring your own robot/policy/skill/capability;
          plan · route · verify · recover. Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen.
@@ -19,16 +22,17 @@ phase:   Post-fetch-place. The SKILLS work in-process (perception_grasp + R11 gr
          central-drop + R15 12s-settle; moat resting_on_receptacle D106/D116). The gap is the acceptance FACE (D163).
 owns:    skills/{perception_grasp,navigate_to_object,mobile_*}.py, vcli/tools/sim_tool.py, tools/acceptance/**,
          acceptance/**, docs/*. Spine vcli/cognitive/ FROZEN (stricter-only).
-blocked: bare-cli fetch/place (ROS2-stack sim crash, D163). CEO gates queued below — do NOT cross.
-next (NEXT SESSION — Yusen's plan):
-  1. FIX THE LOOP / SELF-DEV SETUP. The unattended supervisor (~/.claude/bin/evolving-loop.sh) STALLED 10.6h
-     (a hung round wedged it, no self-heal); the /goal Stop hook spammed. Make the self-dev flow reliable, or
-     retire it for interactive driving. Loop files: ~/.claude/loops/vector-evolve.* (STOPPED; REGISTRY marks it).
-  2. CLOSE D163 — make bare-cli + NL fetch/place actually work: (a) fix the ROS2-stack sim crash [keeps the
-     real-robot path] OR (b) point NL "启动 go2 仿真" at the proven IN-PROCESS sim (sim_tool.SimStartTool._start_go2
-     launches the ROS2 subprocess; cli.py `--sim-go2` builds it in-process). Recommend (b) first. Then RE-VERIFY
-     fetch/place on the bare REPL (not `-p`/`--sim-go2`), all 3 colours, N>=5, Qwen3-VL eyes.
-  3. target #3 frontier (more objects / harder NL / g1 2nd embodiment / real VLA) — ONLY after the acceptance face works.
+blocked: bare-cli fetch/place — awaiting Track C(b) (D164). CEO gates queued below — do NOT cross.
+next (per D164, approved A->C->B; A DONE):
+  1. [DONE] Loop/self-dev setup made reliable — see D164 + ~/.claude REGISTRY (systemd Restart=always + scoped rounds
+     + per-dir lock + never-kill rule; verified). No loop RUNNING until step 2 re-acceptance lands.
+  2. [NEXT] CLOSE D163 via APPROVED (b)+hybrid: SINGLE-SOURCE extract cli.py's in-process go2+arm build (cli.py:747-888)
+     into ONE shared helper; make sim_tool._start_go2 (sim_tool.py:476-654) call it when VECTOR_NO_ROS2=1 (NOT a copy —
+     a copy re-splits the brain). Preserve the ROS2 path (explore/nav) + add a parity e2e; fix runtime.py:132/139
+     teardown ordering. Then RE-ACCEPT fetch+place on the BARE REPL (no -p/--sim-go2; `pgrep -f launch_explore` EMPTY
+     proves (b) took), all 3 colours, N>=5, Qwen3-VL eyes, red-team. Non-gated code; this IS the approved gate.
+  3. [THEN] Track B guardrails (G1=C(b) removes the flag path; G2 harness flag-guard; G3 RECORD provenance gate;
+     G4 env split; G5 red-team provenance question) — make bare-cli+NL un-bypassable. Then #3 frontier.
 tooling (scratchpad/, git-tracked): place_probe.py + run_probe.sh (fast skill-direct place ~120s/trial, no LLM,
   reads moat oracle + bottle xyz); measure_qwen.py + run_measure_qwen.sh (bare-cli fetch/place rate + Qwen3-VL eyes).
   GOTCHAS: inline sim cmds must NOT pre-`pkill 'vector_os_nano.vcli.cli'` (self-kills the bash -c shell); `rosm nuke`
