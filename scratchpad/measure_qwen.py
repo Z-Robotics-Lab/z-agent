@@ -38,7 +38,7 @@ for k in range(1, N + 1):
         p = subprocess.run(
             [f"{ROOT}/.venv/bin/python", "-m", "vector_os_nano.vcli.cli", "-p", CMD,
              "--sim-go2", "--headless", "--native-loop", "--json"],
-            cwd=ROOT, env=env, capture_output=True, text=True, timeout=300,
+            cwd=ROOT, env=env, capture_output=True, text=True, timeout=480,  # R11 retry loop can add ~90s to a FAR cli
         )
         out = p.stdout + p.stderr
     except subprocess.TimeoutExpired as e:
