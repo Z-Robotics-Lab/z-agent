@@ -399,6 +399,32 @@ def test_system_prompt_omits_object_vocab_when_empty() -> None:
     assert with_names[0]["text"] != without[0]["text"]
 
 
+def test_system_prompt_teaches_compound_fetch_and_place() -> None:
+    """A compound 'bring X AND place it' request must not end at the grasp.
+
+    Frontier gap (combo probe '把红色的罐子拿过来放到架子上'): the native producer grasped,
+    verified holding_object, and called finish — silently dropping the trailing place
+    clause, because the sentence LEADS with a fetch word (拿过来) that the grasp guidance
+    matches. The prompt now teaches the two-action compound: after the grasp verifies,
+    call mobile_place + verify resting_on_receptacle BEFORE finishing.
+    """
+    from vector_os_nano.vcli.native_loop import _native_system_prompt
+
+    text = _native_system_prompt(
+        None,
+        frozenset({"holding_object", "resting_on_receptacle"}),
+        ("pickable_can_red",),
+    )[0]["text"]
+    assert "mobile_place" in text
+    assert "resting_on_receptacle" in text
+    # Must explicitly cover the fetch-LED compound (the exact combo failure mode).
+    assert "放到" in text
+    assert "never finish after only" in text.lower()
+    # Omitted in a non-manipulation world (no graspable objects -> no place skill).
+    dev = _native_system_prompt(None, frozenset({"holding_object"}), ())[0]["text"]
+    assert "mobile_place" not in dev
+
+
 def test_oracle_stays_strict_wrong_canonical_name_is_false() -> None:
     """STEP 7 moat guard: the fix did NOT loosen the oracle's exact match.
 

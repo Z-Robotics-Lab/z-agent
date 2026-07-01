@@ -1035,6 +1035,29 @@ def _native_system_prompt(
         )
     else:
         object_vocab = ""
+    # Compound FETCH-AND-PLACE guidance (frontier: a single utterance that both fetches
+    # AND places one object, e.g. "把红色的罐子拿过来放到架子上"). Gated on a manipulation
+    # world (object_names present -> the mobile_place skill + resting_on_receptacle oracle
+    # exist). The combo failure mode: the sentence LEADS with a fetch word (拿过来) that the
+    # grasp guidance matches, so the model grasps, verifies holding_object, and finishes —
+    # dropping the trailing place clause. This teaches the two-action compound WITHOUT any
+    # runner-side clause parsing (the MODEL still decides; the runner stays planner-free).
+    if object_names:
+        place_guidance = (
+            "FETCH-AND-PLACE (one object, TWO actions): if the request asks you to not "
+            "just fetch / bring an object but ALSO put or place it somewhere — e.g. "
+            "'拿过来放到架子上', '放到...上', 'put it on the shelf', 'place it on the "
+            "receptacle' — then grasping is only HALF the task. Even when the sentence "
+            "LEADS with a fetch / bring word (拿 / 拿过来 / bring / fetch), the trailing "
+            "place clause STILL STANDS and you must NOT finish after only the grasp. Do "
+            "this: (1) grasp the object and verify holding_object('<name>') PASSES, then "
+            "(2) call the place skill mobile_place — it auto-resolves the scene's place "
+            "receptacle, so call it with NO target argument — then (3) verify "
+            "resting_on_receptacle() PASSES, and ONLY THEN finish. NEVER finish after "
+            "only the grasp when the request also asked to place the object. "
+        )
+    else:
+        place_guidance = ""
     # Locomotion guidance: when the avoidance NAVIGATION route is available (a world
     # with a mobile base, D9 #1) the model REACHES a place/coordinate via navigate(x, y)
     # — the planner avoids obstacles — and uses walk only for an explicit relative step.
@@ -1114,6 +1137,7 @@ def _native_system_prompt(
         "OR navigate_to_object('<next object>') if it returns no_detections. Only call finish "
         "once EVERY named object has had its OWN passed holding_object verify — never finish "
         "after grasping just one when more were named. "
+        + place_guidance
         + object_vocab
         + locomotion_guidance
     )
