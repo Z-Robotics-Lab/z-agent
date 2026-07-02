@@ -14,7 +14,7 @@
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 17 | 61fde80 |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 10 | HEAD-R190 |
 | kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 20 | c59f386 |
-| place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 19 | 5aa71cb |
+| place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | quantity-place.nl | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
