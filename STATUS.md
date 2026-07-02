@@ -1,6 +1,6 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-01 · post-restructure (owner session; loop stopped; next supervised round = R183)
+updated: 2026-07-02 · post-restructure+consolidation (owner session; loop stopped; next = R183)
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model;
       plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: review
