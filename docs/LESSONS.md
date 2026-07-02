@@ -100,9 +100,10 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 - Ordinal fetch CONFIRMED (R197/E33, deepseek-v4-flash): `最左边的瓶子`→green AND `最右边的瓶子`→blue
   both GROUNDED verified=True, 0 handover, eyes-confirmed — DIRECTION-sensitive (not lucky green default).
   Built on R195 passthrough + catalog-projection + R196 no-auto-handover (Case 16); witness-only (D182) floor → STATUS next.
-- Position-invariance PROVEN (R209/E43, deepseek-v4-flash): under VECTOR_SCENE_SWAP the SAME utterance
-  `最左边的瓶子` grasps BLUE (new leftmost) not frozen GREEN (E31/E33) → resolver reads LIVE positions, not
-  memorized coords. 1st scene variant = breadth-pivot proof point; N=1, N≥3 + 2nd world/D182 next → E43.
+- Position-invariance CONFIRMED N=2 (R209/E43 + R210/E44 skeptic re-run, deepseek-v4-flash): under
+  VECTOR_SCENE_SWAP the SAME `最左边的瓶子` grasps BLUE (new leftmost) not frozen GREEN (E31/E33) →
+  resolver reads LIVE positions, not memorized coords. But it is still the SAME scene/objects/robot — the
+  breadth pivot has NOT yet delivered a 2nd WORLD or embodiment; that (or D182) is the real next bar → E44.
 - Quantity-place: REFUTED v4-flash (R199/E36) → GROUNDED deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC
   not machinery (E38 seq 2/2); model swap moved it ZERO kernel edits (E23-clean, plug-and-play). But NOT deterministic:
   ROBUSTNESS (R205/E40) campaign GROUNDED 2/3 (run1 abandoned obj-2; deepseek-chat FLAKY on 两个) → runner guardrail E40.

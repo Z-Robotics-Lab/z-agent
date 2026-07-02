@@ -9,7 +9,7 @@
 | fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 27 | 61fde80 |
 | fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 24 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 10 | pending |
-| fetch.nl-ordinal-position-invariance | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 13 | pending |
 | fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 20 | HEAD-R190 |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 27 | 61fde80 |
@@ -63,3 +63,4 @@
 - E39 R204 [confirmed] E38 follow-up: R199 quantity 2nd-object stall is BRAIN-SPECIFIC — a different brain self-decomposes 两个 into 2 grasp+place legs where v4-flash abandoned obj-2 — retry only if: robustness N>=3 deepseek-chat, OR test if v4-flash needs a QUANTITY guardrail
 - E40 R205 [confirmed] R204/E39 quantity-place GROUNDED (把两个瓶子放到架子上, deepseek-chat) is ROBUST across N>=3 — retry only if: quantity determinism needs a runner QUANTITY guardrail OR pivot to breadth (2nd scene/world, D182 grounder)
 - E43 R209 [inconclusive] 最左边的瓶子 reads LIVE positions: under VECTOR_SCENE_SWAP the SAME utterance grasps BLUE (new leftmost) not the frozen GREEN (E31/E33) — retry only if: promote next-round after boundary+red-team; robustness N>=3 swap follow-up
+- E44 R210 [confirmed] R210 review: the E43 position-invariance provisional reproduces on the real bare face across a round boundary; the 2 oldest confirmed BOARD rows + wiring/lessons hold — retry only if: n/a - review round
