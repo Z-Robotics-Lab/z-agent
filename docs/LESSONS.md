@@ -96,12 +96,14 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   documented local seam). gemma4:e4b resolves L-R ordinals; unblocked the clean ordinal GROUNDED → E28.
 
 ## Frontier (the ambition horizon — review rounds refresh; STATUS `frontier:` carries the 1-liner)
-- Harder find-fetch NL: ordinal fetch `把最左边的瓶子拿过来`→green is GROUNDED 3/3 on the real face
-  (R196/E32, deepseek-v4-flash) — SELECTION deterministic (R195 verbatim passthrough + catalog resolver)
-  AND the "grasp miss" refuted: it was handover-releases-hold (Case 16), fixed by native_loop
-  no-auto-handover. NEXT ordinal frontier: quantity ("两个"/"两瓶" — gripper holds ONE, needs place/stage
-  between grasps), ambiguity ("那个"/"它" anaphora → last-referenced object), relational near(a,b).
-  Witness-only fidelity (D182) still caps this to a floor, not a moat → STATUS next.
+- Ordinal fetch is CONFIRMED (R197/E33, deepseek-v4-flash): `最左边的瓶子`→green(leftmost) AND the
+  opposite-ordinal red-team `最右边的瓶子`→blue(rightmost) both GROUNDED verified=True, 0 handover,
+  eyes-confirmed. The resolver is genuinely DIRECTION-sensitive (not a lucky green default) — the
+  opposite-ordinal is the test that proves a spatial resolver real. Built on R195 verbatim-passthrough +
+  catalog-projection resolver + R196 no-auto-handover (Case 16). NEXT ordinal frontier: quantity
+  ("两个"/"两瓶" — gripper holds ONE, needs place/stage between grasps), ambiguity ("那个"/"它" anaphora →
+  last-referenced object), relational near(a,b). Witness-only fidelity (D182) still caps this to a
+  floor, not a moat → STATUS next.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
