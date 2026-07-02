@@ -651,6 +651,17 @@
             mass="0.08" friction="2 0.05 0.001" priority="2"/>
     </body>
 
+    <!-- R211: novel 4th object (plug-in proof). A YELLOW bottle at y=3.11 — nestled
+         BETWEEN green (3.0) and red (3.22), inside the d435 FOV (projects to u~109 of
+         320; the row 2.78..3.22 maps to u 263..57). 0.11 spacing => no collision or
+         image occlusion. The go2 navigates to the live target before grasping, so the
+         spot needs no new reach regime. Grasp weld = MuJoCoGo2 welds tuple. -->
+    <body name="pickable_bottle_yellow" pos="10.90 3.11 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.95 0.85 0.05 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
 
     <!-- ==================== BASEBOARDS (visual only) ==================== -->
     <geom name="bb_south" type="box" pos="10 0.06 0.04" size="10.0 0.01 0.04"

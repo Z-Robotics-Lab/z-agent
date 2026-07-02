@@ -22,9 +22,11 @@ from vector_os_nano.perception.front_object import (
 from vector_os_nano.skills.perception_grasp import _COLOR_TO_SCENE
 
 _ROOT = Path(__file__).resolve().parents[3]
-_PIPER_SCENE = (
-    _ROOT / "vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml"
-)
+# The SOURCE room template (attached + compiled at connect); scene_room_piper.xml is
+# the GENERATED output, overwritten each build — never the source of truth.
+_ROOM_TEMPLATE = _ROOT / "vector_os_nano/hardware/sim/go2_room.xml"
+# The grasp weld is added programmatically from this driver tuple, not the XML.
+_GO2_DRIVER = _ROOT / "vector_os_nano/hardware/sim/mujoco_go2.py"
 _YELLOW_NAME = "pickable_bottle_yellow"
 
 
@@ -81,7 +83,13 @@ def test_front_object_mask_selects_yellow_over_green():
     assert abs(xs.mean() - 20) < 8, "yellow mask should sit on the LEFT blob"
 
 
-def test_scene_declares_yellow_body_and_weld():
-    xml = _PIPER_SCENE.read_text()
-    assert f'body name="{_YELLOW_NAME}"' in xml, "yellow body missing from scene"
-    assert f'grasp_{_YELLOW_NAME}' in xml, "yellow grasp weld missing from scene"
+def test_source_room_declares_yellow_body():
+    xml = _ROOM_TEMPLATE.read_text()
+    assert f'name="{_YELLOW_NAME}"' in xml, "yellow body missing from room template"
+
+
+def test_driver_registers_yellow_grasp_weld():
+    src = _GO2_DRIVER.read_text()
+    assert f'"grasp_{_YELLOW_NAME}", "piper_link6", "{_YELLOW_NAME}"' in src, (
+        "yellow grasp weld missing from MuJoCoGo2 welds tuple"
+    )
