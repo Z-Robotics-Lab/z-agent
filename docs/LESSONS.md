@@ -70,6 +70,13 @@ Compressed from docs/tricky-bugs.md (removed 2026-07-02); full original prose in
 Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a green suite, or
 hid behind "every component correct in isolation". Routine bugs → git history.
 
+- **Case 15 (compound place-leg walk-loop, 2026-07-02)** — a single-utterance fetch-AND-place
+  (`放到架子上`) grasped fine but the PLACE leg walk-looped to a self-invented `at_position(10,5)`
+  and never placed (RAN 1/4). Symptom looked like a nav/mobile_place bug; real cause was PROMPT
+  cross-talk — `_native_system_prompt` locomotion_guidance framed navigate as the route to
+  "REACH a **place** or coordinate", colliding with the place clause; the unbounded navigate-
+  RECOVER loop burned all 24 turns. Fix: place_guidance forbids navigate/walk for a place clause;
+  locomotion_guidance scopes navigate to an explicit user-given coordinate. → E21/49d6e0c
 - **Case 14 (FOV, 2026-06-29)** — far fetch grounds green/blue BOTTLES but red returns no_detections at
   re-perceive; red HSV suspected — yet red mask fired ~1000 px @3.9 m and the seed localized. Root: the red
   object is a CAN, shorter — mask 1000@3.9m → 0 at the ~0.9 m standoff: a close short object falls BELOW the

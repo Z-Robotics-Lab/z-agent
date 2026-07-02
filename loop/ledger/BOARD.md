@@ -7,7 +7,7 @@
 | byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 5 | f159306 |
 | byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 1 | 61fde80 |
 | fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 1 | 61fde80 |
-| fetch-place.nl-compound | refuted | RAN 1/4 | bare-repl+nl | deepseek-chat | self-read | 1 | 61fde80 |
+| fetch-place.nl-compound | provisional | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | 49d6e0c |
 | fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 1 | 61fde80 |
 | fetch.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 3 | 5aa71cb |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 1 | 61fde80 |
@@ -36,3 +36,4 @@
 - E18 R182 [refuted] tests/unit is safe to run as ONE unbounded pytest process — retry only if: pytest ALWAYS via scripts/run-tests (MemoryMax scope, serial chunks); unbounded never
 - E19 R182 [confirmed] 27 structure docs consolidate to ~15 lean files without content loss (CEO: few short files) — retry only if: n/a - future doc growth gated by check.sh allowlist+caps
 - E20 R183 [refuted] the 5 backfilled provisional acceptance rows all hold on independent bare-REPL re-run (also red-teams the 14h-loop claims) — retry only if: n/a
+- E21 R184 [inconclusive] compound PLACE leg walk-loops because _native_system_prompt routes the place clause to navigate (H1), not because mobile_place is broken (H3) — retry only if: R185 A/B (old prompt + v4-flash) isolates fix-vs-model before promotion
