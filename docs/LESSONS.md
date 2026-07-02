@@ -104,9 +104,9 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   catalog-projection resolver + R196 no-auto-handover (Case 16). Witness-only fidelity (D182) still
   caps this to a floor, not a moat → STATUS next.
 - Quantity-place: REFUTED on v4-flash (R199/E36) → GROUNDED on deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC, not machinery (E38: seq 2-object place grounds 2/2).
-  E39 swapped ONLY the brain; SAME utterance 把两个瓶子放到架子上 GROUNDED True 5/5 (self-split grasp→place ×2, moat resting_on_receptacle()>=2 True, eyes-ok).
-  PLUG-AND-PLAY proof: model swap moved a decomposition ceiling, ZERO kernel edits (E23-clean). OPEN: n=1
-  (robustness N≥3); v4-flash-class brains that DON'T self-decompose need a runner QUANTITY guardrail → E39.
+  Model swap moved a decomposition ceiling with ZERO kernel edits (E23-clean, plug-and-play proof). But ROBUSTNESS
+  (R205/E40) shows it is NOT deterministic: campaign GROUNDED 2/3 (run1 abandoned obj-2 → False; run2 True 3/3) —
+  deepseek-chat is FLAKY on 两个; determinism needs a runner-side QUANTITY guardrail (per-object grasp→place) → E40.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
