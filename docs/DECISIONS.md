@@ -1138,3 +1138,31 @@ the acceptance face since billing took OpenRouter/DashScope down (D179/D180). Th
   ("把红色的瓶子拿过来放到架子上"), distractor colours, ambiguity/negation, N-to-failure per colour; then the g1 2nd
   embodiment non-gated build. The recurring META plug-and-play-predicate gate (hardcoded _PREDICATE_ORACLES) still
   stands for VLN GROUNDED.
+
+## D182 — [LOOP, FRONTIER REAL-VERIFY+RED-TEAM] harder-NL find-fetch raised past the plain-colour floor: NEGATED-DISTRACTOR NL grounds colour-selectively, eyes-confirmed, can-bias confound refuted by a control (2026-07-01)
+D181 closed D163 on plain "把<colour>的拿过来" (one colour named, no distractor phrasing). This round escalated the NL in
+KIND on the SAME bare-REPL face (repl_accept.py MODE=fetch, VECTOR_PROVIDER=deepseek deepseek-chat, in-process
+VECTOR_NO_ROS2=1) to NEGATED-MULTI-DISTRACTOR utterances, where a naive substring/first-match or grab-nearest would pick
+the wrong object. 3 pickables present the whole time (green bottle, blue bottle, red can).
+- neg_red: "不要蓝色的瓶子，也不要绿色的，只把红色的罐子拿过来" → DeepSeek reasoned to pickable_can_red, perception_grasp(query=red can)
+  → holding_object('pickable_can_red') ✓ (actor=CAUSED) → verdict GROUNDED verified=True (1/1). launch_explore_seen=False.
+  EYES (offscreen verdict render, read back): RED can lifted in the gripper; GREEN + BLUE bottles untouched on the table. Exact NL match.
+- neg_green (DISCRIMINATING CONTROL — negate the can, demand a bottle, to refute a can-bias/grab-nearest confound):
+  "别拿红色的罐子，也别动蓝色的，把绿色的瓶子拿给我" → DeepSeek parsed all three clauses, grasped pickable_bottle_green
+  → holding_object('pickable_bottle_green') ✓ (actor=CAUSED, verdict True). Then read "拿给我" as a HANDOVER, did gripper_open,
+  and released → the 2nd verdict holding_object('pickable_bottle_green') correctly went False (actor=UNCAUSED). RESULT (1/2)
+  False is the honest-verify TRUTHFULLY reporting the released state after a legit handover, NOT a selectivity miss.
+  EYES: GREEN bottle carried off the table and set on the floor (empty gripper); RED can + BLUE bottle still on the table.
+  → Confound REFUTED: it grasped the BOTTLE, not the can → colour-selectivity is real across both a can and a bottle, not can-biased.
+- RED-TEAM / honest caveat surfaced (SPINE-SEMANTICS, queued — not crossed): the grasp oracle holding_object(target) is
+  target-AWARE (R2-7: held≠named ⇒ False), BUT the target string is authored by the ACTOR (the LLM both chooses the object
+  AND writes holding_object('<name>') — native_loop.py system prompt). So the oracle certifies "held == the object I NAMED",
+  NOT "the object I named == the colour the HUMAN demanded". Under ADVERSARIAL NL (negation/ambiguity) the NL-intent→colour
+  fidelity is therefore witness-certified (my eyes / a VLM judge), NOT oracle-certified. DeepSeek got both right here and eyes
+  agree, so these two results are honest; but a model that MISREAD negation would self-consistently grasp+verify the wrong
+  colour and the oracle would say True. This sharpens D181's "eyes are the witness": for NL-intent fidelity a human/VLM witness
+  is REQUIRED — the deterministic oracle alone cannot close it while the actor authors the target. Candidate spine hardening:
+  an independent NL→scene-object grounder (world-owned, actor cannot author) feeding the verify target. Queued as a spine gate.
+- STILL non-gated + runnable (DeepSeek funded): push N per phrasing; MODE=combo single multi-clause "把红色的拿过来放到架子上";
+  then the g1 2nd-embodiment non-gated build. Automated VLM vision-judge remains the ONE thing that would remove the manual-eyes
+  dependency — blocked only by OpenRouter/DashScope credit (external).
