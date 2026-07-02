@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# sim-teardown — Invariant 5 made clonable: tear down THIS repo's sim, nothing else.
+#
+# Preferred path: rosm (Vector Robotics' ROS2 process manager, sibling repo, optional).
+# Fallback (fresh clone, no rosm): repo-scoped pkill only — the pattern proven at
+# tools/acceptance/visual_e2e.py:155.
+#
+# PROHIBITIONS (hard — do not "improve" these away):
+#   - NEVER touch bare 'mujoco' (pkill -f mujoco kills OTHER sessions' sims).
+#   - NEVER kill the loop supervisor, its 'timeout', a 'claude -p' round, or any
+#     sibling round (NEVER-KILL-INFRA — a round that killed its supervisor wedged
+#     a loop for 10.6h on 2026-06-30). Process arbitration belongs to systemd/flock.
+set -u
+
+if command -v rosm >/dev/null 2>&1; then
+  exec rosm nuke --yes
+fi
+
+echo "sim-teardown: rosm not found — falling back to repo-scoped pkill (vector_os_nano.vcli|launch_explore only)" >&2
+pkill -u "$USER" -f 'vector_os_nano\.vcli|launch_explore' 2>/dev/null
+exit 0

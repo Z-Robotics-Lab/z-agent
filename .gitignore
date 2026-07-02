@@ -72,3 +72,9 @@ tools/go2piper_grasp_reliability.log
 tools/go2piper_grasp_reliability_postnudge.log
 tools/grasp_reliability_postnudge.log
 *.stdout
+
+# loop / evidence / scratch state (plan §5 step 2 — never committed)
+loop/.state/
+loop/local.env
+var/
+scratchpad/
