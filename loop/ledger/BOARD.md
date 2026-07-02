@@ -16,7 +16,7 @@
 | kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 24 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
 | quantity-place.nl | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
-| quantity-place.nl-isolation | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| quantity-place.nl-isolation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
