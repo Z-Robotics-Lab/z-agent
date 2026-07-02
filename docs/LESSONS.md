@@ -41,6 +41,11 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   adjudication = APPEND a later row whose `supersedes` points back. checks_schema.py's
   provisional age-check must exempt an already-superseded row or it nags forever and wedges
   every future round once age>2 (R187: R184 row superseded R186, flagged R187) → E24/D183.
+- APPEND a ledger row as ONE pre-formatted line with `>>`; NEVER load-all→`json.dumps`→write-all:
+  default dumps re-serializes EXISTING rows (adds `, ` separators, flips `\uXXXX`↔literal em-dash)
+  — byte-identical content but numstat scores it a DELETION → append-only gate FAILS, quarantines
+  the NEXT round. Content-preserving reformats are NOT restored (a 2nd rewrite compounds); leave +
+  document. The gate caught it correctly — the bug was the write method, not the check → E27.
 - ORDINAL/positional NL ("最右边的瓶子") CAN ground: the model resolves rightmost→blue (the
   non-central, dog's-right bottle) via `describe_scene`(VLM)+`detect`, then perception_grasp.
   BUT it is model-STRATEGY-fragile — it only works if the model PRE-RESOLVES the ordinal to a

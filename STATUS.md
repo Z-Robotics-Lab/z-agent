@@ -1,21 +1,22 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-02 · R190 (E26) — REVIEW round: 2 oldest confirmed rows re-confirmed on the real face
+updated: 2026-07-02 · R191 (E27) — RECOVERY: cleared R190 append-only quarantine (benign reformat)
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model;
       plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R190 (E26) REVIEW. Skeptic 2/2 on the REAL bare-REPL face (deepseek-chat):
-  fetch.nl-plain-colour GROUNDED 1/1 (EYES: arm holds green raised, blue+red untouched) +
-  g1.perception RED GROUNDED 1/1 (GT-oracle) with GREEN honest-negative held 0/14 (no
-  false-green). §1b: the 2 R188 ordinal provisionals SUPERSEDED (finding stands: resolution
-  reproducible, acceptance RAN not clean GROUNDED). Re-red-team E25 SURVIVES (blue==rightmost
-  is WITNESS-only, D182 gap — 3rd-person frame confirms blue-removed, not ordinal-rank).
-  Janitor: Casebook 16→15 (Case 0 folded); WIRING 13rd old (<25, kept); gate audit clean.
+last-round: R191 (E27) RECOVERY. R190's post-check quarantined: acceptance+experiments.jsonl
+  had deletions w/o CEO-APPROVED. ROOT: R190 re-dumped 2 EXISTING rows via a json round-trip
+  (R184 runs-array gained ", " separators; R187 —→literal em-dash) — content byte-identical,
+  numstat scored it a DELETION → gate FAILED correctly. Fix: accept the content-preserving
+  reformat (restoring = a 2nd rewrite, compounds noise), regen stale BOARD.md (13 lines),
+  lesson E27 (append ONE preformatted line, never load-all+dumps+write-all), clear quarantine.
+  Verified: append-only gate + supersession-aware age-check both working — NO open provisional
+  wedge (the 8 in preflight are a naive literal count; all superseded). No sim run this round.
 
 frontier: clean ordinal GROUNDED (grasp-reliable target + non-handover utterance); then
   quantity ("两个") + ambiguity ("那个"/"它"); world-owned spatial grounder kills the fragility.
-  AMBITION (R190): grounding cadence slowed (last NEW GROUNDED = R186); the plug-and-play
-  thesis is GATE-BLOCKED (grounder/VLN/S4-S6 all CEO-gated) — highest leverage needs a CEO call.
+  AMBITION: grounding cadence slow (last NEW GROUNDED = R186); plug-and-play thesis is
+  GATE-BLOCKED (grounder/VLN/S4-S6 all CEO-gated) — highest leverage needs a CEO call.
 
 blocked: provider credit for OpenRouter-N≥4 + the automated VLM vision-judge (external, queued)
 
