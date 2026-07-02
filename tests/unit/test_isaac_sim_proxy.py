@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import math
 import subprocess
-import time
+from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -50,6 +50,60 @@ def _make_odom_msg(x: float = 1.0, y: float = 2.0, z: float = 0.28,
     msg.pose.pose.orientation.z = qz
     msg.pose.pose.orientation.w = qw
     return msg
+
+
+class _FakeClock:
+    """Deterministic clock for the proxy's wall-clock polling loops.
+
+    NEVER patch time.sleep to a no-op while time.time stays real: navigate_to's
+    3 s FAR probe then spins at full speed and MagicMock call-recording grows
+    ~GB/s (ledger E18, 2026-07-01 host OOM; the sibling bomb was yaml.safe_load
+    reading a blanket-mocked builtins.open forever — stub _nav, see the nav
+    tests).  Here sleep() advances the fake time instead, so every deadline
+    loop terminates after its nominal number of polls; max_sleeps hard-fails
+    any runaway loop.
+    """
+
+    def __init__(self, start: float = 1_000_000.0, max_sleeps: int = 10_000) -> None:
+        self.now = start
+        self.sleeps: list[float] = []
+        self._max_sleeps = max_sleeps
+        # Called after each sleep — lets a test simulate events (e.g. a ROS
+        # waypoint callback) arriving while the proxy sleeps.
+        self.on_sleep: Any = None
+
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        if len(self.sleeps) >= self._max_sleeps:
+            raise RuntimeError(
+                f"_FakeClock: more than {self._max_sleeps} sleeps — "
+                "runaway polling loop (see ledger E18)"
+            )
+        self.sleeps.append(seconds)
+        self.now += max(float(seconds), 1e-3)  # zero sleep must still advance
+        if self.on_sleep is not None:
+            self.on_sleep(self)
+
+
+@contextmanager
+def _fake_time(clock: _FakeClock | None = None) -> Any:
+    """Patch time.time/time.sleep with a _FakeClock; yields the clock."""
+    clock = clock or _FakeClock()
+    with patch("time.time", new=clock.time), \
+         patch("time.sleep", new=clock.sleep):
+        yield clock
+
+
+def _fake_geometry_msgs() -> dict[str, MagicMock]:
+    """sys.modules entries stubbing geometry_msgs (not installed without ROS2).
+
+    Lets `from geometry_msgs.msg import PointStamped` succeed inside
+    _publish_goal_point so the publisher path is exercised in any environment.
+    """
+    pkg = MagicMock()
+    return {"geometry_msgs": pkg, "geometry_msgs.msg": pkg.msg}
 
 
 # ---------------------------------------------------------------------------
@@ -496,22 +550,21 @@ class TestIsaacSimProxyMotion:
 
     def test_walk_is_blocking_uses_sleep(self) -> None:
         proxy = self._connected_proxy()
-        sleep_calls: list[float] = []
 
         def mock_set_velocity(vx: float, vy: float, vyaw: float) -> None:
             pass
 
         proxy.set_velocity = mock_set_velocity
 
-        with patch("time.sleep", side_effect=lambda t: sleep_calls.append(t)):
+        with _fake_time() as clock:
             proxy.walk(vx=0.3, vy=0.0, vyaw=0.0, duration=0.5)
 
-        assert len(sleep_calls) > 0
+        assert len(clock.sleeps) > 0
 
     def test_walk_returns_true(self) -> None:
         proxy = self._connected_proxy()
         proxy.set_velocity = MagicMock()
-        with patch("time.sleep"):
+        with _fake_time():
             result = proxy.walk(vx=0.1, vy=0.0, vyaw=0.0, duration=0.1)
         assert result is True
 
@@ -520,7 +573,7 @@ class TestIsaacSimProxyMotion:
         calls: list[tuple] = []
         proxy.set_velocity = lambda vx, vy, vyaw: calls.append((vx, vy, vyaw))
 
-        with patch("time.sleep"):
+        with _fake_time():
             proxy.stand()
 
         assert any(c == (0.0, 0.0, 0.0) for c in calls)
@@ -530,7 +583,7 @@ class TestIsaacSimProxyMotion:
         calls: list[tuple] = []
         proxy.set_velocity = lambda vx, vy, vyaw: calls.append((vx, vy, vyaw))
 
-        with patch("time.sleep"):
+        with _fake_time():
             proxy.sit()
 
         assert any(c == (0.0, 0.0, 0.0) for c in calls)
@@ -541,7 +594,7 @@ class TestIsaacSimProxyMotion:
         calls: list[tuple] = []
         proxy.set_velocity = lambda vx, vy, vyaw: calls.append((vx, vy, vyaw))
 
-        with patch("time.sleep"):
+        with _fake_time():
             proxy.walk(vx=0.5, vy=0.0, vyaw=0.0, duration=0.1)
 
         # Last call must be stop
@@ -564,60 +617,55 @@ class TestIsaacSimProxyNavigation:
         proxy._waypoint_pub = MagicMock()
         proxy._connected = True
         proxy._position = (0.0, 0.0, 0.28)
+        proxy._scene_graph = None  # connect() normally sets this
         return proxy
 
     def test_navigate_to_publishes_goal_point(self) -> None:
-        import os
         proxy = self._nav_proxy()
-
-        # Mock: robot arrives immediately
         proxy.get_position = MagicMock(return_value=(0.5, 0.5, 0.28))
 
-        # FAR responds immediately (waypoint received)
-        proxy._last_waypoint_time = time.time() + 100  # already received
-
-        with patch("time.sleep"), \
+        # FAR never responds (navigate_to resets _last_waypoint_time itself),
+        # so the probe polls /goal_point at 2 Hz until far_probe_timeout on the
+        # fake clock, then the door-chain fallback fails (no scene graph).
+        # _nav MUST be stubbed: with builtins.open mocked, its yaml.safe_load
+        # would read a MagicMock stream forever (the actual E18 memory bomb).
+        with _fake_time(), \
+             patch("vector_os_nano.hardware.sim.go2_ros2_proxy._nav",
+                   new=lambda key, default: default), \
+             patch.dict("sys.modules", _fake_geometry_msgs()), \
              patch("os.path.exists", return_value=True), \
              patch("builtins.open", MagicMock()):
-            try:
-                result = proxy.navigate_to(0.5, 0.5, timeout=1.0)
-            except Exception:
-                result = None  # navigation may fail without full stack
+            result = proxy.navigate_to(0.5, 0.5, timeout=1.0)
 
+        assert result is False
         proxy._goal_pub.publish.assert_called()
+        # A handful of probe polls — never an unbounded spin (ledger E18).
+        assert proxy._goal_pub.publish.call_count <= 100
 
     def test_navigate_to_returns_true_on_arrival(self) -> None:
         proxy = self._nav_proxy()
-        # Robot already at destination (within 0.8 m arrival threshold)
+        # Robot already within the 0.8 m arrival radius of the goal.
         proxy.get_position = MagicMock(return_value=(0.4, 0.3, 0.28))
-        proxy._scene_graph = None  # no scene graph
 
-        # Simulate FAR responding immediately by monkey-patching _last_waypoint_time
-        # to be after the start_time inside navigate_to.
-        # We do this by making time.time() advance fast so the probe succeeds.
-        _t0 = time.time()
-        _call_count = [0]
+        clock = _FakeClock()
+        # Simulate FAR responding: the /way_point callback fires while
+        # navigate_to sleeps between probe polls.
+        clock.on_sleep = lambda c: setattr(proxy, "_last_waypoint_time", c.now)
 
-        def mock_time():
-            _call_count[0] += 1
-            # On the first several calls the time is t0 (start),
-            # then on later calls advance so FAR probe succeeds and robot arrives.
-            if _call_count[0] < 3:
-                return _t0
-            return _t0 + 10  # skip probe timeout
+        def nav_flag_only(path: str) -> bool:
+            # Nav flag present; stall flag absent (phase 2 checks both).
+            return path == "/tmp/vector_nav_active"
 
-        # Alternatively, simply test navigate_to with FAR waypoint already set
-        proxy._last_waypoint_time = _t0 + 1000  # FAR "responded" long ago
-
-        with patch("time.sleep"), \
-             patch("os.path.exists", return_value=True), \
+        with _fake_time(clock), \
+             patch("vector_os_nano.hardware.sim.go2_ros2_proxy._nav",
+                   new=lambda key, default: default), \
+             patch.dict("sys.modules", _fake_geometry_msgs()), \
+             patch("os.path.exists", side_effect=nav_flag_only), \
              patch("builtins.open", MagicMock()):
-            with patch("time.time", side_effect=mock_time):
-                result = proxy.navigate_to(0.4, 0.3, timeout=5.0)
+            result = proxy.navigate_to(0.4, 0.3, timeout=30.0)
 
-        # Result may be True (arrived) or False (FAR probe fallback without scene graph)
-        # What we verify: navigate_to runs without crashing and returns bool
-        assert isinstance(result, bool)
+        assert result is True
+        proxy._goal_pub.publish.assert_called()
 
     def test_cancel_navigation_zeros_velocity(self) -> None:
         proxy = self._nav_proxy()
