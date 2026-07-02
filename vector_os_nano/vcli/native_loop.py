@@ -1171,6 +1171,13 @@ def _native_system_prompt(
         "OR navigate_to_object('<next object>') if it returns no_detections. Only call finish "
         "once EVERY named object has had its OWN passed holding_object verify — never finish "
         "after grasping just one when more were named. "
+        "SPATIAL / ORDINAL references (最左边的 / 最右边的 / 中间的 / leftmost / rightmost / "
+        "middle / the one on the left): pass the user's phrase VERBATIM as the grasp target "
+        "(e.g. query='最左边的瓶子') — do NOT decide yourself which COLOUR that position is and "
+        "do NOT substitute a colour word. The grasp skill resolves the ordinal position "
+        "deterministically from the camera geometry; if you guess the colour you will pick the "
+        "WRONG object (leftmost is NOT a fixed colour — it depends on the live scene). Keep the "
+        "category noun (瓶子/bottle, 罐子/can) in the phrase so the skill filters to it. "
         + place_guidance
         + object_vocab
         + locomotion_guidance
