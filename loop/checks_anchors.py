@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
-"""Hard-check docs/wiring/*.md `anchors:` blocks — every `path/file.py::symbol` must
+"""Hard-check docs/WIRING.md `anchors:` blocks — every `path/file.py::symbol` must
 point at an existing file that still contains the symbol string. stdlib only.
 
-Exit 0 = all anchors resolve (no wiring cards / no anchors block = pass with a note).
-Exit 1 = a card cites a file or symbol that no longer exists (the card is stale).
+WIRING.md holds one '## <subsystem>' section per wiring card; each section may carry
+its own fenced anchors block. Checked per-section.
+
+Exit 0 = all anchors resolve (no wiring file / no anchors block = pass with a note).
+Exit 1 = a section cites a file or symbol that no longer exists (the section is stale).
 """
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WIRING = ROOT / "docs" / "wiring"
+WIRING = ROOT / "docs" / "WIRING.md"
 
 FAILS: list[str] = []
 
@@ -20,6 +23,24 @@ FAILS: list[str] = []
 def fail(msg: str) -> None:
     FAILS.append(msg)
     print(f"ANCHOR-FAIL: {msg}")
+
+
+def split_sections(text: str) -> list[tuple[str, str]]:
+    """Return (section_name, section_text) pairs, one per '## ' heading."""
+    sections: list[tuple[str, str]] = []
+    name: str | None = None
+    lines: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if name is not None:
+                sections.append((name, "\n".join(lines)))
+            name = line[3:].split("—")[0].strip() or line[3:].strip()
+            lines = []
+        elif name is not None:
+            lines.append(line)
+    if name is not None:
+        sections.append((name, "\n".join(lines)))
+    return sections
 
 
 def extract_anchors(text: str) -> list[str]:
@@ -45,30 +66,34 @@ def extract_anchors(text: str) -> list[str]:
     return anchors
 
 
-def check_card(card: Path) -> None:
-    entries = extract_anchors(card.read_text(encoding="utf-8"))
+def check_section(name: str, body: str) -> None:
+    entries = extract_anchors(body)
     if not entries:
-        print(f"note: {card.relative_to(ROOT)} has no anchors: block")
+        print(f"note: WIRING.md section {name!r} has no anchors: block")
         return
     for entry in entries:
         if "::" not in entry:
-            fail(f"{card.name}: malformed anchor {entry!r} (want path/file.py::symbol)")
+            fail(f"{name}: malformed anchor {entry!r} (want path/file.py::symbol)")
             continue
         rel_path, symbol = entry.split("::", 1)
         target = ROOT / rel_path
         if not target.exists():
-            fail(f"{card.name}: anchor file missing: {rel_path}")
+            fail(f"{name}: anchor file missing: {rel_path}")
             continue
         if symbol not in target.read_text(encoding="utf-8", errors="replace"):
-            fail(f"{card.name}: symbol {symbol!r} absent from {rel_path}")
+            fail(f"{name}: symbol {symbol!r} absent from {rel_path}")
 
 
 def main() -> int:
-    if not WIRING.is_dir():
-        print("note: docs/wiring/ does not exist yet — nothing to check")
+    if not WIRING.is_file():
+        print("note: docs/WIRING.md does not exist yet — nothing to check")
         return 0
-    for card in sorted(WIRING.glob("*.md")):
-        check_card(card)
+    sections = split_sections(WIRING.read_text(encoding="utf-8"))
+    if not sections:
+        print("note: docs/WIRING.md has no '## ' sections — nothing to check")
+        return 0
+    for name, body in sections:
+        check_section(name, body)
     return 1 if FAILS else 0
 
 

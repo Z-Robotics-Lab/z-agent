@@ -42,7 +42,7 @@ ADDENDUM = (
     "every D3–D182 remains\n"
     "> resolvable here + docs/decisions-index.md + git history. New entries require "
     "a [RULING] tag\n"
-    "> (admission test: docs/rules/doc-governance.md — an entry must change an "
+    "> (admission test: docs/RULES.md doc-governance — an entry must change an "
     "invariant, contract, or\n"
     "> spine semantic, or record a CEO ruling; everything else is a ledger row + "
     "commit message). Rounds\n"

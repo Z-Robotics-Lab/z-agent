@@ -87,7 +87,7 @@ class WaveSkill:
 ```
 
 A skill may wrap an external **VLA / VLM** or a classical **grasp / nav** stack — full protocol in
-[docs/skill-protocol.md](docs/skill-protocol.md).
+[docs/reference.md](docs/reference.md).
 
 **Bring your own robot** — a robot is a **config bundle, not code**. You provide:
 

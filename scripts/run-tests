@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# run-tests — memory-capped pytest wrapper. ALWAYS run pytest through this.
+# WHY: tests/unit has ~50 sim-spawning test files (MuJoCo); an unbounded background
+# `pytest tests/unit` accumulated module-scoped sims inside one process and OOM'd the
+# shared 64G host (2026-07-01). Caps: MemoryMax=${TEST_MEM_GB:-12}G, RuntimeMaxSec=${TEST_TIMEOUT:-1500}.
+# Run ONE chunk at a time, strictly serial. All args pass through to pytest.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+MEM_GB="${TEST_MEM_GB:-12}"
+TIMEOUT="${TEST_TIMEOUT:-1500}"
+PY=.venv/bin/python
+echo "[run-tests] CAP ${MEM_GB}G/${TIMEOUT}s — 50 sim-spawning test files; unbounded pytest OOMs the shared host" >&2
+peak='rc=$?; cg=/sys/fs/cgroup$(cut -d: -f3 </proc/self/cgroup);
+  [ -r "$cg/memory.peak" ] && echo "[run-tests] MemoryPeak: $(numfmt --to=iec <"$cg/memory.peak")" >&2; exit $rc'
+if command -v systemd-run >/dev/null 2>&1; then
+  exec systemd-run --user --scope --same-dir --collect --quiet \
+    -p MemoryMax="${MEM_GB}G" -p MemoryAccounting=yes -p RuntimeMaxSec="$TIMEOUT" \
+    bash -c "$PY -m pytest \"\$@\"; $peak" _ "$@"
+else
+  echo "[run-tests] WARN: systemd-run missing — fallback: ulimit -v 24G (address-space cap only)" >&2
+  ulimit -v $((24*1024*1024))
+  exec "$PY" -m pytest "$@"
+fi

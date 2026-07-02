@@ -1,6 +1,5 @@
-# Allowlisted tracked .md files (root, docs/, docs/rules/, docs/wiring/, loop/).
-# check.sh fails on any tracked .md in those trees not matched here.
-# One path per line; docs/wiring/*.md is a wildcard (max 8 files, cap-checked).
+# Committed .md allowlist (root, docs/, loop/) — docs/RULES.md doc-governance is the human copy.
+# check.sh fails on any tracked .md in those trees not matched here. One path per line.
 AGENTS.md
 CLAUDE.md
 README.md
@@ -10,19 +9,11 @@ docs/ARCHITECTURE.md
 docs/DECISIONS.md
 docs/decisions-index.md
 docs/LESSONS.md
-docs/verify.md
-docs/cli-tool-system.md
-docs/skill-protocol.md
-docs/tricky-bugs.md
-docs/rules/standards.md
-docs/rules/sim-safety.md
-docs/rules/doc-governance.md
-docs/rules/red-team.md
-docs/rules/debugging.md
-docs/rules/gates.md
-docs/wiring/*.md
+docs/RULES.md
+docs/VERIFY.md
+docs/WIRING.md
+docs/reference.md
 loop/README.md
 loop/GOAL.md
 loop/ROUND.md
-loop/REVIEW.md
 loop/ledger/BOARD.md

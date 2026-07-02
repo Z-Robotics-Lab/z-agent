@@ -33,3 +33,5 @@
 - E15 R179 [refuted] gemini-3.5-flash / mistral-medium-3-5 no-tool-call on sim-start = model over-caution — retry only if: provider credit restored AND 402/404 ruled out BEFORE diagnosing model behavior
 - E16 R181 [refuted] OpenRouter /key limit_remaining=6.85 = spendable credit (so the D180 billing block was over-called) — retry only if: OpenRouter exposes an explicit balance field; until then always probe with a real paid turn
 - E17 R181 [refuted] MODE=both (fetch then place in one session) yields a valid place verdict — retry only if: the harness grades place causation-safely (fresh session or baseline-delta grasp)
+- E18 R182 [refuted] tests/unit is safe to run as ONE unbounded pytest process — retry only if: pytest ALWAYS via scripts/run-tests (MemoryMax scope, serial chunks); unbounded never
+- E19 R182 [confirmed] 27 structure docs consolidate to ~15 lean files without content loss (CEO: few short files) — retry only if: n/a - future doc growth gated by check.sh allowlist+caps

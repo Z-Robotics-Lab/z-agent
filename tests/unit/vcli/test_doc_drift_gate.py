@@ -3,7 +3,8 @@
 
 """S9 — CI doc-drift gate: the documented DEFAULT producer must match the LIVE default.
 
-The #1 doc-rot failure this guards: ``docs/cli-tool-system.md`` once described the legacy
+The #1 doc-rot failure this guards: ``docs/reference.md`` (formerly docs/cli-tool-system.md)
+once described the legacy
 IntentRouter + ``VectorEngine.run_turn()`` keyword path as canonical while the live default had
 moved to the native model-driven producer. This gate ties the doc's machine-readable claim
 (``<!-- doc-drift-gate: default_producer=run_turn_native -->``) to the code's ACTUAL default —
@@ -17,14 +18,14 @@ from pathlib import Path
 
 from vector_os_nano.vcli import cli
 
-_DOC = Path(__file__).resolve().parents[3] / "docs" / "cli-tool-system.md"
+_DOC = Path(__file__).resolve().parents[3] / "docs" / "reference.md"
 
 
 def test_documented_default_producer_matches_live_default(monkeypatch):
     text = _DOC.read_text(encoding="utf-8")
     m = re.search(r"doc-drift-gate:\s*default_producer=(\w+)", text)
     assert m, (
-        "docs/cli-tool-system.md must carry the "
+        "docs/reference.md must carry the "
         "`<!-- doc-drift-gate: default_producer=... -->` marker (S9)"
     )
     documented = m.group(1)

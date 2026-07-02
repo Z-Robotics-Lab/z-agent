@@ -11,7 +11,7 @@ whose verify is a NON-robot, author-writable predicate (``file_exists('grabbed.t
 a PREDICATE oracle so it classifies GROUNDED structurally, and being a non-robot
 predicate it is never actor-causation-graded. That is exactly the fakeable-grasp
 false-green this module closes — deepseek satisfied "抓前面的东西" by writing a marker
-file and verifying the file, never the gripper (D17, see docs/tricky-bugs.md).
+file and verifying the file, never the gripper (D17, see docs/LESSONS.md Casebook).
 
 These PURE helpers let the turn-level gate (``trace_store.evidence_passed``) REJECT such
 a grasp goal: a goal commanding a physical grasp/pick must be GROUNDED via a GT

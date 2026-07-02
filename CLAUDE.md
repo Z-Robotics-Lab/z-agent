@@ -4,4 +4,4 @@
 - You MAY use native subagents/Workflow/skills as accelerators; the contract is ONLY the
   disk artifacts named in AGENTS.md — no in-context state survives a round.
 - Harness project memory (~/.claude/projects/.../MEMORY.md) is machine-local: never rely on
-  it. Anything load-bearing must also land in docs/LESSONS.md or docs/tricky-bugs.md.
+  it. Anything load-bearing must also land in docs/LESSONS.md (Casebook for hidden bugs).

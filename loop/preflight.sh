@@ -10,7 +10,7 @@ FAIL=0
 # --- deadline / mode ---
 if [ -n "${ROUND_N:-}" ] && [ -n "${ROUND_DEADLINE_EPOCH:-}" ]; then
   left=$(( ROUND_DEADLINE_EPOCH - $(date +%s) ))
-  echo "round: R$ROUND_N — deadline in ${left}s (stop new work at T-15min; RECORD by T-5min)"
+  echo "round: R$ROUND_N (${ROUND_KIND:-build}) — deadline in ${left}s (stop new work at T-15min; RECORD by T-5min)"
 else
   echo "round: interactive mode (no ROUND_N/ROUND_DEADLINE_EPOCH — no deadline, all other rules apply)"
 fi
@@ -40,7 +40,7 @@ else
   echo "warn: .env.example missing — env sanity skipped"
 fi
 
-# --- sim liveness (ONE sim at a time — docs/rules/sim-safety.md) ---
+# --- sim liveness (ONE sim at a time — docs/RULES.md sim-safety) ---
 live=$(pgrep -af 'mujoco|vcli' | grep -v "preflight" || true)
 if [ -n "$live" ]; then
   echo "warn: live sim/vcli processes — ONE sim at a time; WAIT or adopt, never kill infra:"
@@ -65,7 +65,7 @@ fi
 
 # --- FakeBackend smoke (pointer only — never launches the sim) ---
 if [ -f tests/harness/fake_backend.py ]; then
-  echo "smoke (deterministic, no network — see docs/verify.md):"
+  echo "smoke (deterministic, no network — see docs/VERIFY.md):"
   echo "  VECTOR_FAKE_LLM='<json>' python -m vector_os_nano.vcli.cli -p '<prompt>' --json  # expect a VECTOR_VERDICT line"
 else
   echo "PREFLIGHT FAIL: tests/harness/fake_backend.py missing — the deterministic smoke seam is gone"

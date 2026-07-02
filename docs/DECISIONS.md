@@ -11,7 +11,7 @@ original prose of every entry lives in git history.
 > **2026-07-01 CEO-approved restructure (one-time, precedent e21d5ad):** journal-class entries
 > folded to one-line stubs per the fold rule this header already sanctions; every D3–D182 remains
 > resolvable here + docs/decisions-index.md + git history. New entries require a [RULING] tag
-> (admission test: docs/rules/doc-governance.md — an entry must change an invariant, contract, or
+> (admission test: docs/RULES.md doc-governance — an entry must change an invariant, contract, or
 > spine semantic, or record a CEO ruling; everything else is a ledger row + commit message). Rounds
 > and experiments now use R#/E# in loop/ledger/ — D# is rulings-only, D183+. No accepted ruling was
 > edited or renumbered.

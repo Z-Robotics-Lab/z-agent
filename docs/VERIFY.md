@@ -59,4 +59,4 @@ the single `create_backend` seam; every verify/permission layer still runs.
   NEVER /tmp). The verdict JSON is also inlined in the ledger row so the claim outlives the
   frames; paths resolve only on the producing machine — review rounds re-verify on the real
   face instead of trusting old frames.
-- Every headline claim passes docs/rules/red-team.md BEFORE it is recorded anywhere.
+- Every headline claim passes docs/RULES.md#red-team-before-recording-any-headline-claim BEFORE it is recorded anywhere.

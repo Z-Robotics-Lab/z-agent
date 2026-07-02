@@ -19,7 +19,7 @@ next:
      quantity, ordinal; push N per phrasing to first failure. Eyes = NL-intent witness.
   3. [FRONTIER] g1 GROUNDED nav — non-gated build; VLN GROUNDED accept stays gated (near_object).
 
-gates: (queue — do NOT cross; format docs/rules/gates.md)
+gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
   - SPINE (D182): actor-authored verify target — NL-intent→colour fidelity is witness- not
     oracle-certified; candidate = world-owned NL→object grounder feeding the verify target.
   - META: plug-and-play verify-predicates — `_PREDICATE_ORACLES` is a hardcoded kernel list;
