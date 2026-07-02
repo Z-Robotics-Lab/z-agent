@@ -10,9 +10,9 @@
 | fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 7 | 61fde80 |
 | fetch.nl-ordinal-spatial | superseded | RAN 0/9 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | HEAD-R190 |
-| fetch.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 9 | 5aa71cb |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | HEAD-R190 |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 7 | 61fde80 |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 15 | 0cc4d5b |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | HEAD-R190 |
 | kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 10 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 9 | 5aa71cb |
 
@@ -43,3 +43,4 @@
 - E23 R186 [confirmed] R184 E21: the native_loop.py prompt fix (place-clause is-not-a-nav-goal) CAUSED the compound combo 1/4->3/3 improvement — retry only if: never credit a code fix for a pass-rate delta while the model also changed (E9/E10/E21 model-sensitivity trap) — isolate first
 - E24 R187 [confirmed] the R184 fetch-place.nl-compound provisional age-FAIL wedging preflight/check.sh is an un-adjudicated row (H1), OR a checker bug: the age-check has no supersession-awareness (H2) — retry only if: n/a — regression: tests/unit/test_checks_schema_provisional.py
 - E25 R188 [inconclusive] harder-NL ORDINAL/positional find-fetch grounds to the spatially-correct object on the bare-REPL face, past D182 negated-distractor — retry only if: ordinal RESOLUTION confirmed (2/2 correct non-default target); a clean GROUNDED needs a non-handover utterance + grasp-reliable target (red can)
+- E26 R190 [confirmed] R190 review: the 2 oldest confirmed BOARD rows still hold on the real bare-REPL face, the R188 ordinal provisionals adjudicate cleanly, and no headline claim from the last 10 rounds overclaims — retry only if: n/a - review round

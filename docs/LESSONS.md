@@ -47,6 +47,11 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   colour before the colour-keyed `perception_grasp` (raw "the rightmost bottle" query the CV
   resolver can't parse). `detect_objects` returns names+confidence, NO positions. Ordinal→object
   fidelity is WITNESS-only (D182 gap: oracle certifies held==named, not named==intent) → E25.
+- g1_accept.py GREEN honest-negative (no groundable green in g1's spawn view) is CORRECT (0/14,
+  verified=False, NO false-green) but the model FLAILS ~14 detect/navigate/verify turns before
+  `finish` → blows a 400s harness budget (R190 skeptic re-run timed out on the GREEN turn; RED
+  GROUNDED 1/1 was fine). The honest-negative is right; the give-up LATENCY is the cost — cap
+  turns or prompt an earlier honest-stop before the next g1 skeptic re-run → R190.
 
 ## Recipes (proven invocations — copy, don't re-derive)
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +
@@ -77,6 +82,12 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   planner-exposure (all CEO-gated) → docs/ARCHITECTURE.md §3.
 - EvolvingLoop as an explicit, visualizable, standalone protocol/product — deferred by CEO
   until this repo's internal doc problems are fixed (2026-07-01 direction).
+- AMBITION (R190 review): grounding cadence has slowed — the last NEW confirmed GROUNDED was
+  R186 (compound); R187-R190 were META (checker fix / adjudication / doc fold / skeptic re-run).
+  The North Star (plug-and-play across robots/policies/skills) is GATE-BLOCKED: the world-owned
+  spatial grounder (D182 spine), near_object VLN (D178), and the S4/S5/S6 embodiment ladder are
+  ALL CEO-gated, so ungated frontier is narrowing to single-robot NL polish. Not yet a hard
+  plateau, but the highest-leverage next step needs a deliberate CEO gate decision → STATUS gates.
 
 ## Casebook — hidden bugs (symptom pointed away from cause; newest first; cap 15 cases, overflow folds oldest to one line under ### Folded)
 Compressed from docs/tricky-bugs.md (removed 2026-07-02); full original prose in git history.
