@@ -257,6 +257,71 @@ def _resolve_ordinal_target(query: str, detections: Any) -> Any:
     return candidates[len(candidates) // 2]  # middle (biased to the upper index on even counts)
 
 
+def _ordinal_detections_from_catalog(
+    catalog: Any, intrinsics: Any, cam_xpos: Any, cam_xmat: Any
+) -> list[dict]:
+    """Project each scene-catalog object to its image column → ``[{'label','cx'}]``.
+
+    *catalog* is ``{scene_name: (x, y, z)}`` (the arm's GT object set — fixed config the
+    actor CANNOT author, exactly the D168 category-resolution source). Each world point is
+    projected to a pixel via :func:`world_to_pixel` (the rigorous inverse of the camera
+    transform), giving the REAL image column ``cx`` — so the world-y↔image-cx SIGN is
+    computed from the actual camera pose, never guessed. Objects BEHIND the camera (not
+    imageable) are dropped. Pure: reads only catalog + camera geometry, no oracle, no model.
+    This only supplies the LEFT/RIGHT ordering for ordinal selection; the verify oracle is
+    untouched.
+    """
+    from vector_os_nano.perception.depth_projection import world_to_pixel
+
+    dets: list[dict] = []
+    for name, pos in dict(catalog or {}).items():
+        try:
+            x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
+        except (TypeError, ValueError, IndexError):
+            continue
+        uvd = world_to_pixel(x, y, z, intrinsics, cam_xpos, cam_xmat)
+        if uvd is None:
+            continue  # behind the camera → not imageable → cannot rank it
+        dets.append({"label": str(name), "cx": float(uvd[0])})
+    return dets
+
+
+def _resolve_ordinal_via_catalog(query: str, arm: Any, perception: Any) -> tuple[str | None, str] | None:
+    """Resolve an ordinal query to ``(colour, scene_name)`` via catalog-projection.
+
+    Wires :func:`_resolve_ordinal_target` into the live run: project the GT object catalog
+    to image columns from the CURRENT camera pose, filter to the query's category, pick the
+    ordinal extreme, and map the chosen object → its colour so the caller drives the PROVEN
+    colour-selection path. Returns ``None`` (behaviour unchanged) when the query carries no
+    ordinal, the catalog / camera geometry is unavailable, or nothing imageable matches — in
+    every such case the existing VLM/perception route is preserved. Honest by construction:
+    catalog-selection only chooses WHICH object to grasp (like D168); the grasp POINT is still
+    perceived from depth+mask and the verify oracle ``holding_object`` is byte-unchanged.
+    """
+    if _parse_ordinal(query) is None:
+        return None
+    try:
+        catalog = arm.get_object_positions()
+    except Exception as exc:  # noqa: BLE001 — no catalog → leave behaviour unchanged
+        logger.debug("[PGRASP] ordinal resolve: no object catalog (%s)", exc)
+        return None
+    if not catalog:
+        return None
+    try:
+        intrinsics = perception.get_intrinsics()
+        cam_xpos, cam_xmat = perception.get_camera_pose()
+    except Exception as exc:  # noqa: BLE001 — no camera geometry → unchanged
+        logger.debug("[PGRASP] ordinal resolve: no camera geometry (%s)", exc)
+        return None
+    dets = _ordinal_detections_from_catalog(catalog, intrinsics, cam_xpos, cam_xmat)
+    chosen = _resolve_ordinal_target(query, dets)
+    if chosen is None:
+        return None
+    label = str(chosen.get("label", ""))
+    color = next((c for c in _CATEGORY_COLORS if c in label.lower()), None)
+    return (color, label)
+
+
 # Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
 # object. MEASURED R17: the top-down EE reaches only ~0.22m forward of the dog centre
 # the dog's SENSOR (0.3 m forward of body origin) must sit within this distance
@@ -975,6 +1040,27 @@ class PerceptionGraspSkill:
                     "[PGRASP] colourless category %r → unique scene object %s "
                     "(colour=%s) — driving the proven colour path",
                     query, cat[1], color,
+                )
+
+        # --- R195 ORDINAL+CATEGORY resolution (E30 fix). An ordinal reference
+        # ("把最左边的瓶子拿过来") survives the colour + unique-category resolvers as
+        # colour=None (瓶子 is AMBIGUOUS with two bottles). The VLM bbox route then DROPS
+        # the category filter and grabs the leftmost OBJECT (the red can — R192 GROUNDED
+        # green but R193 re-ran the identical utterance and grasped the can, acceptance
+        # R194 REFUTED). Resolve it DETERMINISTICALLY instead: project the GT catalog to
+        # image columns from THIS camera pose (world_to_pixel — the sign is computed, not
+        # guessed), filter to the category, pick the ordinal extreme, drive the chosen
+        # object's PROVEN colour path. Only fires when colour is still None (every colour /
+        # unique-category query is byte-unchanged) and honestly leaves the VLM route intact
+        # when nothing imageable matches. Selection only (D168 pattern); verify untouched.
+        if color is None:
+            ordinal_hit = _resolve_ordinal_via_catalog(query, arm, perception)
+            if ordinal_hit is not None and ordinal_hit[0] is not None:
+                color = ordinal_hit[0]
+                logger.info(
+                    "[PGRASP] ordinal %r → %s (colour=%s) via catalog-projection resolver "
+                    "— driving the proven colour path (category-filtered, sign from geometry)",
+                    query, ordinal_hit[1], color,
                 )
 
         # --- PRODUCER->CONSUMER composition (R37): if an earlier `detect` step
