@@ -11,3 +11,5 @@
 {"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-11","state":"queued","kind":"external-dep","summary":"BILLING top-up for provider credit (external; blocks OpenRouter-N>=4 + automated VLM vision-judge)","refs":[],"source":"backfill"}
 {"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-12","state":"queued","kind":"spine","summary":"ELP wiring PR (EvolvingLoop protocol extensions E1-E7: events/rounds/gates JSONL, Round trailer, elp.json — touches run.sh/check.sh/ROUND.md)","refs":["evolvingloop/DESIGN.md"],"source":"backfill"}
 {"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-13","state":"queued","kind":"release","summary":"RELEASE: restructure merge to master = release gate (owner)","refs":[],"source":"backfill"}
+{"schema":1,"ts":1782978105,"round":"R183","gate":"G-183-12","state":"answered","decision":"approve","decision_ref":"loop/inbox/decisions.jsonl#1782978105"}
+{"schema":1,"ts":1782978105,"round":"R183","gate":"G-183-12","state":"crossed","commit":"a64149f"}
