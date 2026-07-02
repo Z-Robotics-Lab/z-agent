@@ -41,7 +41,7 @@ MODE = sys.argv[4] if len(sys.argv) > 4 else "both"
 # Fail LOUD on a bad invocation. A wrong arg-order (e.g. passing a colour where MODE goes)
 # silently no-ops every action turn and quits immediately — wasting a full ~6-min sim with
 # no verdict (observed 2026-07-01: `... <tag> green place` set MODE="green", ran nothing).
-_VALID_MODES = ("both", "fetch", "place", "combo", "quantity")
+_VALID_MODES = ("both", "fetch", "place", "combo", "quantity", "seq")
 if MODE not in _VALID_MODES:
     sys.exit(f"[driver] FATAL: MODE={MODE!r} not in {_VALID_MODES}. "
              f"Usage: repl_accept.py <fetch_nl> <place_nl> <tag> [mode]. Refusing to burn a sim.")
@@ -303,6 +303,38 @@ try:
         wait_prompt(child, timeout=60)
         print(f"\n[driver] quantity turn done — saw {n_verdicts} verdict(s)", flush=True)
 
+    if MODE == "seq":
+        # Isolation probe (R201, E36 follow-up): drive TWO SEPARATE single-object place
+        # utterances back-to-back in ONE session — FETCH=place-bottle-1, PLACE=place-bottle-2
+        # (e.g. 把蓝色的瓶子放到架子上 then 把绿色的瓶子放到架子上). This isolates the R199
+        # quantity failure: if BOTH single-object places ground True, the 2nd-object stall in
+        # 把两个瓶子… is a BRAIN DECOMPOSITION defect (the brain can't self-decompose "two"
+        # into two grasp+place cycles) — NOT a grasp-execution problem placing a 2nd object
+        # after the first is on the receptacle. Each turn is FULLY drained before its eyes
+        # frame so the frame is the SETTLED state (bottle on receptacle), not a mid-grasp pose.
+        def _verds(snap):  # noqa: ANN001,ANN202 — local probe helper
+            return re.findall(r"verified\s*=\s*(True|False)\s*\((\d+)/(\d+)\s*grounded\)",
+                              _clean_log(snap))
+        print("\n[driver] SEQ turn 1 (place object 1)...", flush=True)
+        child.sendline(FETCH)
+        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
+        drain_until_quiet(child, quiet=3.0, max_wait=120)
+        _eyes_frame(SNAP, "seq1")
+        n1 = len(_verds(SNAP))
+        print(f"\n[driver] SEQ turn 1 done — {n1} verdict(s) so far", flush=True)
+        print("\n[driver] SEQ turn 2 (place object 2, after object 1 already placed)...", flush=True)
+        child.sendline(PLACE)
+        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
+        drain_until_quiet(child, quiet=3.0, max_wait=120)
+        _eyes_frame(SNAP, "seq2")
+        allv = _verds(SNAP)
+        result["seq1_verdicts"] = [f"{v[0]}({v[1]}/{v[2]})" for v in allv[:n1]]
+        result["seq2_verdicts"] = [f"{v[0]}({v[1]}/{v[2]})" for v in allv[n1:]]
+        result["seq1_true"] = bool(allv[:n1]) and allv[:n1][-1][0] == "True"
+        result["seq2_true"] = bool(allv[n1:]) and allv[n1:][-1][0] == "True"
+        print(f"\n[driver] SEQ done — turn1={result['seq1_verdicts']} "
+              f"turn2={result['seq2_verdicts']}", flush=True)
+
     if MODE == "combo":
         # Frontier probe: ONE multi-clause utterance (fetch AND place in a single
         # command, e.g. "把红色的罐子拿过来放到架子上"). The producer must decompose it
@@ -389,6 +421,11 @@ elif MODE == "combo":
     print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
           f"combo_all_true={result.get('combo_all_true')} "
           f"verdicts={result.get('combo_verdicts')} frames={frames}", flush=True)
+elif MODE == "seq":
+    print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
+          f"seq1_true={result.get('seq1_true')} seq1={result.get('seq1_verdicts')} "
+          f"seq2_true={result.get('seq2_true')} seq2={result.get('seq2_verdicts')} "
+          f"frames={frames}", flush=True)
 else:
     print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
           f"fetch_verified={result['fetch_verified']} ({result.get('fetch_grounded')}) "
