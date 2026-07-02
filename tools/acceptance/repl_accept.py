@@ -41,7 +41,7 @@ MODE = sys.argv[4] if len(sys.argv) > 4 else "both"
 # Fail LOUD on a bad invocation. A wrong arg-order (e.g. passing a colour where MODE goes)
 # silently no-ops every action turn and quits immediately — wasting a full ~6-min sim with
 # no verdict (observed 2026-07-01: `... <tag> green place` set MODE="green", ran nothing).
-_VALID_MODES = ("both", "fetch", "place", "combo")
+_VALID_MODES = ("both", "fetch", "place", "combo", "quantity")
 if MODE not in _VALID_MODES:
     sys.exit(f"[driver] FATAL: MODE={MODE!r} not in {_VALID_MODES}. "
              f"Usage: repl_accept.py <fetch_nl> <place_nl> <tag> [mode]. Refusing to burn a sim.")
@@ -281,6 +281,28 @@ try:
         drain_until_quiet(child, quiet=3.0, max_wait=90)
         print("\n[driver] place turn done", flush=True)
 
+    if MODE == "quantity":
+        # Frontier probe (R198/E35): ONE quantity-place utterance, e.g.
+        # "把两个瓶子放到架子上" (put two bottles on the shelf). The producer must decompose
+        # it into N sequential grasp->place cycles, then verify the QUANTITY with
+        # resting_on_receptacle() >= N. That is up to 2N+1 verdicts (grasp+place per object,
+        # plus the final count check) — collect them all; the acceptance predicate is the
+        # FINAL count verdict (resting_on_receptacle() >= N -> True), read from the moat GT.
+        print("\n[driver] QUANTITY turn (single N-object place utterance)...", flush=True)
+        child.sendline(FETCH)
+        n_verdicts = 0
+        if child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=600) == 0:
+            n_verdicts += 1
+            while n_verdicts < 6:
+                idx = child.expect([r"grounded\)", r"vector>", pexpect.TIMEOUT], timeout=600)
+                if idx == 0:
+                    n_verdicts += 1
+                else:
+                    break  # prompt returned (turn complete) or timed out
+        _eyes_frame(SNAP, "quantity")
+        wait_prompt(child, timeout=60)
+        print(f"\n[driver] quantity turn done — saw {n_verdicts} verdict(s)", flush=True)
+
     if MODE == "combo":
         # Frontier probe: ONE multi-clause utterance (fetch AND place in a single
         # command, e.g. "把红色的罐子拿过来放到架子上"). The producer must decompose it
@@ -332,7 +354,13 @@ try:
     # Map emitted verdicts to the turns that ACTUALLY ran (mode-aware). In place-only
     # mode a single verdict is emitted — it is the PLACE verdict, NOT the fetch one
     # (the old positional parse mislabeled it fetch_verified, leaving place_verified=None).
-    if MODE == "combo":
+    if MODE == "quantity":
+        # A single N-object place utterance emits up to 2N+1 verdicts (grasp+place per
+        # object, then the final resting_on_receptacle() >= N count check). The QUANTITY
+        # acceptance is the FINAL verdict (the count predicate), read from the moat GT.
+        result["quantity_verdicts"] = [f"{v[0]}({v[1]}/{v[2]})" for v in verds]
+        result["quantity_final_true"] = bool(verds) and verds[-1][0] == "True"
+    elif MODE == "combo":
         # A single compound utterance emits N verdicts (typically grasp then place).
         # Report EVERY verdict verbatim — the frontier claim is "all steps grounded".
         result["combo_verdicts"] = [f"{v[0]}({v[1]}/{v[2]})" for v in verds]
@@ -353,7 +381,11 @@ except Exception as exc:  # noqa: BLE001
     print(f"[driver] verdict parse failed: {exc}", flush=True)
 
 frames = sorted(f for f in os.listdir(SNAP) if f.endswith(".png"))
-if MODE == "combo":
+if MODE == "quantity":
+    print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
+          f"quantity_final_true={result.get('quantity_final_true')} "
+          f"verdicts={result.get('quantity_verdicts')} frames={frames}", flush=True)
+elif MODE == "combo":
     print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
           f"combo_all_true={result.get('combo_all_true')} "
           f"verdicts={result.get('combo_verdicts')} frames={frames}", flush=True)

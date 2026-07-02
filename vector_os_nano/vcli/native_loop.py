@@ -1088,6 +1088,23 @@ def _native_system_prompt(
             "navigate until at_position passes — that is the #1 way this fails (the "
             "robot walk-loops to a made-up coordinate and never places). The ONLY way to "
             "satisfy a place clause is mobile_place -> verify resting_on_receptacle(). "
+            # QUANTITY place (R198/E35): "把两个瓶子放到架子上" / "put two bottles on the
+            # shelf" / N objects onto the SAME receptacle. resting_on_receptacle() RETURNS A
+            # COUNT, so the goal predicate is resting_on_receptacle() >= N. The gripper holds
+            # ONE at a time, so this is N sequential grasp->place cycles, NOT one call.
+            "QUANTITY place — putting MORE THAN ONE object onto the receptacle (e.g. "
+            "'把两个瓶子放到架子上', 'put two bottles on the shelf', 'both bottles onto the "
+            "bin'): the gripper holds ONE object at a time, so do the objects ONE AT A TIME. "
+            "For EACH object in turn: (1) grasp it (grasp skill, first action) and verify "
+            "holding_object('<name>') PASSES, then (2) mobile_place (no target arg) to drop "
+            "it on the receptacle. Do NOT gripper_open to release in mid-air between objects "
+            "(that is for a fetch-and-drop, not a place-on-the-receptacle) — mobile_place "
+            "already releases onto the shelf. After ALL N objects are placed, verify the "
+            "QUANTITY with resting_on_receptacle() >= N (the oracle COUNTS objects on the "
+            "receptacle, e.g. resting_on_receptacle() >= 2 for two bottles) and ONLY THEN "
+            "finish. Do NOT finish after placing just one when more were requested. If a "
+            "grasp comes back no_detections (the just-placed object left the dog docked too "
+            "close to see the next), call navigate_to_object('<next name>') once, then grasp. "
         )
     else:
         place_guidance = ""

@@ -16,6 +16,10 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   balance with one real turn before concluding "funded" → D181.
 - Any rate measured through `-p`/`--sim-go2` flag paths is NOT a bare-REPL face number; all
   pre-D163 acceptance rates were downgraded wholesale for this → D163/D164.
+- `placed_count() >= N` is the WRONG go2 quantity-place predicate: it's FLOOR-only (z<_LIFT_MIN_Z
+  0.10) so it's STRUCTURALLY 0 for a bin/table place (pickables z=0.320, place_bin top ~0.31) —
+  always-FALSE = a structural false-RED. Use the D106 count oracle `resting_on_receptacle() >= N`
+  (ungated, same residual as single place) → E35 (extends #Casebook Case 7).
 
 ## Hazards & confirmed constraints
 - repl_accept MODE=both cross-contaminates verdicts between fetch and place phases — run
