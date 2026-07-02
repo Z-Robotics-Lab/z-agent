@@ -367,6 +367,8 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
             ("grasp_pickable_can_red", "piper_link6", "pickable_can_red"),
             # R211: novel 4th object (plug-in proof) — a yellow bottle.
             ("grasp_pickable_bottle_yellow", "piper_link6", "pickable_bottle_yellow"),
+            # R212: novel 5th object, first non-cylinder — a purple box.
+            ("grasp_pickable_box_purple", "piper_link6", "pickable_box_purple"),
         )
     else:
         go2_xml = _MJCF_DIR / "go2.xml"

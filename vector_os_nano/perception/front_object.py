@@ -50,6 +50,10 @@ _COLOR_HUE: dict[str, list[tuple[int, int]]] = {
     "yellow": [(15, 35)],
     "green": [(38, 88)],
     "blue": [(92, 135)],
+    # purple (R212): the first non-cylinder object (a BOX, rgba .75/.10/.70) renders to
+    # hue ~152 in OpenCV's 0..180 scale — a clean gap ABOVE blue's (92,135) and BELOW
+    # red's (168,180), ≥5-unit margin either side so the novel colour never collides.
+    "purple": [(140, 162)],
 }
 # NL → canonical colour. Substring match (zh + en), so "抓红色的东西" → "red".
 _COLOR_ALIASES: dict[str, str] = {
@@ -57,6 +61,7 @@ _COLOR_ALIASES: dict[str, str] = {
     "黄": "yellow", "黄色": "yellow", "yellow": "yellow",
     "绿": "green", "绿色": "green", "green": "green",
     "蓝": "blue", "蓝色": "blue", "blue": "blue",
+    "紫": "purple", "紫色": "purple", "purple": "purple",
 }
 
 

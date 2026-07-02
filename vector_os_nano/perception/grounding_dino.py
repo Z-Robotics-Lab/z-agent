@@ -73,10 +73,11 @@ _ZH_COLOR_EN: tuple[tuple[str, str], ...] = (
     ("黄色", "yellow"), ("黄", "yellow"),  # R211: novel 4th object (plug-in proof)
     ("绿色", "green"), ("绿", "green"),
     ("蓝色", "blue"), ("蓝", "blue"),
+    ("紫色", "purple"), ("紫", "purple"),  # R212: novel 5th object, first non-cylinder box
 )
 # English colour adjectives kept as-is when an English query already names one
 # (we never re-translate; this is only used by the colour-only fallback below).
-_EN_COLORS: tuple[str, ...] = ("red", "green", "blue", "yellow")
+_EN_COLORS: tuple[str, ...] = ("red", "green", "blue", "yellow", "purple")
 
 
 def _zh_color(q: str) -> str | None:

@@ -662,6 +662,20 @@
             mass="0.08" friction="2 0.05 0.001" priority="2"/>
     </body>
 
+    <!-- R212: novel 5th object AND first non-CYLINDER geometry (breadth pivot: geometry,
+         not just colour). A PURPLE BOX in the biggest free gap y=2.89 (between blue 2.78
+         and green 3.00) — symmetric ~0.052 m edge gaps => no collision/occlusion; in-FOV
+         (u~230 of 320; the row 2.78..3.22 maps to u 263..57). type="box" (flat faces, a
+         genuinely new shape) sized to the cylinders' envelope (0.056 footprint, 0.08 tall)
+         so the position-only weld grasp reaches it identically. rgba .75/.10/.70 renders to
+         hue ~152 (clean gap: blue band ends 135, red begins 168). Grasp weld = MuJoCoGo2
+         welds tuple; colour->name = perception_grasp _COLOR_TO_SCENE. -->
+    <body name="pickable_box_purple" pos="10.90 2.89 0.320">
+      <freejoint/>
+      <geom type="box" size="0.028 0.028 0.04" rgba="0.75 0.10 0.70 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
 
     <!-- ==================== BASEBOARDS (visual only) ==================== -->
     <geom name="bb_south" type="box" pos="10 0.06 0.04" size="10.0 0.01 0.04"
