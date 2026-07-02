@@ -49,20 +49,15 @@ source .venv/bin/activate
 uv pip install -e ".[all]"
 ```
 
-**Configure API key** — copy the example and set the live provider (Qwen via Alibaba DashScope):
+**Configure API key**:
 
 ```bash
-cp .env.example .env
-# then open .env and set:
-#   QWEN_API_KEY=sk-...      # required
-#   VECTOR_PROVIDER=qwen     # select the Qwen / DashScope path
+cp .env.example .env    # then fill in ONE provider block
 ```
 
-`.env` is git-ignored. The **live path is Qwen over Alibaba DashScope**: `qwen-max` runs the routing
-brain and **Qwen3-VL-plus** is the vision layer (the eyes), both through the DashScope
-OpenAI-compatible endpoint. Set `QWEN_API_KEY` and `VECTOR_PROVIDER=qwen` and you're done.
-(DeepSeek-direct and OpenRouter remain as optional code-level provider branches, but are not the
-live path.)
+`.env` is git-ignored. The supported providers and their variables live in **`.env.example`
+only** — it is the single canonical template. What is currently accepted on which provider is
+recorded in [loop/ledger/BOARD.md](loop/ledger/BOARD.md).
 
 **Run** — bare `vector-cli` + natural language is the whole interface:
 
@@ -176,6 +171,18 @@ Exposes all skills as MCP tools plus camera and world-state resources (`world://
   <br>
   <i>Claude Agent autonomously designing, implementing, and executing new robot skills.</i>
 </p>
+
+---
+
+## This repo develops itself
+
+Vector OS Nano ships its own self-evolution loop: an agent-driven round protocol
+([loop/ROUND.md](loop/ROUND.md)) governed by the constitution ([AGENTS.md](AGENTS.md)),
+supervised by a portable runner that works with **any agent CLI and any model** —
+Claude Code, Codex, opencode, or your own adapter. Each round plans, builds, real-verifies
+on the bare `vector-cli` face, and records results to an append-only ledger.
+
+Start at [loop/README.md](loop/README.md).
 
 ---
 

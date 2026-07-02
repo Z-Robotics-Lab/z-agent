@@ -166,45 +166,11 @@ Robot skill（`@skill` 装饰器）自动包装为 LLM tool：
 | no_vlm | VLM 不可用，检查 Ollama 是否运行 |
 | camera_failed | 摄像头未连接，用 robot_status 检查硬件 |
 
-## 非交互验收契约 — `-p / --json / VECTOR_VERDICT` (R2a acceptance instrument)
+## 非交互验收契约 — `-p / --json / VECTOR_VERDICT`
 
-`cli.main` 既是 REPL，也是**机器可验收的验收面**。这是本项目 #1 历史失败（能力靠 `~/sandbox` 脚本"验证"、绕过产品；347 个测试只有 2 个碰 `cli.main`）的根治：引擎本就计算的诚实判定
-`evidence_passed(trace, verify_oracle_names(agent, engine))` 现在能作为机器信号逃出 `cli.main`。
-
-```
-python -m vector_os_nano.vcli.cli -p "<prompt>" --json
-```
-
-- **`-p / --print TEXT`** — 跑 **一个** turn（不进 REPL）后退出。
-- **`--json`** — 在 stdout 打印**恰好一行** `VECTOR_VERDICT {<json>}`（固定 sentinel）；所有 Rich/banner 改走 **stderr**。
-- 该 turn 由默认 native producer(`run_turn_native`，S5b/D73，`-p` 默认 ON;`VECTOR_PRINT_NATIVE=0` 回退 legacy `vgg_execute`)**同步**执行——无论哪个 producer 都同步跑完 trace 再出判定(绝不 async 抢先)。
-- 判定由 frozen `VerdictReport`（`vcli/verdict.py`）承载，**只**从既有 `classify_step_evidence` / `evidence_passed` 构建，**绝不**二次推导（契约：`VerdictReport.from_trace(trace, oracle).verified == evidence_passed(trace, oracle)`）。
-
-`VECTOR_VERDICT` JSON 字段：
-
-| 字段 | 含义 |
-|------|------|
-| `verified` | bool — `evidence_passed` 的结果（验收唯一真值；`verified == (exit==0)`） |
-| `success` | bool — trace 是否成功（步骤都成功，未必有 grounded 证据） |
-| `evidence` | `GROUNDED` \| `RAN` \| `FAILED` \| `NO_TRACE`（顶层证据等级） |
-| `goal` | 本 turn 的 goal（来自 GoalTree） |
-| `n_steps` / `n_grounded` | 步数 / 其中 GROUNDED 的步数 |
-| `oracle_names` | 本世界 live verify 命名空间的可调用名（与 GoalVerifier 同源） |
-| `per_step` | 每步 `{name, strategy, success, verify, verify_result, evidence}` |
-| `error` | 仅 NO_TRACE/错误时填写 |
-
-**退出码契约：** `0` = verified（GROUNDED）·`2` = ran-not-verified（RAN/FAILED）·`1` = error / NO_TRACE（chat/tool_use turn 无确定性 trace → fail-closed）。
-
-**测试驱动（确定性、无网络）：** `VECTOR_FAKE_LLM=<json-path>` 环境变量在**单一** `create_backend` 接缝
-(`create_backend_with_fake_seam`) 注入 `tests/harness/fake_backend.py::FakeBackend`，返回一份固定的 decompose 计划。
-它**只**替换网络 LLM —— 真实的 decomposer / validator / skill / GoalVerifier / 证据门 / 判定**全部照跑**，所以
-`verify='True'` 的假计划仍判 RAN → verified False（接缝绝不绕过任何 verify/permission 层）。未设该变量时，
-`create_backend` 行为与生产完全一致。
-
-**PTY 验收 + CI 门：** `tests/harness/pty_cli.py::run_cli_turn` 用 **stdlib `pty`**（不引入 pexpect 依赖）拉起真入口、
-读 `VECTOR_VERDICT`、断言 `verified == (exit==0)`。CI 门：`cli_main` + `capability` 两个 pytest marker 已注册
-(`pyproject.toml`)；`tests/conftest.py` 的 `pytest_collection_modifyitems` 会**判失败**任何带 `@capability` 却缺
-`@cli_main` 的测试（杜绝回退到绕过脚本）。
+验收/判定契约（`VECTOR_VERDICT` 字段表、退出码、FakeBackend 测试接缝、PTY/CI 门）已移至
+**[docs/verify.md](verify.md)** —— REAL-VERIFY 的唯一 runbook。
+本文档只保留开发者视角：`-p/--json` 的判定由 `vcli/verdict.py` 的 frozen `VerdictReport` 承载，只从诚实脊柱（`evidence_passed`）构建，绝不二次推导。
 
 ## ToolHookRegistry — 工具执行钩子
 
@@ -352,19 +318,19 @@ vcli/
 ├── dynamic_prompt.py       # DynamicSystemPrompt（每轮自动刷新）
 ├── session.py              # JSONL session 持久化
 ├── config.py               # ~/.vector/config.yaml 加载器
-├── permissions.py          # 7层权限检查器
+├── permissions.py          # 8层权限检查器
 ├── backends/
 │   ├── __init__.py         # LLMBackend Protocol + create_backend 工厂
 │   ├── anthropic.py        # Anthropic Messages API（流式）
 │   └── openai_compat.py    # OpenRouter / Ollama / vLLM
-├── cognitive/               # VGG 认知层 + 诚实验证脊柱（~22 模块）
+├── cognitive/               # VGG 认知层 + 诚实验证脊柱（~24 模块）
 │   ├── vgg_harness.py        # VGG 主循环（复杂 NL 任务分解入口）
 │   ├── goal_decomposer.py    # NL → 子步骤计划
 │   ├── goal_executor.py      # 执行计划（skill/primitive/code/tool/capability 派发）
 │   ├── goal_verifier.py      # 验证步骤结果（AST 沙箱谓词）
 │   ├── strategy_selector.py  # 策略选择
-│   ├── trace_store.py / evidence_classifier.py / verdict.py / actor_causation.py
-│   │                         #   诚实判决脊柱（"护城河"，字节不变）
+│   ├── trace_store.py / evidence_classifier.py / actor_causation.py
+│   │                         #   诚实判决脊柱（"护城河"，字节不变；verdict.py 在 vcli/ 顶层）
 │   ├── vocab_from_registry.py # 从注册表单源 decompose 词表
 │   └── capabilities/         # 能力 seam（Capability + CapabilityRegistry + chat/detector）
 ├── worlds/                  # 世界插件（在 vcli/ 下，不在 cognitive/ 下）：

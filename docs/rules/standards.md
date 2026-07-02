@@ -1,7 +1,7 @@
-# Standards — project engineering rules (extend the global ~/.claude base; on conflict, CLAUDE.md/these win)
+# Standards — project engineering rules (self-contained; on conflict with any user-global config, these win)
 
-General style/testing/ROS2/security also come from the global base; this file keeps the ones a
-contributor working in THIS repo should have at hand. Terse one-liners; expand a rule only when it bites.
+Terse one-liners a contributor working in THIS repo should have at hand; expand a rule only
+when it bites. The constitution (AGENTS.md) carries the invariants; this card carries craft.
 
 ## Code style
 - Immutability: never mutate — return new objects. Python frozen dataclasses/tuple>list; C++ const/const-ref.

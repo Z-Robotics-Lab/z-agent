@@ -1,57 +1,20 @@
-# SkillFlow — Skill Plug-in Protocol (+ legacy alias routing)
+# SkillFlow — Skill Plug-in Protocol
 
-**Version:** 1.0
-**Status:** the `@skill` PLUG-IN protocol (declare a skill = one class + one decorator, no kernel edit) is LIVE. The alias / `auto_steps` / VGG-GoalDecomposer **keyword routing** it originally shipped with is **LEGACY — being strangled at S8 (pending CEO approval)**; the model-driven native producer routes now (see docs/cli-tool-system.md "当前 producer 架构" + docs/DECISIONS.md D62/D72–D74). Sections tagged **[LEGACY routing]** below describe that fallback path, kept for reference — NOT removed until S8 lands.
+**Status:** the `@skill` plug-in protocol is LIVE: adding a skill is one class + one decorator —
+no kernel or routing-code edits (the North Star "bring a skill" contract). Skills describe
+themselves; routing is the model's job (the native producer reads tool descriptions). The legacy
+alias/`auto_steps`/VGG keyword-routing sections were ruled dead (D9/D62/D72–D74) and are deleted — git history keeps them.
 
-## Overview
-
-SkillFlow is Vector OS Nano's skill plug-in protocol: a `@skill` decorator declares how each skill is discovered, its params, and its pre/postconditions, so **adding a skill is one class + one decorator — no kernel or routing-code edits** (the North Star "bring a skill" contract). It originally also did all command routing by keyword-matching skill `aliases`; that routing layer is now legacy (see the status note above).
-
-The core principle: **skills describe themselves.** (Routing is now the model's job, not alias matching.)
-
-## How It Works [LEGACY routing]
-
-> Alias-match → `auto_steps` expansion (zero-LLM). Retiring at S8 (pending CEO approval); the model now routes by reading tool descriptions.
-
-```
-User Input: "抓杯子"
-      |
-      v
-SkillRegistry.match("抓杯子")
-      |
-      +-- Check all @skill aliases
-      |   "抓" matches PickSkill (alias)
-      |   extracted_arg = "杯子"
-      |
-      +-- PickSkill.direct = False
-      |   PickSkill.auto_steps = ["scan", "detect", "pick"]
-      |
-      +-- Is this complex? (destinations, multi-object?)
-      |   No → execute auto_steps directly
-      |
-      v
-Execute: scan → detect(杯子) → pick(杯子)
-      |
-      v
-Done. Zero LLM calls.
-```
-
-## The @skill Decorator
-
-> **LIVE plug-in protocol.** The decorator + its fields (`parameters`, `preconditions`, `postconditions`, `effects`) are how a skill declares itself and registers with zero kernel edits — this stays. Only the use of `aliases` / `auto_steps` as *routing triggers* is legacy (S8); the fields themselves still describe the skill.
+## The @skill decorator (the live contract)
 
 ```python
 from vector_os_nano.core.skill import skill, SkillContext
 from vector_os_nano.core.types import SkillResult
 
-@skill(
-    aliases=["grab", "grasp", "抓", "拿", "抓起"],
-    direct=False,
-    auto_steps=["scan", "detect", "pick"],
-)
+@skill(aliases=["grab", "grasp", "抓", "拿", "抓起"])
 class PickSkill:
     name = "pick"
-    description = "Pick up an object from the workspace"
+    description = "Pick up an object from the workspace"   # what the model reads to route
     parameters = {
         "object_label": {"type": "string", "description": "Object to pick"},
         "mode": {"type": "string", "enum": ["hold", "drop"], "default": "drop"},
@@ -61,127 +24,77 @@ class PickSkill:
     effects = {"gripper_state": "holding"}
 
     def execute(self, params: dict, context: SkillContext) -> SkillResult:
-        # ... implementation ...
+        ...
         return SkillResult(success=True)
 ```
 
-### Decorator Parameters
+Fields: `name` · `description` (routing signal) · `parameters` (JSON-schema) ·
+`preconditions` / `postconditions` / `effects` (planner + verify hints) ·
+`aliases` (multi-language synonyms carried into the tool description).
+`direct` / `auto_steps` still exist on the decorator but no longer drive routing.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| aliases | list[str] | Words/phrases that trigger this skill (multi-language) |
-| direct | bool | If True, execute immediately without any LLM call |
-| auto_steps | list[str] | Default skill chain for common patterns |
+## Hardware requirements (arm | base | camera)
 
-## Routing Logic [LEGACY routing]
+A skill declares what hardware it needs and queries it at run time through the
+`SkillContext` registries — `context.arm` / `context.base` / `context.perception`
+(dict registries `arms` / `bases` / `perception_sources`, plus `context.has_arm()`).
+Exposure is gated by the embodiment's capability profile
+(`embodiments/capability_profile.py::resolve_capability_profile`): a skill needing an arm is
+only offered as a tool when the connected body has one. Missing hardware at execute time →
+return `SkillResult(success=False, diagnosis_code=...)` — fail loud, never fake.
 
-> The keyword cascade below (`registry.match` → direct / auto_steps / LLM) is the legacy `IntentRouter`-era path, being strangled at S8 (pending CEO approval). The native producer replaces it — the model reads tool descriptions and routes itself.
+## SkillWrapperTool — how a skill becomes an LLM tool
 
-```
-User Input
-  |
-  v
-registry.match(input)     # Check @skill aliases
-  |
-  +-- Match + direct=True  → Execute immediately (zero LLM)
-  |   Example: "home", "close", "open", "scan"
-  |
-  +-- Match + auto_steps   → Expand to skill chain (zero LLM)
-  |   Example: "抓杯子" → scan → detect → pick
-  |
-  +-- Match + complex      → LLM plans the full sequence
-  |   Example: "把鸭子放到左前方" (has destination)
-  |
-  +-- No match             → LLM classify + plan
-      Example: "你好" (chat), "随便做点什么" (creative task)
-```
+Every registered `@skill` is auto-wrapped by `vcli/tools/skill_wrapper.py::SkillWrapperTool`
+under the `robot` tool category:
+- motor detection: `effects` containing "move"/"navigate"/"arm" ⇒ permission = ask,
+  not concurrency-safe;
+- post-execution state: motor skills append current position/room to the result;
+- recovery hints: on failure, `diagnosis_code` maps to a next-step suggestion for the model.
 
-## Built-in Skills
-
-The 10 arm skills below are available when an arm agent is connected (via `vector-cli --sim` or a live SO-101 arm). They are wrapped as tools under the `robot` tool category by `SkillWrapperTool`.
-
-| Skill | Aliases | Direct | Auto-steps |
-|-------|---------|--------|------------|
-| home | go home, reset, 回家, 归位 | Yes | - |
-| wave | wave, hello, 挥手, 打招呼, 你好 | Yes | - |
-| scan | look, observe, 看看, 扫描 | Yes | - |
-| detect | find, search, 检测, 识别, 找一下 | No | scan, detect |
-| describe | describe, what is, 描述, 这是什么 | Yes | - |
-| pick | grab, grasp, 抓, 拿, 抓起 | No | scan, detect, pick |
-| place | put, 放, 放下, 放到, 放置 | No | - |
-| gripper_open | open, release, 张开, 松开 | Yes | - |
-| gripper_close | close, grip, 夹紧, 合上 | Yes | - |
-| handover | handover, give, 递, 递给 | No | - |
-
-### Auto-steps and SkillWrapperTool [LEGACY routing]
-
-`pick` declares `__skill_auto_steps__ = ["scan", "detect", "pick"]`. When the agent calls the `pick` tool, `SkillWrapperTool.execute()` reads this attribute and expands the call into the full step chain before any LLM planning — zero additional LLM calls for the common case. (Retiring at S8; the model now plans the chain.)
-
-### Complex / Long-chain Tasks [LEGACY routing]
-
-> The **VGG GoalDecomposer** producer below is legacy, being strangled at S8 (pending CEO approval); the native model-driven producer handles multi-step goals now. Its files still exist as the fallback path.
-
-For multi-step or ambiguous goals (e.g. "把鸭子放到左前方", "整理桌面"), simple auto_steps expansion is insufficient. These route through the **VGG GoalDecomposer** in `vcli/cognitive/` (`goal_decomposer`, `goal_executor`, `goal_verifier`, `strategy_selector`, `vgg_harness`). The decomposer breaks the goal into a plan, verifies preconditions, and calls `agent.execute_skill()` for each step — this path may involve multiple LLM calls and is designed for robustness, not zero-LLM speed. Note: `goal_verifier` / the honest-verify spine is NOT part of this legacy layer — it is unchanged and shared by all producers.
-
-## Adding a Custom Skill
+## Adding a custom skill
 
 ```python
-from vector_os_nano.core.skill import skill, SkillContext
-from vector_os_nano.core.types import SkillResult
-
-@skill(
-    aliases=["wave", "hello", "挥手", "打招呼", "你好"],
-    direct=True,
-)
+@skill(aliases=["wave", "挥手"], direct=True)
 class WaveSkill:
     name = "wave"
     description = "Wave the arm back and forth as a greeting"
     parameters = {"times": {"type": "integer", "default": 3}}
-    preconditions = []
-    postconditions = []
-    effects = {}
+    preconditions, postconditions, effects = [], [], {}
 
     def execute(self, params, context):
         for _ in range(params.get("times", 3)):
             joints = context.arm.get_joint_positions()
-            joints[0] = 0.5
-            context.arm.move_joints(joints, duration=0.5)
-            joints[0] = -0.5
-            context.arm.move_joints(joints, duration=0.5)
+            joints[0] = 0.5;  context.arm.move_joints(joints, duration=0.5)
+            joints[0] = -0.5; context.arm.move_joints(joints, duration=0.5)
         return SkillResult(success=True)
 
-# Register:
-agent.register_skill(WaveSkill())
-
-# Now these all work:
-# "wave"     → direct execute (zero LLM)
-# "挥手"     → alias match → same
-# "wave 5 times" → LLM plans with params
+agent.register_skill(WaveSkill())   # or drop the file in vector_os_nano/skills/
 ```
 
-## Multi-Stage Agent Pipeline [LEGACY routing]
+A skill may wrap an external VLA/VLM or a classical grasp/nav stack — the runtime routes to it by NL and grades it like any other step.
 
-> The 6-stage keyword pipeline below is the legacy producer, being strangled at S8 (pending CEO approval). The native producer collapses MATCH/CLASSIFY/PLAN into the model's own tool-use loop.
+## Binding a skill's goal class to a verify oracle (D69 — read this before shipping)
 
-When alias matching can't handle the input, the full pipeline runs:
+A skill (or any actor) must NEVER author its own verify target. The D69 incident: a "grasp"
+graded GROUNDED because the model wrote `grabbed.txt` and verified `file_exists(...)` — every
+gate fired correctly for the wrong reason (tricky-bugs Case 10).
 
-```
-Stage 1: MATCH     — Check @skill aliases (zero LLM)
-Stage 2: CLASSIFY  — LLM determines intent: chat/task/query
-Stage 3: PLAN      — LLM decomposes into skill sequence
-Stage 4: EXECUTE   — Run skills step by step (deterministic)
-Stage 5: ADAPT     — On failure, inject context and retry or explain
-Stage 6: SUMMARIZE — LLM generates user-friendly result summary
-```
+The rule: **a physical-action goal class requires a ground-truth oracle that is only true if
+THAT physical work actually happened** — e.g. a grasp goal must carry a necessary
+`holding_object()` conjunct, a place goal `placed_count()`; both read sim/robot state the
+actor cannot write. When you add a skill that performs a new class of physical action:
+1. add (or reuse) a world-side GT predicate in the world's verify namespace
+   (`vcli/worlds/*_oracle.py`) that reads independent ground truth;
+2. make it a NECESSARY conjunct for that goal class in the evidence gate — a generic oracle
+   (file existence, timer PASS) never suffices for a physical claim;
+3. never offer generic dev tools (`file_write`/`bash`) as action tools in a robot world.
 
-Simple commands (home, open, close, scan) use only Stage 1.
-Common patterns (pick X) use Stage 1 with auto_steps.
-Complex tasks use the full pipeline.
+Full verdict contract + acceptance runbook: [docs/verify.md](verify.md).
 
-## Design Principles
+## Design principles
 
-1. Skills describe themselves — aliases, parameters, pre/postconditions (LIVE)
-2. Adding a skill is one class + one decorator — zero kernel/routing code changes (LIVE plug-in contract)
-3. Chinese and English are first-class — aliases support both languages (LIVE)
-4. [LEGACY routing, S8] Simple things should be fast — `direct` skills had zero-LLM overhead
-5. [LEGACY routing, S8] "LLM is for reasoning, not routing — alias matching handles 80%" — superseded: the model now does the routing too
+1. Skills describe themselves — description, parameters, pre/postconditions.
+2. Adding a skill is one class + one decorator — zero kernel/routing edits.
+3. Chinese and English are first-class — aliases and NL routing support both.
+4. Success is proven by a GT oracle the skill cannot author — never self-reported.

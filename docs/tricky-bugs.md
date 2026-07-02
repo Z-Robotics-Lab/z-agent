@@ -5,8 +5,39 @@ that survived a green test suite, or hid behind "every component is correct in i
 Append-only, newest first. Entries are terse dot-points (symptom → why hidden → root → fix →
 lesson) — key facts only. Routine bugs (typos, missing imports, obvious config) do NOT belong
 here; git history covers them, and covers the full prose of these once trimmed.
+Cap: ≤15 cases. On overflow, fold the OLDEST case to one line + its commit hash under a
+trailing `## Folded` list.
 
 ---
+
+## Case 14 (FOV) — a short object masks at 3.9 m but VANISHES at the 0.9 m grasp standoff (camera FOV, not colour) (2026-06-29, arch/plug-and-play)
+- Symptom: far fetch grounds for the green/blue BOTTLES but the red object returns no_detections at re-perceive; instinct: "the HSV red wrap-around hue gate is the weak one".
+- False trail (ruled out by the depth+mask log): the red HSV mask fired ~1000 px on the red object at 3.9 m AND the seed localized it AND the facing turn fired. Red hue is fine.
+- Root cause: the red object is a CAN — physically SHORTER than the bottles. mask_px went 1000@3.9m → 0 at the ~0.9 m standoff: a close, short object falls BELOW the head camera's downward vertical FOV (the camera looks OVER it). So the mask VANISHES as the dog gets CLOSER — counter to intuition.
+- Fix direction (seed, not yet done): for short objects raise camera tilt or widen the grasp standoff to keep them in the vertical FOV at grasp range.
+- Lesson: "detected far, lost near" is a FOV/geometry signature, not a detector/colour weakness — check object HEIGHT vs camera pitch and the near-field vertical frustum before touching the colour gate. Mask px rising with range then dropping to 0 as you approach localizes it to FOV.
+
+## Case 13 (mobile_pick) — far flail to the ORIGIN was a position-less detection stored at (0,0,0), not a nav bug (2026-06-29, arch/plug-and-play)
+- Symptom: a model-routed far fetch that picked `mobile_pick` failed `nav_failed`, dog driving toward ~(0.5, 0.15) = the ORIGIN, nowhere near the bottle at (13.86, 3.0). "nav_failed"+"drives to origin" pointed at navigation/frame.
+- False trail (ruled out by code-read): `_populate_pickables_from_mjcf` only runs under the heavy ROS2 GT path, not the VECTOR_NO_ROS2 rig the probe used.
+- Root cause (detect.py): DetectSkill defaults `x,y,z=0,0,0; has_3d=False`, then tries to read a 3D pose; a FAR object yields no depth → x,y,z stay at the (0,0,0) SENTINEL, and the object was ADDED to world_model ANYWAY. mobile_pick's `_resolve_target` found that phantom and navigated to origin. A 2D-only detection was stored as a TARGETABLE object at the origin.
+- Fix: additive `ObjectState.has_position` (default True); DetectSkill sets it False for a 2D-only detection and preserves any prior position; pick skips position-less objects → fast honest `object_not_found`.
+- Lesson: a "drives to origin / nav_failed" symptom is often a DEFAULT-SENTINEL leak — a struct field left at its 0-init default and then USED as if real. Never store a position-less observation as a positioned, targetable one; separate EXISTENCE from HAS-A-USABLE-POSITION.
+
+## Case 12 (far-fetch) — "no_detections" was a nav TERMINAL-HEADING bug, not perception/colour (2026-06-29, arch/plug-and-play)
+- Symptom: model-routed far fetch (`把绿色的瓶子拿过来`, VECTOR_FETCH_FAR=1) intermittently ended `RAN / no_detections`. The string `no_detections` + "grounding-dino is English" history pointed at perception/colour.
+- False trails (ruled out by a logged probe): seed colour/query localized the real bottle every time; backend was MPC (casadi+pinocchio present); far-table geom byte-identical to the near table that masks fine.
+- Decisive probe: a faithful skill-direct repro with the CLI's EXACT sim config GROUNDED (2073 green px at standoff); the failing cli run masked 0 at a near-identical depth profile → the only thing that flips an identical-depth frame to 0 is the bottle being out of frame = a different arrival HEADING.
+- Root cause: FAR's `navigate_to` has NO terminal-heading control, so the dog arrives at an arbitrary heading; the re-perceive relies on a one-directional ~200° scan (6×0.6 rad, +vyaw only) → a bottle in the uncovered ~160° arc is never faced → mask=0 → no_detections. Grounds-or-not = luck of arrival heading.
+- Fix: the recovery KNOWS the target xy (the seed) — deterministically TURN TO FACE it via `_grasp_ready_repose` before re-perceiving (skill-level; kernel/moat untouched). 3/3 skill-direct.
+- Lesson: a perception-shaped error string can be a NAV-pose bug. When a "can't see it" failure is intermittent at a fixed location, suspect arrival HEADING before colour/detector/occlusion — prove it by comparing depth profiles (identical depth + different mask ⇒ framing/heading). When you KNOW the target xy, face it, don't search.
+
+## Case 11 — a verdict-time snapshot SIGSEGV'd the whole bare-cli turn: MuJoCo GL is THREAD-BOUND + a control thread was stepping live mjData (2026-06-26, ADR-002 Stage 1)
+- Symptom: adding a same-process snapshot hook in cli `_emit` (env-gated by `VECTOR_SNAPSHOT_DIR`) made a real `--sim-go2 --native-loop` turn die with exit=-11 (SIGSEGV) BEFORE `VECTOR_VERDICT`, on BOTH the ROS2 and in-process paths.
+- False trails (ruled out): NOT the heavy ROS2 stack (in-process crashed too); NOT "a 4th EGL context". Decisive probe: a CONTROL run with the hook OFF emitted a clean verdict → the segfault was specifically MY render.
+- Root cause (two thread-safety violations): (1) MuJoCo's GL context is THREAD-BOUND — the persistent `_cam_renderer`/`_seg_renderer` were created on a worker thread, so touching them from the emit (main) thread = cross-thread GL → segfault. (2) a control thread keeps stepping the LIVE `mjData`; rendering it concurrently = torn read → segfault.
+- Fix: render from an ISOLATED `MjData` copy with a FRESH `mj.Renderer` created ON the emit thread; wrap the hook so any failure returns None (a snapshot must never crash the verdict).
+- Lesson: when adding ANY render/observe call into an existing sim process, assume there is already a GL context owned by another thread AND a thread mutating `mjData`. Never reuse a renderer across threads, never render live data — copy `qpos` into a throwaway `MjData` and render that on your own thread. Isolate the crash with a hook-OFF CONTROL run before blaming context count.
 
 ## Case 10 — Fakeable grasp graded GROUNDED by a self-written marker file, not the gripper (2026-06-24, D69)
 - Symptom: bare-cli NL grasp on go2+arm graded verified=True with the gripper empty — model wrote `grabbed.txt` via `file_write`, verified `file_exists('grabbed.txt')`.
@@ -82,32 +113,3 @@ here; git history covers them, and covers the full prose of these once trimmed.
 - Root cause: convex-MPC needs `casadi` (its QP solver), pinned only in the `[go2]` extra, but `all=[sim,perception,ik,mcp]` OMITTED `go2` → `.[all]` venv had no casadi. casadi imports LAZILY on first solve, so connect() set `_use_mpc=True` then the QP threw EVERY tick (qp_fail=149/149) → zero torque.
 - Fix: `all` now includes `go2`; `_init_mpc_stack` imports casadi EAGERLY (fails loud at connect, clean fallback); fallback log names the cause + install cmd.
 - Lesson: NEVER certify robot motion from PASS/odom-count/nav-flag — measure the actual position/state DELTA (ground truth). A capability's hard dep must be in the install set it ships in, or fail loud at connect — never a lazily-imported solver that fails silently every tick.
-
-## Case 11 — a verdict-time snapshot SIGSEGV'd the whole bare-cli turn: MuJoCo GL is THREAD-BOUND + a control thread was stepping live mjData (2026-06-26, ADR-002 Stage 1)
-- Symptom: adding a same-process snapshot hook in cli `_emit` (env-gated by `VECTOR_SNAPSHOT_DIR`) made a real `--sim-go2 --native-loop` turn die with exit=-11 (SIGSEGV) BEFORE `VECTOR_VERDICT`, on BOTH the ROS2 and in-process paths.
-- False trails (ruled out): NOT the heavy ROS2 stack (in-process crashed too); NOT "a 4th EGL context". Decisive probe: a CONTROL run with the hook OFF emitted a clean verdict → the segfault was specifically MY render.
-- Root cause (two thread-safety violations): (1) MuJoCo's GL context is THREAD-BOUND — the persistent `_cam_renderer`/`_seg_renderer` were created on a worker thread, so touching them from the emit (main) thread = cross-thread GL → segfault. (2) a control thread keeps stepping the LIVE `mjData`; rendering it concurrently = torn read → segfault.
-- Fix: render from an ISOLATED `MjData` copy with a FRESH `mj.Renderer` created ON the emit thread; wrap the hook so any failure returns None (a snapshot must never crash the verdict).
-- Lesson: when adding ANY render/observe call into an existing sim process, assume there is already a GL context owned by another thread AND a thread mutating `mjData`. Never reuse a renderer across threads, never render live data — copy `qpos` into a throwaway `MjData` and render that on your own thread. Isolate the crash with a hook-OFF CONTROL run before blaming context count.
-
-## Case (far-fetch) — "no_detections" was a nav TERMINAL-HEADING bug, not perception/colour (2026-06-29, arch/plug-and-play)
-- Symptom: model-routed far fetch (`把绿色的瓶子拿过来`, VECTOR_FETCH_FAR=1) intermittently ended `RAN / no_detections`. The string `no_detections` + "grounding-dino is English" history pointed at perception/colour.
-- False trails (ruled out by a logged probe): seed colour/query localized the real bottle every time; backend was MPC (casadi+pinocchio present); far-table geom byte-identical to the near table that masks fine.
-- Decisive probe: a faithful skill-direct repro with the CLI's EXACT sim config GROUNDED (2073 green px at standoff); the failing cli run masked 0 at a near-identical depth profile → the only thing that flips an identical-depth frame to 0 is the bottle being out of frame = a different arrival HEADING.
-- Root cause: FAR's `navigate_to` has NO terminal-heading control, so the dog arrives at an arbitrary heading; the re-perceive relies on a one-directional ~200° scan (6×0.6 rad, +vyaw only) → a bottle in the uncovered ~160° arc is never faced → mask=0 → no_detections. Grounds-or-not = luck of arrival heading.
-- Fix: the recovery KNOWS the target xy (the seed) — deterministically TURN TO FACE it via `_grasp_ready_repose` before re-perceiving (skill-level; kernel/moat untouched). 3/3 skill-direct.
-- Lesson: a perception-shaped error string can be a NAV-pose bug. When a "can't see it" failure is intermittent at a fixed location, suspect arrival HEADING before colour/detector/occlusion — prove it by comparing depth profiles (identical depth + different mask ⇒ framing/heading). When you KNOW the target xy, face it, don't search.
-
-## Case (mobile_pick) — far flail to the ORIGIN was a position-less detection stored at (0,0,0), not a nav bug (2026-06-29, arch/plug-and-play)
-- Symptom: a model-routed far fetch that picked `mobile_pick` failed `nav_failed`, dog driving toward ~(0.5, 0.15) = the ORIGIN, nowhere near the bottle at (13.86, 3.0). "nav_failed"+"drives to origin" pointed at navigation/frame.
-- False trail (ruled out by code-read): `_populate_pickables_from_mjcf` only runs under the heavy ROS2 GT path, not the VECTOR_NO_ROS2 rig the probe used.
-- Root cause (detect.py): DetectSkill defaults `x,y,z=0,0,0; has_3d=False`, then tries to read a 3D pose; a FAR object yields no depth → x,y,z stay at the (0,0,0) SENTINEL, and the object was ADDED to world_model ANYWAY. mobile_pick's `_resolve_target` found that phantom and navigated to origin. A 2D-only detection was stored as a TARGETABLE object at the origin.
-- Fix: additive `ObjectState.has_position` (default True); DetectSkill sets it False for a 2D-only detection and preserves any prior position; pick skips position-less objects → fast honest `object_not_found`.
-- Lesson: a "drives to origin / nav_failed" symptom is often a DEFAULT-SENTINEL leak — a struct field left at its 0-init default and then USED as if real. Never store a position-less observation as a positioned, targetable one; separate EXISTENCE from HAS-A-USABLE-POSITION.
-
-## Case (FOV) — a short object masks at 3.9 m but VANISHES at the 0.9 m grasp standoff (camera FOV, not colour) (2026-06-29, arch/plug-and-play)
-- Symptom: far fetch grounds for the green/blue BOTTLES but the red object returns no_detections at re-perceive; instinct: "the HSV red wrap-around hue gate is the weak one".
-- False trail (ruled out by the depth+mask log): the red HSV mask fired ~1000 px on the red object at 3.9 m AND the seed localized it AND the facing turn fired. Red hue is fine.
-- Root cause: the red object is a CAN — physically SHORTER than the bottles. mask_px went 1000@3.9m → 0 at the ~0.9 m standoff: a close, short object falls BELOW the head camera's downward vertical FOV (the camera looks OVER it). So the mask VANISHES as the dog gets CLOSER — counter to intuition.
-- Fix direction (seed, not yet done): for short objects raise camera tilt or widen the grasp standoff to keep them in the vertical FOV at grasp range.
-- Lesson: "detected far, lost near" is a FOV/geometry signature, not a detector/colour weakness — check object HEIGHT vs camera pitch and the near-field vertical frustum before touching the colour gate. Mask px rising with range then dropping to 0 as you approach localizes it to FOV.

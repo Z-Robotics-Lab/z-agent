@@ -6,7 +6,7 @@
   the plug-and-play platform contracts, and the CLI/MCP entry points. The OS *around* the
   models, in service of robots.
 - For live "where are we / what's next" (stages, current round), see
-  [agent-kernel-STATUS.md](agent-kernel-STATUS.md).
+  [STATUS.md](../STATUS.md).
 - For the decision history (kernel/world seam, closed-loop reframe, native-producer ruling,
   embodiment-as-config, …) see [DECISIONS.md](DECISIONS.md).
 
@@ -23,7 +23,7 @@ classical skills, and atomic actions into one deployable whole that is cross-har
 cross-model, cross-system. Further, it is a **programmable, plug-and-play platform**:
 developers bring any model, skill, or robot and plug it in with no kernel edits. Robots are
 the end; sim is the current means. **The authoritative goal statement is the North Star in
-[CLAUDE.md](../CLAUDE.md) — read it first; this doc describes the architecture that serves it,
+[AGENTS.md](../AGENTS.md) — read it first; this doc describes the architecture that serves it,
 not a second copy of the goal.**
 
 ---
@@ -72,7 +72,7 @@ parallel-developed **playground** track registers preset scenes/embodiments the 
 
 ## 3. The five plug-and-play contracts
 
-The structural spine of the platform (CLAUDE.md Rule 11). Each is a way to bring your own
+The structural spine of the platform (Invariant 3). Each is a way to bring your own
 part across the seam — the **user provides data/code on the left, the system does the work
 generically on the right**.
 
@@ -94,7 +94,7 @@ generically on the right**.
 - **Skill** — *user provides:* a `@skill` declaring what it `requires` (arm / base / camera);
   it may wrap an external **VLA / VLM** or a classical **grasp / nav** stack. *system does:*
   makes it callable by NL, routes to it by requirement match, and grades it like any step. A skill
-  may **self-compose recovery internally** (Rule 1's *recover* pillar at the skill layer,
+  may **self-compose recovery internally** (the North Star's *recover* pillar at the skill layer,
   kernel/moat untouched): `perception_grasp` does this for an out-of-reach target — on a
   `no_detections` from the colour-gated HSV perceive it seeds an un-gated localisation
   (`object_localizer`) from the clean forward pose, drives to the standoff via the navigate planner,
@@ -117,7 +117,7 @@ Every plugged-in model and skill is graded by a deterministic predicate that rea
 truth **the actor cannot author**: the runtime trusts *evidence*, never a self-report. The
 spine is the **frozen reference** of the system — the native producer hands it an
 `ExecutionTrace` and the spine computes `verified` byte-for-byte unchanged; the producer never
-computes it itself. Verification is **only ever stricter, never looser** (Rule 5): an
+computes it itself. Verification is **only ever stricter, never looser** (Invariant 1): an
 AST-sandbox predicate, no `eval`/`exec`, no import escape. An action step with no predicate
 **fails** the gate.
 
@@ -156,7 +156,7 @@ trustworthily on the industrial floor.
 |                  CapabilityRegistry (chat + grounding-dino detector) |
 |  ===== HONEST-VERIFY MOAT (frozen spine) ==========================  |
 |   trace_store | actor_causation | evidence_classifier  (frozen)     |
-|   grades every step vs INDEPENDENT GT; only ever stricter (R5)      |
+|   grades every step vs INDEPENDENT GT; only ever stricter (Inv 1)   |
 |  General tools   file/bash/glob/grep/web                            |
 |  Session | Permissions (8-layer) | IntentRouter                     |
 +---------------------------------+------------------------------------+
@@ -182,7 +182,7 @@ engine. Bare `vector-cli` + NL runs the **native** producer by default
 
 ## 6. Invariants / contracts
 
-The architectural form of the CLAUDE.md Rules. Anything that violates them is a bug.
+The architectural form of the AGENTS.md Invariants. Anything that violates them is a bug.
 
 - **Kernel/world seam.** The kernel never imports a world; a world crosses only by the four
   registrations. Robot specifics never leak into kernel code paths.
@@ -260,7 +260,7 @@ One terse line per package. No line numbers (they rot — read the file). Paths 
 - `embodiments/` — **embodiment-as-config**: `config.py` (`EmbodimentConfig` +
   `CapabilityProfile` schema + fail-loud loader), per-robot `<id>/robot.yaml` manifests
   (`go2`, `g1`), and `capability_profile.py` — the ONE resolver (`resolve_capability_profile(agent)`)
-  every "what can this body do" gate consults (Rule 11, no capability-by-code drift): the
+  every "what can this body do" gate consults (Invariant 3, no capability-by-code drift): the
   native producer's navigate gate, `worlds/robot._agent_has_camera`, and `engine._has_base`
   all single-source through it (gated flags runtime-authoritative; enrichment flags reconcile
   runtime-OR-declared for the runtime-attach, e.g. go2+Piper).
