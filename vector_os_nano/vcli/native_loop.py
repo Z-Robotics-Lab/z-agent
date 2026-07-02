@@ -70,6 +70,20 @@ _MAX_NATIVE_TURNS = 24
 # never a false green. The verify stays MODEL-authored; the runner never invents it.
 _MAX_VERIFY_NUDGES = 2
 
+# The re-prompt sent when the model tries to finish/stop while its OWN latest verify
+# returned FAIL. Brain-agnostic quantity/multi-object guardrail: it names the next
+# action generically (place the NEXT remaining object) WITHOUT the runner parsing the
+# goal for N — the model still owns decompose/route, so the loop stays planner-free.
+_FINISH_ON_FAIL_NUDGE = (
+    "Cannot finish: your most recent verify() returned FAIL, so the goal is NOT yet "
+    "proven achieved (for a quantity/multi-object task this usually means only SOME of "
+    "the requested objects are on the receptacle). Do NOT stop. Take the next action "
+    "toward the goal — for a multi-object place, grasp and place the NEXT remaining "
+    "object (call navigate_to_object('<next name>') once first if the grasp returns "
+    "no_detections) — then call verify(<the same goal predicate>) again. Only finish "
+    "once that verify PASSES."
+)
+
 # The registry category whose tools are the kernel's domain-general ACTION surface
 # (file_read/file_write/file_edit/bash/glob/grep — see tools.__init__._TOOL_CATEGORIES
 # and worlds.dev.DEV_TOOL_ALLOWLIST, which is this category). The native loop offers
@@ -457,6 +471,14 @@ class NativeStepRunner:
         self._chain: list[str] = []
         self._baseline: Any = None
         self._step_open: bool = False
+        # The model's MOST-RECENT verify result (None until it verifies once). Read by
+        # ``latest_verify_failed`` so the runner can refuse a finish/stop while the
+        # model's own proof of the goal is still FAILING (D-quantity: a flaky brain
+        # places obj-1, verifies resting_on_receptacle()>=2 -> False, then quits with
+        # only one object placed). Enforces the prompt's "NEVER finish while the latest
+        # verify is FAIL" mechanically + brain-agnostically; the MODEL still owns what
+        # action fixes it (no goal parsing, no per-object loop here -> still planner-free).
+        self._last_verify_result: bool | None = None
         # Backlog #2 — the most-recent INFORMATIONAL skill diagnosis seen during the
         # current step's action chain (from a dispatched skill's ToolResult.metadata).
         # Threaded onto the StepRecord at verify time so triage codes (e.g.
@@ -476,6 +498,20 @@ class NativeStepRunner:
         ungraded trace). Used to nudge a model-authored verify before accepting finish.
         """
         return self._step_open
+
+    @property
+    def latest_verify_failed(self) -> bool:
+        """True iff the model's MOST-RECENT verify returned False (and it has verified
+        at least once) — i.e. it is about to finish/stop while its OWN proof of the
+        goal is still FAILING. Distinct from ``has_unverified_action`` (a ran-but-never-
+        verified step): here the model DID author a verify and it FAILED. The runner
+        uses this to refuse a premature finish and re-prompt (bounded), enforcing the
+        prompt rule "NEVER finish while the latest verify is FAIL" — the deterministic,
+        brain-agnostic guardrail for quantity/multi-object goals (the flaky-brain
+        obj-2-abandon mode). It reads only the model's own latest verdict: no goal
+        parsing, no per-object bookkeeping -> the loop stays planner-free (rule 5).
+        """
+        return self._last_verify_result is False
 
     # ------------------------------------------------------------------
     # Skill dispatch (capture baseline before the first skill of a step)
@@ -532,6 +568,9 @@ class NativeStepRunner:
         except Exception as exc:  # noqa: BLE001
             logger.debug("native_loop: verify(%r) raised: %s", expr, exc)
             verify_result = False
+        # Track the model's latest verdict so the finish-gate can refuse a stop while
+        # the goal is still unproven (see ``latest_verify_failed``).
+        self._last_verify_result = verify_result
 
         # Grade actor-causation with a FRESH post-capture, immediately after the
         # verify read (review fix 3) — only for a graded robot predicate, else
@@ -747,6 +786,11 @@ def run_turn_native(
 
     turns = 0
     verify_nudges = 0  # D23: re-prompts spent forcing a verify before a finish/stop
+    # Re-prompts spent refusing a finish/stop while the model's own LATEST verify is
+    # FAIL (the quantity/multi-object obj-2-abandon guardrail). Bounded like the D23
+    # nudge so a model that CANNOT reach a passing verify still terminates — the trace
+    # then ends on a False step and grades honestly RAN/False, never a forced green.
+    finish_on_fail_nudges = 0
     while turns < max_turns:
         messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
@@ -776,6 +820,14 @@ def run_turn_native(
                     "and call verify now.",
                 )
                 continue
+            if runner.latest_verify_failed and finish_on_fail_nudges < _MAX_VERIFY_NUDGES:
+                # The model verified and it FAILED, yet it is stopping — the goal is not
+                # proven (e.g. only one of N objects placed). Re-prompt it to keep acting
+                # and re-verify (brain-agnostic quantity guardrail; model still decides).
+                finish_on_fail_nudges += 1
+                _emit("re-prompting: last verify FAILED — keep going")
+                _append_user(session, _FINISH_ON_FAIL_NUDGE)
+                continue
             break  # end_turn, no tools — conversation complete
 
         finished = False
@@ -793,6 +845,17 @@ def run_turn_native(
                         "Cannot finish yet: you ran an action but did not verify it. "
                         "Call verify(<predicate>) to PROVE the goal FIRST, then finish.",
                         is_error=True,
+                    ))
+                    continue
+                if runner.latest_verify_failed and finish_on_fail_nudges < _MAX_VERIFY_NUDGES:
+                    # The model DID verify but it FAILED, and it is trying to finish
+                    # anyway — refuse (bounded). This is the quantity/multi-object
+                    # guardrail: obj-1 placed, resting_on_receptacle()>=N still False,
+                    # brain quits. Push it to place the NEXT object and re-verify.
+                    finish_on_fail_nudges += 1
+                    _emit("finish blocked: last verify FAILED")
+                    result_dicts.append(_tool_result_dict(
+                        tc.id, _FINISH_ON_FAIL_NUDGE, is_error=True,
                     ))
                     continue
                 _emit("finishing")

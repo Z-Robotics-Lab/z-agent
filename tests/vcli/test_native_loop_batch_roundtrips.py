@@ -187,6 +187,59 @@ def test_recover_after_failed_verify_records_fail_then_pass():
     assert flaky.calls == 2            # the model re-acted (didn't give up)
 
 
+# --- finish-gate: never let the model quit while its OWN latest verify is FAIL ---
+# The brain-agnostic quantity guardrail (R206). A flaky brain places obj-1, verifies
+# resting_on_receptacle()>=N -> False, then tries to finish with only one object placed.
+# The runner refuses (bounded) and re-prompts to place the next object + re-verify;
+# the MODEL still owns what to do (no goal parsing here -> still planner-free).
+
+
+def test_finish_on_failed_verify_is_blocked_until_pass():
+    """Model verifies FALSE then tries to finish -> the runner BLOCKS the finish and
+    re-prompts; the model re-acts, verifies PASS, and only then finishes. Without the
+    gate the FALSE-then-finish would end the turn with a single [False] step (the
+    obj-2-abandon flake); with it the trace records [False, True] (recovered)."""
+    from pathlib import Path as _P
+    from vector_os_nano.core.types import SkillResult
+    from tests.harness.fake_backend import tool_turn
+
+    class _FlakyWrite:
+        name = "write_file"; description = "write text to a file"
+        parameters = {"file_path": {"type": "string", "required": True},
+                      "content": {"type": "string", "required": True}}
+        preconditions: list = []; effects: dict = {}
+        def __init__(self): self.calls = 0
+        def execute(self, params, context):
+            self.calls += 1
+            if self.calls >= 2:  # writes only on the retry (verify FAILs on attempt 1)
+                _P(params["file_path"]).write_text(str(params.get("content", "")), encoding="utf-8")
+            return SkillResult(success=True, result_data={"attempt": self.calls})
+
+    flaky = _FlakyWrite()
+    msgs: list[str] = []
+    _calls, trace = _run(
+        [tool_turn(_WRITE, _VERIFY),   # attempt 1 -> verify FALSE (no-op write)
+         tool_turn(_FINISH),           # try to quit on a FALSE verify -> BLOCKED
+         tool_turn(_WRITE, _VERIFY),   # re-act after the block -> verify PASS
+         tool_turn(_FINISH)],          # accepted now
+        skill=flaky, on_progress=msgs.append,
+    )
+    assert [bool(s.verify_result) for s in trace.steps] == [False, True]  # recovered
+    assert flaky.calls == 2            # the block forced the model to re-act
+    assert any("block" in m.lower() for m in msgs), f"expected a finish-block msg; got {msgs}"
+
+
+def test_finish_on_permanently_failing_verify_terminates_bounded_and_honest():
+    """A model that keeps stopping while its verify can NEVER pass still terminates
+    (bounded nudges, not max_turns) and grades HONESTLY False — never a forced green."""
+    from tests.harness.fake_backend import tool_turn
+
+    never = ("verify", {"expr": "path_contains('nope.txt', 'x')"})  # nope.txt never written
+    calls, trace = _run([tool_turn(_WRITE, never)])  # then script exhausts -> end_turn forever
+    assert [bool(s.verify_result) for s in trace.steps] == [False]  # honest red, no false green
+    assert calls <= 6  # bounded by the nudge cap, NOT max_turns=24
+
+
 def test_multistep_plan_records_one_step_per_subgoal():
     """PLAN/ROUTE (north-star #1/#2): a 2-step task decomposes into 2 (action->verify)
     steps, both GROUNDED. Real-LLM confirmed (R9/D27): haiku decomposes + routes +

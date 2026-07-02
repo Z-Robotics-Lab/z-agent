@@ -2,22 +2,22 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 26 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 26 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 26 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 22 | 61fde80 |
-| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 22 | 61fde80 |
-| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 19 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
-| fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
-| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 15 | HEAD-R190 |
-| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 22 | 61fde80 |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 15 | HEAD-R190 |
-| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 25 | c59f386 |
-| place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
-| quantity-place.nl | confirmed | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 0 | pending |
-| quantity-place.nl-isolation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
-| quantity-place.nl-robustness | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | pending |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 27 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 27 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 27 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 23 | 61fde80 |
+| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 23 | 61fde80 |
+| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 20 | HEAD-R186 |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 6 | pending |
+| fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 9 | pending |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 16 | HEAD-R190 |
+| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 23 | 61fde80 |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 16 | HEAD-R190 |
+| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 26 | c59f386 |
+| place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 6 | pending |
+| quantity-place.nl | confirmed | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 1 | pending |
+| quantity-place.nl-isolation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
+| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
