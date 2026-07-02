@@ -2,12 +2,31 @@
   "mcpServers": {
     "vector-os-nano": {
       "command": "/home/yusen/Desktop/vector_os_nano/.venv/bin/python",
-      "args": ["-m", "vector_os_nano.mcp", "--hardware", "--stdio"],
+      "args": [
+        "-m",
+        "vector_os_nano.mcp",
+        "--hardware",
+        "--stdio"
+      ],
       "cwd": "/home/yusen/Desktop/vector_os_nano"
     },
     "vector-graph": {
       "command": "vector-graph-mcp",
-      "args": ["/home/yusen/Desktop/vector_os_nano"]
+      "args": [
+        "/home/yusen/Desktop/vector_os_nano"
+      ]
+    },
+    "elp": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "elp.mcp_server",
+        "--repo",
+        "."
+      ],
+      "env": {
+        "PYTHONPATH": "/home/yusen/Desktop/evolvingloop"
+      }
     }
   }
 }
