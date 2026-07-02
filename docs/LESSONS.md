@@ -103,10 +103,10 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   opposite-ordinal is the test that proves a spatial resolver real. Built on R195 verbatim-passthrough +
   catalog-projection resolver + R196 no-auto-handover (Case 16). Witness-only fidelity (D182) still
   caps this to a floor, not a moat → STATUS next.
-- Quantity-place is REFUTED on first real verify (R199/E36): oracle path proven (blue grounded) but the
-  brain won't run N sequential grasp+place — abandons object 2 into a navigate loop. Frontier is now BRAIN
-  DECOMPOSITION for multi-object tasks (native_loop guardrail: no navigate-as-goal + per-object grasp→place
-  loop), then re-verify. After: anaphora (那个/它), relational near(a,b) → E36.
+- Quantity-place: REFUTED on v4-flash (R199/E36) → GROUNDED on deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC, not machinery (E38: seq 2-object place grounds 2/2).
+  E39 swapped ONLY the brain; SAME utterance 把两个瓶子放到架子上 GROUNDED True 5/5 (self-split grasp→place ×2, moat resting_on_receptacle()>=2 True, eyes-ok).
+  PLUG-AND-PLAY proof: model swap moved a decomposition ceiling, ZERO kernel edits (E23-clean). OPEN: n=1
+  (robustness N≥3); v4-flash-class brains that DON'T self-decompose need a runner QUANTITY guardrail → E39.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
