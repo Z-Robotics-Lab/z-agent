@@ -2,18 +2,18 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 7 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 7 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 7 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 3 | 61fde80 |
-| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 3 | 61fde80 |
-| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 3 | 61fde80 |
-| fetch.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 5 | 5aa71cb |
-| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 3 | 61fde80 |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 11 | 0cc4d5b |
-| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 6 | c59f386 |
-| place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 5 | 5aa71cb |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 8 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 8 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 8 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 4 | 61fde80 |
+| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 4 | 61fde80 |
+| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | HEAD-R186 |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 4 | 61fde80 |
+| fetch.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 6 | 5aa71cb |
+| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 4 | 61fde80 |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 12 | 0cc4d5b |
+| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 7 | c59f386 |
+| place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 6 | 5aa71cb |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -40,3 +40,4 @@
 - E22 R182 [confirmed] E18 mechanism = nav probe loop spinning under no-op time.sleep — retry only if: never blanket-mock builtins.open around config-reading code; never no-op time.sleep on wall-clock loops
 - E22 R184 [confirmed] E18's MagicMock hot-loop is defusable at the TEST layer (fake clock advancing time + _nav stub) without touching product code — retry only if: n/a — regression: the test file itself + _FakeClock max_sleeps guard
 - E23 R186 [confirmed] R184 E21: the native_loop.py prompt fix (place-clause is-not-a-nav-goal) CAUSED the compound combo 1/4->3/3 improvement — retry only if: never credit a code fix for a pass-rate delta while the model also changed (E9/E10/E21 model-sensitivity trap) — isolate first
+- E24 R187 [confirmed] the R184 fetch-place.nl-compound provisional age-FAIL wedging preflight/check.sh is an un-adjudicated row (H1), OR a checker bug: the age-check has no supersession-awareness (H2) — retry only if: n/a — regression: tests/unit/test_checks_schema_provisional.py

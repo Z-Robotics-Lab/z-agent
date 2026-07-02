@@ -37,6 +37,10 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 - NEVER run pytest unbounded: tests that patch time.sleep turn wall-clock loops into
   full-speed spins and MagicMock call-recording grows ~GB/s (test_isaac_sim_proxy nav class
   OOM'd the 64G host 2026-07-01); ALWAYS `scripts/run-tests` (MemoryMax scope) → E18.
+- The ledger is append-only, so a provisional row's `status` is NEVER rewritten; §1b
+  adjudication = APPEND a later row whose `supersedes` points back. checks_schema.py's
+  provisional age-check must exempt an already-superseded row or it nags forever and wedges
+  every future round once age>2 (R187: R184 row superseded R186, flagged R187) → E24.
 
 ## Recipes (proven invocations — copy, don't re-derive)
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -53,6 +54,16 @@ def _round_int(value: object) -> int | None:
     return int(digits) if digits else None
 
 
+def _supersedes_round(value: object) -> int | None:
+    """R-number a `supersedes` back-pointer targets ('R184 provisional 49d6e0c' → 184).
+
+    Uses an R<n> anchor, NOT _round_int — the free-text ref also carries a commit
+    hash whose digits would otherwise corrupt the round number.
+    """
+    m = re.search(r"R(\d+)", str(value))
+    return int(m.group(1)) if m else None
+
+
 def _current_round() -> int | None:
     env = os.environ.get("ROUND_N")
     if env and env.isdigit():
@@ -89,7 +100,19 @@ def _load(path: Path) -> list[tuple[int, dict]]:
 
 def check_acceptance(path: Path) -> None:
     cur = _current_round()
-    for i, row in _load(path):
+    rows = _load(path)
+    # The ledger is append-only: a provisional's `status` is NEVER rewritten in place.
+    # Adjudication (ROUND.md §1b) happens by APPENDING a later row whose `supersedes`
+    # points back at it. So a provisional is "adjudicated" once some row supersedes its
+    # (capability, round) — the age-check must exempt those, or a correctly-closed row
+    # nags forever and wedges every future round (R187: R184 fetch-place.nl-compound was
+    # superseded by R186 yet flagged at age 3).
+    adjudicated = {
+        (row.get("capability"), _supersedes_round(row.get("supersedes")))
+        for _, row in rows
+        if _supersedes_round(row.get("supersedes")) is not None
+    }
+    for i, row in rows:
         missing = ACC_REQUIRED - row.keys()
         if missing:
             fail(f"{path.name}:{i} missing keys {sorted(missing)}")
@@ -107,6 +130,7 @@ def check_acceptance(path: Path) -> None:
         # the first round that is supposed to do that adjudication.
         if (row.get("status") == "provisional" and cur is not None
                 and row.get("source") != "backfill"
+                and (row.get("capability"), age_from) not in adjudicated
                 and age_from is not None and cur - age_from > PROVISIONAL_MAX_AGE):
             fail(f"{path.name}:{i} provisional row from R{age_from} is >"
                  f"{PROVISIONAL_MAX_AGE} rounds old — adjudicate it (ROUND.md §1b)")
