@@ -52,6 +52,12 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   colour before the colour-keyed `perception_grasp` (raw "the rightmost bottle" query the CV
   resolver can't parse). `detect_objects` returns names+confidence, NO positions. Ordinal→object
   fidelity is WITNESS-only (D182 gap: oracle certifies held==named, not named==intent) → E25.
+- The perception VLM (`look`/describe_scene/find_objects) IS the ordinal resolver — a natural A/B
+  proved it (R192): VLM DOWN → the model passes the raw ordinal string to perception_grasp → 0/5;
+  VLM up → it resolves 最左边的瓶子→"green bottle" → GROUNDED 1/1 (green held, eyes-confirmed, blue+red
+  untouched). The perception VLM (`vlm_go2.py`/`vlm.py`) defaults to OpenRouter (`google/gemma-4-31b-it`)
+  and was 402/out-of-credit R192 (same external BILLING gate as the vision-judge), silently breaking
+  ordinal grounding → E28.
 - g1_accept.py GREEN honest-negative (no groundable green in g1's spawn view) is CORRECT (0/14,
   verified=False, NO false-green) but the model FLAILS ~14 detect/navigate/verify turns before
   `finish` → blows a 400s harness budget (R190 skeptic re-run timed out on the GREEN turn; RED
@@ -69,11 +75,15 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   bare-REPL localizes a failure to the layer between → DEBUG.md D172 method.
 - Test suites via `scripts/run-tests` in serial chunks (subdirs first, sim-heavy files
   last); measured chunk peaks 0.2–3.7G, so the default 12G cap is generous → E18.
+- Perception VLM off OpenRouter (402/arrears) → route to LOCAL Ollama, plug-and-play, NO credit:
+  `VECTOR_VLM_URL=http://localhost:11434/v1 VECTOR_VLM_MODEL=gemma4:e4b` (already-pulled; the code's
+  documented local seam). gemma4:e4b resolves L-R ordinals; unblocked the clean ordinal GROUNDED → E28.
 
 ## Frontier (the ambition horizon — review rounds refresh; STATUS `frontier:` carries the 1-liner)
-- Harder find-fetch NL: ORDINAL resolution confirmed (最右边→blue, 2/2, E25) but not yet a
-  clean GROUNDED (handover + grasp-miss confounds); next = a clean ordinal GROUNDED (red-can
-  target, non-handover utterance), then quantity ("两个"), ambiguity ("那个"/"它") → STATUS next.
+- Harder find-fetch NL: clean ordinal GROUNDED ACHIEVED (最左边的瓶子→green, 1/1, eyes-confirmed,
+  via local VLM, E28) — opposite direction from R188's 最右→blue. NEXT: robustness (N runs; other
+  ordinals 中间的/最右-on-object 最右边的东西→can), then quantity ("两个"/"两瓶"), ambiguity
+  ("那个"/"它" anaphora). N=1 + witness-only fidelity (D182) means this is a floor, not a moat → STATUS next.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the

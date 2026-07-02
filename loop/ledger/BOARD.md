@@ -2,19 +2,19 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 12 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 12 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 12 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 8 | 61fde80 |
-| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 8 | 61fde80 |
-| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 8 | 61fde80 |
-| fetch.nl-ordinal-spatial | superseded | RAN 0/9 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | HEAD-R190 |
-| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 1 | HEAD-R190 |
-| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 8 | 61fde80 |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 1 | HEAD-R190 |
-| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 11 | c59f386 |
-| place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 10 | 5aa71cb |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 13 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 13 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 13 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 9 | 61fde80 |
+| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 9 | 61fde80 |
+| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 6 | HEAD-R186 |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 9 | 61fde80 |
+| fetch.nl-ordinal-spatial | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | HEAD-R192 |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 2 | HEAD-R190 |
+| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 9 | 61fde80 |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 2 | HEAD-R190 |
+| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 12 | c59f386 |
+| place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 11 | 5aa71cb |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -45,3 +45,4 @@
 - E25 R188 [inconclusive] harder-NL ORDINAL/positional find-fetch grounds to the spatially-correct object on the bare-REPL face, past D182 negated-distractor — retry only if: ordinal RESOLUTION confirmed (2/2 correct non-default target); a clean GROUNDED needs a non-handover utterance + grasp-reliable target (red can)
 - E26 R190 [confirmed] R190 review: the 2 oldest confirmed BOARD rows still hold on the real bare-REPL face, the R188 ordinal provisionals adjudicate cleanly, and no headline claim from the last 10 rounds overclaims — retry only if: n/a - review round
 - E27 R191 [confirmed] the R190 post-check quarantine (acceptance+experiments.jsonl deletions w/o CEO-APPROVED) is real data loss OR benign in-place re-serialization — retry only if: n/a - LESSONS hazard: append ONE preformatted line, never load-all+dumps+write-all
+- E28 R192 [inconclusive] a clean ordinal GROUNDED (past R188/R190 confounds) is reachable via grasp-reliable GREEN + an opposite-direction ordinal (最左边的瓶子) — retry only if: promote next-round after a boundary+red-team; robustness (N runs) is the follow-up
