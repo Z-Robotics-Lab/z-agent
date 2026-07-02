@@ -2,20 +2,21 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 23 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 23 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 23 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 19 | 61fde80 |
-| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 19 | 61fde80 |
-| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 16 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
-| fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
-| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 12 | HEAD-R190 |
-| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 19 | 61fde80 |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 12 | HEAD-R190 |
-| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 22 | c59f386 |
-| place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
-| quantity-place.nl | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 25 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 25 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 25 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 21 | 61fde80 |
+| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 21 | 61fde80 |
+| fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 18 | HEAD-R186 |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
+| fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 7 | pending |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 14 | HEAD-R190 |
+| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 21 | 61fde80 |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 14 | HEAD-R190 |
+| kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 24 | c59f386 |
+| place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
+| quantity-place.nl | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
+| quantity-place.nl-isolation | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -55,3 +56,4 @@
 - E35 R198 [refuted] R197/E34 scope: go2 quantity-place predicate is placed_count() >= 2 — retry only if: NEVER placed_count for go2 quantity-place; R199 verify 把两个瓶子放到架子上 -> resting_on_receptacle()>=2
 - E36 R199 [refuted] R198 machinery grounds quantity-place 把两个瓶子放到架子上 -> resting_on_receptacle()>=2 on the bare face (deepseek-v4-flash) — retry only if: isolate green-2nd-grasp vs planning, then a native_loop QUANTITY decomposition guardrail (E23: no prompt-fix credit across a model change)
 - E37 R200 [confirmed] R200 review: 2 oldest confirmed BOARD rows still hold on the real bare face; R199 quantity-place provisional adjudicates; gates/tokens clean. — retry only if: n/a - review round
+- E38 R203 [confirmed] E36 isolation: R199 quantity-place 2nd-object stall is BRAIN DECOMPOSITION (cant self-split 两个), NOT grasp-execution of a 2nd object — retry only if: land native_loop QUANTITY decomposition guardrail, re-verify quantity utterance (E23: no prompt-fix credit across model change)
