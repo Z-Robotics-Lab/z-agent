@@ -20,6 +20,11 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   0.10) so it's STRUCTURALLY 0 for a bin/table place (pickables z=0.320, place_bin top ~0.31) —
   always-FALSE = a structural false-RED. Use the D106 count oracle `resting_on_receptacle() >= N`
   (ungated, same residual as single place) → E35 (extends #Casebook Case 7).
+- quantity-place (`把两个瓶子放到架子上`) does NOT ground on the bare face (deepseek-v4-flash): brain
+  places bottle 1 (blue, `resting_on_receptacle()` ✓) then ABANDONS bottle 2 (green) after its grasp
+  stalls → `navigate → at_position(10.5,2.9)` loop (Case 15 cross-talk in quantity context) → terminal
+  verify=at_position, RAN False 3/4, eyes 1/2. HONEST RED (moat refused): R198 machinery CORRECT, gap =
+  BRAIN DECOMPOSITION of N grasp+place. Retry only after isolating grasp-vs-planning + a guardrail (E23) → E36.
 
 ## Hazards & confirmed constraints
 - repl_accept MODE=both cross-contaminates verdicts between fetch and place phases — run
@@ -104,10 +109,12 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   opposite-ordinal red-team `最右边的瓶子`→blue(rightmost) both GROUNDED verified=True, 0 handover,
   eyes-confirmed. The resolver is genuinely DIRECTION-sensitive (not a lucky green default) — the
   opposite-ordinal is the test that proves a spatial resolver real. Built on R195 verbatim-passthrough +
-  catalog-projection resolver + R196 no-auto-handover (Case 16). NEXT ordinal frontier: quantity
-  ("两个"/"两瓶" — gripper holds ONE, needs place/stage between grasps), ambiguity ("那个"/"它" anaphora →
-  last-referenced object), relational near(a,b). Witness-only fidelity (D182) still caps this to a
-  floor, not a moat → STATUS next.
+  catalog-projection resolver + R196 no-auto-handover (Case 16). Witness-only fidelity (D182) still
+  caps this to a floor, not a moat → STATUS next.
+- Quantity-place is REFUTED on first real verify (R199/E36): oracle path proven (blue grounded) but the
+  brain won't run N sequential grasp+place — abandons object 2 into a navigate loop. Frontier is now BRAIN
+  DECOMPOSITION for multi-object tasks (native_loop guardrail: no navigate-as-goal + per-object grasp→place
+  loop), then re-verify. After: anaphora (那个/它), relational near(a,b) → E36.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the

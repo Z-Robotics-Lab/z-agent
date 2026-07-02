@@ -15,6 +15,7 @@
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 9 | HEAD-R190 |
 | kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 19 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 18 | 5aa71cb |
+| quantity-place.nl | provisional | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -52,3 +53,4 @@
 - E33 R197 [confirmed] R196 ordinal fetch GROUNDED survives a round boundary + red-team and is genuinely spatial (not a lucky green default) — retry only if: n/a - confirmed; frontier moves to quantity/anaphora.
 - E34 R197 [inconclusive] quantity NL (两个/两瓶) needs new verify machinery vs reusing an existing oracle — retry only if: next: frame quantity as placed_count>=2 place task; check if D168 place gate blocks before sim.
 - E35 R198 [refuted] R197/E34 scope: go2 quantity-place predicate is placed_count() >= 2 — retry only if: NEVER placed_count for go2 quantity-place; R199 verify 把两个瓶子放到架子上 -> resting_on_receptacle()>=2
+- E36 R199 [refuted] R198 machinery grounds quantity-place 把两个瓶子放到架子上 -> resting_on_receptacle()>=2 on the bare face (deepseek-v4-flash) — retry only if: isolate green-2nd-grasp vs planning, then a native_loop QUANTITY decomposition guardrail (E23: no prompt-fix credit across a model change)
