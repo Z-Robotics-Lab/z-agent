@@ -184,11 +184,8 @@ hid behind "every component correct in isolation". Routine bugs → git history.
   cracked by VECTOR_PHYS_LOG printing sim/wall≈0.65×. Fix: integrate every ramp against sim-dt (`sim_clock`
   + `get_sim_time()`). LESSON: a wall-clock controller commanding a sim must integrate by sim-dt — "sim
   slower than real-time" silently changes the meaning of every per-tick constant.
-- **Case 0 (casadi missing, 2026-06-18)** — every walk/explore [PASS] but the dog stays put (~0.15 m for a
-  ~1 m command); judged by the WRONG signals: PASS is a timer, odom=N a message count, nav=ON regardless,
-  the MPC error swallowed per-tick (certified "gait works" twice before measuring position). Root: casadi
-  pinned only in the `[go2]` extra but `all=[sim,perception,ik,mcp]` OMITTED go2; casadi imports LAZILY →
-  qp_fail=149/149 → zero torque. Fix: `all` includes go2; `_init_mpc_stack` imports casadi EAGERLY (fails
-  loud at connect); fallback log names cause + install cmd. LESSON: NEVER certify robot motion from
-  PASS/odom-count/nav-flag — measure the position/state DELTA; a hard dep ships in its install set or
-  fails loud at connect, never a lazily-imported solver failing silently every tick.
+### Folded (oldest cases compressed to one line each; full prose in git at the hash)
+- **Case 0** (casadi missing, 2026-06-18) — [PASS]/odom-count/nav-flag all green but dog stays put; casadi
+  omitted from the `[all]` extra, imported lazily → qp_fail 149/149 → zero torque. LESSON: NEVER certify
+  motion from PASS/odom/nav — measure the position DELTA; hard deps ship in their install set or fail loud
+  at connect, never a lazily-imported solver failing silently every tick. → 45798a2
