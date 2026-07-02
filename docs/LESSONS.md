@@ -240,21 +240,16 @@ hid behind "every component correct in isolation". Routine bugs → git history.
   `.venv-nano`→`.venv`; Python SILENTLY ignores nonexistent PYTHONPATH entries; hardcoded in 12+ scripts.
   Fix: scripts prefer `.venv` with `.venv-nano` fallback, single source. LESSON: PYTHONPATH to a missing dir
   fails silent — print `module.__file__` to verify WHICH copy loaded.
-- **Case 2 (swallowed MPC errors, 2026-06)** — dog stands but never walks, no error anywhere: the per-tick QP
-  fallback was a bare `except Exception: pass` eating the SAME exception every tick. Root: external
-  `convex_mpc` written for numpy<2; numpy 2.x hard-errors on (N,1)→scalar → solver threw every tick →
-  PD-hold only. Fix: shape fixes at source; except clauses count+log (VECTOR_MPC_LOG). LESSON:
-  `except: pass` on a control path converts loud failures into silent wrong behavior — "0 failures" must
-  be provable.
-- **Case 1 (two-clock skew, 2026-06, d7e158b)** — explore gait unstable/limping (飘/瘸腿), worse on a loaded
-  machine; single `walk` fine; every component correct in isolation (byte-identical gait/bridge, one cmd
-  source @19 Hz, 2645/2645 QP ok). Root: physics ran ~0.65× real-time while `_follow_path` ramped by fixed
-  per-tick increments on a 20 Hz WALL timer → profile slewed ~1.5× faster in sim-time → MPC destabilized;
-  cracked by VECTOR_PHYS_LOG printing sim/wall≈0.65×. Fix: integrate every ramp against sim-dt (`sim_clock`
-  + `get_sim_time()`). LESSON: a wall-clock controller commanding a sim must integrate by sim-dt — "sim
-  slower than real-time" silently changes the meaning of every per-tick constant.
 ### Folded (oldest cases compressed to one line each; full prose in git at the hash)
 - **Case 0** (casadi missing, 2026-06-18) — [PASS]/odom-count/nav-flag all green but dog stays put; casadi
   omitted from the `[all]` extra, imported lazily → qp_fail 149/149 → zero torque. LESSON: NEVER certify
   motion from PASS/odom/nav — measure the position DELTA; hard deps ship in their install set or fail loud
   at connect, never a lazily-imported solver failing silently every tick. → 45798a2
+- **Case 1** (two-clock skew, 2026-06) — explore gait limped (飘/瘸腿) though every component was byte-identical
+  in isolation; physics ran ~0.65× real-time while `_follow_path` ramped on a 20 Hz WALL timer → profile
+  slewed ~1.5× in sim-time → MPC destabilized. LESSON: a wall-clock controller commanding a sim must integrate
+  by sim-dt. → d7e158b
+- **Case 2** (swallowed MPC errors, 2026-06) — dog stood but never walked, no error: a bare `except: pass` ate
+  a per-tick QP failure (external convex_mpc broke on numpy 2.x (N,1)→scalar → threw every tick → PD-hold only).
+  LESSON: `except: pass` on a control path converts loud failure into silent wrong behavior — "0 failures" must
+  be provable. → git history

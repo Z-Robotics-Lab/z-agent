@@ -2,7 +2,7 @@
 
 ## verify-spine — how it plugs in
 
-verified-against: e7adec0
+verified-against: 1231a3e
 
 **frozen — GATE-APPROVED required** (Invariant 1): every file below is honest-verify spine; do NOT edit without the CEO gate.
 
@@ -39,7 +39,7 @@ vector_os_nano/vcli/worlds/g1_perception_oracle.py::make_detection_matches_gt
 
 ## embodiments — how it plugs in
 
-verified-against: e7adec0
+verified-against: 1231a3e
 
 - Invariant 3: embodiments are CONFIG, not code — a robot enters via `vector_os_nano/embodiments/<id>/robot.yaml` (go2/, g1/ today), never a kernel or driver edit.
 - A robot.yaml is parsed fail-loud into frozen dataclasses by `vector_os_nano/embodiments/config.py::load_embodiment_config` → `config.py::parse_embodiment_config` → `EmbodimentConfig` (model / spawn / stance / sensors / policy / capabilities / grasp). Frozen dataclasses change ADDITIVELY only (new field last + default, Invariant 7).
@@ -73,7 +73,7 @@ vector_os_nano/vcli/engine.py::init_vgg
 
 ## native-loop — how it plugs in
 
-verified-against: e7adec0
+verified-against: 1231a3e
 
 - The model-driven ReAct producer: `vector_os_nano/vcli/native_loop.py::run_turn_native(engine, user_message, …)` drives `engine._backend.call(messages, tools, system)` in a loop (cap `_MAX_NATIVE_TURNS=24`) and returns an `ExecutionTrace`. It NEVER computes `verified` — the caller `vector_os_nano/vcli/cli.py::run_one_turn` feeds the trace to `VerdictReport.from_trace`.
 - Trace assembly: `native_loop.py::NativeStepRunner` — `dispatch_skill` captures the actor-causation baseline before a step's FIRST skill; `handle_verify` evaluates the model's expr via the live GoalVerifier, grades causation (`NativeStepRunner._grade`), and appends EXACTLY ONE StepRecord per (action-chain → verify) pair; `build_trace` finishes.
