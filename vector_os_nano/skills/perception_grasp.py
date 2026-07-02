@@ -172,6 +172,91 @@ def _resolve_unique_category(
     return color, name
 
 
+# R194 — ORDINAL+CATEGORY reference resolution over PERCEIVED detections.
+# An ordinal reference ("最左边的瓶子"/"the leftmost bottle") is not resolvable from the scene
+# NAME catalog (names carry no position) and the VLM bbox route is UNRELIABLE for it: R192
+# grounded 把最左边的瓶子->green but R193 re-ran the identical utterance and grasped the red CAN
+# — the leftmost OBJECT (image-right? no: largest world-y) with the 瓶子/bottle CATEGORY filter
+# DROPPED (acceptance.jsonl R192 refuted / R193 adopted-miss). This resolver grounds the ordinal
+# DETERMINISTICALLY from the detections themselves: parse ordinal + category, FILTER to the
+# category, sort by horizontal image position, pick the extreme. Honest by construction — it only
+# chooses WHICH detection to grasp; the verify oracle holding_object(...) stays byte-unchanged.
+# zh+en ordinal lexicon; substring match on the lowercased query. Order matters: check the more
+# specific "-most" english forms before bare "left"/"right".
+_ORDINAL_LEXICON: tuple[tuple[str, str], ...] = (
+    ("最左", "left"), ("最右", "right"), ("中间", "middle"), ("中央", "middle"),
+    ("leftmost", "left"), ("left-most", "left"), ("left most", "left"),
+    ("rightmost", "right"), ("right-most", "right"), ("right most", "right"),
+    ("middle", "middle"),
+)
+
+
+def _parse_ordinal(query: str) -> str | None:
+    """Return 'left' | 'right' | 'middle' when *query* carries a spatial ordinal, else None.
+
+    Pure: reads only the query text. A query with no ordinal word is not this resolver's job
+    (the caller keeps its existing colour/category/VLM behaviour unchanged).
+    """
+    q = (query or "").strip().lower()
+    if not q:
+        return None
+    for token, ordinal in _ORDINAL_LEXICON:
+        if token in q:
+            return ordinal
+    return None
+
+
+def _resolve_ordinal_target(query: str, detections: Any) -> Any:
+    """Pick the ordinal-referenced detection, filtered to the named category.
+
+    *detections* is a sequence of mappings each carrying at least ``'label'`` (the object
+    identifier, e.g. ``'pickable_bottle_blue'``) and ``'cx'`` (bbox horizontal centre in image
+    pixels — smaller cx is further LEFT). Returns the chosen detection, or ``None`` when the
+    query carries no ordinal, no detection matches the category, or *detections* is empty — in
+    every such case the caller leaves behaviour unchanged.
+
+    Category filter (R193 bug fix): 最左边的瓶子 must resolve among BOTTLES only, so the red CAN
+    can never win an ordinal over bottles. A deictic ordinal with no category noun ("最左边的")
+    ranks over ALL detections. Pure — no pose, no oracle, no model.
+    """
+    ordinal = _parse_ordinal(query)
+    if ordinal is None:
+        return None
+    dets = list(detections or ())
+    if not dets:
+        return None
+
+    q = (query or "").strip().lower()
+    from vector_os_nano.perception.grounding_dino import _ZH_NOUN_EN
+
+    noun: str | None = None
+    for zh, en in _ZH_NOUN_EN.items():
+        if zh in q:
+            noun = en
+            break
+    if noun is None:
+        for en in set(_ZH_NOUN_EN.values()):
+            if en in q:
+                noun = en
+                break
+
+    def _label(d: Any) -> str:
+        return str(d.get("label", "") if hasattr(d, "get") else getattr(d, "label", "")).lower()
+
+    def _cx(d: Any) -> float:
+        return float(d.get("cx", 0.0) if hasattr(d, "get") else getattr(d, "cx", 0.0))
+
+    candidates = [d for d in dets if noun is None or noun in _label(d)]
+    if not candidates:
+        return None
+    candidates.sort(key=_cx)  # ascending cx = left -> right
+    if ordinal == "left":
+        return candidates[0]
+    if ordinal == "right":
+        return candidates[-1]
+    return candidates[len(candidates) // 2]  # middle (biased to the upper index on even counts)
+
+
 # Dog-to-object planar distance (m) at which the Piper top-down envelope reaches the
 # object. MEASURED R17: the top-down EE reaches only ~0.22m forward of the dog centre
 # the dog's SENSOR (0.3 m forward of body origin) must sit within this distance

@@ -58,6 +58,13 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   untouched). The perception VLM (`vlm_go2.py`/`vlm.py`) defaults to OpenRouter (`google/gemma-4-31b-it`)
   and was 402/out-of-credit R192 (same external BILLING gate as the vision-judge), silently breaking
   ordinal grounding → E28.
+- The VLM-only ordinal route is NOT robust and DROPS the category filter: R192's 把最左边的瓶子→green
+  (GROUNDED 1/1) did NOT reproduce — R193 re-ran the IDENTICAL utterance and grasped the red CAN
+  (verified=False 1/4, eyes: Go2 drags the can, both bottles untouched). The VLM honoured the ordinal
+  POSITION but ignored 瓶子/bottle, so the leftmost OBJECT (a can) won. R192 GROUNDED is REFUTED
+  (acceptance R194). FIX (offline, unwired): deterministic `_parse_ordinal`+`_resolve_ordinal_target`
+  in perception_grasp.py — parse ordinal+category, FILTER to category, sort by image cx, pick the
+  extreme; 12 unit tests green incl. the R193 case. Sign (world-y↔image-cx) unproven till wired+sim → E30.
 - g1_accept.py GREEN honest-negative (no groundable green in g1's spawn view) is CORRECT (0/14,
   verified=False, NO false-green) but the model FLAILS ~14 detect/navigate/verify turns before
   `finish` → blows a 400s harness budget (R190 skeptic re-run timed out on the GREEN turn; RED
@@ -80,10 +87,12 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   documented local seam). gemma4:e4b resolves L-R ordinals; unblocked the clean ordinal GROUNDED → E28.
 
 ## Frontier (the ambition horizon — review rounds refresh; STATUS `frontier:` carries the 1-liner)
-- Harder find-fetch NL: clean ordinal GROUNDED ACHIEVED (最左边的瓶子→green, 1/1, eyes-confirmed,
-  via local VLM, E28) — opposite direction from R188's 最右→blue. NEXT: robustness (N runs; other
-  ordinals 中间的/最右-on-object 最右边的东西→can), then quantity ("两个"/"两瓶"), ambiguity
-  ("那个"/"它" anaphora). N=1 + witness-only fidelity (D182) means this is a floor, not a moat → STATUS next.
+- Harder find-fetch NL: ordinal GROUNDED is NOT robust (R192 green REFUTED by R193 can, E30). The
+  VLM-only route drops the category filter; the fix is deterministic ordinal+category resolution over
+  detections (`_resolve_ordinal_target`, offline-green, unwired). NEXT: WIRE it into perception_grasp's
+  run flow (verify world-y↔image-cx sign), sim-verify 把最左边的瓶子→green N≥3, then quantity
+  ("两个"/"两瓶"), ambiguity ("那个"/"它" anaphora). Witness-only fidelity (D182) still caps this to a
+  floor, not a moat → STATUS next.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
