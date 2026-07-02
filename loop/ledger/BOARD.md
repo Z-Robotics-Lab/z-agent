@@ -9,6 +9,7 @@
 | fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 26 | 61fde80 |
 | fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 23 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 9 | pending |
+| fetch.nl-ordinal-position-invariance | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 12 | pending |
 | fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 19 | HEAD-R190 |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 26 | 61fde80 |
@@ -16,7 +17,7 @@
 | kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 29 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 9 | pending |
 | quantity-place.nl | confirmed | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 4 | pending |
-| quantity-place.nl-guardrail | provisional | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 2 | pending |
+| quantity-place.nl-guardrail | confirmed | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 0 | pending |
 | quantity-place.nl-isolation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
 | quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 3 | pending |
 
@@ -61,3 +62,4 @@
 - E38 R203 [confirmed] E36 isolation: R199 quantity-place 2nd-object stall is BRAIN DECOMPOSITION (cant self-split 两个), NOT grasp-execution of a 2nd object — retry only if: land native_loop QUANTITY decomposition guardrail, re-verify quantity utterance (E23: no prompt-fix credit across model change)
 - E39 R204 [confirmed] E38 follow-up: R199 quantity 2nd-object stall is BRAIN-SPECIFIC — a different brain self-decomposes 两个 into 2 grasp+place legs where v4-flash abandoned obj-2 — retry only if: robustness N>=3 deepseek-chat, OR test if v4-flash needs a QUANTITY guardrail
 - E40 R205 [confirmed] R204/E39 quantity-place GROUNDED (把两个瓶子放到架子上, deepseek-chat) is ROBUST across N>=3 — retry only if: quantity determinism needs a runner QUANTITY guardrail OR pivot to breadth (2nd scene/world, D182 grounder)
+- E43 R209 [inconclusive] 最左边的瓶子 reads LIVE positions: under VECTOR_SCENE_SWAP the SAME utterance grasps BLUE (new leftmost) not the frozen GREEN (E31/E33) — retry only if: promote next-round after boundary+red-team; robustness N>=3 swap follow-up

@@ -100,6 +100,9 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 - Ordinal fetch CONFIRMED (R197/E33, deepseek-v4-flash): `最左边的瓶子`→green AND `最右边的瓶子`→blue
   both GROUNDED verified=True, 0 handover, eyes-confirmed — DIRECTION-sensitive (not lucky green default).
   Built on R195 passthrough + catalog-projection + R196 no-auto-handover (Case 16); witness-only (D182) floor → STATUS next.
+- Position-invariance PROVEN (R209/E43, deepseek-v4-flash): under VECTOR_SCENE_SWAP the SAME utterance
+  `最左边的瓶子` grasps BLUE (new leftmost) not frozen GREEN (E31/E33) → resolver reads LIVE positions, not
+  memorized coords. 1st scene variant = breadth-pivot proof point; N=1, N≥3 + 2nd world/D182 next → E43.
 - Quantity-place: REFUTED v4-flash (R199/E36) → GROUNDED deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC
   not machinery (E38 seq 2/2); model swap moved it ZERO kernel edits (E23-clean, plug-and-play). But NOT deterministic:
   ROBUSTNESS (R205/E40) campaign GROUNDED 2/3 (run1 abandoned obj-2; deepseek-chat FLAKY on 两个) → runner guardrail E40.
@@ -111,8 +114,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   predicate (holding_object / >=1) the gate can't fire — it only catches the >=N-then-quit mode → E41.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
-- g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
-  near_object gate → D176/D178.
+- g1 GROUNDED navigation (non-gated); VLN GROUNDED accept waits on near_object gate → D176/D178.
 - Automated VLM vision-judge — the ONE thing that removes the manual-eyes dependency;
   external-blocked (provider credit) → D181.
 - BYO-model family N≥4 (mistral-small ready on OpenRouter) when credit restored → D181.
