@@ -9,6 +9,7 @@
 | fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 5 | 61fde80 |
 | fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 5 | 61fde80 |
+| fetch.nl-ordinal-spatial | provisional | RAN 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | HEAD-R188 |
 | fetch.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 7 | 5aa71cb |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 5 | 61fde80 |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 13 | 0cc4d5b |
