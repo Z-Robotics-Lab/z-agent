@@ -3,51 +3,36 @@
 Read FIRST. GOAL=[../CLAUDE.md](../CLAUDE.md) North Star · design=[ARCHITECTURE.md](ARCHITECTURE.md) ·
 decisions=[DECISIONS.md](DECISIONS.md) · hidden bugs=[tricky-bugs.md](tricky-bugs.md). Round history → DECISIONS + git.
 
-updated: 2026-07-01 · D180 — BYO-MODEL seam HARDENED + D179 "over-caution" REFUTED (positive control). Both
-provider paths were billing-blocked this round (DashScope Arrearage on qwen-max + qwen3-vl-plus eyes; OpenRouter
-down to ~$0.0007 residual), so full sim acceptance was externally gated → pivoted to the non-gated seam frontier
-and did code-only, error-path-verifiable work. ZERO credit spent (all failures reject pre-generation).
-- REFUTED D179: `mistral-small-3.2-24b-instruct` (a MISTRAL family model) tool-calls the sim-start NL PERFECTLY on
-  the identical prompt. gemini-3.5-flash / mistral-medium-3-5 fail with `402 "Prompt tokens limit exceeded 1114>428"`
-  = the PROMPT exceeds residual credit; the model never ran. "over-caution" was drained-credit/stale-id, NOT behavior.
-- BUILT (TDD, non-gate; grade()/spine byte-unchanged): `ModelUnavailableError` (subclass of APIStatusError) turns the
-  3 non-recoverable BYO failures (402 hard credit-exhaustion · 404 no-endpoints · 400 invalid model id) into ONE clean
-  line "Model '<id>' unavailable via <provider>: <reason>. Check VECTOR_MODEL and credits." Recoverable 402 STILL
-  downshifts once then escalates. Closes the cli.py:497 swallow that made D179 misread balance failures as no-action.
-- REAL-VERIFIED on the BARE REPL (scratchpad/model_unavailable_accept.py, PTY, no flag): 3 shapes × both routes
-  (native "model unavailable:" + legacy "Error:") surface the clean message; NO raw JSON/traceback; red-teamed.
-  73 backend + 93 cli/native unit tests green.
+updated: 2026-07-01 · D181 — D163 RE-ACCEPTED on the bare-REPL NL face (in-process fetch+place, 3 colours, N=5, eyes-confirmed, red-teamed).
+- ACCEPTANCE (honest): bare `vector-cli` REPL + NL (repl_accept.py, PTY, no flag), orchestration = DeepSeek-direct
+  `deepseek-chat` (an ACCEPTED family), in-process VECTOR_NO_ROS2=1. 5/5 GROUNDED True, ALL launch_explore_seen=False
+  (= D163 in-process path took, no ROS2 stack). Eyes = the SAME offscreen verdict render, read back per turn:
+  green+red grasped (fetch True 1/1); green+red+blue placed on receptacle (place True 2/2, MODE=place fresh session →
+  grasp CAUSED). Colour tracked the NL every run → perception colour-selective + load-bearing.
+- RED-TEAM caught a real trap: MODE=both place verdict was untrustworthy (bottle pre-held from fetch → identical eyes
+  frame, uncaused grasp) → re-ran MODE=place (fresh) for the 3 honest place groundings. Moat held: no false green.
+- BILLING re-read (corrects D180 optimism): OpenRouter `/api/v1/key` `limit_remaining` is WEEKLY RATE-LIMIT headroom,
+  NOT credit balance — a live turn still 402'd "out of credit". OpenRouter + DashScope credit ARE exhausted. BUT
+  DeepSeek-direct (DEEPSEEK_API_KEY) is REACHABLE + FUNDED + tool-calls the FULL fetch+place verify path → the core
+  acceptance is NOT billing-blocked. D180 seam confirmed LIVE too: gpt-4o-mini(OpenRouter) surfaced a clean
+  "model unavailable: ... out of credit ... Check VECTOR_MODEL and provider credits." (no traceback).
 
 goal:    PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/CAPABILITY/MODEL; plan·route·verify·recover.
          Bare `vector-cli` + NL is the ONLY acceptance face; honest-verify spine frozen (stricter-only).
-phase:   BYO-MODEL seam robust (clean unavailable-surfacing, 3 shapes). N=3 accepted families stands; N≥4 blocked ONLY
-         by external credit (mistral-small ready). VLN GROUNDED accept still CEO-gated (near_object spine allowlist).
-owns:    vcli/backends/openai_compat.py (ModelUnavailableError) + cli.py native catch + tests/unit/vcli/test_backends.py.
-blocked: BILLING (external, CEO): DashScope arrears (qwen orchestration + qwen3-vl eyes down) + OpenRouter ~$0.0007
-         residual → full sim acceptance + N≥4 gated on a top-up. PRE-EXISTING: test_config_deepseek_provider.py 3 fails.
+phase:   D163 CLOSED — in-process fetch+place RE-ACCEPTED (3 colours, N=5, DeepSeek, eyes-confirmed, red-teamed).
+owns:    verify round — no code change (D163 code already at 4d8da99/adcd04b). Harness: scratchpad/repl_accept.py.
+blocked: NONE for core acceptance (DeepSeek funded). OpenRouter+DashScope credit exhausted → blocks OpenRouter-N≥4
+         (mistral-small) + the automated VLM vision-judge witness ONLY. PRE-EXISTING: test_config_deepseek_provider.py 3 fails.
 next:
-  1. [EXTERNAL/CEO] Credit top-up (OpenRouter + DashScope) is the ONLY blocker to (a) earning N≥4 acceptance
-     (mistral-small-3.2-24b proven tool-calls) and (b) any full-sim REAL-VERIFY round. Queue for Yusen.
-  2. [FRONTIER, non-gated] verify-expr robustness — a weak model dropping `==True` / malforming the expr is the #2
-     BYO failure; connects to the plug-and-play-predicate META gate (below). Buildable + unit-verifiable now.
-  3. [FRONTIER, non-gated] arm-free `describe` for g1 via VLM caption + GT-backed `describe_scene` state-oracle —
-     BLOCKED on a working VLM (qwen3-vl down, OpenRouter VLM needs credit). Defer until billing restored.
-  4. [GATE-THEN-BUILD] VLN GROUNDED accept on near_object approval (see gate queue). Root cause = hardcoded kernel
-     `_PREDICATE_ORACLES` (evidence_classifier.py:52) → META plug-and-play-predicate gate subsumes it.
+  1. [FRONTIER] robust find-fetch-place: harder NL (MODE=combo "把X拿过来放到架子上"; distractor colours; ambiguity/negation),
+     push N per colour to failure — go past the clean 3-colour floor. DeepSeek funded → runnable now.
+  2. [FRONTIER] 2nd embodiment g1 GROUNDED nav — do the non-gated g1 build; VLN GROUNDED accept stays CEO-gated (near_object).
+  3. [BYO-MODEL] N≥4 mistral-small-3.2-24b ready on OpenRouter the moment its credit is restored (external).
 
 ## Pending CEO gates (decision queue — terse; do NOT cross autonomously)
-- **BILLING (external, NEW)**: OpenRouter credit exhausted (~$0.0007) + DashScope arrears — blocks all full-sim
-  acceptance + N≥4. Not a code fix; needs an account top-up. Batch into the return exec summary.
-- **META: plug-and-play verify-predicates** — `_PREDICATE_ORACLES` is a hardcoded kernel list
-  (evidence_classifier.py:52 self-flags "R2 should derive from metadata"); every new predicate (D178 near_object,
-  D169 near) is a spine gate → VIOLATES "bring a verify-predicate — no kernel edits". Resolution: world-declared
-  predicate metadata (stricter-only). ONE decision subsumes the per-predicate gates below. Spine-semantics gate.
-- **D178 near_object VLN predicate** (CONFIRMED gate, exec summary in DECISIONS D178): world-side GT oracle + kernel
-  allowlist entry; same category as `resting_on_receptacle` (D106-approved). grade() byte-unchanged. → go/no-go.
-- **D176 cmd_motion driver seam** (likely non-gate): enables g1 nav GROUNDED; grade() spine byte-unchanged.
-- **D168 place-oracle** resting_on_receptacle object-BLIND+absolute-count → harden to identity+delta. LOAD-BEARING. → go/no-go.
-- **S8** retire legacy keyword producer (READY): delete IntentRouter/StrategySelector/_DIR_MAP + legacy GoalDecomposer;
-  rewire 4 should_use_vgg → should_attempt_native (D74); keep VECTOR_LEGACY_TURN hatch. → go/no-go.
-- **relational-place near(a,b)** (D169): NEW verify predicate → spine-semantics gate (subsumed by META above).
-- **Stage gates:** S4 embodiment-registration · S5 ControlPolicy + convex_mpc dep · S6 capability perm/security ·
-  nav→FAR causation (D14) · strategy_params (D52) · explore TARE · VLN SysNav. New deps/interfaces/hw/sec here.
+- **BILLING (external, DOWNGRADED)**: OpenRouter + DashScope credit exhausted. NO LONGER blocks core acceptance
+  (DeepSeek-direct is funded). Blocks only OpenRouter-N≥4 + the automated VLM vision-judge. Batch into return exec summary.
+- **META: plug-and-play verify-predicates** — `_PREDICATE_ORACLES` hardcoded kernel list (evidence_classifier.py:52) →
+  every new predicate is a spine gate → VIOLATES "bring a verify-predicate — no kernel edits". World-declared metadata (stricter-only).
+- **D178 near_object VLN predicate** · **D176 cmd_motion driver seam** · **D168 place-oracle harden** · **S8 retire legacy** ·
+  **relational near(a,b)** · Stage gates S4/S5/S6/nav-FAR/strategy_params/explore-TARE/VLN-SysNav. New deps/interfaces/hw/sec here.

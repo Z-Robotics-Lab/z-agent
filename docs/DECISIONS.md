@@ -1103,3 +1103,38 @@ non-gated BYO-MODEL seam frontier and did code-only, error-path-verifiable work.
   raw "Error code: 400 - {...}" JSON.
 - GATE QUEUED (external, not code): OpenRouter credit top-up + DashScope arrears are a billing/CEO matter —
   the ONLY remaining blocker to earning N≥4 acceptance (the seam + weaker-model handling are ready).
+
+## D181 — [LOOP, REAL-VERIFY+RED-TEAM] D163 CLOSED: in-process fetch+place RE-ACCEPTED on the bare-REPL NL face (3 colours, N=5, DeepSeek), and D180's OpenRouter billing block corrected — DeepSeek-direct is the funded accepted-family path (2026-07-01)
+D163's single-source in-process builder (`build_inprocess_go2_agent`, routed by both cli.py:_init_agent and
+sim_tool._start_go2 under VECTOR_NO_ROS2=1) was CODE-complete since 4d8da99/adcd04b but had NOT been re-verified on
+the acceptance face since billing took OpenRouter/DashScope down (D179/D180). This round re-verified it for real.
+- FUNDED PATH FOUND: OpenRouter `/api/v1/key` `limit_remaining=6.85` MISLED me (it is WEEKLY RATE-LIMIT headroom, not
+  deposited credit) — a live gpt-4o-mini fetch turn still 402'd "out of credit". OpenRouter + DashScope credit are
+  genuinely exhausted (D180 was right). BUT `DEEPSEEK_API_KEY` is set, and DeepSeek-direct `deepseek-chat` is
+  REACHABLE + FUNDED + tool-calls the sim-start AND the full fetch+place verify path. DeepSeek is one of the N=3
+  ACCEPTED families, so this is a legitimate re-acceptance on a currently-funded provider (qwen-max was the historical
+  one, now in arrears). Lesson banked: never read OpenRouter `limit_remaining` as credit — probe with a real turn.
+- ACCEPTANCE (honest, eyes-on-sim, red-teamed): bare `vector-cli` REPL + NL via scratchpad/repl_accept.py (PTY, no -p,
+  no flag), VECTOR_PROVIDER=deepseek, in-process VECTOR_NO_ROS2=1, headless egl. 5/5 GROUNDED True, EVERY run
+  launch_explore_seen=False (proves the D163 in-process path took — the ROS2 stack never launched):
+    green fetch True(1/1) · red fetch True(1/1) · green place True(2/2) · red place True(2/2) · blue place True(2/2).
+  Eyes = the SAME offscreen verdict render the turn ran on, Read back per turn (I am the VLM witness since the
+  automated qwen3-vl/OpenRouter judge is credit-down): green+red grasped and lifted; green+red+blue resting on the
+  receptacle table with an empty gripper. Colour tracked the NL on all 5 runs → perception is colour-selective and
+  load-bearing, not a fixed grab.
+- RED-TEAM (caught a real trap, did not rubber-stamp): the first MODE=both run reported place_verified=True but its
+  eyes_place.png was IDENTICAL to eyes_fetch.png (bottle still held aloft, not on the shelf) — the documented MODE=both
+  hazard (place-turn grasp uncaused because the bottle is pre-held from the fetch turn). Discarded that place verdict
+  and re-ran the 3 places as MODE=place (fresh session, bottle on the table → grasp CAUSED) to earn honest place
+  groundings with the object visibly on the receptacle. Across every failure/quirk the honest-verify spine produced
+  NO false green (invariant 1 held).
+- D180 CONFIRMED LIVE on the real face (not just the scratchpad probe): the gpt-4o-mini fetch turn surfaced
+  "model unavailable: Model 'openai/gpt-4o-mini' unavailable via https://openrouter.ai/api/v1: out of credit /
+  account balance exhausted. Check VECTOR_MODEL and provider credits." — clean, actionable, no raw JSON/traceback.
+- GATE (external, DOWNGRADED): OpenRouter + DashScope credit exhaustion NO LONGER blocks the core acceptance — it only
+  blocks OpenRouter-specific N≥4 (mistral-small-3.2-24b, ready) and the automated VLM vision-judge (secondary witness;
+  the loop agent serves as eyes meanwhile). Kept on the queue for a top-up, not a loop blocker.
+- NEXT FRONTIER (non-gated, DeepSeek-funded): robust find-fetch-place — MODE=combo single multi-clause utterance
+  ("把红色的瓶子拿过来放到架子上"), distractor colours, ambiguity/negation, N-to-failure per colour; then the g1 2nd
+  embodiment non-gated build. The recurring META plug-and-play-predicate gate (hardcoded _PREDICATE_ORACLES) still
+  stands for VLN GROUNDED.
