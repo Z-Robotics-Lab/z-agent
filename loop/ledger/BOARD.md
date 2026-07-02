@@ -50,3 +50,4 @@
 - E31 R195 [inconclusive] wiring _resolve_ordinal_target into perception_grasp fixes E30 ordinal robustness (把最左边的瓶子->green N>=3) — retry only if: next: isolate grasp-execution miss on ordinal->colour path, then 把最左边的瓶子->green N>=3 GROUNDED
 - E32 R196 [inconclusive] R194/R195 ordinal 'grasp miss/green to floor' is a grasp-execution defect on the ordinal->colour path — retry only if: bare-REPL '拿过来' fetch still routes handover after the fix
 - E33 R197 [confirmed] R196 ordinal fetch GROUNDED survives a round boundary + red-team and is genuinely spatial (not a lucky green default) — retry only if: n/a - confirmed; frontier moves to quantity/anaphora.
+- E34 R197 [inconclusive] quantity NL (两个/两瓶) needs new verify machinery vs reusing an existing oracle — retry only if: next: frame quantity as placed_count>=2 place task; check if D168 place gate blocks before sim.

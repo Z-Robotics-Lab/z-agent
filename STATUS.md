@@ -19,15 +19,16 @@ blocked: cloud VLM/BYO credit (perception VLM + judge + BYO-N≥4) — external 
   Ollama model is the plug-and-play workaround for the perception VLM (recipe: LESSONS/.env.example).
 scene (real mujoco_go2 room XML): blue(y=2.78,r=.028)=rightmost-BOTTLE, green(y=3.00,r=.028)=leftmost-
   BOTTLE, red_can(y=3.22,r=.033)=leftmost-OBJECT (excl. by 瓶子). larger world-y → smaller cx → leftmost.
-  Green/blue bottles ARE grasp-reliable (probe 5/5). Ordinal resolver: candidates.sort(cx); left=[0],
-  right=[-1] — verified in sim both directions R197.
+  Green/blue grasp-reliable (probe 5/5). Resolver sort(cx): left=[0]=green, right=[-1]=blue (R197 sim ✓).
 
 next:
-  1. [FRONTIER] quantity NL: 把两个瓶子拿过来 (fetch TWO) — the gripper holds ONE, so the model must
-     grasp→verify→place/stage→grasp the 2nd; bank each failure mode as a Casebook case, not just a count.
-     Reuse repl_accept.py; keep the utterance predicate-matched. Then anaphora (那个/它).
-  2. [FRONTIER] anaphora: 拿绿色的瓶子 … 把它放到架子上 (它 → last-referenced object) — needs a turn-local
-     referent memory in native_loop; scope whether it's a prompt change or a state seam first.
+  1. [FRONTIER] quantity NL — frame as a PLACE task, NOT hold (R197/E34 scope): make_placed_count
+     (arm_sim_oracle.py:183) ALREADY counts resting GT objects in a region, so 把两个瓶子放到架子上 →
+     placed_count>=2 is the predicate. Build: sequential grasp+place of 2 bottles + native_loop
+     decomposition; add a quantity mode to repl_accept.py; bank each failure mode as a Casebook case.
+     CHECK the D168 place-oracle CEO gate BEFORE any sim (place verify may be gated).
+  2. [FRONTIER] anaphora: 它/那个 → last-referenced object; needs turn-local referent memory in
+     native_loop (scope prompt-change vs state-seam first).
   3. [DEBT] 6 aging N=1 provisional rows (R168/174/176/177/182/184) — superseded by R183/R186
      (check.sh supersession-aware, non-blocking); batch-close on review R200.
 
