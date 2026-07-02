@@ -31,6 +31,9 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   supervisor/siblings → docs/RULES.md sim-safety (10.6h wedge, 2026-06-30).
 - A green unit suite, a PASS timer, an odom count, a nav flag — none of them certify motion;
   measure the position/state DELTA → #Casebook Case 0.
+- A `claude -p` round can die MID-FLIGHT on an API disconnect; the protocol contains it:
+  bank-at-VERIFY keeps the results, post-check quarantines, next agent adopts per ROUND.md
+  §1a. Rounds must bank rows the moment they exist — prose can always be reconstructed → R183.
 - NEVER run pytest unbounded: tests that patch time.sleep turn wall-clock loops into
   full-speed spins and MagicMock call-recording grows ~GB/s (test_isaac_sim_proxy nav class
   OOM'd the 64G host 2026-07-01); ALWAYS `scripts/run-tests` (MemoryMax scope) → E18.

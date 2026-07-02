@@ -5,12 +5,12 @@
 | byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 4 | f159306 |
 | byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 4 | f159306 |
 | byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 4 | f159306 |
-| byo-model.openai-gpt-4o-mini | provisional ⚠ ADJUDICATE | GROUNDED 1/1 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 6 | 4b91e84 |
-| fetch-place.nl-category-only | provisional ⚠ ADJUDICATE | GROUNDED 2/2 | bare-repl+nl | qwen-max | self-read | 15 | 932928c |
-| fetch-place.nl-compound | provisional ⚠ ADJUDICATE | GROUNDED 3/4 | bare-repl+nl | deepseek-chat | self-read | 9 | 0fab87d |
-| fetch.nl-negated-distractor | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 1 | e7adec0 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 0 | 61fde80 |
+| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | 61fde80 |
+| fetch-place.nl-compound | refuted | RAN 1/4 | bare-repl+nl | deepseek-chat | self-read | 0 | 61fde80 |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | 61fde80 |
 | fetch.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 2 | 5aa71cb |
-| g1.navigation | provisional ⚠ ADJUDICATE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 7 | 665d6c9 |
+| g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 0 | 61fde80 |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | 0cc4d5b |
 | kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 3 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-chat | self-read | 2 | 5aa71cb |
@@ -35,3 +35,4 @@
 - E17 R181 [refuted] MODE=both (fetch then place in one session) yields a valid place verdict — retry only if: the harness grades place causation-safely (fresh session or baseline-delta grasp)
 - E18 R182 [refuted] tests/unit is safe to run as ONE unbounded pytest process — retry only if: pytest ALWAYS via scripts/run-tests (MemoryMax scope, serial chunks); unbounded never
 - E19 R182 [confirmed] 27 structure docs consolidate to ~15 lean files without content loss (CEO: few short files) — retry only if: n/a - future doc growth gated by check.sh allowlist+caps
+- E20 R183 [refuted] the 5 backfilled provisional acceptance rows all hold on independent bare-REPL re-run (also red-teams the 14h-loop claims) — retry only if: n/a
