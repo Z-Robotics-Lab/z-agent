@@ -96,12 +96,12 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   documented local seam). gemma4:e4b resolves L-R ordinals; unblocked the clean ordinal GROUNDED → E28.
 
 ## Frontier (the ambition horizon — review rounds refresh; STATUS `frontier:` carries the 1-liner)
-- Harder find-fetch NL: ordinal SELECTION is now deterministic+correct (R195: passthrough prompt +
-  catalog-projection resolver → 最左边的瓶子 correctly targets green, sign confirmed, E31). The remaining
-  ordinal blocker is GRASP EXECUTION (green knocked to floor both runs) — isolate it (why green misses on
-  the ordinal→colour path despite R190 grasp-reliable), then 把最左边的瓶子→green N≥3 GROUNDED. THEN
-  quantity ("两个"/"两瓶"), ambiguity ("那个"/"它" anaphora). Witness-only fidelity (D182) still caps this
-  to a floor, not a moat → STATUS next.
+- Harder find-fetch NL: ordinal fetch `把最左边的瓶子拿过来`→green is GROUNDED 3/3 on the real face
+  (R196/E32, deepseek-v4-flash) — SELECTION deterministic (R195 verbatim passthrough + catalog resolver)
+  AND the "grasp miss" refuted: it was handover-releases-hold (Case 16), fixed by native_loop
+  no-auto-handover. NEXT ordinal frontier: quantity ("两个"/"两瓶" — gripper holds ONE, needs place/stage
+  between grasps), ambiguity ("那个"/"它" anaphora → last-referenced object), relational near(a,b).
+  Witness-only fidelity (D182) still caps this to a floor, not a moat → STATUS next.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
@@ -127,6 +127,18 @@ Compressed from docs/tricky-bugs.md (removed 2026-07-02); full original prose in
 Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a green suite, or
 hid behind "every component correct in isolation". Routine bugs → git history.
 
+- **Case 16 (ordinal "grasp miss" = handover-releases-hold, 2026-07-02)** — R194/R195 recorded the
+  ordinal fetch `把最左边的瓶子拿过来` as a grasp-EXECUTION miss ("green knocked to the floor",
+  verified=False), and 4 rounds chased grasp geometry / the ordinal→colour path. Real cause: the
+  grasp SUCCEEDED (grasp_probe grounds green ordinal 5/5; R195b's own log says "The grasp
+  succeeded") — then the brain (deepseek-v4-flash) read `拿过来`=bring-to-user and routed a
+  `handover`, which RELEASES the weld, so the terminal `holding_object` verdict read False. The
+  floor frame was the handed-over bottle, not a miss. Model variance (deepseek-CHAT grasped the
+  IDENTICAL utterance and STOPPED→GROUNDED; cf Case 15 / E9/E10/E23 — never trust a pass-rate
+  delta across a model change). Fix: native_loop "BRING IS COMPLETE AT THE HOLD" (a bare 拿过来
+  finishes at the hold; handover only on explicit 递给我/给我) → 3/3 GROUNDED on v4-flash. Lesson:
+  a verified=False on a manipulation predicate can be a LATER action UNDOING a real success — read
+  the full action trace to the verdict, not just the failing predicate. → E32/R196
 - **Case 15 (compound place-leg walk-loop, 2026-07-02)** — a single-utterance fetch-AND-place
   (`放到架子上`) grasped fine but the PLACE leg walk-looped to a self-invented `at_position(10,5)`
   and never placed (RAN 1/4). Symptom looked like a nav/mobile_place bug; real cause was PROMPT

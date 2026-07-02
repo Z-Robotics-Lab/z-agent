@@ -425,6 +425,29 @@ def test_system_prompt_teaches_compound_fetch_and_place() -> None:
     assert "mobile_place" not in dev
 
 
+def test_bring_is_complete_at_the_hold_no_auto_handover() -> None:
+    """R196: a bare 拿过来 (bring over) must NOT trigger an auto-handover.
+
+    E32: R194/R195 grounded the green ordinal grasp SUCCESSFULLY, but the brain
+    (deepseek-v4-flash) then read '拿过来' as bring-to-user and routed `handover`,
+    which RELEASES the weld -> the terminal holding_object verdict read False (the
+    "grasp miss" symptom pointed away from the real cause). The grasp guidance now
+    teaches that holding IS the delivery: finish at the hold, call handover ONLY on
+    an explicit hand-over request (递给我/给我).
+    """
+    from vector_os_nano.vcli.native_loop import _native_system_prompt
+
+    text = _native_system_prompt(
+        None, frozenset({"holding_object"}), ("pickable_bottle_green",)
+    )[0]["text"]
+    # Teaches: a bare fetch is COMPLETE at the hold; do NOT auto-handover.
+    assert "COMPLETE AT THE HOLD" in text
+    assert "do NOT call" in text.lower() or "Do NOT call" in text
+    assert "handover" in text
+    # Reserves handover for an EXPLICIT hand-over request only.
+    assert "递给我" in text and "给我" in text
+
+
 def test_place_clause_is_not_a_navigation_goal() -> None:
     """R184: the compound PLACE leg must NOT be routed to navigate.
 

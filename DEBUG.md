@@ -1,56 +1,64 @@
-# DEBUG — compound fetch-place PLACE-leg walk-loop (R184, STATUS next #1)
+# DEBUG — R196: isolate the ordinal→colour grasp-EXECUTION miss (green knocked to floor)
 
 ## OBSERVE
-- Symptom (R183 refuted row, `fetch-place.nl-compound` RAN 1/4, commit 61fde80):
-  single utterance `把红色的罐子拿过来放到架子上` (fetch red can AND place on shelf) →
-  GRASP leg CAUSED (`holding_object('red_can')`, eyes_combo.png), then the PLACE leg
-  "degenerated to a walk-loop + navigate `at_position(10,5)` UNCAUSED → RAN 1/4".
-- History: E7(R169) fixed "drops the trailing place clause"; E9/E10(R171/172) were
-  harness ANSI-sync artifacts (fixed). R174 got 3/4, R183 got 1/4 → genuinely flaky.
-- Code (bare-cli path = native_loop.py, planner-free tool-calling loop):
-  - `_native_system_prompt` (native_loop.py:1030) assembles TWO guidance blocks for a
-    manipulation world: `place_guidance` (1072-1084: grasp→`mobile_place`→verify
-    `resting_on_receptacle`, "never finish after only the grasp") and
-    `locomotion_guidance` (1091-1117): **"To REACH a place or coordinate (x, y), call
-    navigate(x, y) ... RECOVER: if a verify returns FAIL, call navigate AGAIN and
-    re-verify, repeating until at_position PASSES. NEVER call finish while FAIL."**
-  - `_MAX_NATIVE_TURNS = 24` (native_loop.py:65) caps the loop → the run ends RAN, not
-    a true infinite loop.
-  - `mobile_place` (skills/mobile_place.py) is heavily honesty-gated; its verdict
-    predicate is `resting_on_receptacle`, NOT `at_position`.
+- STATUS next#1: R194+R195 both knocked the ordinal target to the FLOOR (verified=False)
+  though SELECTION was correct (R195b targeted green). Frontier: "why green misses on the
+  ordinal→colour path despite R190 grasp-reliable".
+- R192 green ordinal GROUNDED 1/1 (single sample). R194 REFUTED robustness. R195 SELECTION
+  fixed (passthrough+resolver) but grasp missed 1/2.
+- Scene geometry (go2_room.xml:636-651): green bottle r=0.028, blue bottle r=0.028,
+  red can r=0.033 (5 mm wider radius). Comment: thin bottles (<2.5 cm) can't be held by the
+  35 mm Piper jaws under position control; the weld (radius 60 mm) is the hold.
+- R190/R191 "grasp-reliable" target = the RED CAN. Green BOTTLE grasp was NEVER established at
+  N>=2 — the only green-bottle success is R192's lone 1/1.
 
 ## HYPOTHESIZE
 | # | hypothesis | category | evidence |
 |---|---|---|---|
-| H1 | The place clause `放到架子上` is routed to `navigate`, not `mobile_place`, because `locomotion_guidance` invites "To REACH a **place** or coordinate (x,y), call navigate" and its unbounded RECOVER loop ("navigate AGAIN ... until at_position PASSES, NEVER finish while FAIL") traps the model on a self-invented `at_position(10,5)` until the 24-turn cap → RAN. `place_guidance` never forbids using navigate for a place. | prompt-conflict | the word "place" appears in BOTH guidance blocks with contradictory routing; R183 verdict was a `navigate`/`at_position(10,5)`, never `resting_on_receptacle` |
-| H2 | Pure model nondeterminism / temperature. | model-variance | R174 3/4 vs R183 1/4 |
-| H3 | `mobile_place` execution bug (walk-loop inside the place skill). | skill-exec | — |
+| H1 | The ordinal->colour path executes a DIFFERENT grasp than plain-colour (query leaks into grasp-point selection) | code-path | STATUS frames it as "ordinal->colour path misses" |
+| H2 | The miss is green-BOTTLE grasp reliability (marginal weld / lateral knock), independent of ordinal; R192 1/1 was a lucky sample | grasp-geometry | red can r=0.033 reliable vs green bottle r=0.028; N=1 never establishes reliability |
+| H3 | The ordinal resolver picks a non-green so the "miss" is a mis-selection | selection | STATUS says selection was correct in R195b |
 
 ## EXPERIMENT
-- H3 falsify: the R183 recorded verdict predicate was `at_position(10,5)` (a navigate
-  verify), NOT `resting_on_receptacle`; `mobile_place` was never invoked (its verdict
-  would read `resting_on_receptacle`). → **H3 REJECTED.**
-- H1 falsify: does any guidance forbid routing a place clause to navigate/walk?
-  Read native_loop.py:1072-1117 — `place_guidance` says only "call mobile_place";
-  `locomotion_guidance` actively frames navigate as the way to "REACH a place or
-  coordinate (x,y)" and RECOVER-loops on at_position. The collision is in the code.
-  → **H1 CONFIRMED** (root cause: guidance cross-talk on the word "place").
-- H2: variance is real but the FAILURE MODE is fully explained by H1's collision;
-  removing the collision should raise the success rate. Contributing factor, not the
-  root cause; not separately actionable this round.
+### H1 — code read (is `query` inert once `color` is resolved?)
+perception_grasp.py: `_resolve_ordinal_via_catalog` -> `(color,label)`; caller sets
+`color=ordinal_hit[0]` (L1059) then drives the SAME `_perceive_with_scan(...,color=color)`.
+In `_perceive_grasp_point` (L1620): `use_front_resolver = have_front and (deictic or color is
+not None)` -> with color set, the HSV `front_object_mask(rgb,depth,color=color)` computes the
+mask/point; `query` is used ONLY for the verify LABEL fallback + logging, NOT the mask/3D point.
+-> H1 REJECTED: once color=green is resolved, the ordinal path and the plain-colour path execute
+a byte-identical grasp. "ordinal->colour path misses" is a MISATTRIBUTION.
 
-## CONCLUDE
-- Root cause: `_native_system_prompt` (native_loop.py:1088-1117) teaches navigate as
-  the route to "REACH a **place** or coordinate", colliding with the place clause; the
-  model construes `放到架子上` as a nav destination, invents `at_position(10,5)`, and the
-  unbounded navigate-RECOVER loop burns all 24 turns → RAN. `mobile_place` never runs.
-- Fix (native_loop.py, NON-spine): (1) `place_guidance` gains an explicit prohibition —
-  a "place on <receptacle>" clause is handled ENTIRELY by `mobile_place` (it walks
-  there itself); do NOT use navigate/walk/at_position to "reach the shelf". (2)
-  `locomotion_guidance` drops the word "place" so navigate is described only for an
-  explicit coordinate / named location the USER gave — no cross-talk with place clauses.
-- Regression test: `tests/unit/vcli/test_native_loop.py` — assert the manipulation-world
-  prompt forbids navigate/walk for the place clause AND that locomotion guidance no
-  longer offers navigate as the way to reach "a place".
-- Verify command: `scripts/run-tests tests/unit/vcli/test_native_loop.py` (unit) +
-  real-face `tools/acceptance/repl_accept.py MODE=combo` (bare vcli + NL, eyes on sim).
+### H2 — probe plain-colour green N times (scratchpad/grasp_probe.py, default 绿色的瓶子 /
+pickable_bottle_green; VLM stubbed -> isolates GRASP from NL routing; reads holding_object).
+Prediction if H2 true: plain-colour green also misses a meaningful fraction. -> result pending.
+
+### H3 — grasp_probe reads holding_object on the NAMED target; a mis-selection shows as a
+wrong-object hold, not a floor knock. R195b already re-confirmed green targeted. -> deprioritized.
+
+## CONCLUDE (H1+H2+H3 all REJECTED — the premise was wrong)
+- H1 REJECTED (code): once color=green resolves, ordinal path == plain-colour path.
+- H2 REJECTED (probe): plain-colour green grasp 4/4 held; green geometry is NOT unreliable.
+- H3 REJECTED (probe): '最左边的瓶子' skill-direct -> detection_label=pickable_bottle_green,
+  held=True, weld=True, lifted 0.32->0.56, grasp_world=[10.857,3.001,0.322] dead-on. 5/5 total.
+
+ROOT CAUSE (one sentence): perception_grasp GROUNDS the green ordinal reliably; the R194/R195
+verified=False is the BRAIN routing a `handover` AFTER a successful grasp (reading '拿过来' as
+bring-to-user), and handover RELEASES the weld, so the terminal holding_object verdict reads
+False — the "grasp missed / knocked to floor" symptom pointed AWAY from the real cause.
+- Evidence: R195b REPL log — "The grasp succeeded" -> home -> verify holding_object (passed)
+  -> "拿过来 means bring it here ... Let me hand it over" -> handover(direction=right) ->
+  "The handover released the bottle" -> final holding_object -> verified=False.
+- Model-strategy variance (E9/E10/E21 trap): R192 deepseek-CHAT grasped the IDENTICAL utterance
+  '把最左边的瓶子拿过来' and STOPPED at the hold -> GROUNDED; R194/R195 deepseek-v4-FLASH added a
+  handover. So E30 "robustness REFUTED" was a MODEL change (chat->v4-flash), not grasp flakiness.
+
+FIX (file): vector_os_nano/vcli/native_loop.py grasp guidance — "BRING / FETCH IS COMPLETE
+AT THE HOLD" clause: a bare 拿/拿来/拿过来 (no place clause, no explicit hand-over) is satisfied
+when holding_object PASSES; do NOT call handover (it releases the weld); handover ONLY on an
+explicit 递给我/给我/hand-it-to-me. Non-spine, verify oracle byte-unchanged.
+
+REGRESSION TEST: tests/unit/vcli/test_native_loop.py::test_bring_is_complete_at_the_hold_no_auto_handover — the manipulation-world grasp
+prompt teaches "do NOT call handover" for a bare fetch and reserves handover for 递给我/给我.
+
+VERIFY: bare-REPL '把最左边的瓶子拿过来' (deepseek-v4-flash) -> grasp, NO handover, verified=True.
