@@ -8,5 +8,5 @@ export VECTOR_NO_ROS2=1
 # Two distractor colours EXPLICITLY negated; only red demanded. A naive substring/
 # first-match matcher would grab blue or green; true NLU grasps the red can.
 FETCH='不要蓝色的瓶子，也不要绿色的，只把红色的罐子拿过来'
-timeout 1500 .venv/bin/python scratchpad/repl_accept.py "$FETCH" "" neg_red fetch
+timeout 1500 .venv/bin/python tools/acceptance/repl_accept.py "$FETCH" "" neg_red fetch
 echo "EXIT=$?"

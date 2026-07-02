@@ -152,7 +152,9 @@ def _cleanup() -> None:
     # dies at the sim REAL-VERIFY step, committing un-eyes-verified code). The in-process sim lives
     # inside the `python -m vector_os_nano.vcli.cli` child, so match that exact module path (absent
     # from the round's cmdline) — same fix as tools/verify_fetch_cli.py._nuke.
-    os.system("rosm nuke --yes >/dev/null 2>&1; pkill -9 -f 'vector_os_nano.vcli.cli' 2>/dev/null")
+    _teardown = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                             "scripts", "sim-teardown")
+    os.system(f"'{_teardown}' >/dev/null 2>&1; pkill -9 -f 'vector_os_nano.vcli.cli' 2>/dev/null")
 
 
 def main() -> int:

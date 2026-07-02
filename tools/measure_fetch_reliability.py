@@ -28,7 +28,8 @@ _PY = os.path.join(_REPO, ".venv", "bin", "python")
 
 
 def _nuke() -> None:
-    subprocess.run(["rosm", "nuke", "--yes"], capture_output=True)
+    # scripts/sim-teardown = rosm when installed, repo-scoped pkill fallback on a fresh clone.
+    subprocess.run([os.path.join(_REPO, "scripts", "sim-teardown")], capture_output=True)
     subprocess.run(["pkill", "-9", "-f", "verify_fetch_flow"], capture_output=True)
 
 
