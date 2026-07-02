@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # loop/run.sh — the portable round supervisor. One round per tick, forever.
 #   ./loop/run.sh [loop/harness/<adapter>.sh]     (default: $AGENT_ADAPTER or claude.sh)
+#   MAX_ROUNDS=1 ./loop/run.sh ...                (run N rounds then exit — smoke/CI mode)
 # Contract: hold the per-repo lock · bump loop/.state/round_n · export ROUND_N +
 # ROUND_DEADLINE_EPOCH + ROUND_KIND (build; review on every 10th) · pipe GOAL.md+ROUND.md
 # to the adapter · then sim-teardown, check.sh --post (fail => quarantine), heartbeat, sleep.
@@ -64,5 +65,9 @@ while :; do
     printf '%s\n' "$out" | tail -15
   fi
   date +%s > loop/.state/heartbeat
+  if [ -n "${MAX_ROUNDS:-}" ]; then
+    MAX_ROUNDS=$(( MAX_ROUNDS - 1 ))
+    [ "$MAX_ROUNDS" -le 0 ] && { echo "MAX_ROUNDS reached — supervisor exiting cleanly"; exit 0; }
+  fi
   sleep "${INTERVAL:-60}"
 done
