@@ -219,6 +219,18 @@ _FAR_FETCH_BODIES: tuple[str, ...] = (
     "pickable_can_red",
 )
 
+# VECTOR_SCENE_SWAP scenario knob: swap the two BOTTLES' (x,y) positions at connect
+# so each bottle lands on the OTHER bottle's already-validated spot. Reach/FOV
+# geometry stays valid (no new grasp/perception regime) but the LEFT-RIGHT ordering
+# flips — a position-invariance probe (a capability that grounded on the frozen
+# layout, e.g. the ordinal resolver E31, must now track the NEW layout, proving it
+# reads LIVE positions rather than memorized coordinates). Default unset keeps the
+# frozen baseline. The verify spine reads live GT, so moving the bodies stays honest.
+_SCENE_SWAP_BODIES: tuple[str, str] = (
+    "pickable_bottle_blue",
+    "pickable_bottle_green",
+)
+
 # Proportional heading gain and limits (mirrors g1 nav tuning, go2 is more agile)
 _GO2_NAV_K_YAW: float = 2.0
 _GO2_NAV_VYAW_MAX: float = 0.8
@@ -610,6 +622,27 @@ class MuJoCoGo2:
                     if bid >= 0:
                         qadr = int(model.jnt_qposadr[int(model.body_jntadr[bid])])
                         data.qpos[qadr] += _FAR_FETCH_OFFSET_X
+
+            # Optional SCENE-SWAP scenario (additive; default off keeps the frozen
+            # baseline). VECTOR_SCENE_SWAP exchanges the two bottles' (x,y) so each
+            # lands on the other's validated spot — geometry-safe, but the left-right
+            # ordering flips (a position-invariance probe). Never break a launch over it.
+            if os.environ.get("VECTOR_SCENE_SWAP"):
+                _swap_qadr: list[int] = []
+                for _name in _SCENE_SWAP_BODIES:
+                    bid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, _name)
+                    if bid >= 0:
+                        _swap_qadr.append(
+                            int(model.jnt_qposadr[int(model.body_jntadr[bid])])
+                        )
+                if len(_swap_qadr) == 2:
+                    a, b = _swap_qadr
+                    # Swap only the planar (x, y) — keep each body's z and orientation.
+                    for _off in (0, 1):
+                        data.qpos[a + _off], data.qpos[b + _off] = (
+                            float(data.qpos[b + _off]),
+                            float(data.qpos[a + _off]),
+                        )
         else:
             scene_path = _build_flat_scene_xml()
             model = mj.MjModel.from_xml_path(str(scene_path))
