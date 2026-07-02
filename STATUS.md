@@ -1,40 +1,36 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-02 · R199 (E36) — quantity-place REAL-VERIFY on the bare face: REFUTED (honest RED)
+updated: 2026-07-02 · R200 (E37, REVIEW) — skeptic 2/2 re-confirmed on the real face; gates clean
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R199 (E36, build) — SIM REAL-VERIFY of R198's quantity-place machinery, bare face
-  (deepseek-v4-flash): `把两个瓶子放到架子上` → RAN verified=False (3/4), eyes 1/2 placed. HONEST RED,
-  no false-green. Brain grasped+placed bottle 1 (blue, resting_on_receptacle ✓) then ABANDONED bottle
-  2 (green) after its grasp stalled → navigate→at_position(10.5,2.9) loop (Case 15 place/navigate
-  cross-talk in the QUANTITY context) → terminal verify was at_position, NOT the count. R198 machinery
-  CORRECT (oracle path proven on blue); gap = BRAIN DECOMPOSITION of N grasp+place cycles. Banked
-  provisional quantity-place.nl (RAN 0/1) + E36 (refuted). No fix: isolate first (E23).
+last-round: R200 (E37, review). SKEPTIC pass on the REAL bare-REPL face (deepseek-v4-flash brain +
+  local Ollama gemma4:e4b eyes, launch_explore empty = in-process): (1) place.nl-plain-colour re-confirmed
+  GROUNDED 2/2 — eyes: green bottle IN the receptacle, blue+red untouched; (2) fetch.nl-negated-distractor
+  re-confirmed GROUNDED 1/1 — eyes: gripper holds RED can, green+blue untouched. §1b: R199 quantity-place.nl
+  provisional → refuted (E36 brain-decomposition, machinery correct). LESSONS: folded ordinal E30/E31 saga to
+  1 line (settled by E33); added AMBITION-CRITIC frontier line. WIRING verified-against e7adec0=R182 (18r<25,
+  not due). Sim-cap FIX: use `systemd-run --user --scope -p MemoryMax=26G` (RSS cap), NOT `ulimit -v 24G`
+  (virtual cap starves OpenBLAS → false OOM RED — see next).
 
-frontier: quantity-place REFUTED on first real verify (E36) — machinery correct, brain won't compose
-  N grasp+place. RAISE: land a native_loop QUANTITY decomposition guardrail (forbid navigate-as-goal
-  inside a place plan; explicit per-object grasp→place loop) + re-verify. Then anaphora (那个/它 →
-  last-referenced object). AMBITION: world-owned NL→object grounder (D182 spine, CEO-gated).
-
-blocked: cloud VLM/BYO credit (perception VLM + judge + BYO-N≥4) — external BILLING gate; a local
-  Ollama model is the plug-and-play workaround for the perception VLM (recipe: LESSONS/.env.example).
-scene (real go2_room.xml): pickables ON pick_table(10.95,3.0) at z=0.320: blue(y=2.78)=rightmost-
-  BOTTLE, green(y=3.00)=leftmost-BOTTLE, red_can(y=3.22). place_bin(10.95,4.60) top~0.31. Green/blue
-  grasp-reliable. quantity-place graded by resting_on_receptacle()>=N (D106 count oracle); NOT placed_count.
+frontier: AMBITION CRITIC (R200): ~10 rounds refined single-object NL on ONE frozen 3-object go2 scene, all
+  witness-only (D182). Risk = LOCAL HILL. PIVOT candidates BEFORE more NL variants: (a) world-owned NL→object
+  grounder (kills witness-only, unblocks robustness, D182 spine gate) or (b) a 2nd world/scene variant to
+  actually prove plug-and-play. Nearer floor: quantity-place brain-decomposition guardrail (E36) then re-verify.
 
 next:
-  1. [FRONTIER] ISOLATE the R199 quantity blocker BEFORE any fix: was bottle-2 (green) abandoned by a
-     grasp-EXECUTION stall or brain DECOMPOSITION? 2-turn probe — after a blue place, can the brain
-     grasp+place green alone? If yes → the gap is multi-object PLANNING → land a native_loop QUANTITY
-     guardrail (forbid navigate-as-goal in a place plan; explicit per-object grasp→place loop), re-verify.
-  2. [FRONTIER] anaphora: 它/那个 → last-referenced object; turn-local referent memory (prompt vs seam).
-  3. [DEBT] adjudicate the R199 quantity-place.nl provisional next round; batch-close the 6 aging N=1
-     rows (R168/174/176/177/182/184, superseded, non-blocking) on review R200.
+  1. [FRONTIER] quantity-place: ISOLATE R199 blocker (grasp-EXECUTION stall vs brain DECOMPOSITION) with a
+     2-turn probe — after a blue place, can the brain grasp+place green ALONE? If yes → land a native_loop
+     QUANTITY guardrail (forbid navigate-as-goal in a place plan; explicit per-object grasp→place loop), re-verify.
+  2. [PIVOT] ambition: prove plug-and-play breadth — either the world-owned NL→object grounder (D182, CEO-gated)
+     or add a 2nd scene/world variant, rather than another single-object NL variant on the same frozen scene.
+  3. [FRONTIER] anaphora: 它/那个 → last-referenced object; turn-local referent memory (prompt vs seam).
 
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
-  - SPINE (D182): actor-authored verify target — a world-owned NL→object grounder would fix E25/E30/E32
-    model-strategy fragility. META: plug-and-play verify-predicates (`_PREDICATE_ORACLES` hardcoded).
-  - D178 near_object VLN · D176 cmd_motion seam · D168 place-oracle (identity+delta; quantity-place
-    uses resting_on_receptacle count = SAME residual, not a new gate) · relational near(a,b) · S4/S5/S6
-    ladder · BILLING (external) · RELEASE: restructure merge to master (owner).
-last_review: R190
+  - SELF-APPROVAL AUDIT (R200 review, since last_review R190): only crossed gate = G-187-1 (R187, CEO-APPROVED
+    self-delegate: provisional age-check supersession-awareness) — D183 [RULING] filed, checker manifest-hashed.
+    G-183-12 (ELP wiring) fully closed (answered+crossed a64149f). No un-audited self-approvals.
+  - SPINE (D182): actor-authored verify target — world-owned NL→object grounder would fix witness-only fidelity
+    + E25/E30/E32 model-strategy fragility. META: plug-and-play verify-predicates (`_PREDICATE_ORACLES` hardcoded).
+  - D178 near_object VLN · D176 cmd_motion seam · D168 place-oracle · relational near(a,b) · S4/S5/S6 ladder ·
+    BILLING (external: VLM-judge + BYO-N≥4) · RELEASE: restructure merge to master (owner).
+last_review: R200

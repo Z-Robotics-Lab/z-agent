@@ -67,22 +67,14 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   untouched). The perception VLM (`vlm_go2.py`/`vlm.py`) defaults to OpenRouter (`google/gemma-4-31b-it`)
   and was 402/out-of-credit R192 (same external BILLING gate as the vision-judge), silently breaking
   ordinal grounding → E28.
-- The VLM-only ordinal route is NOT robust and DROPS the category filter: R192's 把最左边的瓶子→green
-  (GROUNDED 1/1) did NOT reproduce — R193 re-ran the IDENTICAL utterance and grasped the red CAN
-  (verified=False 1/4, eyes: Go2 drags the can, both bottles untouched). The VLM honoured the ordinal
-  POSITION but ignored 瓶子/bottle, so the leftmost OBJECT (a can) won. R192 GROUNDED is REFUTED
-  (acceptance R194). FIX (offline, unwired): deterministic `_parse_ordinal`+`_resolve_ordinal_target`
-  in perception_grasp.py — parse ordinal+category, FILTER to category, sort by image cx, pick the
-  extreme; 12 unit tests green incl. the R193 case. Sign (world-y↔image-cx) unproven till wired+sim → E30.
-- WIRING the resolver into perception_grasp is NECESSARY BUT INSUFFICIENT — the BRAIN pre-resolves the
-  ordinal UPSTREAM and (deepseek-v4-flash) gets it WRONG: 最左边→"blue bottle" (blue is RIGHTMOST), passes
-  a COLOUR query, so `parse_color` short-circuits the skill resolver (run_a: verified=False, blue on floor).
-  FIX = ordinal-PASSTHROUGH prompt (native_loop grasp guidance): pass spatial phrases VERBATIM, don't
-  self-resolve the colour. Then the query reaches the skill as 最左边的瓶子 and the catalog-projection
-  resolver (project GT catalog via `world_to_pixel`, filter category, pick cx-extreme) correctly SELECTS
-  green — run_b verify authored holding_object(pickable_bottle_green). Sign CONFIRMED (larger world-y→smaller
-  cx→leftmost, offline test + sim). Ordinal SELECTION now deterministic+correct; end-to-end GROUNDED still
-  blocked by a grasp-EXECUTION miss (green knocked to floor, both runs) — a SEPARATE frontier → E31.
+- Ordinal SELECTION (最左边的瓶子→green) is now deterministic+correct, but it took TWO fixes and the
+  VLM-only route was a dead end: (a) the VLM honours ordinal POSITION but DROPS the 瓶子/bottle category
+  (R193 grasped the leftmost OBJECT=a can) → R192 GROUNDED REFUTED (E30); (b) WIRING the deterministic
+  `_parse_ordinal`+`_resolve_ordinal_target` (catalog projection via `world_to_pixel`, filter category,
+  cx-extreme; sign larger world-y→smaller cx) into perception_grasp was NECESSARY BUT INSUFFICIENT — the
+  brain pre-resolved the ordinal to a WRONG colour upstream, so `parse_color` short-circuited the skill
+  resolver; the fix was an ordinal-PASSTHROUGH native_loop prompt (pass spatial phrases VERBATIM) → E31.
+  End-to-end GROUNDED (both ordinal directions) CONFIRMED R197 → E33; see the Frontier line.
 - g1_accept.py GREEN honest-negative (no groundable green in g1's spawn view) is CORRECT (0/14,
   verified=False, NO false-green) but the model FLAILS ~14 detect/navigate/verify turns before
   `finish` → blows a 400s harness budget (R190 skeptic re-run timed out on the GREEN turn; RED
@@ -126,6 +118,14 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   declared predicate metadata (stricter-only) is the META gate on the queue → STATUS gates.
 - Embodiment ladder: S4 one-generic-driver → S5 policy plugin → S6 capability
   planner-exposure (all CEO-gated) → docs/ARCHITECTURE.md §3.
+- AMBITION CRITIC (R200 review): the last ~10 rounds all refined single-object NL grounding on the SAME
+  frozen 3-object go2 tabletop (blue/green/red), all witness-only (D182). A domain expert finds unimpressive:
+  (i) zero scene/object diversity — no clutter, occlusion, novel objects, or a 2nd world; (ii) verify is
+  actor-authored (held==named, not named==intent) so every GROUNDED is a floor; (iii) the first multi-object
+  task (quantity) FAILED (E36 brain decomposition). The loop risks a LOCAL HILL: polishing NL on one static
+  scene while the North Star (plug-and-play cross-robot/model orchestration) needs breadth. PIVOT candidates:
+  land the world-owned NL→object grounder (kills witness-only, unblocks robustness) OR add a 2nd world/scene
+  variant to prove plug-and-play, BEFORE more single-object NL variants → STATUS frontier.
 - EvolvingLoop as an explicit, visualizable, standalone protocol/product — deferred by CEO
   until this repo's internal doc problems are fixed (2026-07-01 direction).
 - AMBITION (R190 review): grounding cadence has slowed — the last NEW confirmed GROUNDED was

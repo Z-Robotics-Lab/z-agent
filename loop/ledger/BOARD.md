@@ -8,7 +8,7 @@
 | byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 17 | 61fde80 |
 | fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 17 | 61fde80 |
 | fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 14 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 17 | 61fde80 |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 3 | pending |
 | fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 10 | HEAD-R190 |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 17 | 61fde80 |
@@ -54,3 +54,4 @@
 - E34 R197 [inconclusive] quantity NL (两个/两瓶) needs new verify machinery vs reusing an existing oracle — retry only if: next: frame quantity as placed_count>=2 place task; check if D168 place gate blocks before sim.
 - E35 R198 [refuted] R197/E34 scope: go2 quantity-place predicate is placed_count() >= 2 — retry only if: NEVER placed_count for go2 quantity-place; R199 verify 把两个瓶子放到架子上 -> resting_on_receptacle()>=2
 - E36 R199 [refuted] R198 machinery grounds quantity-place 把两个瓶子放到架子上 -> resting_on_receptacle()>=2 on the bare face (deepseek-v4-flash) — retry only if: isolate green-2nd-grasp vs planning, then a native_loop QUANTITY decomposition guardrail (E23: no prompt-fix credit across a model change)
+- E37 R200 [confirmed] R200 review: 2 oldest confirmed BOARD rows still hold on the real bare face; R199 quantity-place provisional adjudicates; gates/tokens clean. — retry only if: n/a - review round
