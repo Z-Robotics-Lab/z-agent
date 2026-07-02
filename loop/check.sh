@@ -59,7 +59,8 @@ git diff --cached --name-only 2>/dev/null | grep -qx 'loop/local.env' && f "loop
 # ---------- 3. Append-only integrity (numstat — mechanical) ----------------------------
 if git rev-parse -q --verify HEAD~1 >/dev/null 2>&1; then
   CEO_OK=0; git log -1 --format=%B | grep -q 'CEO-APPROVED:' && CEO_OK=1
-  for p in docs/DECISIONS.md loop/ledger/acceptance.jsonl loop/ledger/experiments.jsonl; do
+  for p in docs/DECISIONS.md loop/ledger/acceptance.jsonl loop/ledger/experiments.jsonl \
+           loop/ledger/gates.jsonl loop/ledger/rounds.jsonl; do
     d=$(git diff HEAD~1..HEAD --numstat -- "$p" | awk '{print $2}')
     [ "${d:-0}" = "0" ] || [ "$CEO_OK" = 1 ] || f "$p had deletions without CEO-APPROVED: (append-only)"
   done

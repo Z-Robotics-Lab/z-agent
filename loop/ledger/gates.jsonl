@@ -1,0 +1,13 @@
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-1","state":"queued","kind":"spine","summary":"SPINE (D182): actor-authored verify target — witness- not oracle-certified; candidate = world-owned NL->object grounder feeding the verify target","refs":["D182"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-2","state":"queued","kind":"interface","summary":"META: plug-and-play verify-predicates — _PREDICATE_ORACLES is a hardcoded kernel list","refs":[],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-3","state":"queued","kind":"spine","summary":"D178 near_object VLN predicate","refs":["D178"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-4","state":"queued","kind":"interface","summary":"D176 cmd_motion driver seam","refs":["D176"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-5","state":"queued","kind":"spine","summary":"D168 place-oracle harden","refs":["D168"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-6","state":"queued","kind":"interface","summary":"S8 retire legacy producer","refs":["S8"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-7","state":"queued","kind":"spine","summary":"relational near(a,b) predicate","refs":[],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-8","state":"queued","kind":"interface","summary":"S4 generic driver","refs":["S4"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-9","state":"queued","kind":"interface","summary":"S5 policy plugin","refs":["S5"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-10","state":"queued","kind":"interface","summary":"S6 capability exposure","refs":["S6"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-11","state":"queued","kind":"external-dep","summary":"BILLING top-up for provider credit (external; blocks OpenRouter-N>=4 + automated VLM vision-judge)","refs":[],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-12","state":"queued","kind":"spine","summary":"ELP wiring PR (EvolvingLoop protocol extensions E1-E7: events/rounds/gates JSONL, Round trailer, elp.json — touches run.sh/check.sh/ROUND.md)","refs":["evolvingloop/DESIGN.md"],"source":"backfill"}
+{"schema":1,"ts":1782977543,"round":"R183","gate":"G-183-13","state":"queued","kind":"release","summary":"RELEASE: restructure merge to master = release gate (owner)","refs":[],"source":"backfill"}

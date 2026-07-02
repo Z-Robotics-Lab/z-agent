@@ -30,6 +30,10 @@ EXP_REQUIRED = {"schema", "ts", "round", "e", "type", "hypothesis", "result",
                 "status", "source"}
 EXP_TYPE = {"build", "verify", "research", "debug", "review"}
 EXP_STATUS = {"confirmed", "refuted", "plateau", "inconclusive"}
+# ELP/1 files (E2/E4) — validated WARN-ONLY: the visualizer never gates the loop.
+ROUNDS_REQUIRED = {"schema", "ts", "round", "kind", "exit", "post_check", "commit", "dur_s"}
+GATES_REQUIRED = {"schema", "ts", "round", "gate", "state"}
+GATE_STATES = {"queued", "answered", "crossed", "dropped"}
 
 FAILS: list[str] = []
 
@@ -37,6 +41,10 @@ FAILS: list[str] = []
 def fail(msg: str) -> None:
     FAILS.append(msg)
     print(f"LEDGER-FAIL: {msg}")
+
+
+def warn(msg: str) -> None:
+    print(f"LEDGER-WARN: {msg}")
 
 
 def _round_int(value: object) -> int | None:
@@ -125,6 +133,35 @@ def check_experiments(path: Path) -> None:
             last_e = e_num
 
 
+def _load_warn(path: Path) -> list[tuple[int, dict]]:
+    """Torn-tail-tolerant, WARN-only loader for ELP files (never appends to FAILS)."""
+    rows: list[tuple[int, dict]] = []
+    for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            rows.append((i, json.loads(line)))
+        except json.JSONDecodeError as exc:
+            warn(f"{path.name}:{i} not JSON: {exc}")
+    return rows
+
+
+def check_rounds_warn(path: Path) -> None:
+    for i, row in _load_warn(path):
+        missing = ROUNDS_REQUIRED - row.keys()
+        if missing:
+            warn(f"{path.name}:{i} missing keys {sorted(missing)}")
+
+
+def check_gates_warn(path: Path) -> None:
+    for i, row in _load_warn(path):
+        missing = GATES_REQUIRED - row.keys()
+        if missing:
+            warn(f"{path.name}:{i} missing keys {sorted(missing)}")
+        if row.get("state") not in GATE_STATES:
+            warn(f"{path.name}:{i} state {row.get('state')!r} not in {sorted(GATE_STATES)}")
+
+
 def main() -> int:
     acc = LEDGER / "acceptance.jsonl"
     exp = LEDGER / "experiments.jsonl"
@@ -132,6 +169,13 @@ def main() -> int:
         check_acceptance(acc)
     if exp.exists():
         check_experiments(exp)
+    # ELP files: WARN-only, and missing files (incl. events.jsonl) are never a failure.
+    rounds = LEDGER / "rounds.jsonl"
+    gates = LEDGER / "gates.jsonl"
+    if rounds.exists():
+        check_rounds_warn(rounds)
+    if gates.exists():
+        check_gates_warn(gates)
     return 1 if FAILS else 0
 
 

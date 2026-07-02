@@ -8,6 +8,8 @@ Fresh context; your only memory is the disk. Supervisor contract:
 - env `ROUND_KIND` = build | review (unset ⇒ build). review ⇒ follow §7 instead of §2-4.
 - You owe back, ALL on disk before the deadline: ≥1 commit, STATUS.md overwritten, ≥1 ledger
   row (or an experiments row saying why none), `./loop/check.sh` green.
+- On entering each phase (orient|plan|build|verify|record) emit a marker, pure shell:
+  `echo "{\"schema\":1,\"ts\":$(date +%s),\"round\":\"R$ROUND_N\",\"src\":\"agent\",\"event\":\"phase\",\"phase\":\"build\"}" >> loop/.state/events.jsonl`
 - NEVER-KILL-INFRA (Invariant 8). Never double-drive: preflight fails if the lock is held.
 
 ## 0. BOOTSTRAP (execute, don't trust prose)
@@ -27,6 +29,11 @@ b. Adjudicate every `provisional` ledger row from prior rounds: append a `confir
    `supersedes:` pointing back. check.sh fails on provisionals >2 rounds old.
 c. Promotion to docs/DECISIONS.md ([RULING]) happens HERE, next-round — never in the round
    that formed the conclusion. Spine-semantics rulings queue as a CEO gate instead.
+d. Read loop/inbox/decisions.jsonl: for each decision with no matching `answered` row in
+   loop/ledger/gates.jsonl, append one ({..,"gate","state":"answered","decision",
+   "decision_ref":"loop/inbox/decisions.jsonl#<ts>"}) and act — approve ⇒ the gate may be
+   crossed with the GATE-APPROVED token (then a `crossed` row); reject ⇒ a `dropped` row
+   and remove it from STATUS `gates:`.
 
 ## 2. PLAN (one substantial chunk, decided by YOU)
 - Take STATUS `next:` #1 — authoritative over GOAL text, over this file, over any memory.
@@ -80,10 +87,13 @@ d. Run `./loop/check.sh` — fix everything it blocks on. The supervisor re-runs
    exit and CI runs it too: you cannot outrun it, so satisfy it now.
 e. `git commit` — subject = one-line round summary with R#/E#, verdicts, Ns; body = the full
    round narrative (what worked, what did NOT, why). This commit is the ONLY narrative copy.
+   The commit message's LAST line is the trailer `Round: R$ROUND_N` (machine anchor).
    Never push unless the owner said so.
 
 ## 6. Gates & stops
-CEO gate hit → ≤10-line summary into STATUS `gates:` (format: docs/RULES.md CEO-gates), pivot to
+CEO gate hit → ≤10-line summary into STATUS `gates:` (format: docs/RULES.md CEO-gates) AND one
+loop/ledger/gates.jsonl row {"schema":1,"ts":<epoch>,"round":"R$ROUND_N","gate":"G-$ROUND_N-<i>",
+"state":"queued","kind":<gate class>,"summary":...,"refs":[...]}, pivot to
 non-gated work, never cross. Genuinely nothing non-gated left AND the frontier is exhausted
 after a real research round → final experiments row + STATUS `phase: blocked`, stop cleanly.
 Every 10th round the supervisor sets ROUND_KIND=review — follow §7.

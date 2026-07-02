@@ -1,0 +1,1 @@
+{"elp":"1.0","levels":["L3","X-GATES"],"phases":["orient","plan","build","verify","record"],"verify":{"sentinel":"VECTOR_VERDICT ","verdicts":["GROUNDED","RAN","FAILED"]},"evidence":{"kind":"frames","dir":"var/evidence"},"review_every":10}
