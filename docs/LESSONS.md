@@ -40,7 +40,13 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 - The ledger is append-only, so a provisional row's `status` is NEVER rewritten; §1b
   adjudication = APPEND a later row whose `supersedes` points back. checks_schema.py's
   provisional age-check must exempt an already-superseded row or it nags forever and wedges
-  every future round once age>2 (R187: R184 row superseded R186, flagged R187) → E24.
+  every future round once age>2 (R187: R184 row superseded R186, flagged R187) → E24/D183.
+- ORDINAL/positional NL ("最右边的瓶子") CAN ground: the model resolves rightmost→blue (the
+  non-central, dog's-right bottle) via `describe_scene`(VLM)+`detect`, then perception_grasp.
+  BUT it is model-STRATEGY-fragile — it only works if the model PRE-RESOLVES the ordinal to a
+  colour before the colour-keyed `perception_grasp` (raw "the rightmost bottle" query the CV
+  resolver can't parse). `detect_objects` returns names+confidence, NO positions. Ordinal→object
+  fidelity is WITNESS-only (D182 gap: oracle certifies held==named, not named==intent) → E25.
 
 ## Recipes (proven invocations — copy, don't re-derive)
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +
@@ -55,8 +61,11 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   last); measured chunk peaks 0.2–3.7G, so the default 12G cap is generous → E18.
 
 ## Frontier (the ambition horizon — review rounds refresh; STATUS `frontier:` carries the 1-liner)
-- Harder find-fetch NL: single multi-clause combo ("把红色的拿过来放到架子上"), ambiguity
-  ("那个"), quantity, ordinals; push N-to-first-failure per phrasing → STATUS next.
+- Harder find-fetch NL: ORDINAL resolution confirmed (最右边→blue, 2/2, E25) but not yet a
+  clean GROUNDED (handover + grasp-miss confounds); next = a clean ordinal GROUNDED (red-can
+  target, non-handover utterance), then quantity ("两个"), ambiguity ("那个"/"它") → STATUS next.
+- A world-owned NL→object spatial grounder (positions the model can't author) would make
+  ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
   near_object gate → D176/D178.
 - Automated VLM vision-judge — the ONE thing that removes the manual-eyes dependency;

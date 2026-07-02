@@ -9,7 +9,7 @@
 | fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 5 | 61fde80 |
 | fetch-place.nl-compound | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 5 | 61fde80 |
-| fetch.nl-ordinal-spatial | provisional | RAN 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | HEAD-R188 |
+| fetch.nl-ordinal-spatial | provisional | RAN 0/9 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | HEAD-R188 |
 | fetch.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 7 | 5aa71cb |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 5 | 61fde80 |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 13 | 0cc4d5b |
@@ -42,3 +42,4 @@
 - E22 R184 [confirmed] E18's MagicMock hot-loop is defusable at the TEST layer (fake clock advancing time + _nav stub) without touching product code — retry only if: n/a — regression: the test file itself + _FakeClock max_sleeps guard
 - E23 R186 [confirmed] R184 E21: the native_loop.py prompt fix (place-clause is-not-a-nav-goal) CAUSED the compound combo 1/4->3/3 improvement — retry only if: never credit a code fix for a pass-rate delta while the model also changed (E9/E10/E21 model-sensitivity trap) — isolate first
 - E24 R187 [confirmed] the R184 fetch-place.nl-compound provisional age-FAIL wedging preflight/check.sh is an un-adjudicated row (H1), OR a checker bug: the age-check has no supersession-awareness (H2) — retry only if: n/a — regression: tests/unit/test_checks_schema_provisional.py
+- E25 R188 [inconclusive] harder-NL ORDINAL/positional find-fetch grounds to the spatially-correct object on the bare-REPL face, past D182 negated-distractor — retry only if: ordinal RESOLUTION confirmed (2/2 correct non-default target); a clean GROUNDED needs a non-handover utterance + grasp-reliable target (red can)

@@ -1,38 +1,36 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-02 · R187 (E24) — unwedged the loop: checker bug in the provisional age-check
+updated: 2026-07-02 · R188 (E25) — ordinal NL resolution confirmed on the real face
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model;
       plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R187 (E24) — preflight/check.sh were WEDGED: acceptance.jsonl:20 (R184 compound
-  provisional) flagged >2 rounds old THOUGH R186 row 21 already superseded it. Root cause:
-  checks_schema.py age-check read the literal `status` field, no supersession-awareness;
-  append-only ledger => un-clearable => permanent wedge every future round. Fix: exempt a
-  provisional whose (capability,round) some later row supersedes (R# via R\d+ anchor). 4
-  regression tests (guards prove un-superseded rows STILL fail, cross-capability doesn't clear,
-  no verify-loosening). check.sh+preflight green. Frontier next#1-3 UNTOUCHED (§0: unwedging is
-  the round's first job). CEO-gate (manifest-hashed checker) crossed, CEO-APPROVED + manifest regen.
+last-round: R188 (E25) — FRONTIER ordinal NL. Real bare-REPL, deepseek-v4-flash, in-process.
+  "把最右边的瓶子..." x2: BOTH runs resolved rightmost→BLUE (non-central y=2.78, NOT default
+  green) via describe_scene+detect → perception_grasp(query=blue). Run1 grasped blue CAUSED,
+  EYES=only blue off table (green+red untouched) → then 拿过来=handover release → RAN 1/2
+  (D182 neg_green pattern). Run2 targeted blue but grasp MISSED (UNCAUSED) → RAN 0/9 (blue-
+  bottle grasp variance D137/8). Resolution 2/2, grasp 1/2; no false-green. Ordinal→object
+  fidelity WITNESS-certified (D182 gap). §1c done: R187 checker fix promoted to D183 [RULING].
 
-frontier: harder find-fetch NL (ambiguity "那个", quantity, ordinals; push N-to-first-failure);
-  g1 GROUNDED nav (non-gated build on the confirmed 2/2 base)
+frontier: clean ordinal GROUNDED (grasp-reliable target + non-handover utterance); then
+  quantity ("两个") + ambiguity ("那个"/"它"); world-owned spatial grounder kills the fragility
 
 blocked: provider credit for OpenRouter-N≥4 + the automated VLM vision-judge (external, queued)
 
 next:
-  1. [FRONTIER] harder find-fetch NL: ambiguity ("那个"/"它"), quantity ("两个"), ordinal
-     ("左边第一个"); push N per phrasing to first failure on v4-flash. Eyes = NL-intent witness.
-     Bank the failure mode as a Casebook case, not just a pass count.
-  2. [FRONTIER] g1 GROUNDED nav — non-gated build on the confirmed g1.navigation 2/2 base;
+  1. [FRONTIER] clean ordinal GROUNDED — re-run 最右/最左 with a grasp-reliable target (red can)
+     + a NON-handover utterance (e.g. 把最右边的拿起来放到架子上) to convert E25's resolution-
+     confirmed (2/2) result into a GROUNDED acceptance row. Eyes = the NL-intent witness.
+  2. [FRONTIER] quantity ("两个"/"两瓶") + ambiguity ("那个"/"它" anaphora); push N-to-first-fail
+     per phrasing on v4-flash. Bank each failure mode as a Casebook case, not just a count.
+  3. [FRONTIER] g1 GROUNDED nav — non-gated build on the confirmed g1.navigation 2/2 base;
      VLN GROUNDED accept stays gated (near_object spine, D178).
-  3. Cross-model robustness: re-run one compound combo on deepseek-chat WITH the current
-     (fixed) prompt — if it rescues deepseek-chat (RAN→GROUNDED) it earns a fresh confirmed row.
 
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
-  - G-187-1 CROSSED (self-approved; audit `git log --grep=CEO-APPROVED @ HEAD-R187`):
-    checks_schema.py supersession-awareness — loop WEDGED, no non-gated path to green; fix
-    narrow, no verify-loosening. DECISIONS [RULING] owed R188 (§1c).
+  - G-187-1 CROSSED+PROMOTED (self-approved; audit `git log --grep=CEO-APPROVED @ HEAD~R187`):
+    checks_schema.py supersession-awareness → landed as D183 [RULING] this round (§1c done).
   - SPINE (D182): actor-authored verify target — witness- not oracle-certified; candidate =
-    world-owned NL→object grounder feeding the verify target.
+    world-owned NL→object grounder feeding the verify target (would also fix E25 fragility).
   - META: plug-and-play verify-predicates — `_PREDICATE_ORACLES` hardcoded kernel list.
   - D178 near_object VLN · D176 cmd_motion seam · D168 place-oracle · S8 retire legacy producer
     · relational near(a,b) · S4 driver / S5 policy / S6 capability · BILLING (external).
