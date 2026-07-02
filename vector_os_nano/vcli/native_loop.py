@@ -1081,6 +1081,13 @@ def _native_system_prompt(
             "receptacle, so call it with NO target argument — then (3) verify "
             "resting_on_receptacle() PASSES, and ONLY THEN finish. NEVER finish after "
             "only the grasp when the request also asked to place the object. "
+            "CRITICAL — a place-on-a-receptacle clause is NOT a navigation goal: the "
+            "receptacle (shelf/table/box) is NOT a coordinate to drive to. mobile_place "
+            "walks to it ITSELF and drops. Do NOT use navigate / walk / at_position to "
+            "'reach the shelf' or invent a coordinate for the receptacle and loop "
+            "navigate until at_position passes — that is the #1 way this fails (the "
+            "robot walk-loops to a made-up coordinate and never places). The ONLY way to "
+            "satisfy a place clause is mobile_place -> verify resting_on_receptacle(). "
         )
     else:
         place_guidance = ""
@@ -1091,7 +1098,8 @@ def _native_system_prompt(
     if has_navigate:
         locomotion_guidance = (
             f"at_position(x, y, tol={tol}) is True when the robot is within tol metres "
-            "of (x, y). To REACH a place or coordinate (x, y), call navigate(x, y): it "
+            "of (x, y). To reach an EXPLICIT coordinate (x, y) or named location the "
+            "USER gave, call navigate(x, y): it "
             "routes through the planner and AVOIDS obstacles (lidar + local planner). Do "
             "NOT walk toward a far target — walk is OPEN-LOOP and collides with anything "
             "in the way; use walk ONLY for an explicit short relative step the user asked "

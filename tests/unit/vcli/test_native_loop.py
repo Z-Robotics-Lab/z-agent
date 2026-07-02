@@ -425,6 +425,35 @@ def test_system_prompt_teaches_compound_fetch_and_place() -> None:
     assert "mobile_place" not in dev
 
 
+def test_place_clause_is_not_a_navigation_goal() -> None:
+    """R184: the compound PLACE leg must NOT be routed to navigate.
+
+    R183 refuted `fetch-place.nl-compound` (RAN 1/4): after the grasp the model
+    construed `放到架子上` as a nav destination, invented `at_position(10,5)`, and the
+    unbounded navigate-RECOVER loop ('navigate AGAIN ... until at_position PASSES,
+    NEVER finish while FAIL') burned all 24 turns without ever calling mobile_place
+    -> walk-loop. Root cause: `locomotion_guidance` framed navigate as the way to
+    'REACH a place or coordinate', colliding with the place clause. The prompt must
+    (1) forbid navigate/walk for a place clause and (2) NOT offer navigate as the way
+    to reach 'a place'.
+    """
+    from vector_os_nano.vcli.native_loop import _native_system_prompt
+
+    text = _native_system_prompt(
+        None,
+        frozenset({"holding_object", "resting_on_receptacle", "at_position"}),
+        ("pickable_can_red",),
+        has_navigate=True,
+    )[0]["text"]
+    low = text.lower()
+    # (1) place_guidance explicitly forbids navigate/walk for the place clause.
+    assert "not a navigation" in low
+    assert "do not use navigate" in low
+    # (2) locomotion_guidance no longer offers navigate as the route to 'a place'
+    #     (the exact colliding phrase that mis-routed the place clause).
+    assert "reach a place or coordinate" not in low
+
+
 def test_oracle_stays_strict_wrong_canonical_name_is_false() -> None:
     """STEP 7 moat guard: the fix did NOT loosen the oracle's exact match.
 
