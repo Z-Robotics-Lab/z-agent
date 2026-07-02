@@ -15,7 +15,7 @@
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 14 | HEAD-R190 |
 | kernel.model-unavailable-surfacing | confirmed | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 24 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
-| quantity-place.nl | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
+| quantity-place.nl | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 0 | pending |
 | quantity-place.nl-isolation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
@@ -57,3 +57,4 @@
 - E36 R199 [refuted] R198 machinery grounds quantity-place 把两个瓶子放到架子上 -> resting_on_receptacle()>=2 on the bare face (deepseek-v4-flash) — retry only if: isolate green-2nd-grasp vs planning, then a native_loop QUANTITY decomposition guardrail (E23: no prompt-fix credit across a model change)
 - E37 R200 [confirmed] R200 review: 2 oldest confirmed BOARD rows still hold on the real bare face; R199 quantity-place provisional adjudicates; gates/tokens clean. — retry only if: n/a - review round
 - E38 R203 [confirmed] E36 isolation: R199 quantity-place 2nd-object stall is BRAIN DECOMPOSITION (cant self-split 两个), NOT grasp-execution of a 2nd object — retry only if: land native_loop QUANTITY decomposition guardrail, re-verify quantity utterance (E23: no prompt-fix credit across model change)
+- E39 R204 [confirmed] E38 follow-up: R199 quantity 2nd-object stall is BRAIN-SPECIFIC — a different brain self-decomposes 两个 into 2 grasp+place legs where v4-flash abandoned obj-2 — retry only if: robustness N>=3 deepseek-chat, OR test if v4-flash needs a QUANTITY guardrail
