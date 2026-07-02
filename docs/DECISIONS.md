@@ -382,6 +382,24 @@ the wrong object. 3 pickables present the whole time (green bottle, blue bottle,
 - STILL non-gated + runnable (DeepSeek funded): push N per phrasing; MODE=combo single multi-clause "把红色的拿过来放到架子上";
   then the g1 2nd-embodiment non-gated build. Automated VLM vision-judge remains the ONE thing that would remove the manual-eyes
   dependency — blocked only by OpenRouter/DashScope credit (external).
+
+## D183 — [RULING] the provisional age-check (a manifest-hashed CHECKER, CEO gate #8) is supersession-AWARE: an already-superseded provisional row is exempt from the >2-round age fail (2026-07-02)
+Promotes the R187 (E24) CEO-delegate call to a durable ruling per ROUND.md §1c. WHAT changed: `loop/checks_schema.py`'s
+provisional age-check previously read only a row's literal `status` field. But the ledger is APPEND-ONLY (Invariant 7) — a
+provisional's `status` is NEVER rewritten; §1b adjudication happens by APPENDING a later row whose `supersedes:` points back.
+So once a provisional aged past 2 rounds the check flagged it FOREVER, un-clearable, wedging preflight + check.sh for every
+future round (R187, R188, … were all blocked by acceptance.jsonl:20, an R184 row that R186 row 21 had ALREADY superseded at
+age 2). RULING: the age-check exempts a provisional whose (capability, round) some later row supersedes; the target R# is
+parsed from `supersedes` with an `R\d+` anchor (NOT the all-digits `_round_int`, which would swallow the commit hash).
+- WHY this is verify-NEUTRAL, not a loosening: the exemption recognizes ONLY the SAME adjudication the §1b protocol already
+  defines. A superseding row is itself schema-validated; guard tests prove an UN-superseded aged provisional STILL fails, a
+  CROSS-capability supersedes does NOT clear an unrelated row, and an in-window provisional is untouched. The sandbox only ever
+  gets stricter — this fixes a checker that was strict in a NON-adjudicable way (nagged rows the protocol had already closed).
+- GATE PROVENANCE (tamper-evident): checks_schema.py is manifest-hashed ⇒ CEO gate class 8 (admission-test / checker
+  semantics). R187 crossed it as CEO-delegate because the loop was WEDGED with no non-gated path to a green round; CEO-APPROVED
+  token in the R187 commit body, gates.jsonl G-187-1 queued+crossed, manifest regenerated (only the checks_schema.py hash
+  changed). This [RULING] is the required next-round promotion; the self-approval is listed in STATUS `gates:` for owner audit.
+- Regression: `tests/unit/test_checks_schema_provisional.py` (4/4, RED→GREEN). Lesson: E24. → git f53813a
 ## Archive index (journal stubs)
 
 D3 Hardware Abstraction Layer · Accepted 2026-03-25 (live from v2.0) → git 519953a
