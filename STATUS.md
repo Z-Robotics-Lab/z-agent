@@ -21,9 +21,6 @@ next:
      phrasing to first failure. Eyes = NL-intent witness.
   3. [FRONTIER] g1 GROUNDED nav — non-gated build on the confirmed 2/2 base; VLN GROUNDED
      accept stays gated (near_object).
-  4. [HYGIENE] fix test_isaac_sim_proxy MagicMock hot-loop (E18 root cause #2: patched
-     time.sleep spins navigate_to's 3s probe; fake clock or bounded side_effect); accept =
-     TEST_MEM_GB=4 scripts/run-tests tests/unit/test_isaac_sim_proxy.py green.
 
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
   - SPINE (D182): actor-authored verify target — witness- not oracle-certified; candidate =

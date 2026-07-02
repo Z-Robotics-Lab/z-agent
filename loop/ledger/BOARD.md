@@ -38,3 +38,4 @@
 - E20 R183 [refuted] the 5 backfilled provisional acceptance rows all hold on independent bare-REPL re-run (also red-teams the 14h-loop claims) — retry only if: n/a
 - E21 R184 [inconclusive] compound PLACE leg walk-loops because _native_system_prompt routes the place clause to navigate (H1), not because mobile_place is broken (H3) — retry only if: R185 A/B (old prompt + v4-flash) isolates fix-vs-model before promotion
 - E22 R182 [confirmed] E18 mechanism = nav probe loop spinning under no-op time.sleep — retry only if: never blanket-mock builtins.open around config-reading code; never no-op time.sleep on wall-clock loops
+- E22 R184 [confirmed] E18's MagicMock hot-loop is defusable at the TEST layer (fake clock advancing time + _nav stub) without touching product code — retry only if: n/a — regression: the test file itself + _FakeClock max_sleeps guard
