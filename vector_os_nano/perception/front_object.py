@@ -44,12 +44,17 @@ _OPEN_KSIZE = 3     # px; morphological-opening kernel. Erode→dilate severs th
 # and these are tuned to the measured values if the render fidelity shifts them.
 _COLOR_HUE: dict[str, list[tuple[int, int]]] = {
     "red": [(0, 12), (168, 180)],
+    # yellow (R211): a 4th scene cylinder (rgba .95/.85/.05) renders to hue ~27 in
+    # OpenCV's 0..180 scale — a clean gap between red's (0,12) and green's (38,88),
+    # ≥3-unit margin either side so a novel colour never collides with an RGB one.
+    "yellow": [(15, 35)],
     "green": [(38, 88)],
     "blue": [(92, 135)],
 }
 # NL → canonical colour. Substring match (zh + en), so "抓红色的东西" → "red".
 _COLOR_ALIASES: dict[str, str] = {
     "红": "red", "红色": "red", "red": "red",
+    "黄": "yellow", "黄色": "yellow", "yellow": "yellow",
     "绿": "green", "绿色": "green", "green": "green",
     "蓝": "blue", "蓝色": "blue", "blue": "blue",
 }

@@ -115,6 +115,7 @@ _COLOR_TO_SCENE: dict[str, str] = {
     "red": "pickable_can_red",
     "blue": "pickable_bottle_blue",
     "green": "pickable_bottle_green",
+    "yellow": "pickable_bottle_yellow",  # R211: novel 4th object (plug-in proof)
 }
 
 # D168 — colourless CATEGORY reference resolution against the scene OBJECT CATALOG.

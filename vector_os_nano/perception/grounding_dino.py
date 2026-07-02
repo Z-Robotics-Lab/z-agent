@@ -70,12 +70,13 @@ _ZH_NOUN_EN: dict[str, str] = {
 # _COLOR_ALIASES (the HSV path) so both routes speak the same colour vocabulary.
 _ZH_COLOR_EN: tuple[tuple[str, str], ...] = (
     ("红色", "red"), ("红", "red"),
+    ("黄色", "yellow"), ("黄", "yellow"),  # R211: novel 4th object (plug-in proof)
     ("绿色", "green"), ("绿", "green"),
     ("蓝色", "blue"), ("蓝", "blue"),
 )
 # English colour adjectives kept as-is when an English query already names one
 # (we never re-translate; this is only used by the colour-only fallback below).
-_EN_COLORS: tuple[str, ...] = ("red", "green", "blue")
+_EN_COLORS: tuple[str, ...] = ("red", "green", "blue", "yellow")
 
 
 def _zh_color(q: str) -> str | None:
