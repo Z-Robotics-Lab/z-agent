@@ -97,16 +97,18 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   documented local seam). gemma4:e4b resolves L-R ordinals; unblocked the clean ordinal GROUNDED → E28.
 
 ## Frontier (the ambition horizon — review rounds refresh; STATUS `frontier:` carries the 1-liner)
-- Ordinal fetch is CONFIRMED (R197/E33, deepseek-v4-flash): `最左边的瓶子`→green(leftmost) AND the
-  opposite-ordinal red-team `最右边的瓶子`→blue(rightmost) both GROUNDED verified=True, 0 handover,
-  eyes-confirmed. The resolver is genuinely DIRECTION-sensitive (not a lucky green default) — the
-  opposite-ordinal is the test that proves a spatial resolver real. Built on R195 verbatim-passthrough +
-  catalog-projection resolver + R196 no-auto-handover (Case 16). Witness-only fidelity (D182) still
-  caps this to a floor, not a moat → STATUS next.
-- Quantity-place: REFUTED on v4-flash (R199/E36) → GROUNDED on deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC, not machinery (E38: seq 2-object place grounds 2/2).
-  Model swap moved a decomposition ceiling with ZERO kernel edits (E23-clean, plug-and-play proof). But ROBUSTNESS
-  (R205/E40) shows it is NOT deterministic: campaign GROUNDED 2/3 (run1 abandoned obj-2 → False; run2 True 3/3) —
-  deepseek-chat is FLAKY on 两个; determinism needs a runner-side QUANTITY guardrail (per-object grasp→place) → E40.
+- Ordinal fetch CONFIRMED (R197/E33, deepseek-v4-flash): `最左边的瓶子`→green AND `最右边的瓶子`→blue
+  both GROUNDED verified=True, 0 handover, eyes-confirmed — DIRECTION-sensitive (not lucky green default).
+  Built on R195 passthrough + catalog-projection + R196 no-auto-handover (Case 16); witness-only (D182) floor → STATUS next.
+- Quantity-place: REFUTED v4-flash (R199/E36) → GROUNDED deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC
+  not machinery (E38 seq 2/2); model swap moved it ZERO kernel edits (E23-clean, plug-and-play). But NOT deterministic:
+  ROBUSTNESS (R205/E40) campaign GROUNDED 2/3 (run1 abandoned obj-2; deepseek-chat FLAKY on 两个) → runner guardrail E40.
+- QUANTITY guardrail is a PLANNER-FREE finish-gate, NOT a runner-side decomposer: native_loop is planner-free
+  BY CONSTRUCTION (import firewall — a per-object loop/replan bookkeeping IS re-growing the planner, the tell).
+  So R206 enforces the prompt's "NEVER finish while latest verify is FAIL" IN THE RUNNER: refuse finish/stop
+  while the model's OWN latest verify() is False (bounded, honest-on-exhaustion), model still owns decompose.
+  Residual (deferred, goal-authenticity per native_loop._grade): if the brain finishes on a WEAKER passing
+  predicate (holding_object / >=1) the gate can't fire — it only catches the >=N-then-quit mode → E41.
 - A world-owned NL→object spatial grounder (positions the model can't author) would make
   ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation, non-gated build first; VLN GROUNDED accept waits on the
@@ -128,12 +130,8 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   variant to prove plug-and-play, BEFORE more single-object NL variants → STATUS frontier.
 - EvolvingLoop as an explicit, visualizable, standalone protocol/product — deferred by CEO
   until this repo's internal doc problems are fixed (2026-07-01 direction).
-- AMBITION (R190 review): grounding cadence has slowed — the last NEW confirmed GROUNDED was
-  R186 (compound); R187-R190 were META (checker fix / adjudication / doc fold / skeptic re-run).
-  The North Star (plug-and-play across robots/policies/skills) is GATE-BLOCKED: the world-owned
-  spatial grounder (D182 spine), near_object VLN (D178), and the S4/S5/S6 embodiment ladder are
-  ALL CEO-gated, so ungated frontier is narrowing to single-robot NL polish. Not yet a hard
-  plateau, but the highest-leverage next step needs a deliberate CEO gate decision → STATUS gates.
+- AMBITION (R190 review, SUPERSEDED by the R200 critic above): grounding cadence slowed post-R186;
+  the North Star frontiers (D182 grounder, D178 VLN, S4/S5/S6 ladder) are all CEO-gated → STATUS gates.
 
 ## Casebook — hidden bugs (symptom pointed away from cause; newest first; cap 15 cases, overflow folds oldest to one line under ### Folded)
 Compressed from docs/tricky-bugs.md (removed 2026-07-02); full original prose in git history.
