@@ -77,6 +77,10 @@ hid behind "every component correct in isolation". Routine bugs → git history.
   "REACH a **place** or coordinate", colliding with the place clause; the unbounded navigate-
   RECOVER loop burned all 24 turns. Fix: place_guidance forbids navigate/walk for a place clause;
   locomotion_guidance scopes navigate to an explicit user-given coordinate. → E21/49d6e0c
+  CORRECTION (E23/R186): the A/B (OLD pre-fix prompt + SAME deepseek-v4-flash) also grounds
+  2/2 — so the fix was NOT what drove 1/4→3/3; the MODEL was (deepseek-chat→v4-flash). Fix is
+  correct+harmless but not the cause. Model-sensitivity trap (cf E9/E10): never credit a code
+  fix for a pass-rate delta while the model also changed — isolate first. → E23/R186
 - **Case 14 (FOV, 2026-06-29)** — far fetch grounds green/blue BOTTLES but red returns no_detections at
   re-perceive; red HSV suspected — yet red mask fired ~1000 px @3.9 m and the seed localized. Root: the red
   object is a CAN, shorter — mask 1000@3.9m → 0 at the ~0.9 m standoff: a close short object falls BELOW the
