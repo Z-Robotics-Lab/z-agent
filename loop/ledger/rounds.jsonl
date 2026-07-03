@@ -65,3 +65,4 @@
 {"schema":1,"ts":1783092804,"round":"R248","kind":"build","exit":0,"post_check":"ok","commit":"6a20d5a","dur_s":1471}
 {"schema":1,"ts":1783094074,"round":"R249","kind":"build","exit":0,"post_check":"ok","commit":"35fb829","dur_s":1150}
 {"schema":1,"ts":1783094993,"round":"R250","kind":"review","exit":0,"post_check":"ok","commit":"f88bb1a","dur_s":799}
+{"schema":1,"ts":1783096542,"round":"R251","kind":"build","exit":0,"post_check":"ok","commit":"0f01a02","dur_s":1429}
