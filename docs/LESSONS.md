@@ -27,6 +27,8 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   BRAIN DECOMPOSITION of N grasp+place. Retry only after isolating grasp-vs-planning + a guardrail (E23) → E36.
 
 ## Hazards & confirmed constraints
+- `scripts/sim-teardown` (`rosm nuke`) reaps ONLY ROS2 procs — an in-process `VECTOR_NO_ROS2=1` MuJoCo sim survives it and a not-reaped harness double-drove TWO g1 sims (R217): kill in-process sims by EXACT launched PIDs (never `pkill mujoco`), pgrep clean before relaunch. Also g1 nav verify coords must be probe-checked REACHABLE (`(11,3)`/`(11,4)` are inside obstacles → `plan_path`→inf → `navigate_to` unreachable/moved_m=0 → honest RAN, moat refuses a fake arrival) → E49.
+- The round env may select the qwen/dashscope provider, billing-blockable (`Arrearage`) while the deepseek route works — a harness inheriting it aborts at PREFLIGHT; force the deepseek provider (.env.example). The dashscope VLM-judge shares that blocked key → BILLING gate → E49.
 - repl_accept MODE=both cross-contaminates verdicts between fetch and place phases — run
   single-mode campaigns for acceptance numbers → D181 red-team.
 - The grasp oracle `holding_object(target)` certifies held==NAMED, not named==HUMAN-INTENT:
@@ -109,7 +111,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   yellow (E45→E46, y=3.11) REFUTED 0/2 SAME harness (perception not-visible → brain WANDERED). 5-site plug-in (0 kernel edits) is CORRECT for colour AND geometry;
   R212's "brain-fragile at N=1" REFINED — an IN-FOV grasp-reachable novel object grounds ROBUSTLY. LESSON: promote N=1 novel passes only on N>=2 repro;
   place novel pickables IN the front FOV band; welds/colour maps still HARDCODED (S4/D182) → E45/E46/E47.
-- Cross-embodiment LIVE w/ the CURRENT brain (R216/E48 prov): deepseek-v4-flash (all recent go2 work) also drives the 2nd embodiment g1-humanoid to GROUNDED nav 2/2 distinct legs bare-face, 0 kernel edits — refreshes 32-round-stale R183 g1.nav (deepseek-chat), answers R200 critic (all-go2). But it's EXISTING g1 config re-verified, NOT a new 3rd embodiment (BYO URDF+driver = S4-gated + multi-round SDD); g1-nav renders no frame → at_position GT pose is the witness → E48.
+- Cross-embodiment CONFIRMED w/ the CURRENT brain (R216/E48 → R217/E49 adjudicated): deepseek-v4-flash (all recent go2 work) drives the 2nd embodiment g1-humanoid to GROUNDED nav bare-face, 0 kernel edits — refreshes 32-round-stale R183 g1.nav (deepseek-chat), answers R200 critic (all-go2). R217 reproduced it across a round boundary at a NON-MEMORIZED coord (12,3, ≠ R216's 9,3/10,4) actor=CAUSED → not a fixed-pair fluke. Bonus MOAT-FIDELITY win: leg-B (11,4) is inside an obstacle → navigate_to reason=unreachable moved_m=0 → system emitted RAN/False, refusing to fabricate an arrival. Still EXISTING g1 config, NOT a new 3rd embodiment (BYO URDF+driver = S4-gated + multi-round SDD); g1-nav renders no frame → at_position GT pose is the witness → E48/E49.
 - Quantity-place: REFUTED v4-flash (R199/E36) → GROUNDED deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC
   not machinery (E38 seq 2/2); model swap moved it ZERO kernel edits (E23-clean, plug-and-play). But NOT deterministic:
   ROBUSTNESS (R205/E40) campaign GROUNDED 2/3 (run1 abandoned obj-2; deepseek-chat FLAKY on 两个) → runner guardrail E40.
@@ -117,10 +119,8 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   BY CONSTRUCTION (import firewall — a per-object loop/replan bookkeeping IS re-growing the planner, the tell).
   So R206 enforces the prompt's "NEVER finish while latest verify is FAIL" IN THE RUNNER: refuse finish/stop
   while the model's OWN latest verify() is False (bounded, honest-on-exhaustion), model still owns decompose.
-  Residual (deferred, goal-authenticity per native_loop._grade): if the brain finishes on a WEAKER passing
-  predicate (holding_object / >=1) the gate can't fire — it only catches the >=N-then-quit mode → E41.
-- A world-owned NL→object spatial grounder (positions the model can't author) would make
-  ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
+  Residual (deferred, goal-authenticity per native_loop._grade): if the brain finishes on a WEAKER passing predicate (holding_object / >=1) the gate can't fire — it only catches the >=N-then-quit mode → E41.
+- A world-owned NL→object spatial grounder (positions the model can't author) would make ordinal/relational NL robust instead of model-strategy-fragile — cf. the D182 spine gate → E25.
 - g1 GROUNDED navigation (non-gated); VLN GROUNDED accept waits on near_object gate → D176/D178.
 - Automated VLM vision-judge — the ONE thing that removes the manual-eyes dependency;
   external-blocked (provider credit) → D181.
