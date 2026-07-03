@@ -40,4 +40,23 @@ holding_object(). Records max distance excursion + whether eq_active ever flips 
 → result pending run.
 
 ## CONCLUDE
-(pending)
+- H1/H2/H3/H4 all **REJECTED**. In-process (`scripts/debug_r256_midwalk_drop.py`, N=2) the held bottle
+  stayed **25–30 mm from the EE through the entire 1.6 m L-nav walk + full Step-6b dock** (1028 samples),
+  eq_active never flipped, object never hit the floor, `holding_object()` never went False. And the FULL
+  place (`scripts/debug_r256_full_place.py`): `place_success=True`, `drop_release`, gripper empty,
+  **`resting_on_receptacle=1`** (bottle rests on the courtyard bin @[11.08,4.51,0.308]). The mobile_place
+  machinery + grasp weld are SOUND. There is **no mid-walk physics drop** — R255's "mid-walk drop" label
+  was an inference (its evidence lacked the `[MOBILE-PLACE]` driver logs, which go to stderr not the PTY).
+- **ROOT CAUSE (confirmed from the real R255 repl trace):** BRAIN POST-PLACE MIS-RECOVERY. Sequence:
+  `perception_grasp` → `verify holding_object`=True → `mobile_place` (legitimately releases the bottle
+  ONTO the bin, emptying the gripper — the place's whole purpose) → `describe` → brain says
+  **`掉了。让我重新抓取它。`** (misreads the empty gripper as an accidental drop) → `navigate` → `detect`
+  → `mobile_pick` **re-grasps the just-placed bottle OFF the bin** → thrash → final `resting=False`.
+  The place succeeded; the brain then UNDID it.
+- file:line — `vector_os_nano/vcli/native_loop.py` (the runner) + the system prompt: after a successful
+  place, an empty gripper is the EXPECTED terminal state, NOT a drop to recover from. The brain needs a
+  guard (prompt nudge and/or runner finish-gate, cf. R206 quantity guardrail) so it does not re-grasp a
+  placed object. Fix is NEXT round (behavior change → owes a real-face N≥2 after it lands).
+- Regression test: `tests/vcli/test_go2_courtyard_place_machinery.py` — asserts mobile_place leaves the
+  object RESTING on the courtyard bin with the gripper empty, so any future "掉了" is provably a brain
+  misread, not a machinery drop. Verified green via the two probe runs this round.

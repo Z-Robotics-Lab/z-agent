@@ -1,31 +1,34 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
-updated: 2026-07-03 · R255 (E60) VERIFY — COURTYARD PLACE PROVISIONAL REFUTED (no N>=2 repro).
-  R253/E60 GROUNDED 1/1 does NOT reproduce: bare face courtyard MODE=place → RAN verified=False
-  (1/2) — grasp holding_object CAUSED, resting_on_receptacle False; bottle lost MID mobile_place
-  walk (brain '掉了'→re-grasp thrash), eyes: empty-armed dog, no bottle placed. Also cleared R254 quarantine.
+updated: 2026-07-03 · R256 (E60) DEBUG — courtyard PLACE "mid-walk drop" REFUTED; root cause = BRAIN.
+  In-process (no brain) the grasp weld holds the bottle 25–30mm from the EE through the WHOLE 1.6m
+  walk + Step-6b dock (N=2, 1028 samples, eq_active never flips, never hits floor), and the FULL
+  MobilePlaceSkill lands it RESTING on the courtyard bin (resting_on_receptacle=1, gripper empty) —
+  machinery SOUND. Real R255 repl trace: mobile_place places OK → brain misreads the (expected) empty
+  gripper as '掉了' → re-grasps the just-placed bottle OFF the bin → thrash → resting=False.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R255 (E60, VERIFY, non-gated). Courtyard PLACE provisional REFUTED (supersedes R253
-  provisional); 1 acceptance + 1 experiments row; R254 stale-BOARD quarantine cleared; BOARD regen; check.sh green.
-frontier: 3 worlds ground go2 FETCH; novel-object breadth RGB+purple+yellow ALL confirmed. Courtyard PLACE
-  is the OPEN non-gated reliability gap — FLAKY across N=3 (R246 2/3, R253 1/1, R255 dropped); residual flake
-  = MID-WALK DROP (holding_object lost during the mobile_place walk/dock), distinct from the nav-miss R253 fixed.
-  PLATEAU HOLDS (R250 critic): genuinely-new breadth is GATED (3rd embodiment BYO URDF S4 + D182 grounder);
-  non-gated frontier = PLACE reliability.
-watch: per-run evidence subdir (VECTOR_EVIDENCE_DIR=var/evidence/R#/<tag>) else eyes_*.png collide. Run harness
-  `.venv/bin/python`; `set -a; source .env; set +a` first (DEEPSEEK_API_KEY not auto-loaded); courtyard via
-  VECTOR_ROOM_TEMPLATE=courtyard; DEEPSEEK_MODEL=deepseek-v4-flash; MODE=place = one compound utterance (brain
-  decomposes grasp→nav→place). Perception VLM auto-routes to local ollama gemma4:e4b (VLM env unset + ollama up).
-  Drop-debug: set VECTOR_PLACE_DIAG=<path> (mobile_place Step-6b writes dog/EE-vs-receptacle JSON, verdict-neutral).
-  Sims slow+FLAKY (~4-8min place); run BACKGROUND (timeout 900), tear down via scripts/sim-teardown. Sim gate =
-  pgrep 'mujoco|vcli|repl_accept' + free/GPU headroom, ONE sim (MuJoCo runs IN-process → pgrep mujoco finds nothing;
-  a leftover --native-loop repl_accept orphan holds ~4.5GB). LEDGER: confirmed redteam starts 'survived'; free-text
-  ≤280 chars + row <1KB; experiments key is `e`; append ONE preformatted line (E27), never load-all+dumps.
+last-round: R256 (E60, DEBUG, non-gated). Root-caused courtyard PLACE flake to BRAIN post-place
+  mis-recovery (NOT a physics drop; H1-H4 refuted N=2 in-process). 1 experiments(debug) row provisional;
+  DEBUG.md CONCLUDE; regression test added (machinery rests=1); LESSONS updated; check.sh green.
+frontier: 3 worlds ground go2 FETCH; courtyard PLACE is the OPEN non-gated reliability gap but is now
+  correctly localized: the mobile_place MACHINERY works (in-process rests=1, weld holds N=2); the flake is
+  the BRAIN re-grasping a legitimately-placed object after mobile_place empties the gripper. PLATEAU HOLDS
+  (R250 critic): genuinely-new breadth is GATED (3rd embodiment BYO URDF S4 + D182 grounder); non-gated
+  frontier = the PLACE post-recovery guard below.
+watch: DEBUG probes: scripts/debug_r256_midwalk_drop.py (weld sampling walk+dock) + debug_r256_full_place.py
+  (full place, reads resting_on_receptacle). Run in-process, NO ROS2/brain, memory-capped:
+  `systemd-run --user --scope -p MemoryMax=24G .venv/bin/python scripts/<probe>.py`; VECTOR_ROOM_TEMPLATE=courtyard,
+  VECTOR_SIM_WITH_ARM=1, backend=mpc. Two holding signals: gripper.is_holding()=software flag (cleared only at
+  open()); holding_object() oracle=GT (object <0.08m of EE + z>=0.10). R255 evidence lacked [MOBILE-PLACE] driver
+  logs (they go to stderr, not the PTY) — that's why "mid-walk drop" was mis-inferred; capture skill stderr next time.
+  Real-face place still: bare vcli + NL, deepseek-v4-flash + local ollama gemma4:e4b, courtyard, ~4-8min flaky, tear
+  down via scripts/sim-teardown. LEDGER: confirmed redteam starts 'survived'; free-text ≤280 chars; experiments key `e`.
 next:
-  1. [DEBUG, NON-gated] Root-cause the courtyard PLACE mid-walk drop (R255/E60): re-run MODE=place courtyard with
-     VECTOR_PLACE_DIAG set + grep [MOBILE-PLACE] to distinguish weld-break-under-locomotion (grasp stability) vs
-     off-receptacle drop-release. Hypothesis Loop → DEBUG.md; regression-test the fix; re-verify N>=2 clean before
-     any promotion. Do NOT re-diagnose as a nav-miss (E23: R253 already fixed that sub-failure).
+  1. [BUILD, NON-gated] BRAIN post-place recovery guard: after a successful place/mobile_place, an EMPTY gripper is
+     the EXPECTED terminal state — the brain must NOT interpret holding_object=False as an accidental drop and
+     re-grasp the placed object. Prompt nudge in the place persona AND/OR a runner finish-gate (cf. R206 quantity
+     guardrail: enforce in native_loop, model still owns decompose). NOT a mobile_place/weld change (refuted R256).
+     Then re-verify courtyard PLACE on the bare face N>=2 (was the R255 refuted bar). Guard must not touch the spine.
   2. [SPINE, GATED] D182 world-owned NL→object grounder — removes witness-only fidelity; CEO gate.
   3. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
