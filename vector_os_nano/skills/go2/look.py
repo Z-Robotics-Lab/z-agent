@@ -29,12 +29,11 @@ logger = logging.getLogger(__name__)
 @skill(
     aliases=[
         "look",
+        "look around",
         "看",
         "看看",
         "看一下",
         "看一看",
-        "what do you see",
-        "describe",
     ],
     direct=False,
 )
@@ -42,7 +41,19 @@ class LookSkill:
     """Look around and describe what the robot sees using VLM."""
 
     name: str = "look"
-    description: str = "Look around and describe what the robot sees using VLM."
+    # Survey-and-move intent: look around, identify the current room, and record
+    # the viewpoint to spatial memory. Distinct from the static scene-description
+    # intent ("describe" / "看到什么") which the generic DescribeSkill owns. The
+    # two used to alias-collide on "describe" / "what do you see", so on go2
+    # (default skills registered first, then go2 skills) LookSkill silently
+    # shadowed the generic DescribeSkill in the alias_map — describe-intent was
+    # routed here and the R248 caption/visual_query fix went un-exercised on the
+    # face. Removed those two aliases (tests/vcli/test_describe_look_alias_routing).
+    description: str = (
+        "Look around to survey the environment: identify the current room and "
+        "record what is visible to spatial memory. For a plain description of "
+        "what is in front of the camera, use describe instead."
+    )
     parameters: dict = {}
     preconditions: list[str] = []
     postconditions: list[str] = []
