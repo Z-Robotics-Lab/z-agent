@@ -113,10 +113,28 @@ def test_empty_localize_returns_false(monkeypatch):
     assert base.nav_calls == []
 
 
-def test_too_close_target_is_not_a_far_recovery(monkeypatch):
-    """0.88m ahead -> within the 1.6m self-approach radius -> the in-reach path handles it."""
+def test_close_but_blind_target_reposes_to_standoff(monkeypatch):
+    """R234/E54 warehouse fix: recovery fires ONLY after the scan already failed
+    no_detections (the caller gates it), so a close target here means the dog arrived
+    ~0.88m away but MIS-ORIENTED/occluded (front_object_mask=0px, observed in the compact
+    warehouse enclosure). The old code SKIPPED d<1.6m as 'the self-approach's job' — but the
+    self-approach cannot recover a target it can't see. Since the un-gated localize KNOWS the
+    xy, back off to the 0.95m standoff and FACE it, then let the caller re-perceive. This is
+    the same localize->standoff->face mechanism, just widened to cover the too-close case."""
     _patch_localize(monkeypatch, [("green bottle", 10.88, 3.0, 0.32)])
-    base = _FakeBase(pos=(10.0, 3.0))
+    base = _FakeBase(pos=(10.0, 3.0))  # dog at 10.0, target 10.88 -> d=0.88m, close-but-blind
+    assert pg._far_localize_and_approach(object(), base, "green bottle") is True
+    assert len(base.nav_calls) == 1
+    sx, sy = base.nav_calls[0]
+    assert sx == pytest.approx(10.88 - 0.95, abs=0.05)  # backed off to the dog-side standoff
+    assert sy == pytest.approx(3.0, abs=0.05)
+
+
+def test_degenerate_on_top_of_target_is_rejected(monkeypatch):
+    """A d<~0.3m localize is a degenerate self-detection (dog basically on the target) —
+    below _RECOVERY_MIN_M, reject so we don't thrash on a phantom zero-distance seed."""
+    _patch_localize(monkeypatch, [("green bottle", 10.1, 3.0, 0.32)])
+    base = _FakeBase(pos=(10.0, 3.0))  # d=0.1m
     assert pg._far_localize_and_approach(object(), base, "green bottle") is False
     assert base.nav_calls == []
 

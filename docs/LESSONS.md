@@ -4,8 +4,7 @@ Append one line per lesson (round agents); review rounds consolidate. A line may
 only if its D#/E#/commit pointer resolves in the ledger or git. Details live at the pointer.
 
 ## Refuted (do NOT retry unless the stated condition changed)
-- "Model-sensitivity ceiling" on fetch was a HARNESS artifact, not the model — control the
-  harness before concluding model capability → D171 refuted by D174.
+- "Model-sensitivity ceiling" on fetch was a HARNESS artifact, not the model — control the harness before concluding model capability → D171 refuted by D174.
 - "Red grasp-robustness ceiling" was a one-campaign transient (8/8 after); 0/3 in a single
   campaign is never a ceiling — re-run with the correct NL term + skill-direct probe → D172
   refuted by D173/DEBUG.md.
@@ -27,6 +26,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   BRAIN DECOMPOSITION of N grasp+place. Retry only after isolating grasp-vs-planning + a guardrail (E23) → E36.
 
 ## Hazards & confirmed constraints
+- perception_grasp far-recovery DEAD-BAND blocked HOUSE→warehouse fetch transfer (R234 root cause): the recovery (localize→0.95m standoff→face→re-perceive) fires only after scan→no_detections but was band-gated d∈(1.6,8.0]m — so a dog that nav-stopped CLOSE (0.88m) yet mis-oriented/occluded (front_object_mask=0px, d_min~0.55m facing an obstacle in the compact enclosure) got SKIPPED as 'the self-approach's job', which can't re-approach a target it can't see (world/config + detector were both fine: far-seed localized the bottle at correct coords). FIX: floor 1.6→0.30m (`_RECOVERY_MIN_M`), recover-by-repose from any plausible distance, keep only a d<0.3m degenerate-self-detection guard. ALSO: the sibling Isaac sim (`/workspace/go2w`, different engine) does NOT trip the repo's `pgrep -f "mujoco|vcli"` gate and with RAM/GPU headroom is NOT an Inv-5 blocker — R231-R233 over-read it and burned 3 rounds; run the repo's ACTUAL gate, not "any sim anywhere" → E54 (f437f4e; e2e re-verify pending R235).
 - `scripts/sim-teardown` (`rosm nuke`) reaps ONLY ROS2 procs — an in-process `VECTOR_NO_ROS2=1` MuJoCo sim survives it and a not-reaped harness double-drove TWO g1 sims (R217): kill in-process sims by EXACT launched PIDs (never `pkill mujoco`), pgrep clean before relaunch. Also g1 nav verify coords must be probe-checked REACHABLE (`(11,3)`/`(11,4)` are inside obstacles → `plan_path`→inf → `navigate_to` unreachable/moved_m=0 → honest RAN, moat refuses a fake arrival) → E49.
 - The round env may select the qwen/dashscope provider, billing-blockable (`Arrearage`) while the deepseek route works — a harness inheriting it aborts at PREFLIGHT; force the deepseek provider (.env.example). The dashscope VLM-judge shares that blocked key → BILLING gate → E49.
 - The PERCEPTION VLM (`look`/`describe_scene`, `perception/vlm_go2.py`) defaults to OpenRouter and is 402 CREDIT-EXHAUSTED RIGHT NOW (E28 block, still ACTIVE R230): a go2 fetch that grasp-fails once and lets the brain ESCALATE to `look`/`explore` then 402s SILENTLY mid-turn — the REPL keeps spinning, no verdict, the process looks hung not failed. FIX: every go2 acceptance run MUST export `VECTOR_VLM_URL=http://localhost:11434/v1 VECTOR_VLM_MODEL=gemma4:e4b` (LESSONS recipe). Proven R230: the SAME green-fetch FAILED (402 on `look`) without the local route and GROUNDED 1/1 WITH it (same brain/scene/utterance). Un-routed runs are billing-CONFOUNDED, not model/world failures → E53.

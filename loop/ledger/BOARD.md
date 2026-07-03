@@ -1,5 +1,4 @@
-wrote /home/yusen/Desktop/vector_os_nano/loop/ledger/BOARD.md
-le)
+# Acceptance board (GENERATED — edit the ledger, not this file)
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
@@ -10,7 +9,7 @@ le)
 | fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 51 | 61fde80 |
 | fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 48 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 34 | pending |
-| fetch.nl-new-world-warehouse | provisional ⚠ ADJUDICATE | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 3 | pending |
+| fetch.nl-new-world-warehouse | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 19 | pending |
 | fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 22 | pending |
 | fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 24 | pending |
@@ -86,3 +85,4 @@ le)
 - E54 R231 [inconclusive] Harden repl_accept vs the R230/E53 perception-VLM 402 confound (silent no-verdict spin), then re-open E52 warehouse cleanly. — retry only if: vlm_guard reverted (regr=test_vlm_guard.py); E52 provisional until N>=2 clean runs + perception_grasp debug
 - E54 R232 [inconclusive] Why a confirmed HOUSE green fetch does NOT transfer to go2_warehouse (R231 N=1 RAN 0/1, closest-seen-inf): H1 nav parks dog off-frame; H3 approach displaced/grasp-miss; H2 render; H4 scan-dir. — retry only if: host sim-free: run VECTOR_ACCEPT_VERBOSE=1 warehouse fetch ONCE, grep [PGRASP] arrival+per-scan to adjudicate H1-H4 (DEBUG.md)
 - E54 R233 [inconclusive] Sim-blocked 3rd round (sibling Isaac hung ~108min, Inv-5, un-killable). Non-blind-fix: harness wrote eyes/verdict PNGs to SNAP scratch but never persisted, so R229/R231 warehouse frames were LOST -> 'closest seen inf' unadjudicable visually. — retry only if: persist reverted (regr=test_vlm_guard.py::TestPersistEvidence); acceptance e2e owed next sim window
+- E54 R234 [confirmed] The confirmed HOUSE green fetch does not transfer zero-shot to go2_warehouse because of a compact-enclosure approach-pose + far-recovery dead-band in perception_grasp, NOT the world config or the detector. — retry only if: the R234 far-recovery floor change (f437f4e) is reverted OR the warehouse fetch still RANs after it — then the residual failure is a NEW mode (re-diagnose from the fresh [PGRASP] trace, not this dead-band).

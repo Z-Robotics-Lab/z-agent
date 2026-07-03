@@ -593,6 +593,13 @@ _SCAN_MAX_STEPS = 6             # up to ~200 deg of sweep
 # the frozen verify spine are UNTOUCHED, the model still routed a single grasp. This makes the
 # skill honor its advertised "finds first, walks to it, grasps" charter beyond 1.6m.
 _FAR_RECOVERY_MAX_M = 8.0       # m; beyond this a localize is implausible -> honest no_detections
+# R234/E54 — the recovery is caller-gated on scan->no_detections, so a CLOSE localize here means
+# the dog arrived near the target but MIS-ORIENTED/occluded (compact warehouse: d=0.88m yet
+# front_object_mask=0px, scan 6/6 none). The old floor _SCAN_MAX_LOCAL_M(1.6m) SKIPPED that as
+# 'the self-approach's job' — but the self-approach cannot re-approach a target it cannot see.
+# So recover from ANY plausible distance: back off to the standoff and FACE the known xy. The
+# floor now only rejects a degenerate d<0.3m self-detection (dog already on top of the target).
+_RECOVERY_MIN_M = 0.30          # m; below this a localize is a degenerate self-detection
 _FAR_STANDOFF_M = 0.95          # m; mirrors navigate_to_object._VICINITY_CLEARANCE_M (asserted in tests)
 
 
@@ -633,11 +640,13 @@ def _far_localize_and_approach(
     d = math.hypot(ox - rx, oy - ry)
     logger.info("[PGRASP] far recovery: localized %r at (%.2f,%.2f) d=%.2fm from dog (%.2f,%.2f)",
                 query, ox, oy, d, rx, ry)
-    # Recover only a genuinely-far target in a plausible band: nearer is the in-reach
-    # self-approach's job; farther than _FAR_RECOVERY_MAX_M is an implausible localize.
-    if not (_SCAN_MAX_LOCAL_M < d <= _FAR_RECOVERY_MAX_M):
-        logger.info("[PGRASP] far recovery SKIP: d=%.2fm out of band (%.1f,%.1f]",
-                    d, _SCAN_MAX_LOCAL_M, _FAR_RECOVERY_MAX_M)
+    # Recover any plausible-distance target: this runs only after the scan already failed
+    # no_detections, so a CLOSE localize means arrived-but-blind (mis-oriented/occluded) and
+    # still needs the standoff re-pose (R234/E54). Reject only a degenerate d<0.3m self-detection
+    # (below) and an implausibly-far localize (beyond _FAR_RECOVERY_MAX_M).
+    if not (_RECOVERY_MIN_M < d <= _FAR_RECOVERY_MAX_M):
+        logger.info("[PGRASP] far recovery SKIP: d=%.2fm out of band (%.2f,%.1f]",
+                    d, _RECOVERY_MIN_M, _FAR_RECOVERY_MAX_M)
         return False
     sx, sy, _ = compute_approach_pose((ox, oy, oz), (rx, ry, ryaw), clearance=_FAR_STANDOFF_M)
     logger.info("[PGRASP] far recovery: %r at (%.2f,%.2f) d=%.2fm -> standoff (%.2f,%.2f)",
