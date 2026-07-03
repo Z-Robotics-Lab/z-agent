@@ -28,6 +28,7 @@
 | g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 36 | pending |
 | kernel.model-unavailable-surfacing | confirmed | PASS 1/1 | bare-repl+nl | openrouter (zero credit spent) | self-read | 1 | pending |
 | place.nl-new-world-courtyard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
+| place.nl-new-world-warehouse | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 61 | pending |
 | quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 56 | pending |
 | quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 52 | pending |
@@ -118,3 +119,4 @@
 - E60 R257 [confirmed] STATUS next#1: BRAIN post-place recovery guard (persona post-place-no-regrasp nudge + runner re-grasp-until-verify gate; NOT a weld change, refuted R256) fixes the R255 '掉了'->re-grasp thrash and grounds courtyard PLACE N>=2. — retry only if: if courtyard PLACE re-grasp thrash recurs, guard regressed (regr=test_native_loop.py post_place tests)
 - E60 R259 [confirmed] Adjudicate R257/E60 courtyard PLACE provisional (GROUNDED 2/2): does it reproduce on the bare face across the R257->R259 round boundary to promote to confirmed (STATUS next#1)? — retry only if: re-grasp thrash recurs (regr=test_native_loop.py post_place) OR resting drops on a fresh run
 - E61 R260 [confirmed] R260 review: re-run the 2 oldest confirmed board rows on the real face; refresh WIRING native-loop (R257 guard); re-red-team a headline; gate/wiring/lessons/ambition audit. — retry only if: n/a - review round
+- E62 R261 [inconclusive] STATUS next#1: PLACE composite transfers to 3rd world (warehouse) bare face: VECTOR_ROOM_TEMPLATE=warehouse MODE=place, deepseek-v4-flash, local-ollama eyes. LAST non-gated place datapoint (E56 nav link). — retry only if: warehouse PLACE regresses to RAN on repl_accept MODE=place, OR R257 post-place guard reverted (regr=tests/unit/vcli/test_native_loop.py post_place)
