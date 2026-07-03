@@ -19,7 +19,7 @@
 | fetch.nl-new-world-warehouse-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 12 | pending |
 | fetch.nl-new-world-warehouse-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 12 | pending |
 | fetch.nl-novel-geometry-purple-box | confirmed ⚠ STALE | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 37 | pending |
-| fetch.nl-novel-object-yellow | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| fetch.nl-novel-object-yellow | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-ordinal-position-invariance | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 42 | pending |
 | fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 55 | pending |
 | fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
@@ -111,3 +111,4 @@
 - E56 R249 [confirmed] Dropping the colliding describe/what-do-you-see aliases from go2 LookSkill routes describe-intent to the generic DescribeSkill, so R248's caption/visual_query->describe_scene fix is exercised on the bare face (path_entered False->True). — retry only if: the alias dedupe is reverted or describe gains a real moat oracle
 - E57 R250 [confirmed] R250 review: ladder-base HOUSE fetch still grounds; R249 describe provisional adjudicates; gates/tokens clean; LESSONS within cap. — retry only if: n/a - review round
 - E58 R251 [inconclusive] STATUS next#2: HOUSE novel yellow (y=3.11, REFUTED 0/2 R212/E46) is intrinsically off the head-cam FOV -- characterize on the bare face. — retry only if: promote confirmed next round only after N>=2 same-brain repro (E46), which SUPERSEDES the R212 refuted fetch.nl-novel-object-yellow row
+- E59 R252 [confirmed] STATUS next#1: HOUSE yellow-fetch (R251/E58 GROUNDED provisional N=1) reproduces same-brain across the R251->R252 boundary, meeting the E46 N>=2 bar to supersede the R212 refuted row. — retry only if: regression = HOUSE yellow-fetch RAN/no-grasp on repl_accept MODE=fetch, or R234 far-recovery / R237 hue-gate reverted
