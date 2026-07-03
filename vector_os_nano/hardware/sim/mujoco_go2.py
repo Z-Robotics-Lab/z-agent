@@ -231,6 +231,39 @@ _SCENE_SWAP_BODIES: tuple[str, str] = (
     "pickable_bottle_green",
 )
 
+# VECTOR_SCENE_CLUTTER scenario knob: inject DECORATIVE distractor geoms into the go2
+# room — a 2nd SCENE VARIANT off the frozen minimal tabletop (R226 breadth pivot;
+# answers the R200 "zero scene diversity, no clutter" ambition critic). Worlds are
+# CONFIG not code (Invariant 3): these ride the existing scene_builder ``extra_geoms``
+# seam (the SAME seam g1's percept_target_red uses) — ZERO kernel/driver edits.
+#
+# Each geom is contype/conaffinity 0 (no collision, like the room rugs/baseboards) and
+# has NO freejoint, so it is NOT pickable (absent from get_object_positions()) — pure
+# VISUAL clutter in the head-cam. Placement rules held (test_scene_clutter.py):
+#   - none on the dog->green-bottle sightline (x<10.88 & |y-3.0|<0.35) -> no occlusion;
+#   - a SAME-HUE green competitor (0.25/0.70/0.35, the green bottle's rgba) placed
+#     off-centre + farther, so a colour-fetch that still grounds the real central green
+#     bottle proves DISCRIMINATION, not "only green thing".
+# The honest-verify spine is untouched: holding_object(real bottle) reads live sim GT;
+# a decorative box has no weld, so grasping toward it holds nothing -> unfakeable verdict.
+# Default unset keeps the frozen baseline BYTE-IDENTICAL (extra_geoms default empty).
+_GO2_CLUTTER_GEOMS: tuple[dict, ...] = (
+    # Extra red + blue on the table flanks (same hues as the can/blue bottle).
+    {"name": "clutter_can_red_a", "type": "box", "pos": (10.96, 2.45, 0.36),
+     "size": (0.05, 0.05, 0.05), "rgba": (0.85, 0.25, 0.20, 1.0)},
+    {"name": "clutter_bottle_blue_a", "type": "box", "pos": (10.96, 3.55, 0.40),
+     "size": (0.05, 0.05, 0.05), "rgba": (0.20, 0.40, 0.85, 1.0)},
+    # SAME-HUE green competitor: off-centre (y=3.72, ~0.7 m lateral) + farther (x=11.35),
+    # a genuine same-colour distractor that a central-blob resolver should NOT prefer.
+    {"name": "clutter_bottle_green_a", "type": "box", "pos": (11.35, 3.72, 0.40),
+     "size": (0.05, 0.05, 0.05), "rgba": (0.25, 0.70, 0.35, 1.0)},
+    # Room clutter (novel hues): a floor box and a back box for scene diversity.
+    {"name": "clutter_box_orange", "type": "box", "pos": (11.60, 2.60, 0.18),
+     "size": (0.06, 0.06, 0.06), "rgba": (0.95, 0.55, 0.10, 1.0)},
+    {"name": "clutter_box_teal", "type": "box", "pos": (11.75, 3.35, 0.30),
+     "size": (0.05, 0.05, 0.09), "rgba": (0.10, 0.65, 0.65, 1.0)},
+)
+
 # Proportional heading gain and limits (mirrors g1 nav tuning, go2 is more agile)
 _GO2_NAV_K_YAW: float = 2.0
 _GO2_NAV_VYAW_MAX: float = 0.8
@@ -382,6 +415,13 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
     # the cross-process scene_xml_path consumers (MuJoCoPiper IK, sim_tool
     # pickable-population). connect() loads that file via from_xml_path.
     out = _MJCF_DIR / scene_name
+    # Optional CLUTTER scenario (additive; default off keeps the frozen minimal scene
+    # BYTE-IDENTICAL). VECTOR_SCENE_CLUTTER injects decorative distractor geoms (2nd
+    # scene variant, Inv.3 — worlds are config). Rides the extra_geoms seam like g1's
+    # percept_target_red; contype/conaffinity 0, no freejoint -> visual-only, unfakeable.
+    extra_geoms: tuple[dict, ...] = (
+        _GO2_CLUTTER_GEOMS if os.environ.get("VECTOR_SCENE_CLUTTER") else ()
+    )
     _model, scene_path = build_room_scene(
         robot_model_path=go2_xml,
         room_template_path=_ROOM_XML,
@@ -391,6 +431,7 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
         welds=welds,
         out_path=out,
         robot_meshes_dir=robot_meshes_dir,
+        extra_geoms=extra_geoms,
     )
     assert scene_path is not None
     return scene_path
