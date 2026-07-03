@@ -11,7 +11,7 @@
 | fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 46 | pending |
 | fetch.nl-new-world-courtyard | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 3 | pending |
 | fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
-| fetch.nl-new-world-courtyard-purple | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| fetch.nl-new-world-courtyard-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-new-world-courtyard-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
 | fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
 | fetch.nl-new-world-warehouse-blue | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 7 | pending |
@@ -26,6 +26,7 @@
 | g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 29 | pending |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 21 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 66 | c59f386 |
+| place.nl-new-world-courtyard | provisional | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 46 | pending |
 | quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 41 | pending |
 | quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 37 | pending |
@@ -103,3 +104,4 @@
 - E56 R243 [confirmed] The R242 courtyard green-fetch (N=1 provisional) reproduces across the R242->R243 boundary (promote to confirmed N>=2, E46), and a 2nd courtyard colour (blue) transfers on the bare face. — retry only if: n/a - courtyard green CLOSED; promote courtyard-blue to N>=2 next round (E46)
 - E56 R244 [confirmed] The R243 courtyard-blue (N=1 provisional) reproduces across the R243->R244 boundary (promote to confirmed N>=2, E46), and a 3rd courtyard colour (RED, the hue-adjacent one the warehouse E54 had to fix) transfers on the bare face. — retry only if: n/a - courtyard blue CLOSED; promote courtyard-red to N>=2 next round (E46)
 - E56 R245 [confirmed] The R244 courtyard-red (N=1 provisional) reproduces across the R244->R245 boundary (promote confirmed N>=2, E46), and a 4th courtyard colour PURPLE (novel non-cylinder BOX geometry) transfers on the bare face. — retry only if: a courtyard colour regresses to RAN, OR purple N=1 fails N>=2 next round
+- E56 R246 [confirmed] Courtyard PURPLE (N=1 provisional) reproduces across the R245->R246 boundary (promote confirmed N=2, E46); and the PLACE-leg transfers to the 3rd world (courtyard) on the bare face. — retry only if: a courtyard colour regresses to RAN, OR the courtyard place nav at_position snag is unresolved
