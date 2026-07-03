@@ -84,6 +84,33 @@ _FINISH_ON_FAIL_NUDGE = (
     "once that verify PASSES."
 )
 
+# Grasp/pick skills that RE-ACQUIRE an object into the gripper. After a SUCCESSFUL
+# place the gripper is legitimately EMPTY (that is the place's whole purpose); a brain
+# that misreads the empty gripper as an accidental drop ('掉了') and issues one of these
+# RE-GRASPS the just-placed object off the receptacle, UNDOING the place (R255/R256
+# courtyard PLACE flake, E60). The runner refuses a re-grasp until ONE verify closes the
+# place — for a single place that verify PASSES (finish); for a quantity place it FAILS
+# (more to place) and the guard clears so the next-object grasp runs.
+_GRASP_SKILLS: frozenset[str] = frozenset(
+    {"perception_grasp", "mobile_pick", "pick", "pick_top_down"}
+)
+# Place skills whose SUCCESS empties the gripper onto a receptacle.
+_PLACE_SKILLS: frozenset[str] = frozenset({"mobile_place", "place", "place_top_down"})
+
+# Re-prompt sent when the model tries to RE-GRASP immediately after a successful place
+# without first verifying it. Brain-agnostic + planner-free: it names the real check
+# (resting_on_receptacle) without parsing the goal for N — the model still owns the
+# decision (finish vs. place the next object). Bounded by _MAX_VERIFY_NUDGES so a model
+# that stubbornly re-grasps still terminates (the guard can never wedge the turn).
+_POST_PLACE_REGRASP_NUDGE = (
+    "You just placed an object with the place skill — it RELEASED the object onto the "
+    "receptacle, so an EMPTY gripper (holding_object == False) is the EXPECTED, correct "
+    "result, NOT an accidental drop ('掉了'). Do NOT re-grasp the object you just placed. "
+    "First call verify(resting_on_receptacle() >= <the requested count>): if it PASSES "
+    "the goal is DONE — call finish. Only grasp again if that verify is still BELOW the "
+    "requested count (a quantity task with more objects still to place)."
+)
+
 # The registry category whose tools are the kernel's domain-general ACTION surface
 # (file_read/file_write/file_edit/bash/glob/grep — see tools.__init__._TOOL_CATEGORIES
 # and worlds.dev.DEV_TOOL_ALLOWLIST, which is this category). The native loop offers
@@ -479,6 +506,14 @@ class NativeStepRunner:
         # verify is FAIL" mechanically + brain-agnostically; the MODEL still owns what
         # action fixes it (no goal parsing, no per-object loop here -> still planner-free).
         self._last_verify_result: bool | None = None
+        # R257/E60 post-place guard: set True when a PLACE skill succeeds (gripper now
+        # legitimately empty), cleared by the next verify. While True, a RE-GRASP skill
+        # is refused (bounded by ``_post_place_regrasp_nudges``) so the brain must first
+        # verify resting_on_receptacle instead of misreading the empty gripper as a drop
+        # and re-grasping the just-placed object. Planner-free: no goal parsing, keys
+        # only on the skill NAMES + the model's own next verify (rule 5).
+        self._place_awaiting_verify: bool = False
+        self._post_place_regrasp_nudges: int = 0
         # Backlog #2 — the most-recent INFORMATIONAL skill diagnosis seen during the
         # current step's action chain (from a dispatched skill's ToolResult.metadata).
         # Threaded onto the StepRecord at verify time so triage codes (e.g.
@@ -527,6 +562,17 @@ class NativeStepRunner:
         tool = self._motor_tools.get(name)
         if tool is None:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
+        # R257/E60 post-place guard: refuse a RE-GRASP that rides on an unverified place
+        # (the '掉了' misread that undoes the placement). Fires BEFORE the step opens so a
+        # refused grasp neither captures a baseline nor runs the skill. Bounded, so a
+        # model that will not verify still terminates (the guard can never wedge).
+        if (
+            self._place_awaiting_verify
+            and name in _GRASP_SKILLS
+            and self._post_place_regrasp_nudges < _MAX_VERIFY_NUDGES
+        ):
+            self._post_place_regrasp_nudges += 1
+            return ToolResult(content=_POST_PLACE_REGRASP_NUDGE, is_error=True)
         if not self._step_open:
             # First skill of a fresh step -> capture the causation baseline NOW.
             self._baseline = actor_causation.capture(self._agent)
@@ -547,6 +593,10 @@ class NativeStepRunner:
             diag = md.get("diagnosis")
             if diag:
                 self._step_diag = str(diag)
+        # R257/E60: a SUCCESSFUL place empties the gripper on purpose -> arm the
+        # post-place guard so the very next re-grasp is refused until a verify closes it.
+        if name in _PLACE_SKILLS and not getattr(result, "is_error", False):
+            self._place_awaiting_verify = True
         return result
 
     # ------------------------------------------------------------------
@@ -571,6 +621,9 @@ class NativeStepRunner:
         # Track the model's latest verdict so the finish-gate can refuse a stop while
         # the goal is still unproven (see ``latest_verify_failed``).
         self._last_verify_result = verify_result
+        # R257/E60: a verify CLOSES the post-place guard — the brain checked the place
+        # (PASS -> it should finish; FAIL quantity -> the next-object grasp may run).
+        self._place_awaiting_verify = False
 
         # Grade actor-causation with a FRESH post-capture, immediately after the
         # verify read (review fix 3) — only for a graded robot predicate, else
@@ -1168,6 +1221,22 @@ def _native_system_prompt(
             "finish. Do NOT finish after placing just one when more were requested. If a "
             "grasp comes back no_detections (the just-placed object left the dog docked too "
             "close to see the next), call navigate_to_object('<next name>') once, then grasp. "
+            # POST-PLACE (R255/R256/E60 courtyard flake): mobile_place RELEASES the object
+            # onto the receptacle, so an empty gripper afterwards is CORRECT, not a drop. The
+            # brain re-grasped the just-placed bottle off the bin ('掉了。让我重新抓取它。'),
+            # undoing the place. Teach: after a place, check resting_on_receptacle, never
+            # holding_object/describe; an empty gripper is expected; do NOT re-grasp.
+            "AFTER A PLACE — an EMPTY gripper is EXPECTED, NOT a drop: the place skill "
+            "(mobile_place) RELEASES the object onto the receptacle, so once it returns your "
+            "gripper is CORRECTLY empty and holding_object('<name>') is now False BY DESIGN. "
+            "This is SUCCESS, not an accidental drop ('掉了'). Do NOT re-grasp / re-pick / "
+            "mobile_pick the object you just placed, and do NOT call describe or "
+            "holding_object to 'check' after a place — that is exactly how the placement gets "
+            "UNDONE (you grab the object right back off the receptacle). The ONLY correct check "
+            "after a place is verify(resting_on_receptacle() >= <requested count>): if it "
+            "PASSES, the task is DONE — call finish immediately. Only grasp again when that "
+            "resting_on_receptacle count is still BELOW the requested number (a quantity task "
+            "with more objects left to place). "
         )
     else:
         place_guidance = ""

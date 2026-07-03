@@ -477,6 +477,34 @@ def test_place_clause_is_not_a_navigation_goal() -> None:
     assert "reach a place or coordinate" not in low
 
 
+def test_system_prompt_teaches_post_place_empty_gripper_is_not_a_drop() -> None:
+    """R257/E60: a SUCCESSFUL place legitimately empties the gripper — that is the
+    place's PURPOSE. The brain must NOT read holding_object==False after a place as an
+    accidental drop ('掉了') and re-grasp the just-placed object off the receptacle
+    (the R255/R256 courtyard PLACE flake: mobile_place placed OK -> brain '掉了。让我
+    重新抓取它。' -> re-grasped -> undid the place). The prompt teaches: after
+    mobile_place, an empty gripper is EXPECTED; verify resting_on_receptacle (NOT
+    holding_object / describe); do NOT re-grasp; finish once it passes.
+    """
+    from vector_os_nano.vcli.native_loop import _native_system_prompt
+
+    text = _native_system_prompt(
+        None,
+        frozenset({"holding_object", "resting_on_receptacle"}),
+        ("pickable_bottle_green",),
+    )[0]["text"]
+    low = text.lower()
+    # An empty gripper after a place is the EXPECTED terminal state, never a drop.
+    assert "掉了" in text
+    assert "empty gripper" in low
+    assert "do not re-grasp" in low
+    # The post-place check is resting_on_receptacle, and only THAT proves the place.
+    assert "resting_on_receptacle" in text
+    # Omitted in a non-manipulation world (no place skill -> no post-place guidance).
+    dev = _native_system_prompt(None, frozenset({"holding_object"}), ())[0]["text"]
+    assert "掉了" not in dev
+
+
 def test_oracle_stays_strict_wrong_canonical_name_is_false() -> None:
     """STEP 7 moat guard: the fix did NOT loosen the oracle's exact match.
 
@@ -619,3 +647,65 @@ def test_skill_diagnosis_threads_into_step_and_verdict() -> None:
     # MOAT: verified is delegated VERBATIM to evidence_passed — diagnosis never feeds it.
     assert report.verified == bool(evidence_passed(trace, oracle_names))
     assert report.verified is False  # RAN, not grounded
+
+
+# ---------------------------------------------------------------------------
+# R257/E60 — deterministic post-place guard. After a SUCCESSFUL place the gripper is
+# legitimately empty (the place's purpose); a brain that reads that as '掉了' and
+# re-grasps the just-placed object UNDOES the place (R255/R256 courtyard flake). The
+# runner refuses a re-grasp until ONE verify closes the place, forcing the brain to
+# check resting_on_receptacle (passes -> finish) — brain-agnostic, planner-free, and
+# quantity-safe (the intermediate FAIL verify clears the guard so the next grasp runs).
+# ---------------------------------------------------------------------------
+
+
+class _OkSkillTool:
+    """A duck-typed motor tool whose execute always succeeds (no world needed)."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def execute(self, params, context):
+        from vector_os_nano.vcli.tools.base import ToolResult
+
+        return ToolResult(content=f"{self.name} ok")
+
+
+def _post_place_runner():
+    from vector_os_nano.vcli.native_loop import NativeStepRunner
+
+    agent, _base = _make_agent(0.0, 0.0)
+    motor = {"mobile_place": _OkSkillTool("mobile_place"),
+             "perception_grasp": _OkSkillTool("perception_grasp")}
+    verifier = SimpleNamespace(verify=lambda expr: True)
+    ctx = SimpleNamespace()
+    return NativeStepRunner(agent, verifier, frozenset({"resting_on_receptacle"}), motor, ctx)
+
+
+def test_regrasp_after_place_is_refused_until_a_verify_closes_it() -> None:
+    runner = _post_place_runner()
+    # (1) place succeeds -> gripper legitimately empty.
+    assert runner.dispatch_skill("mobile_place", {}).is_error is False
+    # (2) an IMMEDIATE re-grasp (no verify between) is the '掉了' misread -> refused,
+    #     with a nudge pointing at the real check.
+    blocked = runner.dispatch_skill("perception_grasp", {"query": "green bottle"})
+    assert blocked.is_error is True
+    assert "resting_on_receptacle" in blocked.content
+    # (3) once a verify closes the place, a subsequent grasp (quantity next-object) runs.
+    runner.handle_verify("resting_on_receptacle() >= 2")
+    assert runner.dispatch_skill("perception_grasp", {"query": "green bottle"}).is_error is False
+
+
+def test_post_place_guard_is_bounded_never_wedges() -> None:
+    """A model that stubbornly re-grasps without ever verifying still terminates: the
+    guard is bounded (like the D23 verify nudge) so it can NEVER wedge the turn."""
+    runner = _post_place_runner()
+    runner.dispatch_skill("mobile_place", {})
+    refusals = 0
+    for _ in range(6):
+        if runner.dispatch_skill("perception_grasp", {"query": "x"}).is_error:
+            refusals += 1
+        else:
+            break
+    # Refuses a bounded number of times, then lets the grasp through (no infinite block).
+    assert 0 < refusals <= 2
