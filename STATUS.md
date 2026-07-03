@@ -1,33 +1,33 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-03 · R241 (E56) BUILD — authored a THIRD distinct world (go2_courtyard.xml,
-  open-air sandstone courtyard) as pure CONFIG (VECTOR_ROOM_TEMPLATE=courtyard, 0 kernel edits);
-  compiles + 14/14 tests. Bare-face green-fetch TRANSFER (the acceptance bar) SIM-BLOCKED by a
-  sibling Isaac hang (Inv.5) → owed to next sim window via inflight.json.
+updated: 2026-07-03 · R242 (E56) VERIFY — ADOPTED the R241 inflight and RAN the owed bare-face
+  courtyard green-fetch. GROUNDED 1/1: holding_object('pickable_bottle_green') actor=CAUSED;
+  eyes (self-read, 2 frames): the Go2 holds the green bottle aloft in the open-air courtyard while
+  the other 4 pickables (purple box/yellow/red/blue) remain on pick_table = colour discrimination.
+  The 3rd distinct world (go2_courtyard.xml, pure CONFIG) TRANSFERS the fetch bar. N=1 provisional.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R241 (E56, BUILD, non-gated). Pivot OFF colour breadth (R240 ambition critic) → 3rd
-  world. go2_courtyard.xml: open sky/no roof, terracotta paving, olive planters + fountain +
-  pergola — tonally/geometrically unlike BOTH the marble house and grey warehouse. Plugs in via a
-  1-line _ROOM_TEMPLATES dict entry (config seam, like warehouse R229; non-spine, non-gated). Pick
-  furniture + 5 pickables BYTE-IDENTICAL at house coords (green 10.88,3.00). 14/14 test_room_template
-  (distinct shell asserted; no house/warehouse geom leak; peak 4.0G). E56 provisional (BUILD=FLOOR).
+last-round: R242 (E56, VERIFY, non-gated). KEY FINDING: R241's inflight sim-free precondition
+  listed `isaac` and re-owed the run as SIM-BLOCKED — but per the CONFIRMED E54 lesson (LESSONS:30)
+  the sibling /workspace/go2w Isaac sim is a DIFFERENT engine, does NOT trip the repo's gate
+  (mujoco|vcli), and with RAM/GPU headroom (43G RAM, 9.8G GPU free) is NOT an Inv-5 blocker; R241
+  (like R231-R233) over-read it. Ran clean (local-ollama perception, deepseek planner, 0x402,
+  in-process); provider unchanged ⇒ a world-generalization result, not a model artifact.
 
-frontier: 3rd world BUILD floor met; the deeper bar (bare-face green-fetch TRANSFER, per E52/R238
-  "build is not acceptance") is OWED — sim-blocked this round. Warehouse colour transfer CLOSED.
-  AMBITION beyond courtyard: verify still WITNESS-ONLY (D182); genuinely-new bars = 3rd embodiment
-  (S4-gated) and the world-owned NL→object grounder.
+frontier: courtyard fetch TRANSFERS (N=1) → 3 distinct worlds ground the green-fetch bar (house
+  N=3, warehouse N=3, courtyard N=1). Deeper bars unchanged: verify WITNESS-ONLY (D182); genuinely-
+  new = 3rd embodiment (S4-gated) + world-owned NL→object grounder. Cheap win: courtyard COLOUR
+  breadth (blue/red/purple), hue gate is colour-agnostic (E54).
 
-watch: NO sim launched — sibling Isaac warehouse_nav.py (/workspace/go2w) hung ~135min/7G; Inv.5 +
-  NEVER-KILL-INFRA ⇒ did not compete, did not kill. Run the owed courtyard fetch only when sim-free.
+watch: do NOT re-own a run SIM-BLOCKED on a sibling ISAAC sim — different engine, not the repo's
+  Inv-5 gate (E54/LESSONS:30). Gate = pgrep 'mujoco|vcli' + free/GPU headroom; ONE MuJoCo/vcli sim.
 
 next:
-  1. [ADOPT inflight, NON-gated] Run the OWED courtyard green-fetch on the bare face
-     (VECTOR_ROOM_TEMPLATE=courtyard, cmd in inflight.json) when the sim frees; bank
-     fetch.nl-new-world-courtyard provisional. If RAN, diagnose per warehouse E52 2-layer playbook
-     (bg is green-free so a saliency flood is unlikely; suspect far-recovery / approach first).
-  2. [DEBUG, NON-gated] YELLOW(y=3.11) HOUSE FOV (E45/E46): raise head tilt / widen standoff so the
-     short/high pickable enters the near-field vertical frustum (Case 14), then transfer yellow.
+  1. [PROMOTE, NON-gated] Re-run courtyard green-fetch across this boundary + red-team → promote
+     fetch.nl-new-world-courtyard to confirmed N>=2 (E46 rule). Cheap: add a 2nd courtyard colour
+     (blue) in the same run to widen transfer while the sim is up.
+  2. [DEBUG, NON-gated] YELLOW(y=3.11) HOUSE FOV (E45/E46, Case 14): raise head tilt / widen standoff
+     so the short/high pickable enters the near-field vertical frustum, then transfer yellow.
   3. [SPINE, GATED] D182 world-owned NL→object grounder — removes witness-only fidelity; CEO gate.
   4. [DEBUG, NON-gated] object_localizer in-warehouse still noisy (R236 floor/far phantoms); harden seed.
   5. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
