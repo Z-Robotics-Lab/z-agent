@@ -77,11 +77,11 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   brain pre-resolved the ordinal to a WRONG colour upstream, so `parse_color` short-circuited the skill
   resolver; the fix was an ordinal-PASSTHROUGH native_loop prompt (pass spatial phrases VERBATIM) → E31.
   End-to-end GROUNDED (both ordinal directions) CONFIRMED R197 → E33; see the Frontier line.
-- g1_accept.py GREEN honest-negative (no groundable green in g1's spawn view) is CORRECT (0/14,
-  verified=False, NO false-green) but the model FLAILS ~14 detect/navigate/verify turns before
-  `finish` → blows a 400s harness budget (R190 skeptic re-run timed out on the GREEN turn; RED
-  GROUNDED 1/1 was fine). The honest-negative is right; the give-up LATENCY is the cost — cap
-  turns or prompt an earlier honest-stop before the next g1 skeptic re-run → R190/R219 (R219 re-repro: 13 green variants, GREEN >6min; RED GROUNDED fine — budget g1_accept >6min, not the Bash default 2min).
+- g1_accept.py full RED+GREEN >10min (GREEN model flails ~14 turns): run BACKGROUND — a foreground Bash-cap timeout SIGTERMs mid-GREEN, orphaning the g1 sim (R217) → R219/R223.
+- g1.perception RED GROUNDED is NON-REPRODUCIBLE at current tol — do NOT re-record as a bar. R219=1/1; R223
+  re-ran x2, IDENTICAL code+scene+query `红色的东西` → RAN 0/6 and 0/17 (REFUTED; not query-phrasing). Red
+  stool at seg-centroid tol boundary of g1's head-cam → dino box outside tol ~2/3 samples (E47/R215 FOV/tol
+  class). Fix: re-frame head-cam (world config) NOT widen tol (looser oracle=Inv.1 gate) → E50 R223.
 
 ## Recipes (proven invocations — copy, don't re-derive)
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +
