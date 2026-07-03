@@ -121,3 +121,70 @@ class TestReplCliArgv:
         # Guard the acceptance-face invariant: the trace toggle must not add a behaviour flag.
         argv = repl_cli_argv({TRACE_ENV_VAR: "1"})
         assert "-p" not in argv and "--sim-go2" not in argv
+
+
+# --- Evidence persistence (R233/E54) -----------------------------------------
+# The acceptance driver writes eyes_*.png / verdict_*.png / repl.raw.log into a /tmp SNAP
+# dir (fast, but AGENTS.md forbids /tmp for durable evidence and a reboot wipes it). The
+# R229/R231 warehouse runs preserved only the .log — the eyes-on-sim FRAMES were lost, so
+# "closest seen inf" could not be adjudicated visually (off-frame vs blind-detector). These
+# guards make the driver copy every frame + log OUT to a durable, round-scoped dir.
+from tools.acceptance.vlm_guard import (  # noqa: E402
+    EVIDENCE_ENV_VAR,
+    ROUND_ENV_VAR,
+    persist_evidence,
+    resolve_evidence_dir,
+)
+
+
+class TestResolveEvidenceDir:
+    def test_explicit_dir_wins(self) -> None:
+        env = {EVIDENCE_ENV_VAR: "/data/ev", ROUND_ENV_VAR: "233"}
+        assert resolve_evidence_dir(env, "/repo") == "/data/ev"
+
+    def test_round_number_normalized_to_R_tag(self) -> None:
+        assert resolve_evidence_dir({ROUND_ENV_VAR: "233"}, "/repo") == "/repo/var/evidence/R233"
+
+    def test_round_already_R_prefixed(self) -> None:
+        assert resolve_evidence_dir({ROUND_ENV_VAR: "R233"}, "/repo") == "/repo/var/evidence/R233"
+
+    def test_none_when_unresolvable(self) -> None:
+        # No ROUND_N and no explicit dir → None (driver leaves frames in SNAP, warns loud).
+        assert resolve_evidence_dir({}, "/repo") is None
+
+    def test_never_tmp(self) -> None:
+        # AGENTS.md: durable evidence never lives under /tmp.
+        dest = resolve_evidence_dir({ROUND_ENV_VAR: "9"}, "/home/u/repo")
+        assert dest is not None and not dest.startswith("/tmp")
+
+
+class TestPersistEvidence:
+    def _seed(self, snap):
+        (snap / "eyes_fetch.png").write_bytes(b"\x89PNG frame")
+        (snap / "verdict_1.png").write_bytes(b"\x89PNG verdict")
+        (snap / "repl.raw.log").write_text("trace")
+        (snap / "session.log").write_text("session")
+        (snap / "scratch.txt").write_text("ignore me")  # non-evidence suffix
+
+    def test_copies_frames_and_logs_not_other(self, tmp_path) -> None:
+        snap = tmp_path / "snap"; snap.mkdir(); self._seed(snap)
+        dest = tmp_path / "ev" / "R233"
+        got = persist_evidence(str(snap), str(dest))
+        assert got == ["eyes_fetch.png", "repl.raw.log", "session.log", "verdict_1.png"]
+        assert (dest / "eyes_fetch.png").read_bytes() == b"\x89PNG frame"
+        assert not (dest / "scratch.txt").exists()
+
+    def test_noop_on_falsy_dest(self, tmp_path) -> None:
+        snap = tmp_path / "snap"; snap.mkdir(); self._seed(snap)
+        assert persist_evidence(str(snap), None) == []
+        assert persist_evidence(str(snap), "") == []
+
+    def test_noop_on_missing_snap(self, tmp_path) -> None:
+        assert persist_evidence(str(tmp_path / "nope"), str(tmp_path / "ev")) == []
+
+    def test_idempotent(self, tmp_path) -> None:
+        snap = tmp_path / "snap"; snap.mkdir(); self._seed(snap)
+        dest = tmp_path / "ev"
+        first = persist_evidence(str(snap), str(dest))
+        second = persist_evidence(str(snap), str(dest))  # re-run must not raise / duplicate
+        assert first == second

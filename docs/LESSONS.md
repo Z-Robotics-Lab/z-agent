@@ -98,7 +98,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 - Perception VLM off OpenRouter (402/arrears) → route to LOCAL Ollama, plug-and-play, NO credit:
   `VECTOR_VLM_URL=http://localhost:11434/v1 VECTOR_VLM_MODEL=gemma4:e4b` (already-pulled; the code's
   documented local seam). gemma4:e4b resolves L-R ordinals; unblocked the clean ordinal GROUNDED → E28.
-- Perception/grasp accept fail hides its cause: non-verbose REPL pins skills/perception loggers to ERROR (cli._QUIET_LOGGERS) so `[PGRASP]` trace never reaches repl.raw.log — `VECTOR_ACCEPT_VERBOSE=1` adds `--verbose` (logging-only, face intact) to capture arrival pose + per-heading detection → E54.
+- Acceptance-diagnosis two-parter (make the ONE warehouse sim run decisive): (a) non-verbose REPL pins skills/perception loggers to ERROR (cli._QUIET_LOGGERS) so `[PGRASP]` trace never reaches repl.raw.log → `VECTOR_ACCEPT_VERBOSE=1` adds `--verbose` (logging-only, face intact) to capture arrival pose + per-heading detection; (b) the driver wrote `eyes_*.png`/`verdict_*.png` to the ephemeral SNAP scratch dir (reboot-wiped, AGENTS.md forbids it for durable evidence) but never copied them out, so R229/R231 warehouse frames VANISHED and `closest seen inf` was unadjudicable visually — now auto-persisted to `var/evidence/R<ROUND_N>` at end-of-run (`vlm_guard.resolve_evidence_dir`/`persist_evidence`, unit-tested; bare run w/o ROUND_N warns loud). Keep the frame, not just the log → E54.
 
 ## Frontier (the ambition horizon — review rounds refresh; STATUS `frontier:` carries the 1-liner)
 - Ordinal fetch CONFIRMED (R197/E33, deepseek-v4-flash): `最左边的瓶子`→green AND `最右边的瓶子`→blue

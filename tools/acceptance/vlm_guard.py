@@ -20,7 +20,9 @@ importable so ``repl_accept.py`` stays unit-testable (no sim, no network in the 
 """
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import urllib.error
 import urllib.request
 
@@ -122,3 +124,57 @@ def repl_cli_argv(environ) -> list[str]:
     if val and val not in ("0", "false", "no"):
         argv.append("--verbose")
     return argv
+
+
+# --- Durable evidence persistence (R233/E54) ---------------------------------
+# The driver writes eyes_*.png / verdict_*.png / repl.raw.log / session.log to a /tmp SNAP
+# dir (fast). But AGENTS.md §State-files forbids /tmp for durable evidence, and a reboot
+# wipes it — so the R229/R231 warehouse runs preserved only the hand-copied .log and LOST
+# the eyes-on-sim FRAMES. That is why "closest seen inf" stayed unadjudicated: with a frame
+# you SEE whether the dog is off-frame (H1/H4) or facing the green bottle yet blind (H2).
+# These pure helpers let the driver copy every frame + log OUT to a durable, round-scoped
+# dir at end-of-run, so the next warehouse sim window yields eyes, not just logs.
+EVIDENCE_ENV_VAR: str = "VECTOR_EVIDENCE_DIR"
+ROUND_ENV_VAR: str = "ROUND_N"
+_EVIDENCE_SUFFIXES: tuple[str, ...] = (".png", ".log")
+
+
+def resolve_evidence_dir(environ, repo_root: str) -> str | None:
+    """Durable, non-/tmp destination for acceptance evidence, or ``None`` to skip.
+
+    Priority: explicit ``VECTOR_EVIDENCE_DIR`` > ``<repo>/var/evidence/R<ROUND_N>`` when the
+    supervisor set ``ROUND_N`` > ``None`` (interactive run with neither set — the driver then
+    warns and leaves frames in SNAP). ``ROUND_N`` is R-space and may arrive bare (``233``) or
+    prefixed (``R233``); normalise to the ``R233`` dir naming the ledger already uses.
+    """
+    explicit = str(environ.get(EVIDENCE_ENV_VAR, "")).strip()
+    if explicit:
+        return explicit
+    rn = str(environ.get(ROUND_ENV_VAR, "")).strip()
+    if rn:
+        tag = rn if rn.upper().startswith("R") else f"R{rn}"
+        return os.path.join(repo_root, "var", "evidence", tag)
+    return None
+
+
+def persist_evidence(snap: str, dest: str | None) -> list[str]:
+    """Copy durable artifacts (frames + logs) out of the /tmp ``snap`` dir into ``dest``.
+
+    Persists every ``*.png`` (eyes/verdict frames — the eyes-on-sim moat) and ``*.log`` file.
+    Best-effort and idempotent: a per-file ``OSError`` is skipped (a persist glitch must never
+    sink an acceptance that already ran), re-runs overwrite in place. Returns the sorted
+    basenames persisted. ``dest`` falsy or ``snap`` missing → ``[]`` (no-op, no raise).
+    """
+    if not dest or not os.path.isdir(snap):
+        return []
+    os.makedirs(dest, exist_ok=True)
+    persisted: list[str] = []
+    for name in sorted(os.listdir(snap)):
+        if not name.endswith(_EVIDENCE_SUFFIXES):
+            continue
+        try:
+            shutil.copy2(os.path.join(snap, name), os.path.join(dest, name))
+        except OSError:
+            continue
+        persisted.append(name)
+    return persisted

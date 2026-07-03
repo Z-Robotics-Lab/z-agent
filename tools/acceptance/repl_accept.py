@@ -40,7 +40,9 @@ from tools.acceptance.vlm_guard import (  # noqa: E402
     VLM_BILLING_402_MARKER,
     VLMConfoundError,
     detect_perception_402,
+    persist_evidence,
     repl_cli_argv,
+    resolve_evidence_dir,
     resolve_local_vlm_env,
 )
 
@@ -492,3 +494,17 @@ else:
           f"fetch_verified={result['fetch_verified']} ({result.get('fetch_grounded')}) "
           f"place_verified={result['place_verified']} ({result.get('place_grounded')}) "
           f"frames={frames}", flush=True)
+
+# Durable-evidence copy-out (R233/E54): SNAP is /tmp (AGENTS.md forbids /tmp for evidence;
+# a reboot wipes it), so copy the eyes-on-sim FRAMES + logs to var/evidence/R<ROUND_N> now.
+# R229/R231 lost their warehouse frames this way — with a frame, "closest seen inf" is
+# visually adjudicable (off-frame H1/H4 vs facing-but-blind H2). Uses os.environ (not the
+# child `env`) so ROUND_N / VECTOR_EVIDENCE_DIR resolve from the round's real environment.
+_ev_dest = resolve_evidence_dir(os.environ, ROOT)
+_ev_saved = persist_evidence(SNAP, _ev_dest)
+if _ev_dest:
+    print(f"[driver] evidence persisted -> {_ev_dest} ({len(_ev_saved)} files: {_ev_saved})",
+          flush=True)
+else:
+    print(f"[driver] evidence NOT persisted (set ROUND_N or VECTOR_EVIDENCE_DIR to keep it) "
+          f"— frames live ONLY in {SNAP} (/tmp, reboot-wiped)", flush=True)

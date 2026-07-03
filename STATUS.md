@@ -1,30 +1,34 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-03 · R232 (E54) DEBUG — Hypothesis-Loop the warehouse green-fetch transfer
-  gap. SIM-BLOCKED (sibling Isaac warehouse sim live, Inv-5 ONE-sim) so no MuJoCo launch: did the
-  static OBSERVE+HYPOTHESIZE pass and shipped the instrumentation that makes next round's ONE run decisive.
+updated: 2026-07-03 · R233 (E54) BUILD — SIM-BLOCKED 3rd round (sibling Isaac /workspace/go2w
+  screenshot hung ~108min, Inv-5 ONE-sim, un-killable per NEVER-KILL-INFRA). Refused to blind-fix
+  the grasp gap before the diagnostic run (respects Hypothesis Loop); instead sharpened the
+  DIAGNOSIS: the acceptance harness was LOSING its eyes-frames (wrote them to /tmp SNAP, never
+  copied out) — now auto-persists to var/evidence/R<N> so the next sim window is decisive with EYES.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R232 (E54, DEBUG, non-gated). Executed STATUS next#2 (sim-free half).
-  OBSERVE (var/evidence/R231 clean-route): two-phase fail — Phase A perceive+approach+grasp ran 26.7s → holding_object
-  False (perceived-then-missed); Phase B scan 6 headings `closest seen inf` (ZERO detections anywhere). RULED OUT:
-  spawn/pose (green 10.88,3.0 byte-identical; dog 10,3 set programmatically; warehouse missing <keyframe> is flat-branch-
-  only, irrelevant), lighting, desaturated-grey bg (should AID green vs _SAT_MIN=140). ROOT CAUSE UNRESOLVED — 4 ranked
-  hypotheses (H1 compact-enclosure nav parks dog off-frame · H3 approach displaced/grasp IK-miss · H2 render/detect · H4
-  scan-dir), all need the sim to falsify. BLIND SPOT found + FIXED: raw log had ZERO [PGRASP] lines (non-verbose pins
-  skills/perception loggers to ERROR) → VECTOR_ACCEPT_VERBOSE=1 now adds --verbose (logging-only, face unchanged;
-  test_never_injects_p_or_sim_flags guards it). 15/15 unit green (5 new TestReplCliArgv). DEBUG.md carries the plan.
+last-round: R233 (E54, BUILD, non-gated). check.sh was red at cold start (BOARD stale from
+  supervisor's R232 rounds.jsonl append) → regen floor committed (b36376a). Then: `vlm_guard.py`
+  gained pure `resolve_evidence_dir` (VECTOR_EVIDENCE_DIR > var/evidence/R<ROUND_N> > None; never
+  /tmp) + `persist_evidence` (copies *.png/*.log, best-effort/idempotent); wired into `repl_accept.py`
+  tail. 24/24 harness unit green (9 new), py_compile clean. Acceptance-face e2e NOT verified this
+  round (needs a sim) — provisional; the next warehouse run is BOTH the H1-H4 adjudication AND this
+  wiring's e2e proof (it will now auto-save frames). No blind grasp fix shipped — diagnosis first.
 
 frontier: Make the confirmed HOUSE green fetch TRANSFER zero-shot to go2_warehouse. Harness now
-  confound-proof (E54 R231) AND trace-capable (E54 R232). NEW BAR: adjudicate H1-H4 in ONE decisive verbose run.
+  confound-proof (R231) + trace-capable (R232) + FRAME-PRESERVING (R233). NEW BAR unchanged:
+  adjudicate H1-H4 in ONE decisive verbose+framed run, then fix the top cause.
+
+watch: sibling Isaac sim (/workspace/go2w, not our loop/REGISTRY) held the ONE-sim slot ~108min hung,
+  blocking R231/R232/R233's decisive warehouse run. NOT a CEO gate; not ours to kill (NEVER-KILL-INFRA).
 
 next:
-  1. [DEBUG/VERIFY, NON-gated] ONCE host is sim-free (pgrep -f "mujoco|isaac|vcli" empty + free -g):
-     run the DEBUG.md EXPERIMENT — `VECTOR_ACCEPT_VERBOSE=1 ... go2_warehouse ... MODE=fetch` ONCE,
-     grep `[PGRASP]` for arrival get_position() + per-scan detection → adjudicate H1/H2/H3/H4, fix the
-     top cause so green fetch TRANSFERS. This also gives the E52 N=2 clean re-run.
-  2. [DEBUG/breadth, NON-gated] Apply the H1/H3 fix (nav standoff or approach re-pose for the compact
-     enclosure) and re-verify green fetch GROUNDED in go2_warehouse; promote fetch.nl-new-world-warehouse.
+  1. [DEBUG/VERIFY, NON-gated] ONCE host sim-free (pgrep -f "mujoco|isaac|vcli" empty + free -g):
+     `VECTOR_ACCEPT_VERBOSE=1 ... go2_warehouse ... MODE=fetch` ONCE. It now auto-saves frames to
+     var/evidence/R<N>. grep `[PGRASP]` for arrival get_position() + per-scan detection AND LOOK at
+     the eyes frame → adjudicate H1(off-frame)/H2(blind)/H3(approach)/H4(scan-dir). Also the E52 N=2.
+  2. [DEBUG/breadth, NON-gated] Apply the diagnosed fix (nav standoff / approach re-pose for the
+     compact enclosure) and re-verify green fetch GROUNDED in go2_warehouse; promote fetch.nl-new-world-warehouse.
   3. [FRONTIER/breadth, GATED] a NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver
      (WIRING:53) + new MuJoCo assets; multi-round SDD.
 
