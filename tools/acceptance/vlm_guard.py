@@ -96,3 +96,29 @@ def resolve_local_vlm_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
             "VECTOR_VLM_MODEL": DEFAULT_LOCAL_VLM_MODEL,
         }
     raise VLMConfoundError(_RECIPE)
+
+
+# The bare-REPL invocation the acceptance driver spawns. --native-loop only (the acceptance
+# face is bare cli + NL: NO -p / --sim-go2). --verbose is a LOGGING-only flag (cli._setup_logging):
+# it restores vector_os_nano.skills / .perception loggers to full output WITHOUT changing any
+# behaviour (planner, perception, verify all run identically), so the face stays intact.
+_BASE_REPL_ARGV: tuple[str, ...] = ("-m", "vector_os_nano.vcli.cli", "--native-loop")
+TRACE_ENV_VAR: str = "VECTOR_ACCEPT_VERBOSE"
+
+
+def repl_cli_argv(environ) -> list[str]:
+    """Argv for the bare-REPL spawn; append ``--verbose`` iff ``VECTOR_ACCEPT_VERBOSE`` is truthy.
+
+    R232/E54: R231's warehouse run read ``closest seen inf`` (perception found nothing at ALL
+    scan headings) but the raw log carried ZERO ``[PGRASP]`` lines — the per-scan-heading
+    detection trace is ``logger.info`` under ``vector_os_nano.skills`` / ``.perception``, which
+    the non-verbose REPL pins to ERROR (cli._QUIET_LOGGERS). Setting this env makes a DEBUG round's
+    single warehouse sim run DECISIVE: it captures arrival pose + per-heading detection counts, so
+    we can tell framing (dog elsewhere) from detection (dog faces green, still None). Default off →
+    every existing run is byte-identical to before.
+    """
+    argv = list(_BASE_REPL_ARGV)
+    val = str(environ.get(TRACE_ENV_VAR, "")).strip().lower()
+    if val and val not in ("0", "false", "no"):
+        argv.append("--verbose")
+    return argv

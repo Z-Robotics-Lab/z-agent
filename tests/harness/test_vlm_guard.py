@@ -20,9 +20,11 @@ import pytest
 from tools.acceptance.vlm_guard import (
     DEFAULT_LOCAL_VLM_MODEL,
     DEFAULT_LOCAL_VLM_URL,
+    TRACE_ENV_VAR,
     VLM_BILLING_402_MARKER,
     VLMConfoundError,
     detect_perception_402,
+    repl_cli_argv,
     resolve_local_vlm_env,
 )
 
@@ -92,3 +94,30 @@ class TestResolveLocalVlmEnv:
             {"VECTOR_ALLOW_REMOTE_VLM": "1"}, ollama_probe=lambda: False
         )
         assert out == {}
+
+
+class TestReplCliArgv:
+    """R232/E54: --verbose trace toggle so a DEBUG round's warehouse run captures [PGRASP]."""
+
+    def test_default_is_bare_native_loop(self) -> None:
+        # No env → byte-identical to the historical spawn (no --verbose leaks in).
+        assert repl_cli_argv({}) == ["-m", "vector_os_nano.vcli.cli", "--native-loop"]
+
+    def test_verbose_appended_when_flag_set(self) -> None:
+        argv = repl_cli_argv({TRACE_ENV_VAR: "1"})
+        assert argv[-1] == "--verbose"
+        # base invocation preserved (acceptance face: --native-loop, no -p/--sim-go2)
+        assert argv[:3] == ["-m", "vector_os_nano.vcli.cli", "--native-loop"]
+
+    def test_falsey_values_do_not_enable(self) -> None:
+        for falsey in ("0", "false", "no", "", "  "):
+            assert "--verbose" not in repl_cli_argv({TRACE_ENV_VAR: falsey}), falsey
+
+    def test_truthy_variants_enable(self) -> None:
+        for truthy in ("1", "true", "yes", "TRUE", "on"):
+            assert "--verbose" in repl_cli_argv({TRACE_ENV_VAR: truthy}), truthy
+
+    def test_never_injects_p_or_sim_flags(self) -> None:
+        # Guard the acceptance-face invariant: the trace toggle must not add a behaviour flag.
+        argv = repl_cli_argv({TRACE_ENV_VAR: "1"})
+        assert "-p" not in argv and "--sim-go2" not in argv

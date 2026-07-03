@@ -1,34 +1,30 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-03 · R231 (E54) BUILD — hardened the acceptance harness against the R230/E53
-  perception-VLM 402 confound; re-opened E52 warehouse cleanly (N=1): still RAN 0/1, but for a REAL
-  grasp gap, not billing — so E52's 0/2 was NOT purely a confound.
+updated: 2026-07-03 · R232 (E54) DEBUG — Hypothesis-Loop the warehouse green-fetch transfer
+  gap. SIM-BLOCKED (sibling Isaac warehouse sim live, Inv-5 ONE-sim) so no MuJoCo launch: did the
+  static OBSERVE+HYPOTHESIZE pass and shipped the instrumentation that makes next round's ONE run decisive.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R231 (E54, BUILD). Executed STATUS next#1 (HARNESS-HARDEN, non-gated).
-  (a) NEW tools/acceptance/vlm_guard.py (pure, 10/10 unit tests green): resolve_local_vlm_env
-  auto-routes VECTOR_VLM_URL=localhost:11434/gemma4:e4b when unset AND Ollama up (probe /api/tags),
-  else fail-LOUD with the recipe; detect_perception_402 matches the perception-VLM
-  'OpenRouter API client error 4xx' signature — verified True on the REAL var/evidence/R229 402
-  stream (would have caught E52). (b) repl_accept.py now auto-routes BEFORE spawn + aborts a turn
-  with a distinct VLM-BILLING-402 marker instead of a 300s silent spin. VERIFY (next#2, N=1): green
-  fetch in go2_warehouse WITH the hardened harness RAN 0/1 — driver logged 'auto-routed', clean
-  stream ZERO 402, fail is a REAL perception_grasp_skill -> verify holding_object() FAIL ([FAIL]1/2,
-  84s) ⇒ R230's 'E52 0/2 = purely 402 confound' DISPROVEN at N=1. run2 DEFERRED (sibling Isaac
-  warehouse_scene.py sim live; Inv-5 ONE-sim — did NOT launch a 2nd or kill it). My sim torn down clean.
+last-round: R232 (E54, DEBUG, non-gated). Executed STATUS next#2 (sim-free half).
+  OBSERVE (var/evidence/R231 clean-route): two-phase fail — Phase A perceive+approach+grasp ran 26.7s → holding_object
+  False (perceived-then-missed); Phase B scan 6 headings `closest seen inf` (ZERO detections anywhere). RULED OUT:
+  spawn/pose (green 10.88,3.0 byte-identical; dog 10,3 set programmatically; warehouse missing <keyframe> is flat-branch-
+  only, irrelevant), lighting, desaturated-grey bg (should AID green vs _SAT_MIN=140). ROOT CAUSE UNRESOLVED — 4 ranked
+  hypotheses (H1 compact-enclosure nav parks dog off-frame · H3 approach displaced/grasp IK-miss · H2 render/detect · H4
+  scan-dir), all need the sim to falsify. BLIND SPOT found + FIXED: raw log had ZERO [PGRASP] lines (non-verbose pins
+  skills/perception loggers to ERROR) → VECTOR_ACCEPT_VERBOSE=1 now adds --verbose (logging-only, face unchanged;
+  test_never_injects_p_or_sim_flags guards it). 15/15 unit green (5 new TestReplCliArgv). DEBUG.md carries the plan.
 
-frontier: Harness now confound-proof. Live REAL question: green fetch does NOT transfer zero-shot to
-  go2_warehouse even confound-free (perception_grasp gap). NEW BAR: debug so a confirmed bar TRANSFERS.
+frontier: Make the confirmed HOUSE green fetch TRANSFER zero-shot to go2_warehouse. Harness now
+  confound-proof (E54 R231) AND trace-capable (E54 R232). NEW BAR: adjudicate H1-H4 in ONE decisive verbose run.
 
 next:
-  1. [VERIFY/breadth, NON-gated] Complete E54 N=2: RE-RUN green fetch in go2_warehouse via the
-     hardened harness (auto-routes local VLM) ONCE the host has NO concurrent sim (check pgrep
-     mujoco|vcli|isaac + free -g; WAIT for the sibling Isaac sim to clear). 2nd clean-route RAN-0
-     confirms the warehouse transfer gap is real & reproducible (not brain-flake).
-  2. [DEBUG/breadth, NON-gated] Hypothesis-Loop the warehouse perception_grasp failure (DEBUG.md):
-     holding_object() FAILs after perception_grasp_skill — is it detector (green geom vs warehouse
-     clutter), approach/framing (dog start pose vs table), or grasp IK? Compare vs the HOUSE green
-     fetch that GROUNDS (R230). Fix so the confirmed bar TRANSFERS zero-shot to the new world.
+  1. [DEBUG/VERIFY, NON-gated] ONCE host is sim-free (pgrep -f "mujoco|isaac|vcli" empty + free -g):
+     run the DEBUG.md EXPERIMENT — `VECTOR_ACCEPT_VERBOSE=1 ... go2_warehouse ... MODE=fetch` ONCE,
+     grep `[PGRASP]` for arrival get_position() + per-scan detection → adjudicate H1/H2/H3/H4, fix the
+     top cause so green fetch TRANSFERS. This also gives the E52 N=2 clean re-run.
+  2. [DEBUG/breadth, NON-gated] Apply the H1/H3 fix (nav standoff or approach re-pose for the compact
+     enclosure) and re-verify green fetch GROUNDED in go2_warehouse; promote fetch.nl-new-world-warehouse.
   3. [FRONTIER/breadth, GATED] a NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver
      (WIRING:53) + new MuJoCo assets; multi-round SDD.
 

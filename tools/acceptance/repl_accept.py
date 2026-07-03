@@ -40,6 +40,7 @@ from tools.acceptance.vlm_guard import (  # noqa: E402
     VLM_BILLING_402_MARKER,
     VLMConfoundError,
     detect_perception_402,
+    repl_cli_argv,
     resolve_local_vlm_env,
 )
 
@@ -260,8 +261,14 @@ def _llm_preflight() -> None:
 _llm_preflight()
 print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim-go2); FETCH={FETCH!r} PLACE={PLACE!r}", flush=True)
 # Bare module invocation with --native-loop only (mirrors the wrapper, sans flags).
+# VECTOR_ACCEPT_VERBOSE=1 adds --verbose (logging-only; face unchanged) so a DEBUG round
+# captures the [PGRASP]/[SCAN] per-heading detection trace into repl.raw.log (R232/E54).
+_repl_argv = repl_cli_argv(env)
+if "--verbose" in _repl_argv:
+    print("[driver] VECTOR_ACCEPT_VERBOSE set — spawning REPL with --verbose "
+          "(logging-only; captures [PGRASP]/[SCAN] trace to repl.raw.log)", flush=True)
 child = pexpect.spawn(
-    f"{ROOT}/.venv/bin/python", ["-m", "vector_os_nano.vcli.cli", "--native-loop"],
+    f"{ROOT}/.venv/bin/python", _repl_argv,
     env=env, cwd=ROOT, encoding="utf-8", codec_errors="replace",
     timeout=120, dimensions=(50, 200),
 )
