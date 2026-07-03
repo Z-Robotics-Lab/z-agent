@@ -10,7 +10,8 @@
 | fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 58 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 44 | pending |
 | fetch.nl-new-world-courtyard | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
-| fetch.nl-new-world-courtyard-blue | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
+| fetch.nl-new-world-courtyard-red | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 6 | pending |
 | fetch.nl-new-world-warehouse-blue | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
 | fetch.nl-new-world-warehouse-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
@@ -99,3 +100,4 @@
 - E56 R241 [inconclusive] A 3rd distinct world (go2_courtyard.xml, open-air sandstone courtyard, unlike house+warehouse) plugs in as pure CONFIG via VECTOR_ROOM_TEMPLATE=courtyard, 0 kernel edits (Inv.3), compiling with pick furniture byte-identical so a confirmed fetch can transfer. — retry only if: n/a - BUILD is a FLOOR not acceptance; next round runs the owed courtyard green-fetch on the bare face when the sim frees
 - E56 R242 [inconclusive] The 3rd distinct world (courtyard) green-fetch transfers on the bare face; and the sibling Isaac sim is NOT the repo's Inv-5 gate (E54), so the R241 SIM-BLOCKED owing was an over-read. — retry only if: promote to confirmed next round after boundary + red-team + N>=2 (E46); do NOT re-own a run SIM-BLOCKED on a sibling Isaac sim (E54/LESSONS:30)
 - E56 R243 [confirmed] The R242 courtyard green-fetch (N=1 provisional) reproduces across the R242->R243 boundary (promote to confirmed N>=2, E46), and a 2nd courtyard colour (blue) transfers on the bare face. — retry only if: n/a - courtyard green CLOSED; promote courtyard-blue to N>=2 next round (E46)
+- E56 R244 [confirmed] The R243 courtyard-blue (N=1 provisional) reproduces across the R243->R244 boundary (promote to confirmed N>=2, E46), and a 3rd courtyard colour (RED, the hue-adjacent one the warehouse E54 had to fix) transfers on the bare face. — retry only if: n/a - courtyard blue CLOSED; promote courtyard-red to N>=2 next round (E46)
