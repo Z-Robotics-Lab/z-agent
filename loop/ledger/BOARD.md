@@ -9,7 +9,7 @@
 | fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 48 | 61fde80 |
 | fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 45 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 31 | pending |
-| fetch.nl-new-world-warehouse | refuted | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| fetch.nl-new-world-warehouse | provisional | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 16 | pending |
 | fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 19 | pending |
 | fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 21 | pending |
@@ -82,3 +82,4 @@
 - E51 R228 [confirmed] Adjudicate R227 E51 fetch.nl-scene-clutter GROUNDED N=2 provisional: does the green fetch REPRODUCE on the bare face across the R227->R228 boundary (the reproducibility gate R219 g1.perception failed)? — retry only if: green fetch under VECTOR_SCENE_CLUTTER regresses to RAN/FAILED, OR the clutter geoms are removed from _GO2_CLUTTER_GEOMS
 - E52 R229 [inconclusive] A NEW WORLD (go2_warehouse.xml, compact box unlike the house) plugs in as pure CONFIG via VECTOR_ROOM_TEMPLATE, 0 kernel edits (Inv.3), AND a confirmed bar (green fetch v4-flash) reproduces on it zero-shot on the bare face. — retry only if: perception_grasp/approach is debugged for the warehouse visual+lidar scene, OR green fetch also regresses in the HOUSE (=brain-flake not world)
 - E53 R230 [confirmed] R230 §7: re-run the oldest confirmed bar on the real face; adjudicate R229 E52; re-red-team a headline claim; gate/wiring/lessons audit. — retry only if: n/a - review round
+- E54 R231 [inconclusive] Harden repl_accept vs the R230/E53 perception-VLM 402 confound (silent no-verdict spin), then re-open E52 warehouse cleanly. — retry only if: vlm_guard reverted (regr=test_vlm_guard.py); E52 provisional until N>=2 clean runs + perception_grasp debug
