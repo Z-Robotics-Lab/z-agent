@@ -40,6 +40,12 @@ _DEFAULT_CLEARANCE: float = 0.90  # m from receptacle to the nav approach. Large
 _APPROACH_XY_TOL: float = 0.10   # metres — within this → already_reachable
 _APPROACH_YAW_DEG: float = 20.0  # degrees — yaw tolerance for already_reachable
 _NAV_TIMEOUT: float = 20.0       # seconds for navigate_to
+_NAV_RETRIES: int = 1            # extra approach-nav attempts on a transient walk/timeout miss.
+# navigate_to fast-fails (planner=None, no walk) on a GENUINELY unreachable target, so a retry is
+# ~free there and honest failure is preserved (nav_failed after all attempts); it only recovers the
+# transient timeout/walk-stall flake that made mobile_place return False, which the brain then
+# "recovered" by improvising an UNREACHABLE navigate(10.8,3.0) -> R247/E56 refuted the courtyard
+# PLACE composite on exactly that surfaced flake even though the physical place succeeded.
 _DROP_XY_TOL: float = 0.30       # m; drop-release only when the EE is within this of the target xy
 # (over the receptacle). The flat place receptacle is ~0.36 x 0.80 m, so 0.30 keeps the drop on it.
 _STABLE_MAX_SPEED: float = 0.05  # m/s — dog counts as stable below this
@@ -72,6 +78,37 @@ def _ang_diff(a: float, b: float) -> float:
     while d < -math.pi:
         d += 2.0 * math.pi
     return d
+
+
+def _navigate_to_approach(
+    base: object,
+    approach_x: float,
+    approach_y: float,
+    is_scene_receptacle: bool,
+) -> bool:
+    """One full approach-nav attempt; returns the main navigate_to result.
+
+    Re-reads the dog pose so the L-nav leg-1 corridor uses the CURRENT y — a retry
+    after a partial walk starts from where the dog actually stalled, not the stale
+    pre-attempt pose.
+    """
+    dog_pos = base.get_position()
+    # For the scene receptacle's -X approach, navigate in TWO legs (an L-path): first -X to the
+    # approach x at the dog's CURRENT y (a clear corridor -X of the receptacle), THEN +Y to the
+    # approach point. A single diagonal leg cuts the corner and STALLS against the receptacle/
+    # furniture inflation for some grasp poses (blue stalled 0.37 m short, D137) — the L-path keeps
+    # the dog -X of the obstruction the whole way, making the controlled approach colour-agnostic.
+    if is_scene_receptacle and abs(dog_pos[1] - approach_y) > _APPROACH_XY_TOL:
+        logger.info(
+            "[MOBILE-PLACE] L-nav leg 1: -X corridor to (%.2f, %.2f)",
+            approach_x, dog_pos[1],
+        )
+        base.navigate_to(approach_x, dog_pos[1], timeout=_NAV_TIMEOUT)
+    logger.info(
+        "[MOBILE-PLACE] navigating to approach (%.3f, %.3f) timeout=%.0fs",
+        approach_x, approach_y, _NAV_TIMEOUT,
+    )
+    return bool(base.navigate_to(approach_x, approach_y, timeout=_NAV_TIMEOUT))
 
 
 def _wait_stable(
@@ -456,25 +493,25 @@ class MobilePlaceSkill:
             nav_distance, already_reachable, skip_navigate,
         )
 
-        # Step 5 — Navigate (if needed)
+        # Step 5 — Navigate (if needed), retrying a transient miss internally so it never
+        # surfaces to the brain as a False (R247/E56: the brain "recovers" a surfaced nav-False by
+        # improvising an UNREACHABLE navigate to the pick location, ungrounding the composite even
+        # though the physical place succeeds). A genuinely unreachable approach fast-fails on every
+        # attempt (planner=None, no walk) -> nav_failed is still returned honestly.
         if not already_reachable and not skip_navigate:
-            # For the scene receptacle's -X approach, navigate in TWO legs (an L-path):
-            # first -X to the approach x at the dog's CURRENT y (a clear corridor -X of the
-            # receptacle), THEN +Y to the approach point. A single diagonal leg cuts the
-            # corner and STALLS against the receptacle/furniture inflation for some grasp
-            # poses (blue stalled 0.37 m short, D137) — the L-path keeps the dog -X of the
-            # obstruction the whole way, making the controlled approach colour-agnostic.
-            if is_scene_receptacle and abs(dog_pos[1] - approach_y) > _APPROACH_XY_TOL:
-                logger.info(
-                    "[MOBILE-PLACE] L-nav leg 1: -X corridor to (%.2f, %.2f)",
-                    approach_x, dog_pos[1],
+            nav_ok = False
+            for attempt in range(_NAV_RETRIES + 1):
+                nav_ok = _navigate_to_approach(
+                    base, approach_x, approach_y, is_scene_receptacle
                 )
-                base.navigate_to(approach_x, dog_pos[1], timeout=_NAV_TIMEOUT)
-            logger.info(
-                "[MOBILE-PLACE] navigating to approach (%.3f, %.3f) timeout=%.0fs",
-                approach_x, approach_y, _NAV_TIMEOUT,
-            )
-            nav_ok = base.navigate_to(approach_x, approach_y, timeout=_NAV_TIMEOUT)
+                if nav_ok:
+                    break
+                if attempt < _NAV_RETRIES:
+                    logger.warning(
+                        "[MOBILE-PLACE] approach nav miss (attempt %d/%d) — retrying "
+                        "internally so a transient walk/timeout flake stays inside the skill",
+                        attempt + 1, _NAV_RETRIES + 1,
+                    )
             if not nav_ok:
                 return SkillResult(
                     success=False,

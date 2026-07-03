@@ -226,6 +226,42 @@ def test_mobile_place_nav_failed_returns_nav_failed() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Test 3b — a TRANSIENT first-nav miss is absorbed by an internal retry
+# (R247/E56: mobile_place's first-nav walk/timeout flake returned False, so the
+# brain "recovered" by improvising an UNREACHABLE navigate(10.8,3.0) -> the
+# courtyard PLACE composite graded verified=False even though the physical place
+# succeeded. Retrying internally keeps the flake from ever surfacing to the brain.)
+# ---------------------------------------------------------------------------
+
+
+def test_mobile_place_transient_nav_miss_retries_then_places() -> None:
+    base = _make_base(x=0.0, y=0.0)
+    # First approach nav returns False (transient walk/timeout), retry succeeds.
+    base.navigate_to.side_effect = [False, True]
+
+    ctx = _make_ctx(
+        base=base,
+        arm=_make_arm(),
+        gripper=_make_gripper(),
+        world_model=_make_wm(),
+    )
+
+    skill = MobilePlaceSkill()
+    skill._place = MagicMock(return_value=None)
+    skill._place.execute.return_value = _place_success()
+
+    approach = (4.45, 5.0, 0.0)
+    with _patch_approach_pose(approach), _patch_wait_stable(True):
+        result = skill.execute({"target_xyz": _TARGET_FAR}, ctx)
+
+    # The transient miss is absorbed: place still runs, no nav_failed surfaces.
+    assert result.success is True, result.result_data
+    assert result.result_data.get("diagnosis") != "nav_failed"
+    assert base.navigate_to.call_count == 2  # first miss + one internal retry
+    skill._place.execute.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # Test 4 — _wait_stable returns False → wait_stable_timeout
 # ---------------------------------------------------------------------------
 
