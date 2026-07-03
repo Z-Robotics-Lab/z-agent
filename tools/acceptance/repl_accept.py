@@ -21,6 +21,7 @@ sim, one colour.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -43,6 +44,7 @@ from tools.acceptance.vlm_guard import (  # noqa: E402
     persist_evidence,
     repl_cli_argv,
     resolve_evidence_dir,
+    resolve_judge_env,
     resolve_local_vlm_env,
 )
 
@@ -85,13 +87,19 @@ _PLANNER = {
 # via VECTOR_JUDGE_* to any OpenAI-compatible VLM whose credit is NOT exhausted (e.g. an
 # OpenRouter VLM). NOTE: the AUTHORITATIVE acceptance is the GT moat oracle + the offscreen
 # eyes_*.png this driver reads back — the judge is a secondary witness, never the moat.
-_JUDGE = {
-    "VECTOR_JUDGE_BASE_URL": os.environ.get(
-        "VECTOR_JUDGE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
-    "VECTOR_JUDGE_MODEL": os.environ.get("VECTOR_JUDGE_MODEL", "qwen3-vl-plus"),
-    "VECTOR_JUDGE_API_KEY": os.environ.get(
-        "VECTOR_JUDGE_API_KEY", os.environ.get("QWEN_API_KEY", "")),
-}
+# R271/E69: default the eyes second-witness to the LOCAL Ollama gemma4:e4b when unset + Ollama
+# up (zero credit, stricter-only) — this is what flips the acceptance eyes self-read → vlm-judge.
+# resolve_judge_env respects an explicit VECTOR_JUDGE_MODEL (e.g. a funded remote VLM) and is
+# fail-SOFT (Ollama down → {} → judge abstains, self-read floor). Injected into os.environ so the
+# driver-side vision_judge import (which reads VECTOR_JUDGE_BASE_URL at module load) picks it up.
+_JUDGE = resolve_judge_env(os.environ)
+if _JUDGE:
+    os.environ.update(_JUDGE)
+    print(f"[driver] eyes vision-judge auto-routed to local Ollama: "
+          f"{_JUDGE['VECTOR_JUDGE_MODEL']} @ {_JUDGE['VECTOR_JUDGE_BASE_URL']}", flush=True)
+else:
+    print("[driver] eyes vision-judge: caller-supplied or unavailable (eyes stay self-read)",
+          flush=True)
 env = dict(os.environ)
 env.update({
     "PATH": "/usr/bin:" + os.environ.get("PATH", ""),
@@ -210,6 +218,37 @@ def _clean_log(snap: str) -> str:
     return re.sub(r"[⠀-⣿]", "", clean)
 
 
+# Accumulates the automated eyes-witness verdicts (tag -> "PASS|FAIL|ABSTAIN") so the final
+# [RESULT] line and the persisted judge sidecar record whether the eyes were vlm-judged.
+JUDGE_WITNESSES: list = []
+
+
+def _judge_frame(out: str, tag: str) -> None:
+    """Run the vision second-witness on the eyes frame ``out`` (R271/E69).
+
+    Flips the acceptance eyes self-read → vlm-judge: an automated VLM (local gemma4:e4b by
+    default, see resolve_judge_env) grades the SAME offscreen render against the ORTHOGONAL
+    frozen rubric (render / upright / intact / workspace-in-frame). STRICTER-ONLY (Invariant 1):
+    the witness is RECORDED alongside the authoritative GT verdict, it NEVER alters ``verified=``;
+    a 'no' is a downgrade flag, a PASS never manufactures a green. Fail-CLOSED + fail-SOFT: any
+    error → ABSTAIN, and if the judge is unrouted (VECTOR_JUDGE_MODEL unset) it is skipped so the
+    round degrades to plain self-read (never a fabricated pass)."""
+    if not os.environ.get("VECTOR_JUDGE_MODEL"):
+        return  # judge unrouted (Ollama down / caller opted out) — eyes stay self-read
+    try:
+        sys.path.insert(0, ROOT)
+        from vector_os_nano.acceptance import vision_judge  # noqa: PLC0415
+        v = vision_judge.judge(out)
+    except Exception as exc:  # noqa: BLE001 — never let the witness break a real acceptance run
+        print(f"[driver] eyes vlm-judge {tag}: ERROR {exc} (recorded ABSTAIN, self-read stands)",
+              flush=True)
+        JUDGE_WITNESSES.append((tag, "ABSTAIN"))
+        return
+    JUDGE_WITNESSES.append((tag, v.witness))
+    print(f"[driver] eyes vlm-judge {tag}: witness={v.witness} model={v.model} "
+          f"[{v.reasoning}]", flush=True)
+
+
 def _eyes_frame(snap: str, tag: str) -> None:
     """Record the honest eyes-on-sim frame for turn ``tag``.
 
@@ -230,6 +269,7 @@ def _eyes_frame(snap: str, tag: str) -> None:
         src = os.path.join(snap, verdicts[-1])
         shutil.copyfile(src, out)
         print(f"[driver] eyes frame (offscreen verdict render) -> {out}", flush=True)
+        _judge_frame(out, tag)
     else:
         print("[driver] no verdict_*.png emitted (snapshot_on_verdict yielded nothing)", flush=True)
 
@@ -512,6 +552,22 @@ try:
             result[f"{turn}_grounded"] = f"{verd[1]}/{verd[2]}"
 except Exception as exc:  # noqa: BLE001
     print(f"[driver] verdict parse failed: {exc}", flush=True)
+
+# R271/E69: surface the automated eyes-witness so the round records eyes=vlm-judge honestly.
+# The judge NEVER alters the GT verdict above — it is a recorded secondary witness (Inv.1).
+_eyes_mode = "vlm-judge" if JUDGE_WITNESSES else "self-read"
+if JUDGE_WITNESSES:
+    _wsummary = " ".join(f"{t}={w}" for t, w in JUDGE_WITNESSES)
+    print(f"\n[EYES-WITNESS {TAG}] mode=vlm-judge model={os.environ.get('VECTOR_JUDGE_MODEL')} "
+          f"{_wsummary}", flush=True)
+    try:
+        with open(f"{SNAP}/judge_witness.log", "w", encoding="utf-8") as _jf:  # .log → persisted
+            json.dump({"eyes_mode": "vlm-judge",
+                       "model": os.environ.get("VECTOR_JUDGE_MODEL"),
+                       "witnesses": [{"tag": t, "witness": w} for t, w in JUDGE_WITNESSES]},
+                      _jf)
+    except OSError as _exc:
+        print(f"[driver] judge sidecar write failed: {_exc}", flush=True)
 
 frames = sorted(f for f in os.listdir(SNAP) if f.endswith(".png"))
 if MODE == "describe":

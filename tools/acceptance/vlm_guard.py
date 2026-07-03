@@ -100,6 +100,34 @@ def resolve_local_vlm_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
     raise VLMConfoundError(_RECIPE)
 
 
+def resolve_judge_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
+    """Return the VECTOR_JUDGE_* env vars to INJECT so the eyes second-witness (vision_judge)
+    runs on the LOCAL Ollama VLM by default — flipping the acceptance eyes self-read → vlm-judge
+    (R271/E69). The judge is a SECONDARY witness (stricter-only, Invariant 1): it can only
+    DOWNGRADE/flag a frame, never manufacture a PASS, and on any error abstains.
+
+    - ``VECTOR_JUDGE_MODEL`` already set → respect the caller's explicit judge (return {}).
+    - unset + Ollama up → default the local Ollama gemma4:e4b judge.
+    - unset + Ollama down → return {} (judge simply ABSTAINS; a down witness must NEVER block
+      or fabricate a verdict — UNLIKE perception, whose absence silent-spins, so this is
+      fail-SOFT by design; self-read remains the floor).
+
+    The judge model (gemma4:e4b, the perception seam) DIFFERS from the routing/planner brain
+    (deepseek-v4-flash), so generator≠evaluator holds; the rubric is ORTHOGONAL (render /
+    upright / intact / workspace-in-frame), never "did the task succeed". ``ollama_probe`` is
+    injectable so the unit test runs offline.
+    """
+    if environ.get("VECTOR_JUDGE_MODEL"):
+        return {}
+    if ollama_probe():
+        return {
+            "VECTOR_JUDGE_BASE_URL": DEFAULT_LOCAL_VLM_URL,
+            "VECTOR_JUDGE_MODEL": DEFAULT_LOCAL_VLM_MODEL,
+            "VECTOR_JUDGE_API_KEY": environ.get("VECTOR_JUDGE_API_KEY", "ollama"),
+        }
+    return {}
+
+
 # The bare-REPL invocation the acceptance driver spawns. --native-loop only (the acceptance
 # face is bare cli + NL: NO -p / --sim-go2). --verbose is a LOGGING-only flag (cli._setup_logging):
 # it restores vector_os_nano.skills / .perception loggers to full output WITHOUT changing any

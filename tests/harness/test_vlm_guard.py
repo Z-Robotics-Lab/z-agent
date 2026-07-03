@@ -25,6 +25,7 @@ from tools.acceptance.vlm_guard import (
     VLMConfoundError,
     detect_perception_402,
     repl_cli_argv,
+    resolve_judge_env,
     resolve_local_vlm_env,
 )
 
@@ -94,6 +95,34 @@ class TestResolveLocalVlmEnv:
             {"VECTOR_ALLOW_REMOTE_VLM": "1"}, ollama_probe=lambda: False
         )
         assert out == {}
+
+
+class TestResolveJudgeEnv:
+    """R271/E69: the eyes second-witness (vision_judge) auto-routes to the LOCAL gemma4:e4b so
+    the acceptance eyes flip self-read → vlm-judge. Stricter-only + fail-SOFT (a down judge
+    abstains, never blocks — UNLIKE perception's fail-loud)."""
+
+    def test_defaults_local_judge_when_unset_and_ollama_up(self) -> None:
+        out = resolve_judge_env({}, ollama_probe=lambda: True)
+        assert out["VECTOR_JUDGE_BASE_URL"] == DEFAULT_LOCAL_VLM_URL
+        assert out["VECTOR_JUDGE_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
+        assert out["VECTOR_JUDGE_API_KEY"]  # non-empty (ollama ignores it, httpx wants a value)
+
+    def test_fail_SOFT_when_unset_and_ollama_down(self) -> None:
+        # A down judge must NOT raise (it is a secondary witness) — it returns {} so the caller
+        # leaves VECTOR_JUDGE_* unset and vision_judge.judge() abstains. Self-read stays the floor.
+        assert resolve_judge_env({}, ollama_probe=lambda: False) == {}
+
+    def test_respects_explicit_judge_model(self) -> None:
+        # A caller who already pointed the judge at a funded remote VLM is untouched.
+        env = {"VECTOR_JUDGE_MODEL": "openai/gpt-4o"}
+        out = resolve_judge_env(env, ollama_probe=lambda: True)
+        assert out == {}
+
+    def test_preserves_caller_api_key(self) -> None:
+        out = resolve_judge_env({"VECTOR_JUDGE_API_KEY": "sk-live"}, ollama_probe=lambda: True)
+        assert out["VECTOR_JUDGE_API_KEY"] == "sk-live"
+        assert out["VECTOR_JUDGE_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
 
 
 class TestReplCliArgv:
