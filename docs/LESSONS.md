@@ -78,10 +78,10 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   resolver; the fix was an ordinal-PASSTHROUGH native_loop prompt (pass spatial phrases VERBATIM) → E31.
   End-to-end GROUNDED (both ordinal directions) CONFIRMED R197 → E33; see the Frontier line.
 - g1_accept.py full RED+GREEN >10min (GREEN model flails ~14 turns): run BACKGROUND — a foreground Bash-cap timeout SIGTERMs mid-GREEN, orphaning the g1 sim (R217) → R219/R223.
-- g1.perception RED GROUNDED is NON-REPRODUCIBLE at current tol — do NOT re-record as a bar. R219=1/1; R223
-  re-ran x2, IDENTICAL code+scene+query `红色的东西` → RAN 0/6 and 0/17 (REFUTED; not query-phrasing). Red
-  stool at seg-centroid tol boundary of g1's head-cam → dino box outside tol ~2/3 samples (E47/R215 FOV/tol
-  class). Fix: re-frame head-cam (world config) NOT widen tol (looser oracle=Inv.1 gate) → E50 R223.
+- g1.perception NON-REPRODUCIBLE (R223 RAN 0/17): the oracle unions ALL same-colour seg pixels, but the OLD
+  scene had MULTIPLE red geoms (2 stools + a can) → centroid on the cluster while dino boxed ONE → box↔centroid
+  >60px ~2/3 of samples. RESOLVED R224 (WORLD config Inv.3; oracle+tol UNCHANGED=Inv.1): inject ONE dominant
+  central red target (~18-20k seg px ≫ 920px) → 4-5px match, N=2 GROUNDED. LESSON: a GT-centroid oracle over a UNION of same-colour geoms is ILL-POSED with several in view — give perception ONE target → E50 R224.
 
 ## Recipes (proven invocations — copy, don't re-derive)
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +
@@ -111,7 +111,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   yellow (E45→E46, y=3.11) REFUTED 0/2 SAME harness (perception not-visible → brain WANDERED). 5-site plug-in (0 kernel edits) is CORRECT for colour AND geometry;
   R212's "brain-fragile at N=1" REFINED — an IN-FOV grasp-reachable novel object grounds ROBUSTLY. LESSON: promote N=1 novel passes only on N>=2 repro;
   place novel pickables IN the front FOV band; welds/colour maps still HARDCODED (S4/D182) → E45/E46/E47.
-- Cross-embodiment CONFIRMED w/ the CURRENT brain (R216/E48 → R217/E49 adjudicated): deepseek-v4-flash (all recent go2 work) drives the 2nd embodiment g1-humanoid to GROUNDED nav bare-face, 0 kernel edits — refreshes 32-round-stale R183 g1.nav (deepseek-chat), answers R200 critic (all-go2). R217 reproduced it across a round boundary at a NON-MEMORIZED coord (12,3, ≠ R216's 9,3/10,4) actor=CAUSED → not a fixed-pair fluke. Bonus MOAT-FIDELITY win: leg-B (11,4) is inside an obstacle → navigate_to reason=unreachable moved_m=0 → system emitted RAN/False, refusing to fabricate an arrival. Still EXISTING g1 config, NOT a new 3rd embodiment (BYO URDF+driver = S4-gated + multi-round SDD); g1-nav renders no frame → at_position GT pose is the witness → E48/E49.
+- Cross-embodiment CONFIRMED w/ the CURRENT brain (R216/E48 → R217/E49 adjudicated): deepseek-v4-flash (all recent go2 work) drives the 2nd embodiment g1-humanoid to GROUNDED nav bare-face, 0 kernel edits — refreshes 32-round-stale R183 g1.nav (deepseek-chat), answers R200 critic (all-go2). R217 reproduced it across a round boundary at a NON-MEMORIZED coord (12,3, ≠ R216's 9,3/10,4) actor=CAUSED → not a fixed-pair fluke. Bonus MOAT-FIDELITY win: leg-B (11,4) is inside an obstacle → navigate_to reason=unreachable moved_m=0 → system emitted RAN/False, refusing to fabricate an arrival. Still EXISTING g1 config, NOT a new 3rd embodiment (BYO URDF+driver = S4-gated + multi-round SDD); g1-nav renders no frame → at_position GT pose is the witness → E48/E49. R224: the PERCEPTION axis also GROUNDED (E50, provisional N=2) after a WORLD-config hardening — cross-embodiment spans BOTH axes, 0 kernel edits. Real breadth is still a NEW 3rd embodiment or a 2nd world → E50.
 - Quantity-place: REFUTED v4-flash (R199/E36) → GROUNDED deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC
   not machinery (E38 seq 2/2); model swap moved it ZERO kernel edits (E23-clean, plug-and-play). But NOT deterministic:
   ROBUSTNESS (R205/E40) campaign GROUNDED 2/3 (run1 abandoned obj-2; deepseek-chat FLAKY on 两个) → runner guardrail E40.

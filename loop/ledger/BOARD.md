@@ -15,7 +15,7 @@
 | fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 27 | pending |
 | fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 34 | HEAD-R190 |
 | g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 7 | pending |
-| g1.perception | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| g1.perception | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 44 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 24 | pending |
 | quantity-place.nl | confirmed | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 19 | pending |
@@ -74,3 +74,4 @@
 - E49 R217 [confirmed] R216/E48 g1.navigation cross-embodiment (current brain drives 2nd embodiment to GROUNDED nav) reproduces across a round boundary at NON-MEMORIZED coords — retry only if: n/a - confirmed. For a clean 2/2 pick TWO probe-verified REACHABLE non-memorized coords; (11,3)/(11,4) are obstacle-blocked
 - E50 R219 [inconclusive] the current brain (deepseek-v4-flash) still drives the 2nd embodiment g1 (camera-only) to a GROUNDED perception match on the bare face 0 kernel edits — refreshing the 29-round-stale R190 g1.perception deepseek-chat row (non-gated proxy per STATUS next#1) — retry only if: promote to confirmed R220; NEW 3rd embodiment is S4-gated + multi-round SDD
 - E50 R223 [refuted] Adjudicate R219 E50: does g1.perception GROUNDED reproduce across a round boundary? Re-run g1_accept RED+GREEN foreground x2. — retry only if: g1 head-cam re-framed to center the red stool OR seg-centroid tol widened+justified
+- E50 R224 [inconclusive] STATUS next#1: HARDEN g1.perception (R223 refuted RAN 0/17) into a RELIABLE bar via a WORLD-config re-frame (Inv.3), NOT verify-loosening (Inv.1). — retry only if: promote to confirmed R225 after boundary+red-team; NEW 3rd embodiment S4-gated
