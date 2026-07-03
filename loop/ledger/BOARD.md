@@ -14,7 +14,7 @@
 | fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 6 | pending |
 | fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 19 | pending |
 | fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 26 | HEAD-R190 |
-| g1.navigation | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-chat | self-read | 33 | 61fde80 |
+| g1.navigation | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 26 | HEAD-R190 |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 36 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 16 | pending |
@@ -70,3 +70,4 @@
 - E46 R212 [refuted] R211/E45 novel-object yellow GROUNDED 1/1 reproduces on the real bare face across a round boundary (§1b adjudication) — retry only if: N=1 fetch passes provisional-only; promote only on N>=2 same-brain reproduction, or a more reliable brain / D182 grounder lands
 - E47 R212 [inconclusive] a NOVEL non-cylinder GEOMETRY (purple box, 5th pickable) added as CONFIG+driver+skill zero kernel edits grounds an NL fetch on the real bare face -- geometry breadth past R211 colour-only — retry only if: promote next round only after N>=2 same-brain reproduction (E46 lesson)
 - E47 R215 [confirmed] the R212/E47 purple-box GROUNDED (1/1) reproduces N>=2 same-brain (deepseek-v4-flash) on the bare face, past the E46 sibling-yellow fragility -> confirm or refute the provisional — retry only if: the purple-box scene config / weld tuple / HSV band changes, or deepseek-v4-flash routing changes
+- E48 R216 [inconclusive] the CURRENT brain (v4-flash, all recent go2 work) also drives the 2nd embodiment g1-humanoid to GROUNDED nav bare-face 0 kernel edits — refreshing the 32-round-stale R183 g1.nav deepseek-chat row (cross-embodiment breadth, non-gated slice of next#1) — retry only if: n/a - promote next round; NEW 3rd embodiment (BYO URDF+driver) is S4-gated + multi-round SDD

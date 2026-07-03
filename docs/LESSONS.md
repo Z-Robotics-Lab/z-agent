@@ -109,6 +109,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   yellow (E45→E46, y=3.11) REFUTED 0/2 SAME harness (perception not-visible → brain WANDERED). 5-site plug-in (0 kernel edits) is CORRECT for colour AND geometry;
   R212's "brain-fragile at N=1" REFINED — an IN-FOV grasp-reachable novel object grounds ROBUSTLY. LESSON: promote N=1 novel passes only on N>=2 repro;
   place novel pickables IN the front FOV band; welds/colour maps still HARDCODED (S4/D182) → E45/E46/E47.
+- Cross-embodiment LIVE w/ the CURRENT brain (R216/E48 prov): deepseek-v4-flash (all recent go2 work) also drives the 2nd embodiment g1-humanoid to GROUNDED nav 2/2 distinct legs bare-face, 0 kernel edits — refreshes 32-round-stale R183 g1.nav (deepseek-chat), answers R200 critic (all-go2). But it's EXISTING g1 config re-verified, NOT a new 3rd embodiment (BYO URDF+driver = S4-gated + multi-round SDD); g1-nav renders no frame → at_position GT pose is the witness → E48.
 - Quantity-place: REFUTED v4-flash (R199/E36) → GROUNDED deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC
   not machinery (E38 seq 2/2); model swap moved it ZERO kernel edits (E23-clean, plug-and-play). But NOT deterministic:
   ROBUSTNESS (R205/E40) campaign GROUNDED 2/3 (run1 abandoned obj-2; deepseek-chat FLAKY on 两个) → runner guardrail E40.
