@@ -34,7 +34,7 @@
 | quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 63 | pending |
 | quantity-place.nl-isolation | provisional | PARTIAL 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
 | quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 66 | pending |
-| verify.eyes-vlm-judge-wired | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 1 | pending |
+| verify.eyes-vlm-judge-wired | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 0 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -126,3 +126,4 @@
 - E63 R263 [confirmed] STATUS next#2 hygiene: does fetch-place.nl-category-only (oldest STALE row age79, confirmed ONLY on retired deepseek-chat R183) still GROUND on the current deepseek-v4-flash+local-gemma4:e4b seam? — retry only if: category-only fetch regresses to RAN, or HOUSE can becomes ambiguous (E6)
 - E64 R264 [refuted] next#2 hygiene: stale row fetch-place.nl-compound (age77, R186 2/2 old grading) still GROUNDS on the current v4-flash+gemma4:e4b seam via MODE=combo. — retry only if: causation-SAFE compound-place grader (E17); do NOT re-credit R186 2/2 (old grading, E23)
 - E65 R268 [refuted] next#2 hygiene: adopt R266->R267 inflight; stale fetch.nl-ordinal-spatial (age69, R197 2/2) reproduces on bare face (v4-flash+gemma4:e4b) via MODE=fetch leftmost-bottle. — retry only if: ordinal grounding made scene-derived AND re-earned via fresh round-boundary + red-team like R197.
+- E70 R272 [refuted] A PLACE-mode run promotes verify.eyes-vlm-judge-wired AND extends the vlm-judge witness to place mode. — retry only if: n/a
