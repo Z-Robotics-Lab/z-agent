@@ -100,30 +100,37 @@ def resolve_local_vlm_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
     raise VLMConfoundError(_RECIPE)
 
 
+JUDGE_FORCE_REMOTE_VAR: str = "VECTOR_JUDGE_FORCE_REMOTE"
+
+
 def resolve_judge_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
     """Return the VECTOR_JUDGE_* env vars to INJECT so the eyes second-witness (vision_judge)
-    runs on the LOCAL Ollama VLM by default — flipping the acceptance eyes self-read → vlm-judge
-    (R271/E69). The judge is a SECONDARY witness (stricter-only, Invariant 1): it can only
-    DOWNGRADE/flag a frame, never manufacture a PASS, and on any error abstains.
+    runs on the LOCAL Ollama VLM whenever Ollama is up — flipping the acceptance eyes
+    self-read → vlm-judge (R271/E69). The judge is a SECONDARY witness (stricter-only,
+    Invariant 1): it can only DOWNGRADE/flag a frame, never manufacture a PASS; any error abstains.
 
-    - ``VECTOR_JUDGE_MODEL`` already set → respect the caller's explicit judge (return {}).
-    - unset + Ollama up → default the local Ollama gemma4:e4b judge.
-    - unset + Ollama down → return {} (judge simply ABSTAINS; a down witness must NEVER block
-      or fabricate a verdict — UNLIKE perception, whose absence silent-spins, so this is
-      fail-SOFT by design; self-read remains the floor).
+    PRECEDENCE (local-preferred, deliberately):
+    - ``VECTOR_JUDGE_FORCE_REMOTE=1`` → respect the caller's remote judge untouched (return {}).
+    - Ollama up → route the LOCAL gemma4:e4b judge, OVERRIDING any inherited remote judge env.
+      This is intentional: the loop supervisor exports a stale ``VECTOR_JUDGE_MODEL=qwen3-vl-plus``
+      whose DashScope key shares the ARREARED routing brain (dead), so honouring it would abstain
+      forever and never flip the eyes. The local witness is zero-credit and always reachable.
+    - Ollama down → return {} (leave the caller's env as-is: a configured funded remote judge is
+      used if present, else vision_judge simply ABSTAINS). Fail-SOFT — a down witness must NEVER
+      block or fabricate a verdict (UNLIKE perception, whose absence silent-spins); self-read floor.
 
     The judge model (gemma4:e4b, the perception seam) DIFFERS from the routing/planner brain
     (deepseek-v4-flash), so generator≠evaluator holds; the rubric is ORTHOGONAL (render /
     upright / intact / workspace-in-frame), never "did the task succeed". ``ollama_probe`` is
     injectable so the unit test runs offline.
     """
-    if environ.get("VECTOR_JUDGE_MODEL"):
+    if environ.get(JUDGE_FORCE_REMOTE_VAR) == "1":
         return {}
     if ollama_probe():
         return {
             "VECTOR_JUDGE_BASE_URL": DEFAULT_LOCAL_VLM_URL,
             "VECTOR_JUDGE_MODEL": DEFAULT_LOCAL_VLM_MODEL,
-            "VECTOR_JUDGE_API_KEY": environ.get("VECTOR_JUDGE_API_KEY", "ollama"),
+            "VECTOR_JUDGE_API_KEY": environ.get("VECTOR_JUDGE_API_KEY") or "ollama",
         }
     return {}
 

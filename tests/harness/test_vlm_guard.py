@@ -113,11 +113,25 @@ class TestResolveJudgeEnv:
         # leaves VECTOR_JUDGE_* unset and vision_judge.judge() abstains. Self-read stays the floor.
         assert resolve_judge_env({}, ollama_probe=lambda: False) == {}
 
-    def test_respects_explicit_judge_model(self) -> None:
-        # A caller who already pointed the judge at a funded remote VLM is untouched.
-        env = {"VECTOR_JUDGE_MODEL": "openai/gpt-4o"}
+    def test_local_overrides_stale_inherited_remote_judge(self) -> None:
+        # The loop supervisor exports a stale VECTOR_JUDGE_MODEL=qwen3-vl-plus (arreared key).
+        # Local-preferred: Ollama up must OVERRIDE it so the eyes actually flip to vlm-judge,
+        # not abstain forever against a dead remote.
+        env = {"VECTOR_JUDGE_MODEL": "qwen3-vl-plus",
+               "VECTOR_JUDGE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1"}
         out = resolve_judge_env(env, ollama_probe=lambda: True)
-        assert out == {}
+        assert out["VECTOR_JUDGE_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
+        assert out["VECTOR_JUDGE_BASE_URL"] == DEFAULT_LOCAL_VLM_URL
+
+    def test_force_remote_opts_out_of_local(self) -> None:
+        # A caller who KNOWINGLY wants a funded remote judge sets FORCE_REMOTE=1 → untouched.
+        env = {"VECTOR_JUDGE_FORCE_REMOTE": "1", "VECTOR_JUDGE_MODEL": "openai/gpt-4o"}
+        assert resolve_judge_env(env, ollama_probe=lambda: True) == {}
+
+    def test_ollama_down_leaves_remote_judge_intact(self) -> None:
+        # Ollama down → {} so a configured funded remote judge (or abstain) stands; no raise.
+        env = {"VECTOR_JUDGE_MODEL": "openai/gpt-4o"}
+        assert resolve_judge_env(env, ollama_probe=lambda: False) == {}
 
     def test_preserves_caller_api_key(self) -> None:
         out = resolve_judge_env({"VECTOR_JUDGE_API_KEY": "sk-live"}, ollama_probe=lambda: True)
