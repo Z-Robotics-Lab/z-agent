@@ -38,8 +38,19 @@ import pexpect
 
 ROOT = "/home/yusen/Desktop/vector_os_nano"
 # (tx, ty) legs — demanded literal coordinates the human states in NL.
-LEG_A = (9.0, 3.0)
-LEG_B = (10.0, 4.0)
+# Overridable via env (G1_NAV_A / G1_NAV_B, "x,y") so a re-verify round can demand DIFFERENT
+# coords than a prior run — non-memorized selectivity (a resolver that walks to arbitrary
+# demanded coords, not a lucky fixed pair). Defaults preserve the R183/R216 legs.
+def _leg(env_key: str, default: "tuple[float, float]") -> "tuple[float, float]":
+    raw = os.environ.get(env_key)
+    if not raw:
+        return default
+    x, y = (float(v) for v in raw.split(","))
+    return (x, y)
+
+
+LEG_A = _leg("G1_NAV_A", (9.0, 3.0))
+LEG_B = _leg("G1_NAV_B", (10.0, 4.0))
 TAG = sys.argv[1] if len(sys.argv) > 1 else "g1nav_r183"
 SNAP = f"/tmp/g1_nav_accept/{TAG}"
 os.system(f"rm -rf {SNAP}; mkdir -p {SNAP}")

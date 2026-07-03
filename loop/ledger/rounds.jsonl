@@ -30,3 +30,4 @@
 {"schema":1,"ts":1783037781,"round":"R213","kind":"build","exit":0,"post_check":"ok","commit":"60ecd17","dur_s":352}
 {"schema":1,"ts":1783038310,"round":"R214","kind":"build","exit":0,"post_check":"ok","commit":"5bde42f","dur_s":409}
 {"schema":1,"ts":1783040126,"round":"R215","kind":"build","exit":0,"post_check":"ok","commit":"8819eba","dur_s":1696}
+{"schema":1,"ts":1783041854,"round":"R216","kind":"build","exit":0,"post_check":"ok","commit":"4639ed3","dur_s":1608}
