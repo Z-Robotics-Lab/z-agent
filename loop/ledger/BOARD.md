@@ -15,7 +15,7 @@
 | fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 28 | pending |
 | fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 35 | HEAD-R190 |
 | g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
-| g1.perception | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 45 | c59f386 |
 | place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 25 | pending |
 | quantity-place.nl | confirmed | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 20 | pending |
@@ -75,3 +75,4 @@
 - E50 R219 [inconclusive] the current brain (deepseek-v4-flash) still drives the 2nd embodiment g1 (camera-only) to a GROUNDED perception match on the bare face 0 kernel edits — refreshing the 29-round-stale R190 g1.perception deepseek-chat row (non-gated proxy per STATUS next#1) — retry only if: promote to confirmed R220; NEW 3rd embodiment is S4-gated + multi-round SDD
 - E50 R223 [refuted] Adjudicate R219 E50: does g1.perception GROUNDED reproduce across a round boundary? Re-run g1_accept RED+GREEN foreground x2. — retry only if: g1 head-cam re-framed to center the red stool OR seg-centroid tol widened+justified
 - E50 R224 [inconclusive] STATUS next#1: HARDEN g1.perception (R223 refuted RAN 0/17) into a RELIABLE bar via a WORLD-config re-frame (Inv.3), NOT verify-loosening (Inv.1). — retry only if: promote to confirmed R225 after boundary+red-team; NEW 3rd embodiment S4-gated
+- E50 R225 [confirmed] Adjudicate R224 E50 g1.perception GROUNDED N=2 provisional: does the world-config hardening REPRODUCE on the bare face across the R224->R225 round boundary (the test R223 failed on R219)? — retry only if: g1_accept RED regresses to RAN OR the percept_target_red world geom is removed from _G1_EXTRA_GEOMS
