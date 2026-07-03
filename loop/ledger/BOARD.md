@@ -2,27 +2,27 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 48 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 48 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 48 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 44 | 61fde80 |
-| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 44 | 61fde80 |
-| fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 41 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 27 | pending |
-| fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 12 | pending |
-| fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 15 | pending |
-| fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 17 | pending |
-| fetch.nl-ordinal-spatial | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 30 | pending |
-| fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 37 | HEAD-R190 |
-| fetch.nl-scene-clutter | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
-| g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 10 | pending |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
-| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 47 | c59f386 |
-| place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 27 | pending |
-| quantity-place.nl | confirmed | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 22 | pending |
-| quantity-place.nl-guardrail | confirmed | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 18 | pending |
-| quantity-place.nl-isolation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 23 | pending |
-| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 21 | pending |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 49 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 49 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 49 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 45 | 61fde80 |
+| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 45 | 61fde80 |
+| fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 42 | HEAD-R186 |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 28 | pending |
+| fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 13 | pending |
+| fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 16 | pending |
+| fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 18 | pending |
+| fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 31 | pending |
+| fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 38 | HEAD-R190 |
+| fetch.nl-scene-clutter | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 11 | pending |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 3 | pending |
+| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 48 | c59f386 |
+| place.nl-plain-colour | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 28 | pending |
+| quantity-place.nl | confirmed | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 23 | pending |
+| quantity-place.nl-guardrail | confirmed | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 19 | pending |
+| quantity-place.nl-isolation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 24 | pending |
+| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 22 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
