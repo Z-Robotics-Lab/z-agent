@@ -22,11 +22,11 @@
 | fetch.nl-novel-object-yellow | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 6 | pending |
 | fetch.nl-ordinal-position-invariance | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 50 | pending |
 | fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 63 | pending |
-| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 10 | pending |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-scene-clutter | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 32 | pending |
 | g1.navigation | confirmed ⚠ STALE | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 43 | pending |
 | g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 35 | pending |
-| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 80 | c59f386 |
+| kernel.model-unavailable-surfacing | confirmed | PASS 1/1 | bare-repl+nl | openrouter (zero credit spent) | self-read | 0 | pending |
 | place.nl-new-world-courtyard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
 | place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 60 | pending |
 | quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 55 | pending |
@@ -117,3 +117,4 @@
 - E60 R256 [refuted] R255 courtyard PLACE flake = MID-WALK DROP (grasp weld breaks under mobile_place walk/dock). — retry only if: do NOT re-diagnose as weld/mid-walk drop (regr=test_go2_courtyard_place_machinery); next=brain post-place guard
 - E60 R257 [confirmed] STATUS next#1: BRAIN post-place recovery guard (persona post-place-no-regrasp nudge + runner re-grasp-until-verify gate; NOT a weld change, refuted R256) fixes the R255 '掉了'->re-grasp thrash and grounds courtyard PLACE N>=2. — retry only if: if courtyard PLACE re-grasp thrash recurs, guard regressed (regr=test_native_loop.py post_place tests)
 - E60 R259 [confirmed] Adjudicate R257/E60 courtyard PLACE provisional (GROUNDED 2/2): does it reproduce on the bare face across the R257->R259 round boundary to promote to confirmed (STATUS next#1)? — retry only if: re-grasp thrash recurs (regr=test_native_loop.py post_place) OR resting drops on a fresh run
+- E61 R260 [confirmed] R260 review: re-run the 2 oldest confirmed board rows on the real face; refresh WIRING native-loop (R257 guard); re-red-team a headline; gate/wiring/lessons/ambition audit. — retry only if: n/a - review round
