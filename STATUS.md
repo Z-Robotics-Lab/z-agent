@@ -1,35 +1,31 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
-updated: 2026-07-03 · R253 (E60) BUILD/VERIFY — COURTYARD PLACE RECOVERED to GROUNDED
-  provisional N=1 (2/2, was R246 2/3): STATUS next#1. R247/E56 REFUTED the courtyard
-  PLACE-leg, but its own root-cause was that mobile_place's transient FIRST-NAV miss
-  surfaced to the brain as False, which the brain "recovered" by improvising an
-  UNREACHABLE navigate(10.8,3.0) — ungrounding the composite though the physical place
-  always succeeded. Fix (TDD, non-gated, intra-package): mobile_place now retries the
-  approach nav internally (_NAV_RETRIES=1, re-reads pose) so a transient miss stays inside
-  the skill; a genuinely-unreachable target still fast-fails → honest nav_failed. Bare
-  face (v4-flash + ollama gemma4:e4b, courtyard MODE=place): holding_object(green) CAUSED +
-  resting_on_receptacle True = 2/2 GROUNDED, no spurious brain navigate. Eyes
-  (var/evidence/R253/place/eyes_place.png): green IN place_bin, purple/red REMAIN =
-  discrimination. HONEST: the retry did NOT fire (first nav landed) → unit-tested only, N=1.
+updated: 2026-07-03 · R255 (E60) VERIFY — COURTYARD PLACE PROVISIONAL REFUTED (no N>=2 repro).
+  R253/E60 GROUNDED 1/1 does NOT reproduce: bare face courtyard MODE=place → RAN verified=False
+  (1/2) — grasp holding_object CAUSED, resting_on_receptacle False; bottle lost MID mobile_place
+  walk (brain '掉了'→re-grasp thrash), eyes: empty-armed dog, no bottle placed. Also cleared R254 quarantine.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R253 (E60, BUILD/VERIFY, non-gated). Courtyard PLACE GROUNDED provisional N=1
-  (supersedes R247 refuted); 1 acceptance + 1 experiments row; 22/22 mobile_place unit; BOARD regen.
-frontier: 3 worlds ground go2 FETCH; novel-object breadth RGB+purple+yellow ALL confirmed.
-  Courtyard PLACE now provisionally recovered (was the last refuted go2 capability). PLATEAU
-  HOLDS (R250 critic): genuinely-new breadth is GATED — 3rd embodiment (BYO URDF, S4) + D182
-  world-owned NL→object grounder. Non-gated frontier thins to PLACE reliability + robustness.
-watch: per-run evidence subdir (VECTOR_EVIDENCE_DIR=var/evidence/R#/<tag>) else eyes_*.png collide.
-  Run harness `.venv/bin/python`; `source .env` first (DEEPSEEK_API_KEY not auto-loaded); courtyard
-  via VECTOR_ROOM_TEMPLATE=courtyard; MODE=place sends one compound utterance (brain decomposes
-  grasp→nav→place). Perception VLM auto-routes to local ollama gemma4:e4b (VLM env unset + ollama up).
-  Sims slow (~4min grasp+place); run BACKGROUND (timeout 600 + nohup), tear down via scripts/sim-teardown.
-  Sim gate = pgrep 'mujoco|vcli' + free/GPU headroom, ONE sim. LEDGER: confirmed redteam starts
-  'survived'; all free-text ≤280 chars + row <1KB; experiments key is `e` (check.sh enforces).
+last-round: R255 (E60, VERIFY, non-gated). Courtyard PLACE provisional REFUTED (supersedes R253
+  provisional); 1 acceptance + 1 experiments row; R254 stale-BOARD quarantine cleared; BOARD regen; check.sh green.
+frontier: 3 worlds ground go2 FETCH; novel-object breadth RGB+purple+yellow ALL confirmed. Courtyard PLACE
+  is the OPEN non-gated reliability gap — FLAKY across N=3 (R246 2/3, R253 1/1, R255 dropped); residual flake
+  = MID-WALK DROP (holding_object lost during the mobile_place walk/dock), distinct from the nav-miss R253 fixed.
+  PLATEAU HOLDS (R250 critic): genuinely-new breadth is GATED (3rd embodiment BYO URDF S4 + D182 grounder);
+  non-gated frontier = PLACE reliability.
+watch: per-run evidence subdir (VECTOR_EVIDENCE_DIR=var/evidence/R#/<tag>) else eyes_*.png collide. Run harness
+  `.venv/bin/python`; `set -a; source .env; set +a` first (DEEPSEEK_API_KEY not auto-loaded); courtyard via
+  VECTOR_ROOM_TEMPLATE=courtyard; DEEPSEEK_MODEL=deepseek-v4-flash; MODE=place = one compound utterance (brain
+  decomposes grasp→nav→place). Perception VLM auto-routes to local ollama gemma4:e4b (VLM env unset + ollama up).
+  Drop-debug: set VECTOR_PLACE_DIAG=<path> (mobile_place Step-6b writes dog/EE-vs-receptacle JSON, verdict-neutral).
+  Sims slow+FLAKY (~4-8min place); run BACKGROUND (timeout 900), tear down via scripts/sim-teardown. Sim gate =
+  pgrep 'mujoco|vcli|repl_accept' + free/GPU headroom, ONE sim (MuJoCo runs IN-process → pgrep mujoco finds nothing;
+  a leftover --native-loop repl_accept orphan holds ~4.5GB). LEDGER: confirmed redteam starts 'survived'; free-text
+  ≤280 chars + row <1KB; experiments key is `e`; append ONE preformatted line (E27), never load-all+dumps.
 next:
-  1. [VERIFY, NON-gated] Adjudicate R253/E60 courtyard PLACE provisional: re-run MODE=place courtyard
-     for N≥2 same-brain repro across the boundary (promote confirmed, supersedes R247 refuted). Bonus:
-     try to face-TRIGGER the nav-retry (a run whose first nav genuinely misses) to exercise the fix on the face.
+  1. [DEBUG, NON-gated] Root-cause the courtyard PLACE mid-walk drop (R255/E60): re-run MODE=place courtyard with
+     VECTOR_PLACE_DIAG set + grep [MOBILE-PLACE] to distinguish weld-break-under-locomotion (grasp stability) vs
+     off-receptacle drop-release. Hypothesis Loop → DEBUG.md; regression-test the fix; re-verify N>=2 clean before
+     any promotion. Do NOT re-diagnose as a nav-miss (E23: R253 already fixed that sub-failure).
   2. [SPINE, GATED] D182 world-owned NL→object grounder — removes witness-only fidelity; CEO gate.
   3. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
