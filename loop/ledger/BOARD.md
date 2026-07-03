@@ -2,36 +2,37 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 68 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 68 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 68 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 64 | 61fde80 |
-| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 64 | 61fde80 |
-| fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 61 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 47 | pending |
-| fetch.nl-new-world-courtyard | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
-| fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 3 | pending |
-| fetch.nl-new-world-courtyard-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
-| fetch.nl-new-world-courtyard-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
-| fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 9 | pending |
-| fetch.nl-new-world-warehouse-blue | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
-| fetch.nl-new-world-warehouse-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 7 | pending |
-| fetch.nl-new-world-warehouse-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 7 | pending |
-| fetch.nl-novel-geometry-purple-box | confirmed ⚠ STALE | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 32 | pending |
-| fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 35 | pending |
-| fetch.nl-ordinal-position-invariance | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 37 | pending |
-| fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 50 | pending |
-| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
-| fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 19 | pending |
-| g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 30 | pending |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 22 | pending |
-| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 67 | c59f386 |
-| place.nl-new-world-courtyard | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
-| place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 47 | pending |
-| quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 42 | pending |
-| quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 38 | pending |
-| quantity-place.nl-isolation | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 43 | pending |
-| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 41 | pending |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 69 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 69 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 69 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 65 | 61fde80 |
+| describe.nl-go2-courtyard | provisional | RAN 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
+| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 65 | 61fde80 |
+| fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 62 | HEAD-R186 |
+| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 48 | pending |
+| fetch.nl-new-world-courtyard | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
+| fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
+| fetch.nl-new-world-courtyard-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
+| fetch.nl-new-world-courtyard-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 3 | pending |
+| fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 10 | pending |
+| fetch.nl-new-world-warehouse-blue | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 9 | pending |
+| fetch.nl-new-world-warehouse-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
+| fetch.nl-new-world-warehouse-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
+| fetch.nl-novel-geometry-purple-box | confirmed ⚠ STALE | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 33 | pending |
+| fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 36 | pending |
+| fetch.nl-ordinal-position-invariance | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 38 | pending |
+| fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 51 | pending |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 9 | pending |
+| fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 20 | pending |
+| g1.navigation | confirmed ⚠ STALE | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 31 | pending |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 23 | pending |
+| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 68 | c59f386 |
+| place.nl-new-world-courtyard | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 48 | pending |
+| quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 43 | pending |
+| quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 39 | pending |
+| quantity-place.nl-isolation | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 44 | pending |
+| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 42 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -106,3 +107,4 @@
 - E56 R245 [confirmed] The R244 courtyard-red (N=1 provisional) reproduces across the R244->R245 boundary (promote confirmed N>=2, E46), and a 4th courtyard colour PURPLE (novel non-cylinder BOX geometry) transfers on the bare face. — retry only if: a courtyard colour regresses to RAN, OR purple N=1 fails N>=2 next round
 - E56 R246 [confirmed] Courtyard PURPLE (N=1 provisional) reproduces across the R245->R246 boundary (promote confirmed N=2, E46); and the PLACE-leg transfers to the 3rd world (courtyard) on the bare face. — retry only if: a courtyard colour regresses to RAN, OR the courtyard place nav at_position snag is unresolved
 - E56 R247 [confirmed] R246: courtyard PLACE composite fails because navigate at_position(10.8,3.0) grounds on HOUSE but ungrounds on courtyard (byte-identical furniture) -> world-transfer bug. — retry only if: courtyard PLACE-leg retried with a grasp/nav fix; do NOT re-diagnose (10.8,3.0) as a world difference (unreachable everywhere)
+- E56 R248 [inconclusive] Wiring Go2GraspPerception.caption/visual_query -> vlm_go2 describe_scene removes the R247 generic-DescribeSkill AttributeError('visual_query') dead-end on go2. — retry only if: the generic DescribeSkill is forced on the bare go2 face (resolve look<->describe alias collision) to exercise context.perception.caption/visual_query end-to-end

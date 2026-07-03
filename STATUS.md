@@ -1,33 +1,34 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
-updated: 2026-07-03 · R247 (E56) DEBUG/VERIFY — courtyard PLACE nav snag ROOT-CAUSED, world-transfer
-  hypothesis REFUTED. Deterministic geometry probe (g1_vgraph, R=0.28): navigate(10.8,3.0) sits INSIDE
-  the inflated pick_table (table x∈[10.80,11.10]) → plan_path=None from every start, UNREACHABLE in
-  EVERY world incl HOUSE (furniture byte-identical). R246's failing at_position was a brain-IMPROVISED
-  recovery nav to the bottle pick-loc after a mobile_place first-nav flake; the physical place had already
-  succeeded. R247 bare-face re-verify (courtyard place): grasp itself never completed (13× perception_grasp,
-  robot pos drifted) → brain wandered → NO verdict. PLACE-leg is model-flaky (grasp+nav), not a clean transfer.
+updated: 2026-07-03 · R248 (E56) BUILD/VERIFY — wired Go2GraspPerception.caption/visual_query to the
+  vlm_go2 describe_scene seam (R247 gap: it had detect() only → the generic DescribeSkill dead-ended on
+  AttributeError('visual_query')). 3 unit tests GREEN. Bare-face courtyard describe run: NO dead-end
+  (attr_error=False, vlm_ran=True, eyes: courtyard+5 pickables) — but the brain routed the describe NL to
+  the alias-colliding go2 LookSkill (context.services['vlm']), NOT the generic DescribeSkill
+  (context.perception) my fix patches, so the EXACT fixed path was not exercised on the face.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R247 (E56, DEBUG/VERIFY, non-gated). KEY FINDING: the R246 "same (10.8,3.0) grounds on HOUSE
-  but not courtyard" world-transfer narrative is REFUTED — (10.8,3.0) is unreachable everywhere (inside the
-  inflated pick_table). No product bug: navigate_to correctly rejects an inside-obstacle target; the bad coord
-  was brain-authored. Provisional place.nl-new-world-courtyard adjudicated → refuted (not a clean transfer).
-  Also found: go2 `describe`/`visual_query` dead-ends (Go2GraspPerception lacks the method) → recovery branch broken.
-frontier: 3 distinct worlds ground go2 FETCH (house, warehouse, courtyard) — courtyard FETCH breadth CLOSED
-  (green/blue/red/purple N=2, zero-shot). PLACE-leg does NOT transfer cleanly to the 3rd world: flaky at BOTH
-  grasp-completion and brain-nav. Deeper: verify WITNESS-ONLY (D182); genuinely-new = 3rd embodiment (S4-gated,
-  BYO URDF+manifest) + world-owned NL→object grounder. Cheap: fix go2 visual_query; YELLOW HOUSE-FOV (Case 14).
-watch: per-run evidence subdir BEFORE each run (VECTOR_EVIDENCE_DIR=var/evidence/R#/<tag>); ROUND_N alone
-  reuses R#/ and collides eyes_*.png. Run harness with `.venv/bin/python`. ledger free-text hard-caps at 280
-  chars (schema) — trim redteam/result/note BEFORE append. navigate(10.8,3.0) is UNREACHABLE in every world
-  (inside inflated pick_table) — do NOT re-diagnose as a world difference. Do NOT re-own an Isaac-sibling
-  SIM-BLOCK (E54): gate = pgrep 'mujoco|vcli' + free/GPU headroom, ONE MuJoCo/vcli sim.
+last-round: R248 (E56, BUILD/VERIFY, non-gated). Fix + a describe MODE added to repl_accept (post-hoc
+  grounds via verbose-log markers). Ledger: describe.nl-go2-courtyard RAN 1/1 provisional; E56 build
+  provisional. Latent-crash removed, unit-proven + no-regression on the face. KEY: go2 `describe`/`看到什么`
+  NL is ALIAS-COLLIDED between the generic DescribeSkill (context.perception=Go2GraspPerception) and the
+  go2 LookSkill (context.services['vlm']=Go2VLMPerception) — which fires is model/registration-dependent;
+  the fix makes BOTH branches safe.
+frontier: 3 distinct worlds ground go2 FETCH (house/warehouse/courtyard) — courtyard FETCH breadth CLOSED
+  (green/blue/red/purple N=2, zero-shot). PLACE-leg does NOT transfer cleanly (flaky at grasp + brain-nav,
+  R247). Deeper bars: verify WITNESS-ONLY (D182 world-owned NL→object grounder); genuinely-new = 3rd
+  embodiment (S4-gated, BYO URDF+manifest). Cheap: YELLOW HOUSE-FOV (Case 14); alias-collision resolve.
+watch: per-run evidence subdir BEFORE each run (VECTOR_EVIDENCE_DIR=var/evidence/R#/<tag>) else eyes_*.png
+  collide. Run harness with `.venv/bin/python`. ledger free-text hard-caps at 280 chars — trim BEFORE
+  append. describe MODE grounds post-hoc from the VERBOSE log (needs VECTOR_ACCEPT_VERBOSE=1); the brain
+  PREFERS the go2 LookSkill for describe NL, so the generic DescribeSkill (the fixed path) is not reliably
+  reachable on the face without resolving the look<->describe alias collision. navigate(10.8,3.0) is
+  UNREACHABLE in every world (inside inflated pick_table) — do NOT re-diagnose as a world difference. Do
+  NOT re-own an Isaac-sibling SIM-BLOCK (E54): gate = pgrep 'mujoco|vcli' + free/GPU headroom, ONE sim.
 next:
-  1. [BUILD, NON-gated] Wire go2 `visual_query`/`caption` → the vlm_go2 describe_scene seam (R247 gap:
-     Go2GraspPerception implements detect but not visual_query → describe raises AttributeError, so the
-     brain's describe-based recovery dead-ends). Then re-verify courtyard PLACE N≥1 on the bare face.
-  2. [DEBUG, NON-gated] courtyard PLACE grasp flakiness (R247): grasp completes for FETCH but flaked for
+  1. [DEBUG, NON-gated] courtyard PLACE grasp flakiness (R247): grasp completes for FETCH but flaked for
      PLACE same world/scene — isolate (settle-time? held-arm pose? perception under place framing?).
+  2. [BUILD, NON-gated] resolve the look<->describe alias collision (dedupe aliases, or fold the generic
+     DescribeSkill into the go2 LookSkill on go2) so the R248 fix is deterministically exercised on the face.
   3. [DEBUG, NON-gated] YELLOW(y=3.11) HOUSE FOV (E45/E46, Case 14): raise head tilt / widen standoff.
   4. [SPINE, GATED] D182 world-owned NL→object grounder — removes witness-only fidelity; CEO gate.
   5. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
