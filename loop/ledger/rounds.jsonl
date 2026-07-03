@@ -34,3 +34,5 @@
 {"schema":1,"ts":1783044344,"round":"R217","kind":"build","exit":0,"post_check":"ok","commit":"172be84","dur_s":2370}
 {"schema":1,"ts":1783044896,"round":"R218","kind":"build","exit":0,"post_check":"ok","commit":"5129532","dur_s":432}
 {"schema":1,"ts":1783046256,"round":"R219","kind":"build","exit":0,"post_check":"ok","commit":"af0cf05","dur_s":1240}
+{"schema":1,"ts":1783046567,"round":"R220","kind":"review","exit":1,"post_check":"quarantined","commit":"e39e7d4","dur_s":191}
+{"schema":1,"ts":1783046975,"round":"R221","kind":"build","exit":1,"post_check":"ok","commit":"e39e7d4","dur_s":288}
