@@ -1,35 +1,35 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-03 · R234 (E54) DEBUG — BROKE the 3-round sim block: the repo's OWN sim gate
-  (`pgrep -f "mujoco|vcli"` + `free -g`) was CLEAR (44G RAM / 12G GPU free); the sibling Isaac
-  `/workspace/go2w` sim is a different engine that does NOT trip the pattern. So the decisive
-  warehouse fetch finally RAN with the `[PGRASP]` trace, and adjudicated R229-R233's H1-H4.
+updated: 2026-07-03 · R236 (E54) BUILD/DEBUG — ROOT-CAUSED the warehouse green-fetch
+  transfer gap ONE LAYER DEEPER than R234. Adopted R234's bg e2e (far-recovery fix f437f4e
+  CONFIRMED engaging: localizes+standoffs+faces), then a fresh cap run + a NEW mask-gate
+  breakdown diagnostic isolated the residual: front_object SALIENCY FLOOD.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R234 (E54, DEBUG, non-gated). ROOT-CAUSED the HOUSE→warehouse transfer gap: far-seed
-  localizes the bottle at correct (10.86,3.00) (world+detector fine, H2 refuted); nav stops the dog
-  0.88m off but front_object_mask=0px 6/6 scan, d_min~0.55m (mis-oriented at an obstacle, H3 approach
-  CONFIRMED); far-recovery re-approach was band-gated d∈(1.6,8.0] → SKIPPED at 0.88m = DEAD-BAND.
-  FIX (skill-only, not spine): perception_grasp `_far_localize_and_approach` floor 1.6→0.30m
-  (`_RECOVERY_MIN_M`), recover-by-repose from any plausible distance. TDD 11/11+36/36 unit green
-  (f437f4e). Acceptance row R234 refuted supersedes R231 (preflight unblocked). E2E re-verify of the
-  fix launched in BACKGROUND (var/evidence/R234/verify.log, inflight.json) — R235 adopts the verdict.
+last-round: R236 (E54, BUILD+DEBUG, non-gated). At the CORRECT 0.9m standoff facing the real
+  bottle (attempt-1 localized (10.86,3.00) right), front_object_mask STILL = 0px. New breakdown
+  (`front_object.mask_gate_breakdown`, logged at the 0px site): n_salient~99k = ~32% of frame
+  passes sat>=140 (warehouse orange racking / yellow stripes / steel all vivid) → the green
+  bottle's real pixels (n_color_hue<=2917) FUSE into bg blobs whose MEDIAN hue!=green →
+  colour-blob resolver None. HOUSE works only because its bg is MUTED; the resolver's "vivid
+  object on muted scene" assumption is FALSE industrial. Shipped mask_gate_breakdown()+5 TDD
+  (17/17 front_object, 51/51 incl perception_grasp); wired at mask_px=0. E54 debug row confirmed.
 
-frontier: Make the confirmed HOUSE green fetch TRANSFER to go2_warehouse — root cause now KNOWN
-  (far-recovery dead-band) and fix shipped; the bar is now the e2e GROUNDED verdict of that fix.
+frontier: Make the HOUSE colour fetch TRANSFER to go2_warehouse. Root cause now KNOWN
+  (saliency flood, not nav/localizer/dead-band). Bar = e2e GROUNDED green fetch on the bare face.
 
-watch: R234 background e2e verify (unit vecacc-r234-verify.scope) may be LIVE at R235 start — preflight pgrep finds it: WAIT + adopt (OURS), never kill (NEVER-KILL-INFRA).
+watch: R234/R235 bg verify DONE+adopted; inflight cleared; sim down. 28 acceptance provisionals (check.sh green).
 
 next:
-  1. [VERIFY, NON-gated] ADOPT the R234 inflight run (loop/.state/inflight.json): read
-     var/evidence/R234/verify.log for `[RESULT r234b] fetch_verified/fetch_grounded` + grep its
-     raw trace (path in inflight.json) for `[PGRASP] far recovery` (must NO LONGER SKIP at d<1.6
-     — should navigate_to standoff + face + re-perceive). Append the acceptance row (GROUNDED→
-     confirmed-provisional / RAN→refuted new mode) + clear inflight; LOOK at the persisted frame.
-  2. [DEBUG/breadth, NON-gated] If the fix grounds, run N≥2 for robustness, then promote
-     fetch.nl-new-world-warehouse. If not, iterate the approach-pose fix (dog still faces the
-     obstacle — face-then-sidestep or a pre-grasp standoff re-plan for the compact enclosure).
-  3. [FRONTIER/breadth, GATED] a NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver
+  1. [BUILD/DEBUG, NON-gated] FIX saliency flood: in front_object_mask, for a COLOUR query gate
+     the colour HUE at PIXEL level BEFORE `_open`/components (build the mask from green-hue px
+     first, THEN pick nearest/central green blob) so warehouse bg never competes. TDD: a
+     "vivid-orange-bg + small green blob" frame must return the green blob (today None). e2e
+     re-verify on the bare face AND re-run the confirmed HOUSE red/green/blue/yellow/purple
+     fetches to prove NO regression (shared path). GROUNDED N>=2 → promote fetch.nl-new-world-warehouse.
+  2. [DEBUG, NON-gated] object_localizer unreliable in-warehouse (3/4 attempts floor/far phantoms;
+     only attempt-1 right). After #1, harden the seed to always use the clean-forward localize.
+  3. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver
      (WIRING:53) + new MuJoCo assets; multi-round SDD.
 
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
