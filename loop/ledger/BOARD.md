@@ -27,7 +27,7 @@
 | g1.navigation | confirmed ⚠ STALE | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 42 | pending |
 | g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 34 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 79 | c59f386 |
-| place.nl-new-world-courtyard | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | b8c45cb |
+| place.nl-new-world-courtyard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 59 | pending |
 | quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 54 | pending |
 | quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 50 | pending |
@@ -116,3 +116,4 @@
 - E60 R255 [refuted] STATUS next#1: adjudicate R253/E60 courtyard PLACE provisional (GROUNDED 1/1) — reproduce across the R253->R255 boundary to meet the E46 N>=2 bar? — retry only if: a DEBUG round with VECTOR_PLACE_DIAG localizes the drop (weld-break-under-locomotion vs off-receptacle drop-release); do NOT re-credit the nav-retry (E23, wrong sub-failure)
 - E60 R256 [refuted] R255 courtyard PLACE flake = MID-WALK DROP (grasp weld breaks under mobile_place walk/dock). — retry only if: do NOT re-diagnose as weld/mid-walk drop (regr=test_go2_courtyard_place_machinery); next=brain post-place guard
 - E60 R257 [confirmed] STATUS next#1: BRAIN post-place recovery guard (persona post-place-no-regrasp nudge + runner re-grasp-until-verify gate; NOT a weld change, refuted R256) fixes the R255 '掉了'->re-grasp thrash and grounds courtyard PLACE N>=2. — retry only if: if courtyard PLACE re-grasp thrash recurs, guard regressed (regr=test_native_loop.py post_place tests)
+- E60 R259 [confirmed] Adjudicate R257/E60 courtyard PLACE provisional (GROUNDED 2/2): does it reproduce on the bare face across the R257->R259 round boundary to promote to confirmed (STATUS next#1)? — retry only if: re-grasp thrash recurs (regr=test_native_loop.py post_place) OR resting drops on a fresh run

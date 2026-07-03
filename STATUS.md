@@ -1,38 +1,37 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
-updated: 2026-07-03 · R257 (E60) BUILD/VERIFY — courtyard PLACE GROUNDED N=2 provisional; the
-  R256-root-caused BRAIN post-place mis-recovery is FIXED. Guard = persona post-place-no-regrasp
-  nudge + a deterministic runner re-grasp-until-verify gate (NOT a mobile_place/weld change,
-  refuted R256). Both bare-face runs (deepseek-v4-flash, MODE=place, in-process) grounded
-  resting_on_receptacle True with NO mobile_pick re-grasp; eyes: green RESTING in bin, gripper empty.
+updated: 2026-07-03 · R259 (E60) VERIFY/ADJUDICATE — courtyard PLACE PROMOTED to CONFIRMED.
+  Re-ran the R257 provisional on the bare face across the boundary: GROUNDED verified=True (2/2),
+  native skill seq CLEAN (perception_grasp->verify holding->mobile_place->verify resting->finish),
+  ZERO mobile_pick re-grasp — the R257 post-place guard held (cleaner than R257 run2's wander).
+  Eyes: green bottle resting in the courtyard bin, gripper empty. Courtyard PLACE CLOSED.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R257 (E60, BUILD/VERIFY, non-gated). Fixed the R256 root cause (brain re-grasps a
-  legitimately-placed object). TDD: 3 RED->GREEN (persona teaches empty-gripper-after-place is not a
-  drop; runner refuses a re-grasp until a verify closes the place, bounded/quantity-safe). Real face
-  N=2 both GROUNDED (was R255 refuted RAN 0/1). 1 acceptance provisional + 1 experiments(confirmed) row.
-frontier: 3 worlds ground go2 FETCH; courtyard PLACE now GROUNDED N=2 provisional — the long-running
-  reliability gap is CLOSED to the R255 bar. RESIDUAL (honest): run2 brain wandered post-place
-  (look/at_position/repeat-place) but non-destructively — the guard kills the DESTRUCTIVE re-grasp,
-  not all post-place flakiness. PLATEAU HOLDS (R250 critic): genuinely-new breadth is GATED (3rd
-  embodiment BYO URDF S4 + D182 grounder). Non-gated polish: tighten post-place convergence only if it recurs.
+last-round: R259 (E60, VERIFY/ADJUDICATE, non-gated). Also cleared the R258 stale-BOARD quarantine
+  (regen loop/board.py) + adopted the R258 rounds.jsonl append. 1 acceptance(confirmed) + 1
+  experiments(confirmed) row banked; supersedes the R257 provisional. 3 clean same-brain GROUNDED
+  total (R257×2 + R259). No sim leftover (sim-teardown clean).
+frontier: 3 worlds ground go2 FETCH; PLACE now CONFIRMED on house + courtyard (2 of 3 worlds).
+  NEXT non-gated FLOOR-raise: does the PLACE composite (grasp->nav->place, the fragile nav-sub-goal
+  per E56) transfer to the WAREHOUSE — the hue-adjacent hard world (E54)? Fetch transferred zero-shot
+  everywhere; place is the multi-step composite that does NOT follow from fetch. PLATEAU HOLDS (R250
+  critic): genuinely-new breadth is GATED (3rd embodiment BYO URDF S4 + D182 grounder).
 watch: Real-face place: bare vcli + NL, deepseek-v4-flash brain (provider env per .env.example),
-  courtyard template, local ollama gemma4:e4b, repl_accept.py MODE=place; FETCH='把绿色的瓶子拿过来'
-  PLACE='把绿色的瓶子放到架子上'; memory-cap `systemd-run --user --scope -p MemoryMax=24G`; tear down
-  `scripts/sim-teardown`; ~7min/run. Bash tool 120s limit — run acceptance in the BACKGROUND. Guard code:
-  native_loop.py `_GRASP_SKILLS`/`_PLACE_SKILLS`/`_POST_PLACE_REGRASP_NUDGE` + NativeStepRunner
-  `_place_awaiting_verify`. LEDGER: confirmed redteam starts 'survived'; free-text ≤280 chars; row ≤1KB.
+  VECTOR_ROOM_TEMPLATE={courtyard|warehouse}, local ollama gemma4:e4b, repl_accept.py MODE=place;
+  PLACE='把绿色的瓶子放到架子上'; RUN via `.venv/bin/python` (bare `python` is NOT on the scope PATH —
+  systemd-run resets it, R259 wasted one launch on env:python not-found); memory-cap `systemd-run
+  --user --scope -p MemoryMax=24G`; tear down `scripts/sim-teardown`; ~4-6min/run; Bash 120s limit ->
+  run in BACKGROUND. Guard code: native_loop.py `_GRASP_SKILLS`/`_PLACE_SKILLS`/`_POST_PLACE_REGRASP_NUDGE`
+  + NativeStepRunner `_place_awaiting_verify`. LEDGER: confirmed redteam starts 'survived'; free-text ≤280; row ≤1KB.
 next:
-  1. [PROMOTE, §1c] Adjudicate the R257 courtyard PLACE provisional (place.nl-new-world-courtyard
-     GROUNDED 2/2) next round: re-run N>=1 across the boundary + red-team; if it holds, promote to
-     confirmed. Do NOT promote same-round.
-  2. [BUILD, NON-gated] IF a post-place wander recurs (run2 style): add a runner finish-nudge that,
-     once resting_on_receptacle PASSES, steers the brain to finish rather than re-place/look. Optional
-     polish — the destructive failure is already fixed; only build if the wander costs a real verdict.
-  3. [SPINE, GATED] D182 world-owned NL→object grounder — removes witness-only fidelity; CEO gate.
-  4. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
+  1. [BUILD/VERIFY, NON-gated] WAREHOUSE PLACE transfer: VECTOR_ROOM_TEMPLATE=warehouse MODE=place
+     '把绿色的瓶子放到架子上' on the bare face, N>=1. Confirms PLACE composite generalizes to all 3
+     worlds (not just fetch). If it RANs, Hypothesis-Loop the nav-sub-goal (E56 fragile link), NOT
+     perception (warehouse perception already fixed R237/R238). Provisional -> promote next round.
+  2. [SPINE, GATED] D182 world-owned NL->object grounder — removes witness-only fidelity; CEO gate.
+  3. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
   - S4 (one generic driver): a genuinely-new 3rd embodiment needs the ONE generic driver replacing per-driver MuJoCoGo2/G1 (WIRING:53) — CEO-gated (kernel/interface), multi-round SDD.
-  - SPINE (D182): actor-authored verify target — a world-owned NL→object grounder fixes witness-only fidelity AND makes grasp-vs-wander deterministic (E46). Object plug-in not pure config (per-object weld tuple + colour maps) → S4.
+  - SPINE (D182): actor-authored verify target — a world-owned NL->object grounder fixes witness-only fidelity AND makes grasp-vs-wander deterministic (E46). Object plug-in not pure config (per-object weld tuple + colour maps) -> S4.
   - D178 near_object VLN · D176 cmd_motion seam · D168 place-oracle · relational near(a,b) · S5/S6 ladder · BILLING (external: VLM-judge + BYO-N≥4 + PERCEPTION VLM OpenRouter/dashscope-402; local Ollama gemma4:e4b is the working seam) · RELEASE: restructure merge to master (owner).
   - SELF-APPROVAL AUDIT (R250): gate/token audit R241..R249 CLEAN. R209 schema-cap approval remains the last, audited clean.
 last_review: R250
