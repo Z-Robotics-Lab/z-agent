@@ -9,7 +9,7 @@
 | describe.nl-go2-courtyard | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 17 | pending |
 | fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
 | fetch-place.nl-compound | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 4 | pending |
-| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 68 | pending |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-new-world-courtyard | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 25 | pending |
 | fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 24 | pending |
 | fetch.nl-new-world-courtyard-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 22 | pending |
