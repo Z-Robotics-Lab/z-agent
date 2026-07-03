@@ -86,3 +86,74 @@ def test_built_perception_is_localizer_usable():
     perception = _build_go2_perception(_FullCameraBase())
     assert perception is not None
     assert _perception_is_usable(perception) is True
+
+
+# ---------------------------------------------------------------------------
+# describe seam: caption() / visual_query() route to Go2VLMPerception.describe_scene
+# (R248 — the brain's `describe` recovery raised AttributeError because
+# Go2GraspPerception exposed detect() but not caption()/visual_query()).
+# ---------------------------------------------------------------------------
+
+
+class _FrameBase:
+    """Stub base yielding a fixed RGB frame (never a ground-truth pose)."""
+
+    def get_camera_frame(self, width: int = 640, height: int = 480) -> Any:
+        import numpy as np
+
+        return np.zeros((height, width, 3), dtype=np.uint8)
+
+
+class _FakeDescribeVLM:
+    """Stub Go2VLMPerception recording the frame it was asked to describe."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def describe_scene(self, frame: Any) -> Any:
+        from vector_os_nano.perception.vlm_go2 import (
+            DetectedObject,
+            SceneDescription,
+        )
+
+        self.calls += 1
+        return SceneDescription(
+            summary="a courtyard tabletop",
+            objects=[DetectedObject(name="green bottle", description="", confidence=0.9)],
+            room_type="courtyard",
+            details="A sandstone courtyard with a green bottle on a table.",
+        )
+
+
+def _grasp_perception_with_describe_vlm():
+    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
+
+    vlm = _FakeDescribeVLM()
+    p = Go2GraspPerception(_FrameBase(), describe_vlm=vlm)
+    return p, vlm
+
+
+def test_grasp_perception_caption_routes_to_describe_scene():
+    """caption() renders a frame and returns the describe_scene text (no GT)."""
+    p, vlm = _grasp_perception_with_describe_vlm()
+    cap = p.caption(length="long")
+    assert isinstance(cap, str) and cap
+    assert vlm.calls == 1
+    assert "green bottle" in cap
+    assert "courtyard" in cap
+
+
+def test_grasp_perception_visual_query_routes_to_describe_scene():
+    """visual_query() answers via the SAME describe_scene seam (never crashes)."""
+    p, vlm = _grasp_perception_with_describe_vlm()
+    ans = p.visual_query("what do you see?")
+    assert isinstance(ans, str) and ans
+    assert vlm.calls == 1
+    assert "bottle" in ans
+
+
+def test_grasp_perception_satisfies_perception_protocol_describe_methods():
+    """The describe skill's contract: caption + visual_query are callable."""
+    p, _ = _grasp_perception_with_describe_vlm()
+    assert callable(getattr(p, "caption", None))
+    assert callable(getattr(p, "visual_query", None))

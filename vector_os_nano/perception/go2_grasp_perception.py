@@ -48,12 +48,16 @@ class Go2GraspPerception:
         *,
         vlm: Any = None,
         tracker: Any = None,
+        describe_vlm: Any = None,
         width: int = 640,
         height: int = 480,
     ) -> None:
         self._base = base
         self._vlm = vlm
         self._tracker = tracker
+        # Separate captioning VLM (Go2VLMPerception.describe_scene) — NOT the
+        # grounding-dino DETECTOR held in ``_vlm``. Lazily built on first use.
+        self._describe_vlm = describe_vlm
         self._w = int(width)
         self._h = int(height)
 
@@ -114,6 +118,46 @@ class Go2GraspPerception:
         """
         self._ensure_detector()
         return self._vlm.detect(self.get_color_frame(), query)
+
+    # --- open-ended scene description (VLM describe_scene seam) --------------
+
+    def _ensure_describe_vlm(self) -> None:
+        """Lazily build the Go2VLMPerception captioner (local Ollama / OpenRouter).
+
+        Distinct from ``_ensure_detector`` — the grounding-dino detector answers
+        NAMED-object detect() only; open-ended caption/visual_query need the VLM.
+        Reads its backend from env exactly like the look/explore describe_scene
+        path (VECTOR_VLM_URL local Ollama, else OPENROUTER_API_KEY).
+        """
+        if self._describe_vlm is None:
+            from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+            logger.info("[GO2-PERCEPT] building Go2VLMPerception describe seam (lazy)")
+            self._describe_vlm = Go2VLMPerception()
+
+    def caption(self, length: str = "normal") -> str:
+        """Open-ended scene caption via the vlm_go2 describe_scene seam.
+
+        Go2 has no ground-truth scene text (unlike MuJoCoPerception) — the
+        caption is produced by the SAME Go2VLMPerception the look/explore path
+        uses. Renders a fresh RGB frame and flattens the SceneDescription to a
+        readable string so the ``describe`` skill's recovery has content to read.
+        """
+        self._ensure_describe_vlm()
+        scene = self._describe_vlm.describe_scene(self.get_color_frame())
+        return _scene_to_text(scene)
+
+    def visual_query(self, question: str) -> str:
+        """Answer a free-form question about the current frame.
+
+        Routes through the SAME describe_scene seam as caption() (the seam is
+        description-only; it does not take a per-question prompt), mirroring
+        MuJoCoPerception.visual_query. Best-effort scene answer, never a crash —
+        before R248 this method was absent and the brain's describe-based
+        recovery raised AttributeError and dead-ended.
+        """
+        self._ensure_describe_vlm()
+        scene = self._describe_vlm.describe_scene(self.get_color_frame())
+        return _scene_to_text(scene)
 
     def segment(self, image: np.ndarray, bbox: Any) -> np.ndarray | None:
         """Binary mask for a single bbox on *image*, or None.
@@ -184,3 +228,27 @@ class Go2GraspPerception:
                 self._tracker.stop()
             except Exception as exc:  # noqa: BLE001
                 logger.debug("[GO2-PERCEPT] tracker stop failed: %s", exc)
+
+
+def _scene_to_text(scene: Any) -> str:
+    """Flatten a vlm_go2 SceneDescription into one readable string.
+
+    Composes summary + named objects + free-form details (whichever the VLM
+    filled). Returns a loud fallback rather than "" so the describe skill's
+    ``describe_scene() != ''`` verify_hint never silently passes on nothing.
+    """
+    parts: list[str] = []
+    summary = str(getattr(scene, "summary", "") or "").strip()
+    if summary:
+        parts.append(summary)
+    objects = getattr(scene, "objects", None) or []
+    names = ", ".join(
+        n for n in (str(getattr(o, "name", "") or "").strip() for o in objects) if n
+    )
+    if names:
+        parts.append(f"Objects: {names}.")
+    details = str(getattr(scene, "details", "") or "").strip()
+    if details and details not in parts:
+        parts.append(details)
+    text = " ".join(parts).strip()
+    return text or "I can see the scene but cannot make out any distinct objects."
