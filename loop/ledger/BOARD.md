@@ -27,7 +27,7 @@
 | g1.navigation | confirmed ⚠ STALE | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 40 | pending |
 | g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 32 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 77 | c59f386 |
-| place.nl-new-world-courtyard | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
+| place.nl-new-world-courtyard | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | b8c45cb |
 | place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 57 | pending |
 | quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 52 | pending |
 | quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 48 | pending |
@@ -115,3 +115,4 @@
 - E60 R253 [inconclusive] next#1: R247 courtyard PLACE refutation = mobile_place's transient first-nav miss surfacing to the brain (recovered via unreachable navigate(10.8,3.0)); an internal nav-retry lets it ground. — retry only if: courtyard PLACE regresses to RAN, OR nav-retry reverted (regr=test_mobile_place_transient_nav_miss_retries_then_places)
 - E60 R255 [refuted] STATUS next#1: adjudicate R253/E60 courtyard PLACE provisional (GROUNDED 1/1) — reproduce across the R253->R255 boundary to meet the E46 N>=2 bar? — retry only if: a DEBUG round with VECTOR_PLACE_DIAG localizes the drop (weld-break-under-locomotion vs off-receptacle drop-release); do NOT re-credit the nav-retry (E23, wrong sub-failure)
 - E60 R256 [refuted] R255 courtyard PLACE flake = MID-WALK DROP (grasp weld breaks under mobile_place walk/dock). — retry only if: do NOT re-diagnose as weld/mid-walk drop (regr=test_go2_courtyard_place_machinery); next=brain post-place guard
+- E60 R257 [confirmed] STATUS next#1: BRAIN post-place recovery guard (persona post-place-no-regrasp nudge + runner re-grasp-until-verify gate; NOT a weld change, refuted R256) fixes the R255 '掉了'->re-grasp thrash and grounds courtyard PLACE N>=2. — retry only if: if courtyard PLACE re-grasp thrash recurs, guard regressed (regr=test_native_loop.py post_place tests)
