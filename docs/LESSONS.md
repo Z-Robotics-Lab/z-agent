@@ -19,11 +19,14 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   0.10) so it's STRUCTURALLY 0 for a bin/table place (pickables z=0.320, place_bin top ~0.31) —
   always-FALSE = a structural false-RED. Use the D106 count oracle `resting_on_receptacle() >= N`
   (ungated, same residual as single place) → E35 (extends #Casebook Case 7).
-- quantity-place (`把两个瓶子放到架子上`) does NOT ground on the bare face (deepseek-v4-flash): brain
-  places bottle 1 (blue, `resting_on_receptacle()` ✓) then ABANDONS bottle 2 (green) after its grasp
-  stalls → `navigate → at_position(10.5,2.9)` loop (Case 15 cross-talk in quantity context) → terminal
-  verify=at_position, RAN False 3/4, eyes 1/2. HONEST RED (moat refused): R198 machinery CORRECT, gap =
-  BRAIN DECOMPOSITION of N grasp+place. Retry only after isolating grasp-vs-planning + a guardrail (E23) → E36.
+- quantity-place (`把两个瓶子放到架子上`) does NOT ground (deepseek-v4-flash): brain places bottle 1 then
+  ABANDONS bottle 2 after its grasp stalls → at_position loop, RAN False 3/4. HONEST RED (moat refused): gap =
+  BRAIN DECOMPOSITION of N grasp+place, machinery correct. Retry only after isolating grasp + a guardrail → E36.
+- courtyard PLACE composite False is NOT a world-transfer bug: `navigate(10.8,3.0)` is INSIDE the inflated
+  pick_table (R=0.28, table x∈[10.80,11.10]) → `plan_path`=None, UNREACHABLE in EVERY world incl HOUSE
+  (furniture identical). R246's at_position was a brain-IMPROVISED recovery nav to the bottle pick-loc after
+  a `mobile_place` first-nav flake; the place had already succeeded. Do NOT re-diagnose (10.8,3.0) as a
+  house-vs-courtyard diff. R247 re-verify grasp itself flaked → PLACE-leg is model-flaky (grasp+nav) → E56/R247.
 
 ## Hazards & confirmed constraints
 - perception_grasp far-recovery DEAD-BAND blocked HOUSE→warehouse fetch transfer (R234 root cause): the recovery (localize→0.95m standoff→face→re-perceive) fires only after scan→no_detections but was band-gated d∈(1.6,8.0]m — so a dog that nav-stopped CLOSE (0.88m) yet mis-oriented/occluded (front_object_mask=0px, d_min~0.55m facing an obstacle in the compact enclosure) got SKIPPED as 'the self-approach's job', which can't re-approach a target it can't see (world/config + detector were both fine: far-seed localized the bottle at correct coords). FIX: floor 1.6→0.30m (`_RECOVERY_MIN_M`), recover-by-repose from any plausible distance, keep only a d<0.3m degenerate-self-detection guard. ALSO: the sibling Isaac sim (`/workspace/go2w`, different engine) does NOT trip the repo's `pgrep -f "mujoco|vcli"` gate and with RAM/GPU headroom is NOT an Inv-5 blocker — R231-R233 over-read it and burned 3 rounds; run the repo's ACTUAL gate, not "any sim anywhere" → E54 (f437f4e; e2e re-verify pending R235).
@@ -65,25 +68,21 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   colour before the colour-keyed `perception_grasp` (raw "the rightmost bottle" query the CV
   resolver can't parse). `detect_objects` returns names+confidence, NO positions. Ordinal→object
   fidelity is WITNESS-only (D182 gap: oracle certifies held==named, not named==intent) → E25.
-- The perception VLM (`look`/describe_scene/find_objects) IS the ordinal resolver — a natural A/B
-  proved it (R192): VLM DOWN → the model passes the raw ordinal string to perception_grasp → 0/5;
-  VLM up → it resolves 最左边的瓶子→"green bottle" → GROUNDED 1/1 (green held, eyes-confirmed, blue+red
-  untouched). The perception VLM (`vlm_go2.py`/`vlm.py`) defaults to OpenRouter (`google/gemma-4-31b-it`)
-  and was 402/out-of-credit R192 (same external BILLING gate as the vision-judge), silently breaking
-  ordinal grounding → E28.
-- Ordinal SELECTION (最左边的瓶子→green) is now deterministic+correct, but it took TWO fixes and the
-  VLM-only route was a dead end: (a) the VLM honours ordinal POSITION but DROPS the 瓶子/bottle category
-  (R193 grasped the leftmost OBJECT=a can) → R192 GROUNDED REFUTED (E30); (b) WIRING the deterministic
-  `_parse_ordinal`+`_resolve_ordinal_target` (catalog projection via `world_to_pixel`, filter category,
-  cx-extreme; sign larger world-y→smaller cx) into perception_grasp was NECESSARY BUT INSUFFICIENT — the
-  brain pre-resolved the ordinal to a WRONG colour upstream, so `parse_color` short-circuited the skill
-  resolver; the fix was an ordinal-PASSTHROUGH native_loop prompt (pass spatial phrases VERBATIM) → E31.
-  End-to-end GROUNDED (both ordinal directions) CONFIRMED R197 → E33; see the Frontier line.
+- The perception VLM (`look`/describe_scene) IS the ordinal resolver — A/B proved it (R192): VLM DOWN →
+  raw ordinal to perception_grasp → 0/5; VLM up → 最左边的瓶子→"green bottle" GROUNDED 1/1. It defaults to
+  OpenRouter (`google/gemma-4-31b-it`), 402-exhausted R192 (BILLING gate), silently breaking ordinals → E28.
+- Ordinal SELECTION (最左边的瓶子→green) is deterministic+correct but took TWO fixes (VLM-only was a dead
+  end): (a) the VLM drops the 瓶子 category (R193 grasped a can) → E30; (b) deterministic `_parse_ordinal`+
+  `_resolve_ordinal_target` in perception_grasp was necessary but INSUFFICIENT until an ordinal-PASSTHROUGH
+  native_loop prompt stopped the brain pre-resolving to a wrong colour → E31. E2E GROUNDED R197 → E33.
 - g1_accept.py full RED+GREEN >10min (GREEN model flails ~14 turns): run BACKGROUND — a foreground Bash-cap timeout SIGTERMs mid-GREEN, orphaning the g1 sim (R217) → R219/R223.
 - g1.perception NON-REPRODUCIBLE (R223 RAN 0/17): the oracle unions ALL same-colour seg pixels, but the OLD
   scene had MULTIPLE red geoms (2 stools + a can) → centroid on the cluster while dino boxed ONE → box↔centroid
   >60px ~2/3 of samples. RESOLVED R224 (WORLD config Inv.3; oracle+tol UNCHANGED=Inv.1): inject ONE dominant
   central red target (~18-20k seg px ≫ 920px) → 4-5px match, N=2 GROUNDED. LESSON: a GT-centroid oracle over a UNION of same-colour geoms is ILL-POSED with several in view — give perception ONE target → E50 R224.
+- `Go2GraspPerception` implements `detect` but NOT `visual_query`/`caption`, so `describe`/`look` with a question
+  raises `'Go2GraspPerception' has no attribute 'visual_query'` (vlm_error) — the go2 describe-recovery is a dead
+  branch. Route go2 visual_query to the vlm_go2 describe_scene seam (or add the method) → R247/E56.
 
 ## Recipes (proven invocations — copy, don't re-derive)
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +
