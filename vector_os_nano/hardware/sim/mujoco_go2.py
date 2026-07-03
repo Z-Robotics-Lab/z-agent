@@ -120,6 +120,11 @@ _GO2_PIPER_XML: Path = Path(__file__).parent / "mjcf" / "go2_piper" / "go2_piper
 # frozen house BYTE-IDENTICAL, mirroring VECTOR_SCENE_CLUTTER / VECTOR_SCENE_SWAP.
 _ROOM_TEMPLATES: dict[str, Path] = {
     "warehouse": Path(__file__).parent / "go2_warehouse.xml",
+    # R241/E56: a THIRD distinct world — an open-air sandstone courtyard (open sky, warm
+    # terracotta paving, olive planters + fountain + pergola), tonally and geometrically
+    # unlike both the marble house and the grey industrial warehouse. Same token contract,
+    # pick furniture byte-identical → confirmed bars stay reachable; only the shell differs.
+    "courtyard": Path(__file__).parent / "go2_courtyard.xml",
 }
 
 

@@ -126,6 +126,62 @@ def test_warehouse_has_distinct_shell_geoms(monkeypatch):
         assert _geom_id(go2, name) < 0, f"house geom {name} leaked into the warehouse"
 
 
+def test_select_courtyard(monkeypatch):
+    monkeypatch.setenv("VECTOR_ROOM_TEMPLATE", "courtyard")
+    assert _select_room_template() == _ROOM_TEMPLATES["courtyard"]
+
+
+def test_courtyard_template_file_exists():
+    assert _ROOM_TEMPLATES["courtyard"].exists()
+    xml = _ROOM_TEMPLATES["courtyard"].read_text()
+    for tok in ("GO2_MODEL_PATH", "GO2_ASSETS_DIR", "GRASP_WELDS"):
+        assert tok in xml, f"courtyard template must carry the {tok} token"
+
+
+def test_courtyard_compiles_with_all_pickables(monkeypatch):
+    """VECTOR_ROOM_TEMPLATE=courtyard: the 3rd world compiles and every tuned pickable body
+    is present at its coordinates — the grasp/perception face stays reachable."""
+    monkeypatch.setenv("VECTOR_ROOM_TEMPLATE", "courtyard")
+    monkeypatch.delenv("VECTOR_SIM_WITH_ARM", raising=False)
+    go2 = MuJoCoGo2(gui=False, room=True)
+    go2.connect()
+    for name in _PICKABLES:
+        assert _body_id(go2, name) >= 0, f"{name} must exist in the courtyard world"
+    for name in ("pick_table", "place_bin"):
+        assert _body_id(go2, name) >= 0, f"{name} must exist in the courtyard world"
+
+
+def test_courtyard_green_bottle_at_house_coordinates(monkeypatch):
+    """The green bottle must sit at the SAME (10.88, 3.0) it does in the house/warehouse — a
+    moved target would break the tuned grasp reach and the oracle GT, making the new-world
+    re-verify a different (unfair) experiment."""
+    monkeypatch.setenv("VECTOR_ROOM_TEMPLATE", "courtyard")
+    monkeypatch.delenv("VECTOR_SIM_WITH_ARM", raising=False)
+    go2 = MuJoCoGo2(gui=False, room=True)
+    go2.connect()
+    bid = _body_id(go2, "pickable_bottle_green")
+    assert bid >= 0
+    x, y, _z = (float(v) for v in go2._mj.model.body_pos[bid])
+    assert abs(x - 10.88) < 1e-6 and abs(y - 3.00) < 1e-6, (
+        f"green bottle moved to ({x}, {y}); must stay at house coords (10.88, 3.00)"
+    )
+
+
+def test_courtyard_has_distinct_shell_geoms(monkeypatch):
+    """The world is genuinely NEW: it carries the courtyard-signature geoms (sandstone
+    perimeter + timber pergola + stone fountain) that exist in NEITHER the house NOR the
+    warehouse, and none of either prior world's shell geoms."""
+    monkeypatch.setenv("VECTOR_ROOM_TEMPLATE", "courtyard")
+    monkeypatch.delenv("VECTOR_SIM_WITH_ARM", raising=False)
+    go2 = MuJoCoGo2(gui=False, room=True)
+    go2.connect()
+    for name in ("cw_south", "cw_north", "cw_west", "cw_east", "perg_post_a", "fnt_base"):
+        assert _geom_id(go2, name) >= 0, f"courtyard must have {name}"
+    # House-only and warehouse-only geoms must both be absent (proves a real 3rd shell).
+    for name in ("bb_south", "df_living_l", "ww_south", "rack_up_a"):
+        assert _geom_id(go2, name) < 0, f"foreign shell geom {name} leaked into the courtyard"
+
+
 def test_default_env_is_the_house(monkeypatch):
     """Unset knob → the frozen house: its signature geoms are present, warehouse ones absent
     (guards the byte-identical default against silent drift)."""

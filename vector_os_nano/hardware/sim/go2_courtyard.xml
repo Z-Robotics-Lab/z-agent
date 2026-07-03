@@ -1,0 +1,195 @@
+<mujoco model="go2 courtyard">
+  <compiler angle="radian" meshdir="GO2_ASSETS_DIR" texturedir="GO2_ASSETS_DIR" autolimits="true"/>
+  <include file="GO2_MODEL_PATH"/>
+
+  <option cone="elliptic" impratio="100"/>
+
+  <statistic center="11.5 4 0.5" extent="9"/>
+
+  <visual>
+    <headlight diffuse="0.60 0.58 0.52" ambient="0.42 0.40 0.36" specular="0 0 0"/>
+    <rgba haze="0.80 0.84 0.90 1"/>
+    <global azimuth="-140" elevation="-20" offwidth="1280" offheight="960"/>
+    <map znear="0.05" zfar="60" shadowclip="0.5"/>
+    <quality shadowsize="1024"/>
+  </visual>
+
+  <!--
+    COURTYARD LAYOUT — a THIRD genuinely-NEW WORLD (R241/E56 breadth pivot OFF colour breadth;
+    STATUS next#1). An OPEN-AIR walled sandstone courtyard (open sky, NO ceiling, warm
+    terracotta paving, low 1.2m sandstone perimeter, olive planters + a stone fountain +
+    a timber pergola) — geometrically AND tonally distinct from BOTH the 20×14m marble house
+    (go2_room.xml) AND the compact grey industrial warehouse (go2_warehouse.xml). Larger
+    open 12×10m footprint, no roof, a warm daylight palette. Same discipline: the tuned pick
+    furniture (pick_table + 5 pickables + place_bin + welds) is copied BYTE-FOR-BYTE at the
+    SAME coordinates so grasp / perception / the honest-verify spine stay reachable — only
+    the ROOM SHELL changed. Worlds are CONFIG not code (Invariant 3): fed to the already-
+    parameterized build_room_scene(room_template_path=) via VECTOR_ROOM_TEMPLATE — ZERO
+    kernel/driver edits. All decorative foliage/fountain sit OUTSIDE the dog's forward pick
+    FOV (+x toward pick_table) so the green-fetch background stays warm sandstone (hue far
+    from green — a fair transfer test of the R237 pixel-hue gate in a fresh enclosure).
+
+          5.5   8   10  12  14        17.5
+     9.0  +==========[ pergola beams ]========+
+          |  (fountain)          (planters)   |
+     4.6  |                place_bin           |  (open sky above; no roof)
+     3.0  |   go2 (10,3) -> pick_table 10.95   |     pick_table_far 13.95
+          | [olive planters, west]             |
+    -1.0  +==================================+
+  -->
+
+  <asset>
+    <!-- Warm bright daylight sky (open top) — cream near the horizon, soft blue above.
+         Deliberately NOT the house marble nor the warehouse's cool grey gradient. -->
+    <texture type="skybox" builtin="gradient" rgb1="0.55 0.70 0.90" rgb2="0.90 0.88 0.80"
+             width="512" height="3072"/>
+
+    <!-- Terracotta paving (warm clay tile, hue ~25° — far from green, so the pixel-hue gate
+         cleanly isolates a green target against it). Distinct from concrete / marble. -->
+    <texture type="2d" name="terracotta_tex" builtin="checker"
+             rgb1="0.72 0.44 0.28 " rgb2="0.66 0.40 0.25" width="300" height="300"/>
+    <material name="mat_terracotta" texture="terracotta_tex" texuniform="true"
+              texrepeat="7 6" reflectance="0.05"/>
+
+    <!-- Sandstone perimeter wall (warm cream — the forward pick-view background). -->
+    <material name="mat_sandstone" rgba="0.82 0.72 0.55 1" reflectance="0.06"/>
+    <!-- Wall coping / cap (slightly lighter limestone). -->
+    <material name="mat_coping" rgba="0.88 0.82 0.68 1" reflectance="0.08"/>
+
+    <!-- Timber pergola beams (weathered oak, warm brown). -->
+    <material name="mat_pergola" rgba="0.46 0.33 0.20 1" reflectance="0.04"/>
+
+    <!-- Terracotta planter pots (deeper clay). -->
+    <material name="mat_pot" rgba="0.70 0.36 0.22 1" reflectance="0.05"/>
+    <!-- Muted OLIVE foliage (desaturated — a low-saturation greenish, kept OUT of the
+         forward FOV so it can't flood the target-hue gate). -->
+    <material name="mat_foliage" rgba="0.34 0.42 0.24 1" reflectance="0.03"/>
+
+    <!-- Grey stone fountain basin + a pale water disc. -->
+    <material name="mat_stone" rgba="0.62 0.60 0.56 1" reflectance="0.10"/>
+    <material name="mat_water" rgba="0.40 0.58 0.70 1" reflectance="0.35"/>
+
+    <!-- Oak pick furniture (rgba-only, self-contained — keeps pick_table / place_bin
+         appearance identical to the house/warehouse so grasp perception is unchanged). -->
+    <material name="mat_oak" rgba="0.62 0.44 0.24 1" reflectance="0.12"/>
+  </asset>
+
+  <worldbody>
+    <!-- Warm overhead daylight + a single directional sun (the shadow caster). No ceiling
+         lights — this is an OPEN-air court lit by the sky. -->
+    <light name="sun" pos="10 3 6" dir="-0.2 0.1 -1" directional="true" diffuse="0.55 0.53 0.48"/>
+    <light name="court_fill" pos="11.5 4 3.2" dir="0 0 -1" diffuse="0.30 0.29 0.26" cutoff="90" castshadow="false"/>
+    <light name="warm_bounce" pos="11.5 4 0.4" dir="0 0 1" diffuse="0.12 0.11 0.09" castshadow="false"/>
+
+    <!-- Terracotta paving (12m x 10m, centre (11.5,4)). Covers spawn (10,3),
+         pick_table (10.95,3), pick_table_far (13.95,3) and place_bin (10.95,4.6). -->
+    <geom name="floor" type="plane" pos="11.5 4 0" size="6.0 5.0 0.05" material="mat_terracotta"/>
+    <!-- Invisible raycast ground for the lidar (group 3, no collision) — mirrors house/warehouse. -->
+    <geom name="floor_raycast" type="box" pos="11.5 4 -0.02" size="6.0 5.0 0.01"
+          contype="0" conaffinity="0" group="3" rgba="0 0 0 0"/>
+
+    <!-- ==================== SANDSTONE PERIMETER (collidable — the enclosure + lidar returns).
+         Low 1.2m walls so the open sky shows above them (this is what makes it a COURTYARD,
+         not a roofed box). Warm cream — the forward (+x) pick-view background. -->
+    <geom name="cw_south" type="box" pos="11.5 -1.0 0.60" size="6.0 0.08 0.60" material="mat_sandstone"/>
+    <geom name="cw_north" type="box" pos="11.5 9.0 0.60" size="6.0 0.08 0.60" material="mat_sandstone"/>
+    <geom name="cw_west"  type="box" pos="5.5 4.0 0.60"  size="0.08 5.0 0.60" material="mat_sandstone"/>
+    <geom name="cw_east"  type="box" pos="17.5 4.0 0.60" size="0.08 5.0 0.60" material="mat_sandstone"/>
+    <!-- Limestone coping caps along the wall tops (decorative silhouette, no collision). -->
+    <geom name="cap_south" type="box" pos="11.5 -1.0 1.22" size="6.05 0.12 0.04" material="mat_coping" contype="0" conaffinity="0"/>
+    <geom name="cap_north" type="box" pos="11.5 9.0 1.22" size="6.05 0.12 0.04" material="mat_coping" contype="0" conaffinity="0"/>
+    <geom name="cap_west"  type="box" pos="5.5 4.0 1.22"  size="0.12 5.05 0.04" material="mat_coping" contype="0" conaffinity="0"/>
+    <geom name="cap_east"  type="box" pos="17.5 4.0 1.22" size="0.12 5.05 0.04" material="mat_coping" contype="0" conaffinity="0"/>
+
+    <!-- ==================== TIMBER PERGOLA over the north edge (visual only, contype 0) =====
+         Four posts + cross-beams along y~8.5, well clear of the go2's +y path to place_bin
+         (y=4.6). The signature courtyard object — nothing like it in the house or warehouse. -->
+    <body name="pergola" pos="11.5 8.5 0">
+      <geom name="perg_post_a" type="box" pos="-4.0 0 1.1" size="0.06 0.06 1.1" material="mat_pergola" contype="0" conaffinity="0"/>
+      <geom name="perg_post_b" type="box" pos="-1.3 0 1.1" size="0.06 0.06 1.1" material="mat_pergola" contype="0" conaffinity="0"/>
+      <geom name="perg_post_c" type="box" pos="1.3 0 1.1"  size="0.06 0.06 1.1" material="mat_pergola" contype="0" conaffinity="0"/>
+      <geom name="perg_post_d" type="box" pos="4.0 0 1.1"  size="0.06 0.06 1.1" material="mat_pergola" contype="0" conaffinity="0"/>
+      <geom name="perg_beam_x" type="box" pos="0 0 2.15" size="4.1 0.05 0.05" material="mat_pergola" contype="0" conaffinity="0"/>
+      <geom name="perg_slat_a" type="box" pos="-2.5 0.3 2.2" size="0.04 0.35 0.03" material="mat_pergola" contype="0" conaffinity="0"/>
+      <geom name="perg_slat_b" type="box" pos="0.0 0.3 2.2"  size="0.04 0.35 0.03" material="mat_pergola" contype="0" conaffinity="0"/>
+      <geom name="perg_slat_c" type="box" pos="2.5 0.3 2.2"  size="0.04 0.35 0.03" material="mat_pergola" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== STONE FOUNTAIN, NW corner (visual only) — off the dog's forward
+         pick view (+x), a warm-court centrepiece with a grey basin + pale water disc. -->
+    <body name="fountain" pos="7.6 7.4 0">
+      <geom name="fnt_base" type="cylinder" pos="0 0 0.15" size="0.55 0.15" material="mat_stone" contype="0" conaffinity="0"/>
+      <geom name="fnt_bowl" type="cylinder" pos="0 0 0.32" size="0.40 0.05" material="mat_stone" contype="0" conaffinity="0"/>
+      <geom name="fnt_water" type="cylinder" pos="0 0 0.36" size="0.34 0.01" material="mat_water" contype="0" conaffinity="0"/>
+      <geom name="fnt_stem" type="cylinder" pos="0 0 0.55" size="0.06 0.22" material="mat_stone" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== OLIVE PLANTERS — deliberately placed WEST/NW, BEHIND & beside the
+         dog (spawn 10,3 facing +x), OUT of the forward pick FOV so the muted foliage cannot
+         flood a green-target hue gate. Terracotta pots + low desaturated-olive canopy. -->
+    <body name="planter_w1" pos="6.6 2.0 0">
+      <geom name="pw1_pot" type="box" pos="0 0 0.22" size="0.24 0.24 0.22" material="mat_pot" contype="0" conaffinity="0"/>
+      <geom name="pw1_bush" type="ellipsoid" pos="0 0 0.62" size="0.32 0.32 0.30" material="mat_foliage" contype="0" conaffinity="0"/>
+    </body>
+    <body name="planter_w2" pos="6.6 6.0 0">
+      <geom name="pw2_pot" type="box" pos="0 0 0.22" size="0.24 0.24 0.22" material="mat_pot" contype="0" conaffinity="0"/>
+      <geom name="pw2_bush" type="ellipsoid" pos="0 0 0.62" size="0.32 0.32 0.30" material="mat_foliage" contype="0" conaffinity="0"/>
+    </body>
+    <body name="planter_ne" pos="16.4 7.6 0">
+      <geom name="pne_pot" type="box" pos="0 0 0.22" size="0.24 0.24 0.22" material="mat_pot" contype="0" conaffinity="0"/>
+      <geom name="pne_bush" type="ellipsoid" pos="0 0 0.62" size="0.30 0.30 0.28" material="mat_foliage" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== PICK BAY (verbatim from go2_room.xml — DO NOT re-tune) =======
+         The tuned grasp/perception furniture is copied byte-for-byte from the house so
+         every confirmed bar (green fetch, ordinal, quantity, place) stays reachable. Only
+         the ROOM SHELL above changed — that is what makes this a new WORLD, not a new task. -->
+    <body name="pick_table" pos="10.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
+    </body>
+
+    <body name="pick_table_far" pos="13.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
+    </body>
+
+    <body name="place_bin" pos="10.95 4.60 0">
+      <geom type="box" pos="0 0 0.14" size="0.18 0.40 0.14" material="mat_oak"/>
+      <geom type="box" pos="0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="-0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 -0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
+    </body>
+
+    <body name="pickable_bottle_blue" pos="10.90 2.78 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.20 0.40 0.85 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_bottle_green" pos="10.88 3.00 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.25 0.70 0.35 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_can_red" pos="10.90 3.22 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.033 0.04" rgba="0.85 0.25 0.20 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_bottle_yellow" pos="10.90 3.11 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.95 0.85 0.05 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_box_purple" pos="10.90 2.89 0.320">
+      <freejoint/>
+      <geom type="box" size="0.028 0.028 0.04" rgba="0.75 0.10 0.70 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+  </worldbody>
+GRASP_WELDS
+</mujoco>
