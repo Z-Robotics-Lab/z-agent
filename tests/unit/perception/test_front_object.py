@@ -217,6 +217,36 @@ def test_color_none_keeps_frontmost_behavior():
     assert abs(xs.mean() - _W / 2) < 6, "color=None should pick the central blob, unchanged"
 
 
+def test_color_green_survives_saliency_flood():
+    """R237 warehouse transfer: a large vivid-orange region (racking) floods the
+    saliency gate AND 8-connects the small green blob into one big blob whose MEDIAN
+    hue is orange. The old per-blob median-hue gate rejected that fused blob (→ None);
+    gating the target hue at PIXEL level BEFORE _open/components isolates the green
+    pixels so the green blob survives as its own component and is returned.
+
+    This is the exact R236 root cause (front_object saliency flood) made synthetic:
+    the target's real pixels FUSE into a bg blob whose median hue != target.
+    """
+    rgb = _muted_bg()
+    cy = _H // 2
+    # A large vivid-orange band (warehouse orange racking) — salient (sat>=140) and,
+    # spanning most of the frame width, it 8-connects any touching object into itself.
+    rgb[cy - 8 : cy + 8, 4 : _W - 4] = (235, 140, 30)   # orange, hue~16 (NOT green)
+    # A small green blob EMBEDDED in the orange band (bridged into it under 8-conn).
+    _put_blob(rgb, _W // 2, cy, (64, 179, 89), r=5)      # green target, ~100 px
+    depth = np.full((_H, _W), 1.0, dtype=np.float32)
+    # Sanity: the fused blob's median hue is orange, so the OLD median-gate path
+    # would (and did) reject it — the breakdown confirms green pixels ARE present.
+    bd = mask_gate_breakdown(rgb, depth, color="green")
+    assert bd["n_hue_anywhere"] > 0, "green must render — else this isn't a flood test"
+    m = front_object_mask(rgb, depth, color="green")
+    assert m is not None, "green flooded/fused by orange saliency — pixel-hue gate failed"
+    sel = rgb[m > 0]
+    assert sel[:, 1].mean() > sel[:, 0].mean() + 20, "selection is not the green object"
+    xs = np.where(m > 0)[1]
+    assert abs(xs.mean() - _W / 2) < 5, f"selection x={xs.mean():.1f} not on the green blob"
+
+
 def test_color_no_match_fails_loud():
     """A colour query with no blob of that colour returns None — never the front-most."""
     rgb = _muted_bg()

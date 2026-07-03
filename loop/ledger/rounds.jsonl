@@ -50,3 +50,4 @@
 {"schema":1,"ts":1783066800,"round":"R233","kind":"build","exit":0,"post_check":"ok","commit":"8519564","dur_s":1257}
 {"schema":1,"ts":1783070266,"round":"R234","kind":"build","exit":0,"post_check":"ok","commit":"0df528f","dur_s":3346}
 {"schema":1,"ts":1783070827,"round":"R235","kind":"build","exit":1,"post_check":"quarantined","commit":"0df528f","dur_s":441}
+{"schema":1,"ts":1783073395,"round":"R236","kind":"build","exit":0,"post_check":"ok","commit":"aad2cfb","dur_s":2448}

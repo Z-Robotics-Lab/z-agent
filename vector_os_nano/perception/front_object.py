@@ -289,6 +289,22 @@ def front_object_mask(
     if depth is not None:
         salient &= ((depth > 0) & (depth <= max_depth)).astype(np.uint8)
 
+    # ATTRIBUTE (colour): gate the target HUE at PIXEL level BEFORE opening/components
+    # (D47 → R237). A vivid NON-target background (warehouse orange racking floods ~32%
+    # of the frame past sat>=140, R236) 8-connects the target's real pixels into one big
+    # blob whose MEDIAN hue is off-target, so a per-blob median-hue gate rejected the
+    # target (→ None, the warehouse green-fetch transfer gap). Building the mask from
+    # target-hue pixels FIRST means each colour survives as its own component and the bg
+    # can never compete. color=None → front-most path, UNCHANGED.
+    hue_img = _hue(rgb) if color is not None else None
+    if color is not None:
+        if color not in _COLOR_HUE:
+            return None  # FAIL LOUD on an unknown colour, never the front-most
+        in_band = np.zeros((h, w), dtype=bool)
+        for lo, hi in _COLOR_HUE[color]:
+            in_band |= (hue_img >= lo) & (hue_img <= hi)
+        salient &= in_band.astype(np.uint8)
+
     # Sever thin saturation bridges so each vivid object survives as its OWN
     # connected component (the table else fuses the cylinders into one blob and
     # the central object vanishes — the bug this resolver previously had).
@@ -299,13 +315,6 @@ def front_object_mask(
 
     n, labels, centroids, areas = _components(salient)
     img_c = np.array([w / 2.0, h / 2.0])
-
-    # ATTRIBUTE selection: when a colour is requested, pre-compute the hue over the
-    # salient pixels so each blob can be matched on its median hue (computed over the
-    # blob ∩ salient pixels — exactly the vivid object body, not its anti-aliased rim).
-    hue_img = _hue(rgb) if color is not None else None
-    if color is not None and color not in _COLOR_HUE:
-        return None  # FAIL LOUD on an unknown colour, never the front-most
 
     # Per-blob: centrality + median depth. "前面" = NEAREST (a foreground object
     # at ~1 m beats a same-colored background object at ~3 m, which 'most central'
