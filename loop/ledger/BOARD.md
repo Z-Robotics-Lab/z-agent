@@ -10,12 +10,14 @@
 | fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 53 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 39 | pending |
 | fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
-| fetch.nl-new-world-warehouse-blue | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| fetch.nl-new-world-warehouse-blue | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
+| fetch.nl-new-world-warehouse-purple | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
+| fetch.nl-new-world-warehouse-red | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 24 | pending |
 | fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 27 | pending |
 | fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 29 | pending |
 | fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 42 | pending |
-| fetch.nl-plain-colour | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 2 | pending |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 11 | pending |
 | g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 22 | pending |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 14 | pending |
@@ -90,3 +92,4 @@
 - E54 R236 [confirmed] After R234 far-recovery fix ENGAGES, warehouse green fetch still mask_px=0 at the correct standoff — a NEW perception-segmentation mode, not nav/localizer. — retry only if: front_object color path gates the colour HUE at PIXEL level BEFORE blob-forming (isolate green from saturated warehouse bg) AND re-verified NOT to regress the confirmed HOUSE colour fetches.
 - E54 R237 [confirmed] Gating the target hue at PIXEL level BEFORE _open/components (not per-blob median AFTER) grounds the warehouse green-fetch that R236 root-caused as a saliency flood, without regressing the HOUSE colour fetch. — retry only if: n/a; regression=test_color_green_survives_saliency_flood + the R237 e2e rows
 - E54 R238 [confirmed] The R237 warehouse green-fetch (saliency-flood fix) reproduces across the R237->R238 boundary AND is colour-agnostic (a 2nd colour also transfers). — retry only if: warehouse green regresses to RAN (fix reverted) OR blue N=1 fails N>=2 next round (then per-colour hue-band check)
+- E54 R239 [confirmed] The R237 pixel-hue gate transfers ALL warehouse colours and the HOUSE plain-colour base holds (no regression). — retry only if: a warehouse colour regresses to RAN (hue-gate reverted) OR purple/red N=1 fails on N>=2 next round
