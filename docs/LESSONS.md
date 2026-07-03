@@ -104,12 +104,12 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   VECTOR_SCENE_SWAP the SAME `最左边的瓶子` grasps BLUE (new leftmost) not frozen GREEN (E31/E33) →
   resolver reads LIVE positions, not memorized coords. But it is still the SAME scene/objects/robot — the
   breadth pivot has NOT yet delivered a 2nd WORLD or embodiment; that (or D182) is the real next bar → E44.
-- Novel-object breadth GROUNDED (R211/E45, deepseek-v4-flash): a YELLOW bottle (FIRST non-RGB 4th pickable) added
-  as CONFIG+driver+skill (ZERO kernel edits) grounds `把黄色的瓶子拿过来`: holding_object(pickable_bottle_yellow)
-  actor=CAUSED, eyes yellow held, red/green/blue remain (isolated among 4) — first object-DIVERSITY proof past the
-  frozen RGB triple (R200). Plug-in=5 sites (go2_room.xml body+MuJoCoGo2 welds+HSV band+dino vocab+_COLOR_TO_SCENE);
-  welds+colour maps HARDCODED per-object (not pure config)=the S4/D182 gap. HAZARD: offline front_object_mask on
-  SYNTHETIC-depth MISpredicted a fusion the real depth-cam lacked (offline≠acceptance); edit SOURCE go2_room.xml, not the GENERATED scene_room_piper.xml → E45.
+- Novel-object breadth is BRAIN-STRATEGY-FRAGILE at N=1, NOT the geometry/plug-in (R212/E46+E47, deepseek-v4-flash).
+  SAME round/brain, opposite outcomes: R211/E45 yellow-bottle GROUNDED 1/1 did NOT reproduce (E46 REFUTED, RAN 0/2 —
+  perception_grasp not-visible, brain WANDERED navigate(5,5)/(1,0)), while a NOVEL non-cylinder PURPLE BOX (type=box,
+  5th, first non-cylinder geometry) GROUNDED 1/1 (holding_object(pickable_box_purple) actor=CAUSED; eyes: box held,
+  RGB remain, isolated among 5). So the 5-site config+driver+skill plug-in (0 kernel edits) is CORRECT for colour AND
+  geometry; the flake is the brain grasp-vs-wander (E36/Case-15). LESSON: N=1 novel-object passes are provisional-only, promote on N>=2 same-brain repro; welds/colour maps HARDCODED (S4/D182) → E45/E46/E47.
 - Quantity-place: REFUTED v4-flash (R199/E36) → GROUNDED deepseek-chat (R204/E39) — ceiling was BRAIN-SPECIFIC
   not machinery (E38 seq 2/2); model swap moved it ZERO kernel edits (E23-clean, plug-and-play). But NOT deterministic:
   ROBUSTNESS (R205/E40) campaign GROUNDED 2/3 (run1 abandoned obj-2; deepseek-chat FLAKY on 两个) → runner guardrail E40.
