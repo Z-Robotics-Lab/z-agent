@@ -81,7 +81,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   verified=False, NO false-green) but the model FLAILS ~14 detect/navigate/verify turns before
   `finish` → blows a 400s harness budget (R190 skeptic re-run timed out on the GREEN turn; RED
   GROUNDED 1/1 was fine). The honest-negative is right; the give-up LATENCY is the cost — cap
-  turns or prompt an earlier honest-stop before the next g1 skeptic re-run → R190.
+  turns or prompt an earlier honest-stop before the next g1 skeptic re-run → R190/R219 (R219 re-repro: 13 green variants, GREEN >6min; RED GROUNDED fine — budget g1_accept >6min, not the Bash default 2min).
 
 ## Recipes (proven invocations — copy, don't re-derive)
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +
