@@ -1,36 +1,35 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-03 · R236 (E54) BUILD/DEBUG — ROOT-CAUSED the warehouse green-fetch
-  transfer gap ONE LAYER DEEPER than R234. Adopted R234's bg e2e (far-recovery fix f437f4e
-  CONFIRMED engaging: localizes+standoffs+faces), then a fresh cap run + a NEW mask-gate
-  breakdown diagnostic isolated the residual: front_object SALIENCY FLOOD.
+updated: 2026-07-03 · R237 (E54) BUILD+VERIFY — FIXED the warehouse green-fetch saliency
+  flood (R236 root cause). front_object_mask now gates the target HUE at PIXEL level BEFORE
+  _open/components for a colour query. Warehouse green-fetch GROUNDED N=2 + HOUSE no-regression
+  GROUNDED, all on the bare face, eyes-confirmed (dog holds green bottle in the warehouse).
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R236 (E54, BUILD+DEBUG, non-gated). At the CORRECT 0.9m standoff facing the real
-  bottle (attempt-1 localized (10.86,3.00) right), front_object_mask STILL = 0px. New breakdown
-  (`front_object.mask_gate_breakdown`, logged at the 0px site): n_salient~99k = ~32% of frame
-  passes sat>=140 (warehouse orange racking / yellow stripes / steel all vivid) → the green
-  bottle's real pixels (n_color_hue<=2917) FUSE into bg blobs whose MEDIAN hue!=green →
-  colour-blob resolver None. HOUSE works only because its bg is MUTED; the resolver's "vivid
-  object on muted scene" assumption is FALSE industrial. Shipped mask_gate_breakdown()+5 TDD
-  (17/17 front_object, 51/51 incl perception_grasp); wired at mask_px=0. E54 debug row confirmed.
+last-round: R237 (E54, BUILD+VERIFY, non-gated). Fix (front_object.py): for color!=None, build the
+  salient mask from target-hue PIXELS before morphology, so the vivid warehouse bg can't 8-connect
+  the green bottle into an off-hue blob (the R236 flood → mask_px=0 → None). TDD: new
+  test_color_green_survives_saliency_flood RED→GREEN; perception dir + grasp routing/recovery 121 pass.
+  e2e on the bare warehouse face: N=2 GROUNDED (perceived:True detection_label pickable_bottle_green;
+  holding_object(pickable_bottle_green)->PASS actor=CAUSED), + HOUSE green-fetch GROUNDED (shared path,
+  no regression). 3 provisional acceptance rows + E54 verify(confirmed) banked. Was refuted R229/R231/R234/R236.
 
-frontier: Make the HOUSE colour fetch TRANSFER to go2_warehouse. Root cause now KNOWN
-  (saliency flood, not nav/localizer/dead-band). Bar = e2e GROUNDED green fetch on the bare face.
+frontier: Warehouse green-fetch transfer CLOSED (N=2). Next floor: robustness N>=3 + the OTHER colours
+  (red/blue/yellow/purple) must transfer to warehouse too, then a genuinely-NEW 3rd embodiment (S4-gated).
 
-watch: R234/R235 bg verify DONE+adopted; inflight cleared; sim down. 28 acceptance provisionals (check.sh green).
+watch: inflight cleared; sim torn down. Sibling ISAAC sim (warehouse_nav.py, ~7G) was live in another
+  loop all round — did NOT kill (NEVER-KILL-INFRA); RAM stayed ample (40G avail). 30 acceptance provisionals.
 
 next:
-  1. [BUILD/DEBUG, NON-gated] FIX saliency flood: in front_object_mask, for a COLOUR query gate
-     the colour HUE at PIXEL level BEFORE `_open`/components (build the mask from green-hue px
-     first, THEN pick nearest/central green blob) so warehouse bg never competes. TDD: a
-     "vivid-orange-bg + small green blob" frame must return the green blob (today None). e2e
-     re-verify on the bare face AND re-run the confirmed HOUSE red/green/blue/yellow/purple
-     fetches to prove NO regression (shared path). GROUNDED N>=2 → promote fetch.nl-new-world-warehouse.
-  2. [DEBUG, NON-gated] object_localizer unreliable in-warehouse (3/4 attempts floor/far phantoms;
-     only attempt-1 right). After #1, harden the seed to always use the clean-forward localize.
-  3. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver
-     (WIRING:53) + new MuJoCo assets; multi-round SDD.
+  1. [ADJUDICATE, §1c] Promote fetch.nl-new-world-warehouse to confirmed: red-team the R237 GROUNDED
+     N=2 (survived a round boundary), append confirmed acceptance row, and add the DECISIONS/LESSONS
+     promotion. THEN robustness N>=3 fresh sims to certify determinism.
+  2. [BUILD/VERIFY, NON-gated] Transfer the OTHER colours to warehouse: run red/blue/yellow/purple
+     fetches on VECTOR_ROOM_TEMPLATE=warehouse — the pixel-hue gate should carry them; verify N>=1 each,
+     any miss is a per-colour hue-band vs warehouse-render check (breakdown n_hue_anywhere).
+  3. [DEBUG, NON-gated] object_localizer in-warehouse still noisy (R236: 3/4 attempts floor/far phantoms;
+     seat-approach recovered it here). Harden the seed to prefer the clean-forward localize.
+  4. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
 
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
   - S4 (one generic driver): a genuinely-new 3rd embodiment needs the ONE generic driver replacing per-driver MuJoCoGo2/G1 (WIRING:53) — CEO-gated (kernel/interface), multi-round SDD.

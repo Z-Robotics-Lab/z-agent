@@ -2,28 +2,28 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 57 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 57 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 57 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 53 | 61fde80 |
-| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 53 | 61fde80 |
-| fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 50 | HEAD-R186 |
-| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 36 | pending |
-| fetch.nl-new-world-warehouse | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
-| fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 21 | pending |
-| fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 24 | pending |
-| fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 26 | pending |
-| fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 39 | pending |
-| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 6 | pending |
-| fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
-| g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 19 | pending |
-| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 11 | pending |
-| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 56 | c59f386 |
-| place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 36 | pending |
-| quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 31 | pending |
-| quantity-place.nl-guardrail | confirmed | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 27 | pending |
-| quantity-place.nl-isolation | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 32 | pending |
-| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 30 | pending |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 58 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 58 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 58 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 54 | 61fde80 |
+| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 54 | 61fde80 |
+| fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 51 | HEAD-R186 |
+| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 37 | pending |
+| fetch.nl-new-world-warehouse | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
+| fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 22 | pending |
+| fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 25 | pending |
+| fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 27 | pending |
+| fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 40 | pending |
+| fetch.nl-plain-colour | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
+| fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 9 | pending |
+| g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 20 | pending |
+| g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 12 | pending |
+| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 57 | c59f386 |
+| place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 37 | pending |
+| quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 32 | pending |
+| quantity-place.nl-guardrail | confirmed | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 28 | pending |
+| quantity-place.nl-isolation | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 33 | pending |
+| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 31 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -87,3 +87,4 @@
 - E54 R233 [inconclusive] Sim-blocked 3rd round (sibling Isaac hung ~108min, Inv-5, un-killable). Non-blind-fix: harness wrote eyes/verdict PNGs to SNAP scratch but never persisted, so R229/R231 warehouse frames were LOST -> 'closest seen inf' unadjudicable visually. — retry only if: persist reverted (regr=test_vlm_guard.py::TestPersistEvidence); acceptance e2e owed next sim window
 - E54 R234 [confirmed] The confirmed HOUSE green fetch does not transfer zero-shot to go2_warehouse because of a compact-enclosure approach-pose + far-recovery dead-band in perception_grasp, NOT the world config or the detector. — retry only if: the R234 far-recovery floor change (f437f4e) is reverted OR the warehouse fetch still RANs after it — then the residual failure is a NEW mode (re-diagnose from the fresh [PGRASP] trace, not this dead-band).
 - E54 R236 [confirmed] After R234 far-recovery fix ENGAGES, warehouse green fetch still mask_px=0 at the correct standoff — a NEW perception-segmentation mode, not nav/localizer. — retry only if: front_object color path gates the colour HUE at PIXEL level BEFORE blob-forming (isolate green from saturated warehouse bg) AND re-verified NOT to regress the confirmed HOUSE colour fetches.
+- E54 R237 [confirmed] Gating the target hue at PIXEL level BEFORE _open/components (not per-blob median AFTER) grounds the warehouse green-fetch that R236 root-caused as a saliency flood, without regressing the HOUSE colour fetch. — retry only if: n/a; regression=test_color_green_survives_saliency_flood + the R237 e2e rows
