@@ -79,3 +79,4 @@
 {"schema":1,"ts":1783109998,"round":"R262","kind":"build","exit":0,"post_check":"ok","commit":"17d5a99","dur_s":1156}
 {"schema":1,"ts":1783110910,"round":"R263","kind":"build","exit":0,"post_check":"ok","commit":"0c18ef5","dur_s":792}
 {"schema":1,"ts":1783112307,"round":"R264","kind":"build","exit":0,"post_check":"ok","commit":"17d04da","dur_s":1277}
+{"schema":1,"ts":1783112752,"round":"R265","kind":"build","exit":0,"post_check":"quarantined","commit":"2d4849c","dur_s":325}
