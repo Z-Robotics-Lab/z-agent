@@ -9,6 +9,7 @@
 | fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 46 | 61fde80 |
 | fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 43 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 29 | pending |
+| fetch.nl-new-world-warehouse | provisional | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 3/3 | bare-repl+nl | deepseek-v4-flash | self-read | 14 | pending |
 | fetch.nl-novel-object-yellow | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 17 | pending |
 | fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 19 | pending |
@@ -79,3 +80,4 @@
 - E50 R225 [confirmed] Adjudicate R224 E50 g1.perception GROUNDED N=2 provisional: does the world-config hardening REPRODUCE on the bare face across the R224->R225 round boundary (the test R223 failed on R219)? — retry only if: g1_accept RED regresses to RAN OR the percept_target_red world geom is removed from _G1_EXTRA_GEOMS
 - E51 R227 [inconclusive] Does a CONFIRMED bar (bare-REPL NL green fetch) still GROUND on a 2nd scene variant (VECTOR_SCENE_CLUTTER: 5 distractor geoms incl. a same-hue green decoy) built via CONFIG off the frozen apartment — plug-and-play scene breadth (Inv.3, 0 kernel edits)? — retry only if: green fetch under VECTOR_SCENE_CLUTTER regresses to RAN/FAILED, OR the clutter geoms are removed from _GO2_CLUTTER_GEOMS
 - E51 R228 [confirmed] Adjudicate R227 E51 fetch.nl-scene-clutter GROUNDED N=2 provisional: does the green fetch REPRODUCE on the bare face across the R227->R228 boundary (the reproducibility gate R219 g1.perception failed)? — retry only if: green fetch under VECTOR_SCENE_CLUTTER regresses to RAN/FAILED, OR the clutter geoms are removed from _GO2_CLUTTER_GEOMS
+- E52 R229 [inconclusive] A NEW WORLD (go2_warehouse.xml, compact box unlike the house) plugs in as pure CONFIG via VECTOR_ROOM_TEMPLATE, 0 kernel edits (Inv.3), AND a confirmed bar (green fetch v4-flash) reproduces on it zero-shot on the bare face. — retry only if: perception_grasp/approach is debugged for the warehouse visual+lidar scene, OR green fetch also regresses in the HOUSE (=brain-flake not world)
