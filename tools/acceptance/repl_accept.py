@@ -373,8 +373,12 @@ try:
         child.sendline(FETCH)
         child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=300)
         _abort_on_vlm_402(SNAP)
-        _eyes_frame(SNAP, "fetch")
+        # E70 fix (R273): drain to the SETTLED post-verdict state BEFORE the eyes/judge
+        # frame. snapshot_on_verdict writes verdict_*.png slightly AFTER the `grounded)`
+        # marker matches; grabbing the frame pre-drain raced the PNG write — the judge
+        # graded a stale frame or never fired (verified on place, R272/E70). Mirror seq.
         drain_until_quiet(child, quiet=3.0, max_wait=90)
+        _eyes_frame(SNAP, "fetch")
         print("\n[driver] fetch turn done", flush=True)
 
     if MODE in ("both", "place"):
@@ -382,8 +386,11 @@ try:
         child.sendline(PLACE)
         child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=300)
         _abort_on_vlm_402(SNAP)
-        _eyes_frame(SNAP, "place")
+        # E70 fix (R273): SAME race as fetch — the place verdict PNG lands just AFTER the
+        # marker. Drain to settled BEFORE the eyes/judge frame so the judge grades the REAL
+        # post-place frame (bottle on receptacle), not a stale one — and actually fires.
         drain_until_quiet(child, quiet=3.0, max_wait=90)
+        _eyes_frame(SNAP, "place")
         print("\n[driver] place turn done", flush=True)
 
     if MODE == "describe":
@@ -419,6 +426,8 @@ try:
                 else:
                     break  # prompt returned (turn complete) or timed out
         _abort_on_vlm_402(SNAP)
+        # E70 fix (R273): settle before the eyes/judge frame — same PNG-write race.
+        drain_until_quiet(child, quiet=3.0, max_wait=90)
         _eyes_frame(SNAP, "quantity")
         wait_prompt(child, timeout=60)
         print(f"\n[driver] quantity turn done — saw {n_verdicts} verdict(s)", flush=True)
@@ -482,6 +491,11 @@ try:
                 else:
                     break  # prompt returned (turn complete) or timed out
         _abort_on_vlm_402(SNAP)
+        # E70 fix (R273): the compound plan's LAST verdict (place) writes its PNG just after
+        # the marker. Drain to settled BEFORE the eyes/judge frame so the judge fires on the
+        # real post-place frame. (wait_prompt below may already have the prompt consumed by
+        # the verdict loop's idx==1 break — the drain is the reliable settle point.)
+        drain_until_quiet(child, quiet=3.0, max_wait=90)
         _eyes_frame(SNAP, "combo")
         wait_prompt(child, timeout=60)
         print(f"\n[driver] combo turn done — saw {n_verdicts} verdict(s)", flush=True)
