@@ -1,51 +1,43 @@
-# DEBUG — R247: courtyard PLACE-leg composite fails on navigate at_position(10.8,3.0)
+# DEBUG — courtyard PLACE mid-walk drop (R256/E60)
 
 ## OBSERVE
-R246 first courtyard PLACE-leg (`把绿色的瓶子放到架子上`, mode=place, deepseek-v4-flash +
-local ollama gemma4:e4b). Verdict:
-```
-> perception_grasp -> verify holding_object('pickable_bottle_green') OK (actor=CAUSED)
-> navigate         -> verify at_position(10.8, 3.0, tol=1.0) . (actor=CAUSED)     <- UNGROUNDED
-> mobile_place     -> verify resting_on_receptacle() OK (actor=NOT_GRADED)
-verdict RAN verified=False (2/3 grounded)
-```
-Eyes: green bottle IS in place_bin -- physical place SUCCEEDED. Brain narration in the raw log:
-grasp OK -> `mobile_place` -> "The navigation failed. Let me try again..." -> `mobile_place` (retry)
--> "Let me try navigating closer to the shelf area first, then place." -> brain-issued
-`navigate(10.8,3.0)` -> `mobile_place` -> resting_on_receptacle OK -> finish.
-Furniture is byte-identical to go2_room.xml (house): pick_table@(10.95,3.0) box half(0.15,0.25),
-place_bin@(10.95,4.60). STATUS hypothesis: "same (10.8,3.0) coords ground on HOUSE but not
-courtyard (byte-identical furniture)" -> world-transfer bug.
+- Symptom (R255): compound courtyard PLACE → RAN verified=False. Grasp holding_object CAUSED=True,
+  then during mobile_place the held bottle is LOST; brain sees '瓶子…掉了' → re-grasp thrash → ends
+  empty-armed, resting_on_receptacle=False. Eyes: no bottle placed.
+- Across N=3 real runs courtyard PLACE is FLAKY (R246 2/3, R253 1/1, R255 dropped). R253's _NAV_RETRIES
+  fix (absorb a transient first-nav MISS) is real but INSUFFICIENT — the residual is a MID-WALK DROP,
+  not a nav-miss (do NOT re-diagnose as nav-miss; E23/R253 already fixed that).
+- Two distinct "holding" signals in code:
+  - `gripper.is_holding()` (mujoco_piper_gripper.py:150) → software flag `_held_object`, set at grasp,
+    cleared ONLY by `open()`/`_release_all()`. Never cleared by locomotion.
+  - `holding_object()` oracle (arm_sim_oracle.py:125) → GT: requires software-flag AND object lifted
+    (z>=_LIFT_MIN_Z=0.10) AND within `_NEAR_EE_RADIUS=0.08m` of the EE. This is what the brain's verify
+    and the acceptance oracle read.
+- The weld (scene_builder.py:175) pins the object's RELATIVE pose to piper_link6 at DEFAULT solref/solimp
+  (no stiffness set). The go2 walks a real trot gait (mujoco_go2.walk → set_velocity + 1kHz daemon step),
+  so the base bounces/accelerates while carrying.
 
 ## HYPOTHESIZE
 | # | hypothesis | category | evidence |
-|---|---|---|---|
-| H1 | navigate(10.8,3.0) target is INSIDE the inflated pick_table -> planner rejects -> nav fails in EVERY world | geometry | (10.8,.) is the table -x edge (x in [10.80,11.10]); body radius 0.28 |
-| H2 | courtyard room-shell/obstacles block the approach that house allows | world | planters@x6.6, pergola@y8.5 near the bay? |
-| H3 | mobile_place's OWN approach to the bin is unreachable in courtyard | world | first mobile_place narrated "navigation failed" |
-| H4 | mobile_place first-nav returned False by TIMEOUT/walk-stall, not planner reject; path exists | control | dog holds bottle; L-nav two legs |
+|---|------------|----------|----------|
+| H1 | Weld COMPLIANCE under trot: object lags EE by >0.08m transiently during the gait, so holding_object() flickers False while eq_active stays 1 (object never actually leaves the gripper) | physics/oracle-threshold | default weld solref + trot accelerations; _NEAR_EE_RADIUS=0.08 tight vs a 0.06 grasp offset |
+| H2 | Weld SEPARATION: constraint force exceeded, object physically detaches (eq_active still 1 but object on floor, or a collision knocks it) | physics | "lost in transport" honest-fail path already exists (mobile_place.py:608) — a real floor-drop was seen before |
+| H3 | READ RACE: holding_object() reads get_object_positions() and _ee_position() at different 1kHz-daemon instants while the base moves fast → spuriously inflated distance, no real drop | concurrency | navigate_to docstring warns mj_forward races the daemon; EE instantaneous velocity during trot ≫ 0.4 m/s nominal |
+| H4 | DOCK repose (Step-6b `_grasp_ready_repose`/`_approach_object`) swings the arm/object into the table/bin → collision knocks it off | physics | Step-6b runs arm+base motion right before the drop |
 
-## EXPERIMENT (deterministic geometry probe, no brain sim -- g1_vgraph real funcs, R=0.28)
-- H1 -> CONFIRMED. point_in_any((10.8,3.0), inflated[pick_table])=True; plan_path(start,(10.8,3.0))
-  = None (inf) from every plausible start (9.5/10.0/10.5,.). Unreachable in ANY world -- furniture is
-  byte-identical, so HOUSE rejects (10.8,3.0) identically. -> H2 world-transfer REFUTED.
-- H3 -> REJECTED. mobile_place -X approach point (tx-clearance, ty)=(10.05,4.60) is OUTSIDE all
-  inflated obstacles; plan_path from every grasp standoff returns a valid 2-wp path (leg1, leg2, and
-  direct all succeed). The planner does NOT reject mobile_place's approach.
-- H4 -> CONFIRMED by elimination. navigate_to returns False only on (a) planner-None [ruled out by
-  H3] or (b) timeout/not-within-tol. mobile_place's first-nav flake was a transient walk/timeout, not a
-  world defect -- it succeeded on retry (resting_on_receptacle OK).
+## EXPERIMENT
+Probe: `scripts/debug_r256_midwalk_drop.py` — in-process go2+Piper+gripper (courtyard), NO brain/VLM.
+Grasp the green bottle (assert holding_object True), then base.navigate_to an approach ~1 m away in a
+thread while sampling at ~30 Hz: object-EE distance, object z, eq_active(weld), is_holding flag,
+holding_object(). Records max distance excursion + whether eq_active ever flips + whether object hits floor.
+
+- H1 CONFIRMED iff: dist_max > 0.08 during walk BUT eq_active stays 1 AND object z stays lifted (returns
+  <0.08 when stable) → transient compliance, not a real drop.
+- H2 CONFIRMED iff: object z → floor (<0.10) and stays, or eq_active flips to 0.
+- H3 CONFIRMED iff: excursion vanishes when sampled with the daemon paused / two stationary re-reads disagree.
+- H4 CONFIRMED iff: the drop only appears during the Step-6b dock, not the plain navigate walk.
+
+→ result pending run.
 
 ## CONCLUDE
-Root cause: the composite verified=False was NOT a courtyard-vs-house world-transfer defect. The brain
-IMPROVISED navigate(10.8,3.0) (the bottle's pick location -- inside the inflated pick_table, UNREACHABLE
-in every world) as a recovery after mobile_place's first-nav returned False on a transient walk/timeout
-flake. The physical place transferred correctly (bottle on shelf, eyes-confirmed, resting_on_receptacle OK).
-- file:line -- no product bug: mujoco_go2.navigate_to correctly rejects the inside-obstacle target
-  (vector_os_nano/hardware/sim/mujoco_go2.py:1755-1764); the bad coordinate was brain-authored.
-- REFUTED STATUS claim: (10.8,3.0) grounds on house -- it is unreachable on house too.
-- Regression evidence: geometry probe above is reproducible; furniture identity guarantees world-parity.
-- Fix direction: none in the driver/world. The courtyard PLACE physical transfer IS proven; the composite
-  flake is brain-recovery noise triggered by mobile_place's transient first-nav miss. Re-verify on the
-  bare face -- a run where mobile_place's first nav lands should ground cleanly (grasp OK + place OK, no
-  spurious brain navigate).
+(pending)
