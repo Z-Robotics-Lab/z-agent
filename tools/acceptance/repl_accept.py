@@ -31,6 +31,18 @@ import time
 import pexpect
 
 ROOT = "/home/yusen/Desktop/vector_os_nano"
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+# Perception-VLM billing-confound guards (R231/E54): default the local Ollama route +
+# fail-loud/abort on an OpenRouter-402 look/describe_scene instead of a silent no-verdict
+# spin (R230/E53). Pure, unit-tested in tests/harness/test_vlm_guard.py.
+from tools.acceptance.vlm_guard import (  # noqa: E402
+    VLM_BILLING_402_MARKER,
+    VLMConfoundError,
+    detect_perception_402,
+    resolve_local_vlm_env,
+)
+
 FETCH = sys.argv[1] if len(sys.argv) > 1 else "把绿色的瓶子拿过来"
 PLACE = sys.argv[2] if len(sys.argv) > 2 else "把绿色的瓶子放到架子上"
 TAG = sys.argv[3] if len(sys.argv) > 3 else "r"
@@ -96,7 +108,44 @@ env.update({
 env.pop("DISPLAY", None)
 env.pop("WAYLAND_DISPLAY", None)
 
+# (a) Perception-VLM route: default the LOCAL Ollama route when unset + Ollama up, else
+# fail LOUD (R230/E53). Never silently inherit the OpenRouter perception route, whose 402
+# credit exhaustion spins to a no-verdict hang and confounds the verdict. Done BEFORE the
+# sim spawns so a confounded config wastes zero sim time.
+try:
+    _vlm_route = resolve_local_vlm_env(env)
+except VLMConfoundError as exc:
+    sys.exit(f"[driver] FATAL: {exc}")
+if _vlm_route:
+    env.update(_vlm_route)
+    print(f"[driver] perception VLM auto-routed to local Ollama: {_vlm_route}", flush=True)
+else:
+    print(f"[driver] perception VLM route: caller-supplied "
+          f"(VECTOR_VLM_URL={env.get('VECTOR_VLM_URL', '<remote/openrouter>')})", flush=True)
+
 LOG = open(f"{SNAP}/session.log", "wb")
+
+
+def _abort_on_vlm_402(snap: str) -> None:
+    """(b) If the ANSI-stripped stream shows a perception-VLM 402, abort LOUD.
+
+    R230/E53: an OpenRouter-402 look/describe_scene is caught upstream and the brain
+    silently re-plans, so the REPL spins to no verdict — a billing artifact masquerading
+    as a world/model failure. Raise with the distinct VLM_BILLING_402_MARKER so the round
+    records a confound, NOT a refutation."""
+    if detect_perception_402(_clean_log(snap)):
+        raise SystemExit(
+            f"[driver] {VLM_BILLING_402_MARKER}: perception VLM (look/describe_scene) hit an "
+            f"OpenRouter-402 — verdict is BILLING-CONFOUNDED, not a real outcome. Route the "
+            f"local VLM (VECTOR_VLM_URL={env.get('VECTOR_VLM_URL')}) or restore OpenRouter credit."
+        )
+
+
+# pexpect alternative so a perception 402 aborts a turn IMMEDIATELY instead of waiting the
+# full ~300s per-verdict timeout (the silent-spin signature). The intact stderr logger line
+# survives the raw PTY stream (verified R229 raw log); _abort_on_vlm_402 re-confirms via the
+# ANSI-stripped log before aborting.
+_VLM_402_PAT = r"OpenRouter API client error 40\d"
 
 
 def launch_explore_running() -> bool:
@@ -268,7 +317,8 @@ try:
     if MODE in ("both", "fetch"):
         print("\n[driver] FETCH turn...", flush=True)
         child.sendline(FETCH)
-        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
+        child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=300)
+        _abort_on_vlm_402(SNAP)
         _eyes_frame(SNAP, "fetch")
         drain_until_quiet(child, quiet=3.0, max_wait=90)
         print("\n[driver] fetch turn done", flush=True)
@@ -276,7 +326,8 @@ try:
     if MODE in ("both", "place"):
         print("\n[driver] PLACE turn...", flush=True)
         child.sendline(PLACE)
-        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
+        child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=300)
+        _abort_on_vlm_402(SNAP)
         _eyes_frame(SNAP, "place")
         drain_until_quiet(child, quiet=3.0, max_wait=90)
         print("\n[driver] place turn done", flush=True)
@@ -299,6 +350,7 @@ try:
                     n_verdicts += 1
                 else:
                     break  # prompt returned (turn complete) or timed out
+        _abort_on_vlm_402(SNAP)
         _eyes_frame(SNAP, "quantity")
         wait_prompt(child, timeout=60)
         print(f"\n[driver] quantity turn done — saw {n_verdicts} verdict(s)", flush=True)
@@ -319,6 +371,7 @@ try:
         child.sendline(FETCH)
         child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
         drain_until_quiet(child, quiet=3.0, max_wait=120)
+        _abort_on_vlm_402(SNAP)
         _eyes_frame(SNAP, "seq1")
         n1 = len(_verds(SNAP))
         print(f"\n[driver] SEQ turn 1 done — {n1} verdict(s) so far", flush=True)
@@ -360,6 +413,7 @@ try:
                     n_verdicts += 1
                 else:
                     break  # prompt returned (turn complete) or timed out
+        _abort_on_vlm_402(SNAP)
         _eyes_frame(SNAP, "combo")
         wait_prompt(child, timeout=60)
         print(f"\n[driver] combo turn done — saw {n_verdicts} verdict(s)", flush=True)
