@@ -1,0 +1,171 @@
+<mujoco model="go2 warehouse">
+  <compiler angle="radian" meshdir="GO2_ASSETS_DIR" texturedir="GO2_ASSETS_DIR" autolimits="true"/>
+  <include file="GO2_MODEL_PATH"/>
+
+  <option cone="elliptic" impratio="100"/>
+
+  <statistic center="12 4 0.5" extent="8"/>
+
+  <visual>
+    <headlight diffuse="0.55 0.55 0.55" ambient="0.35 0.35 0.35" specular="0 0 0"/>
+    <rgba haze="0.20 0.22 0.24 1"/>
+    <global azimuth="-120" elevation="-25" offwidth="1280" offheight="960"/>
+    <map znear="0.05" zfar="50" shadowclip="0.5"/>
+    <quality shadowsize="1024"/>
+  </visual>
+
+  <!--
+    WAREHOUSE LAYOUT — a genuinely-NEW WORLD (R229/E52 breadth pivot; answers the
+    R226→R228 "still ONE room" LESSON). A single compact 9m x 8m industrial box, NOT
+    the 20m x 14m multi-room house (go2_room.xml). Distinct enclosure geometry (one open
+    bay, steel perimeter, concrete floor, orange racking) but the SAME tuned pick furniture
+    (pick_table + 5 pickables + place_bin + welds) at the SAME coordinates, so grasp /
+    perception / the honest-verify spine stay reachable BYTE-FOR-BYTE (only the room shell
+    changed). Worlds are CONFIG not code (Invariant 3): fed to the already-parameterized
+    build_room_scene(room_template_path=) via VECTOR_ROOM_TEMPLATE — ZERO kernel/driver edits.
+
+          7.5     10  12        16.5
+     8.0  +==================================+
+          |  [racks along north wall]        |
+          |                                  |
+     4.6  |          place_bin               |  (open bay, one space)
+     3.0  |   go2 (10,3) -> pick_table 10.95 |     pick_table_far 13.95
+          |                                  |
+     0.0  +==================================+
+  -->
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.72 0.74 0.78" rgb2="0.42 0.44 0.48"
+             width="512" height="3072"/>
+
+    <!-- Concrete slab floor (industrial checker, cool grey — NOT the house marble) -->
+    <texture type="2d" name="concrete_tex" builtin="checker"
+             rgb1="0.52 0.53 0.55" rgb2="0.44 0.45 0.47" width="300" height="300"/>
+    <material name="mat_concrete" texture="concrete_tex" texuniform="true"
+              texrepeat="6 6" reflectance="0.08"/>
+
+    <!-- Painted-steel perimeter wall (cool bluish grey) -->
+    <material name="mat_steel_wall" rgba="0.60 0.63 0.68 1" reflectance="0.28"/>
+
+    <!-- Corrugated ceiling deck -->
+    <material name="mat_deck" rgba="0.48 0.50 0.53 1" reflectance="0.10"/>
+
+    <!-- Safety-orange racking uprights + beams (classic warehouse pallet racking) -->
+    <material name="mat_rack" rgba="0.88 0.45 0.10 1" reflectance="0.06"/>
+
+    <!-- Shipping crates / pallets (natural pine) -->
+    <material name="mat_crate" rgba="0.60 0.44 0.26 1" reflectance="0.05"/>
+
+    <!-- Yellow floor safety striping -->
+    <material name="mat_stripe" rgba="0.90 0.78 0.10 1" reflectance="0.04"/>
+
+    <!-- Oak pick furniture (rgba-only so the room is self-contained — no external
+         texture files; keeps the pick_table / place_bin appearance table-like). -->
+    <material name="mat_oak" rgba="0.62 0.44 0.24 1" reflectance="0.12"/>
+  </asset>
+
+  <worldbody>
+    <!-- Overhead high-bay lights + a single directional sun (the shadow caster). -->
+    <light name="bay_a" pos="10 2.5 2.7" dir="0 0 -1" diffuse="0.55 0.55 0.52" cutoff="70" castshadow="false"/>
+    <light name="bay_b" pos="10 6.0 2.7" dir="0 0 -1" diffuse="0.55 0.55 0.52" cutoff="70" castshadow="false"/>
+    <light name="bay_c" pos="14 4.0 2.7" dir="0 0 -1" diffuse="0.55 0.55 0.52" cutoff="70" castshadow="false"/>
+    <light name="sun" pos="12 4 4" dir="0 0 -1" directional="true" diffuse="0.35 0.35 0.35"/>
+    <light name="fill_bay" pos="12 4 0.5" dir="0 0 1" diffuse="0.14 0.14 0.13" castshadow="false"/>
+
+    <!-- Concrete slab (9m x 8m, centre (12,4)). Covers spawn (10,3), pick_table (10.95,3),
+         pick_table_far (13.95,3) and place_bin (10.95,4.6). -->
+    <geom name="floor" type="plane" pos="12 4 0" size="4.5 4.0 0.05" material="mat_concrete"/>
+    <!-- Invisible raycast ground for the lidar (group 3, no collision) — mirrors the house. -->
+    <geom name="floor_raycast" type="box" pos="12 4 -0.02" size="4.5 4.0 0.01"
+          contype="0" conaffinity="0" group="3" rgba="0 0 0 0"/>
+    <!-- Corrugated ceiling deck (decorative, no collision). -->
+    <geom name="ceiling" type="box" pos="12 4 2.85" size="4.5 4.0 0.05" material="mat_deck"
+          contype="0" conaffinity="0" group="3"/>
+
+    <!-- Yellow safety striping around the pick bay floor (visual only). -->
+    <geom name="stripe_s" type="box" pos="11.5 1.6 0.002" size="2.4 0.06 0.002" material="mat_stripe" contype="0" conaffinity="0"/>
+    <geom name="stripe_n" type="box" pos="11.5 5.6 0.002" size="2.4 0.06 0.002" material="mat_stripe" contype="0" conaffinity="0"/>
+
+    <!-- ==================== STEEL PERIMETER (collidable — the enclosure + lidar returns) -->
+    <geom name="ww_south" type="box" pos="12 0.0 1.35" size="4.5 0.06 1.35" material="mat_steel_wall"/>
+    <geom name="ww_north" type="box" pos="12 8.0 1.35" size="4.5 0.06 1.35" material="mat_steel_wall"/>
+    <geom name="ww_west"  type="box" pos="7.5 4.0 1.35" size="0.06 4.0 1.35" material="mat_steel_wall"/>
+    <geom name="ww_east"  type="box" pos="16.5 4.0 1.35" size="0.06 4.0 1.35" material="mat_steel_wall"/>
+
+    <!-- ==================== NORTH-WALL PALLET RACKING (visual only, contype 0) ==========
+         Safety-orange uprights + horizontal beams along the north wall (y~7.7), well clear
+         of the go2's +y navigation to place_bin (y=4.6). This is the signature warehouse
+         object — nothing like it exists in the house. -->
+    <body name="rack_north" pos="12 7.7 0">
+      <geom name="rack_up_a" type="box" pos="-3.0 0 1.2" size="0.05 0.25 1.2" material="mat_rack" contype="0" conaffinity="0"/>
+      <geom name="rack_up_b" type="box" pos="-1.0 0 1.2" size="0.05 0.25 1.2" material="mat_rack" contype="0" conaffinity="0"/>
+      <geom name="rack_up_c" type="box" pos="1.0 0 1.2"  size="0.05 0.25 1.2" material="mat_rack" contype="0" conaffinity="0"/>
+      <geom name="rack_up_d" type="box" pos="3.0 0 1.2"  size="0.05 0.25 1.2" material="mat_rack" contype="0" conaffinity="0"/>
+      <geom name="rack_beam_lo" type="box" pos="0 0 0.55" size="3.1 0.06 0.05" material="mat_rack" contype="0" conaffinity="0"/>
+      <geom name="rack_beam_hi" type="box" pos="0 0 1.55" size="3.1 0.06 0.05" material="mat_rack" contype="0" conaffinity="0"/>
+      <!-- Pine pallets stacked on the lower shelf -->
+      <geom name="rack_crate_a" type="box" pos="-2.0 0 0.75" size="0.35 0.20 0.18" material="mat_crate" contype="0" conaffinity="0"/>
+      <geom name="rack_crate_b" type="box" pos="1.6 0 0.75"  size="0.35 0.20 0.18" material="mat_crate" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- East-corner stacked shipping crates (visual only) — background clutter in the
+         +x view past the far pedestal, distinct industrial silhouette. -->
+    <body name="crate_stack" pos="15.7 6.6 0">
+      <geom name="cs_a" type="box" pos="0 0 0.30" size="0.35 0.35 0.30" material="mat_crate" contype="0" conaffinity="0"/>
+      <geom name="cs_b" type="box" pos="0.1 0.05 0.85" size="0.30 0.30 0.25" material="mat_crate" contype="0" conaffinity="0"/>
+      <geom name="cs_c" type="box" pos="-0.5 0.1 0.25" size="0.30 0.30 0.25" material="mat_crate" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== PICK BAY (verbatim from go2_room.xml — DO NOT re-tune) =======
+         The tuned grasp/perception furniture is copied byte-for-byte from the house so
+         every confirmed bar (green fetch, ordinal, quantity, place) stays reachable. Only
+         the ROOM SHELL above changed — that is what makes this a new WORLD, not a new task. -->
+    <body name="pick_table" pos="10.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
+    </body>
+
+    <body name="pick_table_far" pos="13.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
+    </body>
+
+    <body name="place_bin" pos="10.95 4.60 0">
+      <geom type="box" pos="0 0 0.14" size="0.18 0.40 0.14" material="mat_oak"/>
+      <geom type="box" pos="0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="-0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 -0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
+    </body>
+
+    <body name="pickable_bottle_blue" pos="10.90 2.78 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.20 0.40 0.85 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_bottle_green" pos="10.88 3.00 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.25 0.70 0.35 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_can_red" pos="10.90 3.22 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.033 0.04" rgba="0.85 0.25 0.20 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_bottle_yellow" pos="10.90 3.11 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.95 0.85 0.05 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_box_purple" pos="10.90 2.89 0.320">
+      <freejoint/>
+      <geom type="box" size="0.028 0.028 0.04" rgba="0.75 0.10 0.70 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+  </worldbody>
+GRASP_WELDS
+</mujoco>

@@ -108,6 +108,41 @@ _MJCF_DIR: Path = Path(__file__).parent / "mjcf" / "go2"
 _ROOM_XML: Path = Path(__file__).parent / "go2_room.xml"
 _GO2_PIPER_XML: Path = Path(__file__).parent / "mjcf" / "go2_piper" / "go2_piper.xml"
 
+# VECTOR_ROOM_TEMPLATE scenario knob: swap the ROOM TEMPLATE for a genuinely-NEW WORLD
+# (R229/E52 breadth pivot — answers the R226→R228 "still ONE room" LESSON that scene-
+# clutter left standing). A room enters as a new XML TEMPLATE fed to the already-
+# parameterized build_room_scene(room_template_path=), NOT a kernel or driver edit —
+# worlds are CONFIG (Invariant 3), the same discipline as embodiments (robot.yaml). Each
+# template carries the SAME token contract the scene_builder resolves (GO2_MODEL_PATH /
+# GO2_ASSETS_DIR / GRASP_WELDS) and keeps the tuned pick furniture at the SAME coordinates
+# so every confirmed grasp/perception bar stays reachable; only the room SHELL differs.
+# Unknown key fails LOUD (never a silent fallback to the house). Default unset keeps the
+# frozen house BYTE-IDENTICAL, mirroring VECTOR_SCENE_CLUTTER / VECTOR_SCENE_SWAP.
+_ROOM_TEMPLATES: dict[str, Path] = {
+    "warehouse": Path(__file__).parent / "go2_warehouse.xml",
+}
+
+
+def _select_room_template() -> Path:
+    """Resolve the active room template from ``VECTOR_ROOM_TEMPLATE`` (fail-loud).
+
+    Unset/empty → the frozen ``go2_room.xml`` house (byte-identical default). A known
+    key → its alternate template. An unknown key raises rather than silently falling
+    back, so a typo can never mask which world was actually run.
+    """
+    import os  # noqa: PLC0415
+    key = os.environ.get("VECTOR_ROOM_TEMPLATE", "").strip().lower()
+    if not key:
+        return _ROOM_XML
+    try:
+        return _ROOM_TEMPLATES[key]
+    except KeyError:
+        valid = ", ".join(sorted(_ROOM_TEMPLATES)) or "(none)"
+        raise RuntimeError(
+            f"VECTOR_ROOM_TEMPLATE={key!r} is not a known room template "
+            f"(valid: {valid}; unset for the default house)"
+        ) from None
+
 # ---------------------------------------------------------------------------
 # Constants — postures
 # ---------------------------------------------------------------------------
@@ -424,7 +459,7 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
     )
     _model, scene_path = build_room_scene(
         robot_model_path=go2_xml,
-        room_template_path=_ROOM_XML,
+        room_template_path=_select_room_template(),
         room_assets_dir=assets_dir,
         attach_prefix="",
         spawn_xy=(10.0, 3.0),
