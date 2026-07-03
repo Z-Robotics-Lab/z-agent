@@ -14,7 +14,7 @@
 | fetch.nl-ordinal-position-invariance | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 18 | pending |
 | fetch.nl-ordinal-spatial | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 31 | pending |
 | fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 38 | HEAD-R190 |
-| fetch.nl-scene-clutter | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | g1.navigation | confirmed | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 11 | pending |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 3 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 3/3 | bare-repl+nl | openrouter (zero credit spent) | self-read | 48 | c59f386 |
@@ -78,3 +78,4 @@
 - E50 R224 [inconclusive] STATUS next#1: HARDEN g1.perception (R223 refuted RAN 0/17) into a RELIABLE bar via a WORLD-config re-frame (Inv.3), NOT verify-loosening (Inv.1). — retry only if: promote to confirmed R225 after boundary+red-team; NEW 3rd embodiment S4-gated
 - E50 R225 [confirmed] Adjudicate R224 E50 g1.perception GROUNDED N=2 provisional: does the world-config hardening REPRODUCE on the bare face across the R224->R225 round boundary (the test R223 failed on R219)? — retry only if: g1_accept RED regresses to RAN OR the percept_target_red world geom is removed from _G1_EXTRA_GEOMS
 - E51 R227 [inconclusive] Does a CONFIRMED bar (bare-REPL NL green fetch) still GROUND on a 2nd scene variant (VECTOR_SCENE_CLUTTER: 5 distractor geoms incl. a same-hue green decoy) built via CONFIG off the frozen apartment — plug-and-play scene breadth (Inv.3, 0 kernel edits)? — retry only if: green fetch under VECTOR_SCENE_CLUTTER regresses to RAN/FAILED, OR the clutter geoms are removed from _GO2_CLUTTER_GEOMS
+- E51 R228 [confirmed] Adjudicate R227 E51 fetch.nl-scene-clutter GROUNDED N=2 provisional: does the green fetch REPRODUCE on the bare face across the R227->R228 boundary (the reproducibility gate R219 g1.perception failed)? — retry only if: green fetch under VECTOR_SCENE_CLUTTER regresses to RAN/FAILED, OR the clutter geoms are removed from _GO2_CLUTTER_GEOMS
