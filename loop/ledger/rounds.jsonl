@@ -40,3 +40,4 @@
 {"schema":1,"ts":1783050034,"round":"R223","kind":"build","exit":0,"post_check":"ok","commit":"bcae2d6","dur_s":1847}
 {"schema":1,"ts":1783052920,"round":"R224","kind":"build","exit":0,"post_check":"ok","commit":"39be6a6","dur_s":2766}
 {"schema":1,"ts":1783054261,"round":"R225","kind":"build","exit":0,"post_check":"ok","commit":"01b8063","dur_s":1221}
+{"schema":1,"ts":1783055204,"round":"R226","kind":"build","exit":0,"post_check":"ok","commit":"946526b","dur_s":823}
