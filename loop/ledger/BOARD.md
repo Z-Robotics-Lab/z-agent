@@ -6,7 +6,7 @@
 | byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 70 | f159306 |
 | byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 70 | f159306 |
 | byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 66 | 61fde80 |
-| describe.nl-go2-courtyard | provisional | RAN 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 1 | pending |
+| describe.nl-go2-courtyard | provisional | RAN 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 66 | 61fde80 |
 | fetch-place.nl-compound | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 63 | HEAD-R186 |
 | fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 49 | pending |
@@ -108,3 +108,4 @@
 - E56 R246 [confirmed] Courtyard PURPLE (N=1 provisional) reproduces across the R245->R246 boundary (promote confirmed N=2, E46); and the PLACE-leg transfers to the 3rd world (courtyard) on the bare face. — retry only if: a courtyard colour regresses to RAN, OR the courtyard place nav at_position snag is unresolved
 - E56 R247 [confirmed] R246: courtyard PLACE composite fails because navigate at_position(10.8,3.0) grounds on HOUSE but ungrounds on courtyard (byte-identical furniture) -> world-transfer bug. — retry only if: courtyard PLACE-leg retried with a grasp/nav fix; do NOT re-diagnose (10.8,3.0) as a world difference (unreachable everywhere)
 - E56 R248 [inconclusive] Wiring Go2GraspPerception.caption/visual_query -> vlm_go2 describe_scene removes the R247 generic-DescribeSkill AttributeError('visual_query') dead-end on go2. — retry only if: the generic DescribeSkill is forced on the bare go2 face (resolve look<->describe alias collision) to exercise context.perception.caption/visual_query end-to-end
+- E56 R249 [confirmed] Dropping the colliding describe/what-do-you-see aliases from go2 LookSkill routes describe-intent to the generic DescribeSkill, so R248's caption/visual_query->describe_scene fix is exercised on the bare face (path_entered False->True). — retry only if: the alias dedupe is reverted or describe gains a real moat oracle
