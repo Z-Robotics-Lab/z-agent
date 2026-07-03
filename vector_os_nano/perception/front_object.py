@@ -180,6 +180,74 @@ def _components(binary: np.ndarray):
         return 2, labels, centroids, areas
 
 
+def mask_gate_breakdown(
+    rgb: np.ndarray,
+    depth: np.ndarray | None = None,
+    *,
+    color: str | None = None,
+    sat_min: int = _SAT_MIN,
+    val_min: int = _VAL_MIN,
+    central_frac: float = 0.8,
+    max_depth: float = _MAX_DEPTH,
+) -> dict[str, int]:
+    """Per-gate surviving-pixel counts — diagnose WHY ``front_object_mask`` found
+    nothing (mask_px=0). Each gate is applied INDEPENDENTLY on the raw frame using
+    this module's own thresholds (single source of truth), then cumulatively, so the
+    caller sees exactly where the target's pixels die:
+
+      n_sat/n_val/n_salient  — vividness gate (sat>=sat_min, val>=val_min, both)
+      n_central              — salient AND inside the central-FOV window
+      n_near_depth           — salient∩central AND near, valid depth (the workspace)
+      n_color_hue            — of those, how many fall in the requested colour band
+      n_hue_anywhere         — pixels in the colour band over the WHOLE frame,
+                               ungated (is the colour rendered AT ALL?)
+
+    Reading it: n_near_depth≈0 with n_salient>0 ⇒ the object is out of the near
+    workspace band (mis-framed / camera looks over it / occluded), NOT a colour miss.
+    n_hue_anywhere≈0 ⇒ the object does not render in the expected hue (lighting /
+    material shift), a colour-gate problem. Cheap (a few numpy sums); call only on
+    the mask_px=0 path. Returns an all-zero dict for a malformed frame.
+    """
+    out = {
+        "n_sat": 0, "n_val": 0, "n_salient": 0, "n_central": 0,
+        "n_near_depth": 0, "n_color_hue": 0, "n_hue_anywhere": 0,
+    }
+    if rgb is None or rgb.ndim != 3:
+        return out
+    h, w = rgb.shape[:2]
+    sat, val = _saturation(rgb)
+    m_sat = sat >= sat_min
+    m_val = val >= val_min
+    salient = m_sat & m_val
+    out["n_sat"] = int(m_sat.sum())
+    out["n_val"] = int(m_val.sum())
+    out["n_salient"] = int(salient.sum())
+
+    cx0, cx1 = int(w * (1 - central_frac) / 2), int(w - w * (1 - central_frac) / 2)
+    cy0, cy1 = int(h * (1 - central_frac) / 2), int(h - h * (1 - central_frac) / 2)
+    gate = np.zeros((h, w), dtype=bool)
+    gate[cy0:cy1, cx0:cx1] = True
+    salient_c = salient & gate
+    out["n_central"] = int(salient_c.sum())
+
+    if depth is not None:
+        near = (depth > 0) & (depth <= max_depth)
+        salient_cd = salient_c & near
+    else:
+        salient_cd = salient_c
+    out["n_near_depth"] = int(salient_cd.sum())
+
+    if color is not None and color in _COLOR_HUE:
+        hue = _hue(rgb)
+        bands = _COLOR_HUE[color]
+        in_band = np.zeros((h, w), dtype=bool)
+        for lo, hi in bands:
+            in_band |= (hue >= lo) & (hue <= hi)
+        out["n_color_hue"] = int((salient_cd & in_band).sum())
+        out["n_hue_anywhere"] = int(in_band.sum())
+    return out
+
+
 def front_object_mask(
     rgb: np.ndarray,
     depth: np.ndarray | None = None,

@@ -1668,6 +1668,20 @@ class PerceptionGraspSkill:
                     "near_depth(<=2m)=%d d_min=%.3f d_med=%.3f",
                     _mask_px, _d_valid, _d_near, _d_min, _d_med,
                 )
+                # 0px diagnostic (R236): show WHICH gate killed the target so a
+                # transfer failure is decisive without eyeballing a frame —
+                # n_near_depth≈0 ⇒ out of the workspace band (mis-framed/occluded);
+                # n_hue_anywhere≈0 ⇒ the colour never rendered (lighting/material).
+                if _mask_px == 0 and rgb is not None:
+                    try:
+                        from vector_os_nano.perception.front_object import (
+                            mask_gate_breakdown,
+                        )
+                        _bd = mask_gate_breakdown(rgb, depth, color=color)
+                        logger.info("[PGRASP] mask 0px breakdown (color=%s): %s",
+                                    color, _bd)
+                    except Exception as _bexc:  # noqa: BLE001 — diagnostic only
+                        logger.warning("[PGRASP] mask breakdown raised: %s", _bexc)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[PGRASP] front_object_mask raised: %s", exc)
         else:

@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from vector_os_nano.perception.front_object import front_object_mask, parse_color
+from vector_os_nano.perception.front_object import (
+    front_object_mask,
+    mask_gate_breakdown,
+    parse_color,
+)
 
 _H, _W = 48, 64
 
@@ -55,6 +59,46 @@ def test_far_object_rejected_by_depth():
     _put_blob(rgb, _W // 2, _H // 2, (220, 30, 30))
     depth = np.full((_H, _W), 9.0, dtype=np.float32)  # all far -> beyond max_depth
     assert front_object_mask(rgb, depth, max_depth=4.0) is None
+
+
+def test_breakdown_pinpoints_depth_gate_on_far_object():
+    """mask_px=0 because the green blob is beyond the near workspace: the breakdown
+    must show it was salient+central but killed by the depth gate (n_near_depth≈0),
+    NOT a colour miss — the exact warehouse-transfer signature (R236)."""
+    rgb = _muted_bg()
+    _put_blob(rgb, _W // 2, _H // 2, (60, 180, 90))  # warehouse green (0.25,0.70,0.35)*255
+    depth = np.full((_H, _W), 9.0, dtype=np.float32)  # all far
+    assert front_object_mask(rgb, depth, color="green", max_depth=2.0) is None
+    bd = mask_gate_breakdown(rgb, depth, color="green", max_depth=2.0)
+    assert bd["n_salient"] > 0 and bd["n_central"] > 0
+    assert bd["n_near_depth"] == 0          # depth gate is the killer
+    assert bd["n_hue_anywhere"] > 0         # the green DID render — not a colour miss
+
+
+def test_breakdown_pinpoints_color_miss_when_hue_absent():
+    """A near, salient, central blob that renders OUTSIDE the green band: the
+    breakdown must show n_near_depth>0 but n_color_hue==0 (a colour-gate miss)."""
+    rgb = _muted_bg()
+    _put_blob(rgb, _W // 2, _H // 2, (220, 30, 30))  # vivid RED, asked for green
+    depth = np.full((_H, _W), 1.0, dtype=np.float32)
+    bd = mask_gate_breakdown(rgb, depth, color="green", max_depth=2.0)
+    assert bd["n_near_depth"] > 0           # it's in the workspace
+    assert bd["n_color_hue"] == 0           # but not green
+    assert bd["n_hue_anywhere"] == 0        # no green anywhere in frame
+
+
+def test_breakdown_all_pass_for_visible_green():
+    rgb = _muted_bg()
+    _put_blob(rgb, _W // 2, _H // 2, (60, 180, 90))
+    depth = np.full((_H, _W), 1.0, dtype=np.float32)
+    assert front_object_mask(rgb, depth, color="green") is not None
+    bd = mask_gate_breakdown(rgb, depth, color="green")
+    assert bd["n_near_depth"] > 0 and bd["n_color_hue"] > 0
+
+
+def test_breakdown_malformed_frame_is_all_zero():
+    bd = mask_gate_breakdown(None)
+    assert set(bd.values()) == {0}
 
 
 def test_speckle_below_min_blob_rejected():
