@@ -85,6 +85,18 @@ _G1_PELVIS_Z: float = 0.793  # from g1_12dof default stance height
 # go2's blue-bottle detection stays unambiguous. Verified: visible ~3800 head-cam px, planner
 # arrives within 0.28 m, ground-projection of the blob lands ~0.4 m of GT (scratchpad/g1_mat_probe.py).
 _G1_VLN_MAT_XY: tuple[float, float] = (12.6, 3.0)
+# Perception acceptance target: a dedicated red panel CENTRALLY framed in g1's forward
+# head-cam (pelvis-mounted at z~1.21, level +x view). R224 HARDENING of g1.perception
+# (E50/R223 refuted): the pre-existing red targets (two bar STOOLS @16/18,2.8 + the red
+# can) form a MULTI-object red cluster, so the seg-centroid the oracle unions sat between
+# them while grounding-dino's top box locked one → box-center vs centroid diverged >60px
+# on ~2/3 of samples (RAN 0/17). This panel is the DOMINANT red mass dead-ahead (~2.9 m,
+# centred at camera height so it lands at frame-centre), so BOTH the segmentation centroid
+# AND dino's high-confidence box lock onto it → the box↔centroid match is robust to the
+# humanoid's settle-pose jitter. Worlds are CONFIG (Inv.3); the oracle/tol are UNCHANGED
+# (no verify-loosening — Inv.1). Offset to y=3.35 clears the y=3.0 blue VLN mat / nav line.
+# Non-colliding (scene_builder forces contype/conaffinity 0), like the room rugs & the mat.
+_G1_PERCEPT_TARGET_XY: tuple[float, float] = (12.9, 3.35)
 _G1_EXTRA_GEOMS: tuple[dict, ...] = (
     {
         "name": "vln_mat_blue",
@@ -92,6 +104,13 @@ _G1_EXTRA_GEOMS: tuple[dict, ...] = (
         "pos": [_G1_VLN_MAT_XY[0], _G1_VLN_MAT_XY[1], 0.011],
         "size": [0.55, 0.55, 0.01],
         "rgba": [0.12, 0.3, 0.92, 1.0],
+    },
+    {
+        "name": "percept_target_red",
+        "type": "box",
+        "pos": [_G1_PERCEPT_TARGET_XY[0], _G1_PERCEPT_TARGET_XY[1], 1.15],
+        "size": [0.05, 0.32, 0.32],
+        "rgba": [0.86, 0.14, 0.12, 1.0],
     },
 )
 
