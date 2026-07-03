@@ -56,7 +56,12 @@ MODE = sys.argv[4] if len(sys.argv) > 4 else "both"
 # Fail LOUD on a bad invocation. A wrong arg-order (e.g. passing a colour where MODE goes)
 # silently no-ops every action turn and quits immediately — wasting a full ~6-min sim with
 # no verdict (observed 2026-07-01: `... <tag> green place` set MODE="green", ran nothing).
-_VALID_MODES = ("both", "fetch", "place", "combo", "quantity", "seq")
+# "describe" (R248): a single NL scene-description turn — exercises the perception
+# describe path (Go2GraspPerception.caption/visual_query -> vlm_go2 describe_scene) on
+# the bare face. No grasp/grounded verdict; the acceptance GT is that the describe path
+# RAN (real VLM call, non-empty scene text) and did NOT dead-end on the R247
+# AttributeError('visual_query'). Uses FETCH arg as the describe utterance.
+_VALID_MODES = ("both", "fetch", "place", "combo", "quantity", "seq", "describe")
 if MODE not in _VALID_MODES:
     sys.exit(f"[driver] FATAL: MODE={MODE!r} not in {_VALID_MODES}. "
              f"Usage: repl_accept.py <fetch_nl> <place_nl> <tag> [mode]. Refusing to burn a sim.")
@@ -341,6 +346,20 @@ try:
         drain_until_quiet(child, quiet=3.0, max_wait=90)
         print("\n[driver] place turn done", flush=True)
 
+    if MODE == "describe":
+        # R248: ONE natural-language describe turn. The brain runs the `describe`
+        # skill -> context.perception.caption/visual_query -> the vlm_go2
+        # describe_scene seam (real Ollama gemma4:e4b). No `grounded)` verdict is
+        # emitted (describe is a perception skill, not a grasp), so we sync on quiet,
+        # then GROUND the outcome post-hoc from the ANSI-stripped verbose log:
+        # the fixed path must ENTER (build the describe seam / [DESCRIBE] log) and
+        # NOT raise AttributeError('visual_query'). Run with VECTOR_ACCEPT_VERBOSE=1.
+        print("\n[driver] DESCRIBE turn (perception describe-seam)...", flush=True)
+        child.sendline(FETCH)
+        drain_until_quiet(child, quiet=4.0, max_wait=180)
+        _eyes_frame(SNAP, "describe")
+        print("\n[driver] describe turn done", flush=True)
+
     if MODE == "quantity":
         # Frontier probe (R198/E35): ONE quantity-place utterance, e.g.
         # "把两个瓶子放到架子上" (put two bottles on the shelf). The producer must decompose
@@ -449,7 +468,26 @@ try:
     # Map emitted verdicts to the turns that ACTUALLY ran (mode-aware). In place-only
     # mode a single verdict is emitted — it is the PLACE verdict, NOT the fetch one
     # (the old positional parse mislabeled it fetch_verified, leaving place_verified=None).
-    if MODE == "quantity":
+    if MODE == "describe":
+        # No grasp verdict. GROUND the describe-seam outcome from the (verbose) log:
+        # PATH_ENTERED = the fixed caption/visual_query built the describe VLM or the
+        # DescribeSkill logged; DEAD_END = the R247 AttributeError we are fixing;
+        # VLM_RAN = a real describe_scene VLM call completed (Ollama "VLM call ok").
+        low = clean.lower()
+        result["describe_attr_error"] = (
+            "has no attribute 'visual_query'" in clean
+            or "has no attribute 'caption'" in clean
+        )
+        result["describe_path_entered"] = (
+            "building go2vlmperception describe seam" in low
+            or "[describe]" in low
+        )
+        result["describe_vlm_ran"] = "vlm call ok" in low
+        result["describe_ok"] = (
+            result["describe_path_entered"]
+            and not result["describe_attr_error"]
+        )
+    elif MODE == "quantity":
         # A single N-object place utterance emits up to 2N+1 verdicts (grasp+place per
         # object, then the final resting_on_receptacle() >= N count check). The QUANTITY
         # acceptance is the FINAL verdict (the count predicate), read from the moat GT.
@@ -476,7 +514,13 @@ except Exception as exc:  # noqa: BLE001
     print(f"[driver] verdict parse failed: {exc}", flush=True)
 
 frames = sorted(f for f in os.listdir(SNAP) if f.endswith(".png"))
-if MODE == "quantity":
+if MODE == "describe":
+    print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
+          f"describe_ok={result.get('describe_ok')} "
+          f"path_entered={result.get('describe_path_entered')} "
+          f"attr_error={result.get('describe_attr_error')} "
+          f"vlm_ran={result.get('describe_vlm_ran')} frames={frames}", flush=True)
+elif MODE == "quantity":
     print(f"\n[RESULT {TAG}] launch_explore_seen={result['launch_explore_seen']} "
           f"quantity_final_true={result.get('quantity_final_true')} "
           f"verdicts={result.get('quantity_verdicts')} frames={frames}", flush=True)
