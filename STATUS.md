@@ -1,37 +1,35 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
 
-updated: 2026-07-03 · R242 (E56) VERIFY — ADOPTED the R241 inflight and RAN the owed bare-face
-  courtyard green-fetch. GROUNDED 1/1: holding_object('pickable_bottle_green') actor=CAUSED;
-  eyes (self-read, 2 frames): the Go2 holds the green bottle aloft in the open-air courtyard while
-  the other 4 pickables (purple box/yellow/red/blue) remain on pick_table = colour discrimination.
-  The 3rd distinct world (go2_courtyard.xml, pure CONFIG) TRANSFERS the fetch bar. N=1 provisional.
+updated: 2026-07-03 · R243 (E56) BUILD/VERIFY — 3rd-WORLD COURTYARD TRANSFER CLOSED. Two bare-face
+  sims (deepseek-v4-flash, local-ollama perception, in-process, launch_explore_seen=False):
+  (1) courtyard GREEN re-run across the R242→R243 boundary GROUNDED → PROMOTED confirmed N=2;
+  (2) courtyard BLUE (把蓝色的瓶子拿过来) GROUNDED N=1 provisional, mirror discrimination. Eyes
+  (self-read, 2 frames): Go2 holds green (then blue) aloft in the open-air sandstone courtyard,
+  other 4 pickables remain on pick_table = colour discrimination. ZERO perception fix needed.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
 phase: green
-last-round: R242 (E56, VERIFY, non-gated). KEY FINDING: R241's inflight sim-free precondition
-  listed `isaac` and re-owed the run as SIM-BLOCKED — but per the CONFIRMED E54 lesson (LESSONS:30)
-  the sibling /workspace/go2w Isaac sim is a DIFFERENT engine, does NOT trip the repo's gate
-  (mujoco|vcli), and with RAM/GPU headroom (43G RAM, 9.8G GPU free) is NOT an Inv-5 blocker; R241
-  (like R231-R233) over-read it. Ran clean (local-ollama perception, deepseek planner, 0x402,
-  in-process); provider unchanged ⇒ a world-generalization result, not a model artifact.
-
-frontier: courtyard fetch TRANSFERS (N=1) → 3 distinct worlds ground the green-fetch bar (house
-  N=3, warehouse N=3, courtyard N=1). Deeper bars unchanged: verify WITNESS-ONLY (D182); genuinely-
-  new = 3rd embodiment (S4-gated) + world-owned NL→object grounder. Cheap win: courtyard COLOUR
-  breadth (blue/red/purple), hue gate is colour-agnostic (E54).
-
+last-round: R243 (E56, BUILD/VERIFY, non-gated). KEY FINDING: a config-only new world whose
+  background hue is FAR from the target's colour transfers ZERO-SHOT (courtyard, warm sandstone);
+  the warehouse (E54) was hard only because orange racking is hue-ADJACENT to green's saliency —
+  new worlds are not inherently hard. Both courtyard sims ran clean on the FIRST window (no Isaac
+  contention; E54/LESSONS:30 gate = pgrep mujoco|vcli + headroom, not "any sim").
+frontier: 3 distinct worlds ground go2 green-fetch (house N=3, warehouse N=3, courtyard N=2);
+  courtyard blue transfers N=1. Deeper bars unchanged: verify WITNESS-ONLY (D182); genuinely-new =
+  3rd embodiment (S4-gated, BYO URDF+manifest) + world-owned NL→object grounder. Cheap wins left:
+  promote courtyard-blue to N≥2; more courtyard colours (red/purple); the YELLOW HOUSE-FOV debug.
 watch: do NOT re-own a run SIM-BLOCKED on a sibling ISAAC sim — different engine, not the repo's
   Inv-5 gate (E54/LESSONS:30). Gate = pgrep 'mujoco|vcli' + free/GPU headroom; ONE MuJoCo/vcli sim.
-
+  Evidence frames COLLIDE on eyes_fetch.png in a shared R#/ dir — copy each to a per-colour subdir
+  (this round: var/evidence/R243/{green,blue}/) BEFORE the next run overwrites it.
 next:
-  1. [PROMOTE, NON-gated] Re-run courtyard green-fetch across this boundary + red-team → promote
-     fetch.nl-new-world-courtyard to confirmed N>=2 (E46 rule). Cheap: add a 2nd courtyard colour
-     (blue) in the same run to widen transfer while the sim is up.
+  1. [PROMOTE, NON-gated] Re-run courtyard BLUE across this boundary + red-team → promote
+     fetch.nl-new-world-courtyard-blue to confirmed N>=2 (E46 rule). Cheap: add courtyard RED
+     or PURPLE in the same sim window to widen the 3rd-world colour breadth.
   2. [DEBUG, NON-gated] YELLOW(y=3.11) HOUSE FOV (E45/E46, Case 14): raise head tilt / widen standoff
      so the short/high pickable enters the near-field vertical frustum, then transfer yellow.
   3. [SPINE, GATED] D182 world-owned NL→object grounder — removes witness-only fidelity; CEO gate.
   4. [DEBUG, NON-gated] object_localizer in-warehouse still noisy (R236 floor/far phantoms); harden seed.
   5. [FRONTIER/breadth, GATED] NEW 3rd embodiment via BYO URDF+manifest — S4 one-generic-driver (WIRING:53).
-
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
   - S4 (one generic driver): a genuinely-new 3rd embodiment needs the ONE generic driver replacing per-driver MuJoCoGo2/G1 (WIRING:53) — CEO-gated (kernel/interface), multi-round SDD.
   - SPINE (D182): actor-authored verify target — a world-owned NL→object grounder fixes witness-only fidelity AND makes grasp-vs-wander deterministic (E46). Object plug-in not pure config (per-object weld tuple + colour maps) → S4.
