@@ -110,3 +110,4 @@
 {"schema":1,"ts":1783144541,"round":"R293","kind":"build","exit":0,"post_check":"ok","commit":"6528915","dur_s":512}
 {"schema":1,"ts":1783145056,"round":"R294","kind":"build","exit":0,"post_check":"ok","commit":"c0abb86","dur_s":395}
 {"schema":1,"ts":1783145418,"round":"R295","kind":"build","exit":0,"post_check":"quarantined","commit":"c0abb86","dur_s":242}
+{"schema":1,"ts":1783146555,"round":"R296","kind":"build","exit":0,"post_check":"ok","commit":"bb99263","dur_s":1017}
