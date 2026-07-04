@@ -76,6 +76,23 @@ def test_go2_lidar_update_interval_matches_driver() -> None:
     assert lidar.params["update_interval_steps"] == go2._LIDAR_UPDATE_INTERVAL
 
 
+def test_go2_lidar_offset_matches_driver() -> None:
+    """Manifest lidar mount offset mirrors _LIDAR_OFFSET_X / _LIDAR_OFFSET_Z.
+
+    The go2 manifest ``pos: [0.3, 0.0, 0.2]`` header names
+    ``_LIDAR_OFFSET_X / _LIDAR_OFFSET_Z`` as its source, and the vnav bridge's
+    ``_SENSOR_X/_SENSOR_Z`` claim the same numbers ("Must match mujoco_go2.py
+    _LIDAR_OFFSET"). Yet the E148 g1 lidar-offset guard had NO go2 counterpart —
+    the go2 consts were METHOD-LOCAL to ``_update_lidar`` and unimportable, so a
+    drift would silently make both the manifest and the bridge advertise a beam
+    origin the driver no longer casts from. Hoisting them to module scope makes
+    this mirror guardable, symmetric with g1.
+    """
+    lidar = next(s for s in load_embodiment_config("go2").sensors if s.role == "lidar")
+    assert lidar.pos[0] == pytest.approx(go2._LIDAR_OFFSET_X)
+    assert lidar.pos[2] == pytest.approx(go2._LIDAR_OFFSET_Z)
+
+
 # ---------------------------------------------------------------------------
 # g1 humanoid — manifest mirrors mujoco_g1 module constants
 # ---------------------------------------------------------------------------

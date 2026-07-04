@@ -232,6 +232,13 @@ _MPC_LEG_NAMES: list[str] = ["FL", "FR", "RL", "RR"]
 # ---------------------------------------------------------------------------
 
 _LIDAR_UPDATE_INTERVAL: int = 200  # physics steps between scans (~5 Hz, 5200 rays/scan)
+# Livox MID360 mount offset from base — on top of the Go2 head, above all leg
+# geoms (0.3 m forward, 0.2 m up). AUTHORITATIVE: the go2 manifest lidar `pos`
+# and scripts/go2_vnav_bridge.py _SENSOR_X/_SENSOR_Z both mirror these numbers
+# (see test_manifest_driver_fidelity). Module-scope so the drift guard can import
+# them, symmetric with mujoco_g1 _LIDAR_OFFSET_X/_LIDAR_OFFSET_Z.
+_LIDAR_OFFSET_X: float = 0.3
+_LIDAR_OFFSET_Z: float = 0.2
 
 # ---------------------------------------------------------------------------
 # Constants — obstacle-aware navigate_to
@@ -1516,10 +1523,9 @@ class MuJoCoGo2:
         # 0.3m forward (head position) + 0.2m up (above trunk top).
         # At -20° tilt, nearest ground hit ≈ 0.9m ahead of lidar →
         # well past front legs (~0.1m ahead of lidar). No self-hits.
-        # Must match bridge _SENSOR_X/_SENSOR_Z and nav stack sensorOffset.
-        _LIDAR_OFFSET_X = 0.3
-        _LIDAR_OFFSET_Z = 0.2
-
+        # Offset consts are module-scope (_LIDAR_OFFSET_X/_LIDAR_OFFSET_Z) so the
+        # manifest↔driver drift guard can import them; must match bridge
+        # _SENSOR_X/_SENSOR_Z and nav stack sensorOffset.
         rq = self._mj.layout.root_qpos_adr
         pos = self._mj.data.qpos[rq : rq + 3].copy().astype(np.float64)
         heading = self.get_heading()
