@@ -7,9 +7,9 @@
 | byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 128 | f159306 |
 | byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 124 | 61fde80 |
 | describe.nl-go2-courtyard | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 56 | pending |
-| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 44 | pending |
+| fetch-place.nl-category-only | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch-place.nl-compound | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 43 | pending |
-| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 39 | pending |
+| fetch.nl-negated-distractor | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch.nl-new-world-courtyard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 19 | pending |
 | fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 2 | pending |
 | fetch.nl-new-world-courtyard-purple | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 17 | pending |
@@ -22,7 +22,7 @@
 | fetch.nl-novel-object-yellow | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 53 | pending |
 | fetch.nl-ordinal-position-invariance | superseded | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 20 | pending |
 | fetch.nl-ordinal-spatial | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 39 | pending |
-| fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 47 | pending |
+| fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 20 | pending |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 15 | pending |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 13 | pending |
@@ -135,3 +135,4 @@
 - E93 R303 [inconclusive] STATUS next#1: upgrade last STALE self-read warehouse FETCH colour bars (blue/purple/red age~62-63) self-read->vlm-judge, bare face, Inv.1 stricter-only, mirroring R301->R302 place eyes upgrade. — retry only if: promote 3 provisionals->confirmed next round on N>=2; funded qwen3-vl judge replaces ABSTAIN with trusted PASS
 - E94 R304 [confirmed] STATUS next#1+#2: promote 3 R303 warehouse-fetch vlm-judge provisionals->confirmed (E46 N>=2 boundary); upgrade last self-read non-house fetch bar courtyard-blue->vlm-judge. — retry only if: a warehouse colour regresses to RAN; promote courtyard-blue N>=2 next round
 - E96 R306 [refuted] STATUS next#1 skeptic: OLDEST stale confirmed bar quantity-place.nl (age~100, R205 chat self-read flaky 2/3) still grounds a 2-object place on current shipped face (v4-flash), or refute. — retry only if: n/a
+- E97 R307 [confirmed] STATUS next#1 skeptic: 3 STALE self-read HOUSE fetch bars (plain-colour, category-only, negated-distractor) still GROUND on current v4-flash + eyes upgrade self-read->vlm-judge (Inv.1 stricter)? — retry only if: a house bar regresses to RAN, or funded qwen3-vl judge replaces gemma4 ABSTAIN with trusted PASS.
