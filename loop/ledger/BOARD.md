@@ -27,8 +27,8 @@
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 10 | pending |
 | g1.perception | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 8 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 1/1 | bare-repl+nl | openrouter (zero credit spent) | self-read | 42 | pending |
-| place.nl-new-world-courtyard | provisional | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 1 | pending |
-| place.nl-new-world-warehouse | provisional | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 1 | pending |
+| place.nl-new-world-courtyard | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
+| place.nl-new-world-warehouse | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | place.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 4 | pending |
 | quantity-place.nl | confirmed ⚠ STALE | GROUNDED-FLAKY 2/3 | bare-repl+nl | deepseek-chat | self-read | 97 | pending |
 | quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 93 | pending |
