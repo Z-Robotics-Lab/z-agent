@@ -73,12 +73,13 @@ vector_os_nano/vcli/engine.py::init_vgg
 
 ## native-loop — how it plugs in
 
-verified-against: 6834860
+verified-against: 2406411
 
 - The model-driven ReAct producer: `vector_os_nano/vcli/native_loop.py::run_turn_native(engine, user_message, …)` drives `engine._backend.call(messages, tools, system)` in a loop (cap `_MAX_NATIVE_TURNS=24`) and returns an `ExecutionTrace`. It NEVER computes `verified` — the caller `vector_os_nano/vcli/cli.py::run_one_turn` feeds the trace to `VerdictReport.from_trace`.
 - Trace assembly: `native_loop.py::NativeStepRunner` — `dispatch_skill` captures the actor-causation baseline before a step's FIRST skill; `handle_verify` evaluates the model's expr via the live GoalVerifier, grades causation (`NativeStepRunner._grade`), and appends EXACTLY ONE StepRecord per (action-chain → verify) pair; `build_trace` finishes.
 - Synthetic tools the runner OWNS (never wrapped from a skill): `verify(expr)` + `finish` (`VERIFY_TOOL`/`FINISH_TOOL`); D23 nudges (`_MAX_VERIFY_NUDGES=2`) refuse a finish riding on an unverified action.
 - Post-place re-grasp guard (R257, E60): a successful `_PLACE_SKILLS` step arms `NativeStepRunner._place_awaiting_verify`; while armed, a `_GRASP_SKILLS` call is REFUSED with `_POST_PLACE_REGRASP_NUDGE` (bounded by `_MAX_VERIFY_NUDGES`; the next `verify` clears it — an intermediate FAIL clears it for the NEXT object so quantity-place stays safe) so the brain can't misread the EXPECTED empty post-place gripper as a drop and re-grasp the just-placed object. Paired with the `_native_system_prompt` `place_guidance` block (empty gripper after a place is terminal success → verify `resting_on_receptacle`, never re-grasp). Fixes the R255 courtyard-place `掉了` thrash with NO weld/physics change (R256 refuted the mid-walk-drop theory).
+- Degenerate-spin guard (R274/E74 + goal-aware R279/E76): a flaky routing brain can issue action skills (perception_grasp/navigate/detect) turn after turn WITHOUT ever calling `verify`, burning the `_MAX_NATIVE_TURNS=24` budget on ZERO verdicts (~15min, nothing grounds, the eyes-judge never fires). The loop (`run_turn_native` body) counts consecutive turns with no MEASURABLE PROGRESS: soft nudge at `_UNPRODUCTIVE_NUDGE_AT=6` (`_UNPRODUCTIVE_SPIN_NUDGE` forces a verify), honest break at `_MAX_TURNS_WITHOUT_VERIFY=12` (trace grades RAN/empty, NEVER a forced green). R279 made it GOAL-AWARE: a verify counts as progress only if its `(normalized-expr, result)` is NOVEL vs the loop's `seen_verify_outcomes` set — re-reading an already-known outcome (an off-goal `at_position` verify interleaved to pin the counter) is NOT progress, so a thrash that dodges by re-verifying one sub-check still climbs to the break instead of the 24-cap. Keys on `NativeStepRunner.last_verify_result`; planner-free (no goal parse). Distinct from the finish-on-fail guard (which fires only when the model DID verify and it was FALSE).
 - Tool injection lives in `native_loop.py::_build_motor_tools`: (a) engine registry's `code`-category tools via `_code_tools_from_registry` — in a robot world `_MUTATING_CODE_TOOLS` (file_write/file_edit/bash) are DROPPED (D17 fakeable-grasp prong 1); (b) coordinate `navigate` (`_NativeBaseNavigateTool`, FAR-planner avoidance route) gated on has_base; (c) learned detector `_NativeDetectTool` from the world-registered `detect` capability (`_registered_capability`, same instance `worlds/robot.py::register_capabilities` bound — no second model load); (d) world skills via `vector_os_nano/vcli/tools/skill_wrapper.py::wrap_skills` (`SkillWrapperTool` wraps each Skill; the world's own `navigate` skill is excluded).
 - Capability gates single-source `embodiments/capability_profile.py::resolve_capability_profile`: `has_base` → navigate tool; `has_arm` False → `_ARM_REQUIRING_SKILLS` (pick/place/scan/describe/…) dropped so an armless g1 never chains a doomed pick.
 - Verify vocab is single-sourced: oracle names from `trace_store.py::verify_oracle_names` (the SAME `engine._build_verifier_namespace` the spine reads) flow into `_verify_tool_schema` + the system prompt; `at_position` tol read live from go2_sim_oracle via `native_loop.py::_at_position_tol`.
@@ -102,6 +103,10 @@ vector_os_nano/vcli/native_loop.py::_MUTATING_CODE_TOOLS
 vector_os_nano/vcli/native_loop.py::_GRASP_SKILLS
 vector_os_nano/vcli/native_loop.py::_PLACE_SKILLS
 vector_os_nano/vcli/native_loop.py::_POST_PLACE_REGRASP_NUDGE
+vector_os_nano/vcli/native_loop.py::_UNPRODUCTIVE_NUDGE_AT
+vector_os_nano/vcli/native_loop.py::_MAX_TURNS_WITHOUT_VERIFY
+vector_os_nano/vcli/native_loop.py::seen_verify_outcomes
+vector_os_nano/vcli/native_loop.py::last_verify_result
 vector_os_nano/vcli/tools/skill_wrapper.py::wrap_skills
 vector_os_nano/vcli/tools/skill_wrapper.py::SkillWrapperTool
 vector_os_nano/vcli/worlds/robot.py::persona_blocks
