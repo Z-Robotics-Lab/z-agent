@@ -362,3 +362,166 @@ def test_byo_predicate_grounding_preserves_the_moat() -> None:
     )
     # a name absent from the live namespace cannot ground, even as pred() == True
     assert classify_verify_expr("not_contributed() == True", frozenset()) == "RAN"
+
+
+# ---------------------------------------------------------------------------
+# Invariant 1 (moat) × plug-and-play Verify — the RUNTIME DELIVERY seam.
+# The tests above prove the frozen CLASSIFIER grades a BYO expr, but they feed
+# it a hand-built oracle set (``_byo_oracle_names``). That a BYO world's
+# predicate actually REACHES that classifier through the REAL engine namespace
+# builder — ``verify_oracle_names`` -> ``engine._build_verifier_namespace`` ->
+# ``_merge_world_verify_namespace`` -> ``world.build_verify_namespace`` — and
+# then clears the DONE-GATE (``evidence_passed``) was, until here, asserted only
+# by reading the code. These exercise the whole path end-to-end, offline and
+# LLM-free, with a BYO world wired into a REAL engine and ZERO kernel edits: the
+# North Star's "bring a verify-predicate" claim proven at the RUNTIME level, not
+# just the classifier level. The ground truth (the import/merge graph and the
+# frozen done-gate) is not something the actor can author.
+# ---------------------------------------------------------------------------
+
+
+def _byo_agent(gripping: bool = True) -> SimpleNamespace:
+    """A plain fake agent the BYO world's predicate reads its ground truth from.
+
+    ``_base``/``_spatial_memory`` are None so ``_build_verifier_namespace`` adds
+    only its domain-general dev stubs before merging the world contribution — the
+    BYO predicate is the only robot-flavoured oracle in the namespace, which is
+    exactly the isolation this proof wants.
+    """
+    return SimpleNamespace(gripping=gripping, _base=None, _spatial_memory=None)
+
+
+def _engine_with_byo_world(world: Any) -> Any:
+    """A REAL engine with a BYO world wired in exactly as a resolved session does.
+
+    ``VectorEngine.__init__`` only stores its backend (never calls it during
+    namespace construction), so a trivial fake backend keeps this offline and
+    LLM-free while ``_build_verifier_namespace`` / ``_merge_world_verify_namespace``
+    run the genuine kernel code.
+    """
+    from vector_os_nano.vcli.engine import VectorEngine
+
+    engine = VectorEngine(backend=SimpleNamespace())
+    engine._world = world  # the one line a resolved session wires; no kernel edit
+    return engine
+
+
+def test_byo_predicate_reaches_oracle_names_through_the_real_engine_seam() -> None:
+    """The REAL ``verify_oracle_names`` surfaces a BYO world's predicate name.
+
+    Not the hand-built ``_byo_oracle_names`` set the classifier tests use — this
+    drives ``verify_oracle_names(agent, engine)`` against a real engine whose
+    ``_world`` is the synthetic BYO world, so the name only reaches the oracle set
+    if ``_merge_world_verify_namespace`` actually merges ``build_verify_namespace``
+    (engine.py). If that merge regressed, the name would be missing and this goes
+    RED — closing the "asserted by code-reading" gap E116 left.
+    """
+    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
+
+    engine = _engine_with_byo_world(_AcmeArmWorld())
+    names = verify_oracle_names(_byo_agent(), engine)
+    assert "acme_is_gripping" in names, (
+        "the BYO world's build_verify_namespace name did not survive the real "
+        "engine namespace builder; the plug-and-play verify delivery seam regressed"
+    )
+
+
+def test_byo_predicate_passes_the_done_gate_end_to_end_zero_kernel_edit() -> None:
+    """A BYO predicate clears ``evidence_passed`` through the real runtime path.
+
+    Full chain, no kernel edit: real engine namespace -> real
+    ``verify_oracle_names`` -> real ``classify_step_evidence`` (GROUNDED) -> real
+    ``evidence_passed`` (True). This is the North Star claim ("bring a
+    verify-predicate") proven at the DONE-GATE, one level above E116's classifier.
+    """
+    from vector_os_nano.vcli.cognitive.trace_store import (
+        classify_step_evidence,
+        evidence_passed,
+        verify_oracle_names,
+    )
+    from vector_os_nano.vcli.cognitive.types import (
+        ExecutionTrace,
+        GoalTree,
+        StepRecord,
+        SubGoal,
+    )
+
+    engine = _engine_with_byo_world(_AcmeArmWorld())
+    oracle_names = verify_oracle_names(_byo_agent(gripping=True), engine)
+
+    sg = SubGoal(
+        name="s1", description="close the acme gripper",
+        verify="acme_is_gripping() == True", strategy="acme_grip",
+    )
+    step = StepRecord(
+        sub_goal_name="s1", strategy="acme_grip",
+        success=True, verify_result=True, duration_sec=0.1,
+    )
+    tree = GoalTree(goal="close the acme gripper", sub_goals=(sg,))
+    trace = ExecutionTrace(
+        goal_tree=tree, steps=(step,), success=True, total_duration_sec=0.1,
+    )
+
+    assert classify_step_evidence(step, sg, oracle_names) == "GROUNDED"
+    assert evidence_passed(trace, oracle_names) is True
+
+
+def test_byo_predicate_done_gate_moat_holds_under_actor_causation() -> None:
+    """The done-gate's actor-causation downgrade governs a BYO predicate too.
+
+    The strongest moat probe: a step whose BYO verify would otherwise GROUND
+    (``verify_result`` True, oracle consumed) but whose actor did NOT cause the
+    state change (``ActorCaused.UNCAUSED`` — a satisfied-at-baseline no-op) must
+    DOWNGRADE to RAN and FAIL ``evidence_passed``. If "bring a verify-predicate"
+    let a satisfied-at-baseline state pass, it would be a self-certifying grade
+    (Invariant 1). Non-tautological: ``verify_result`` stays True — only causation
+    changes the verdict.
+    """
+    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+    from vector_os_nano.vcli.cognitive.trace_store import (
+        classify_step_evidence,
+        evidence_passed,
+        verify_oracle_names,
+    )
+    from vector_os_nano.vcli.cognitive.types import (
+        ExecutionTrace,
+        GoalTree,
+        StepRecord,
+        SubGoal,
+    )
+
+    engine = _engine_with_byo_world(_AcmeArmWorld())
+    oracle_names = verify_oracle_names(_byo_agent(gripping=True), engine)
+
+    sg = SubGoal(
+        name="s1", description="close the acme gripper",
+        verify="acme_is_gripping() == True", strategy="acme_grip",
+    )
+    step = StepRecord(
+        sub_goal_name="s1", strategy="acme_grip",
+        success=True, verify_result=True, duration_sec=0.1,
+        actor_caused=ActorCaused.UNCAUSED,
+    )
+    tree = GoalTree(goal="close the acme gripper", sub_goals=(sg,))
+    trace = ExecutionTrace(
+        goal_tree=tree, steps=(step,), success=True, total_duration_sec=0.1,
+    )
+
+    assert classify_step_evidence(step, sg, oracle_names) == "RAN"
+    assert evidence_passed(trace, oracle_names) is False
+
+
+def test_byo_predicate_delivery_fails_closed_without_an_engine() -> None:
+    """No engine -> no namespace -> the BYO predicate cannot ground (moat stricter).
+
+    ``verify_oracle_names(agent, None)`` fails closed to ``frozenset()`` (rule 5),
+    so even the grounding idiom ``pred() == True`` classifies RAN. The delivery
+    seam can only ever make verification STRICTER when the namespace is absent —
+    never a spurious pass.
+    """
+    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
+
+    names = verify_oracle_names(_byo_agent(), None)
+    assert names == frozenset()
+    assert classify_verify_expr("acme_is_gripping() == True", names) == "RAN"
