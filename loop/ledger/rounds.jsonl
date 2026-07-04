@@ -155,3 +155,4 @@
 {"schema":1,"ts":1783189201,"round":"R338","kind":"build","exit":0,"post_check":"ok","commit":"4b85a08","dur_s":297}
 {"schema":1,"ts":1783189647,"round":"R339","kind":"build","exit":0,"post_check":"ok","commit":"a52226e","dur_s":326}
 {"schema":1,"ts":1783190276,"round":"R340","kind":"review","exit":0,"post_check":"ok","commit":"0c06ec4","dur_s":509}
+{"schema":1,"ts":1783190622,"round":"R341","kind":"build","exit":0,"post_check":"ok","commit":"47c723d","dur_s":226}
