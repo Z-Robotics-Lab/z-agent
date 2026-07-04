@@ -5,12 +5,9 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 
 ## Refuted (do NOT retry unless the stated condition changed)
 - "Model-sensitivity ceiling" on fetch was a HARNESS artifact, not the model — control the harness before concluding model capability → D171 refuted by D174.
-- "Red grasp-robustness ceiling" was a one-campaign transient (8/8 after); 0/3 in a single
-  campaign is never a ceiling — re-run with the correct NL term + skill-direct probe → D172
-  refuted by D173/DEBUG.md.
-- "BYO-model over-caution blocks tool-calls" — refuted by a positive control; gemini/mistral
-  no-tool-call is model behaviour, not plumbing (tools passed, llama tool-called same path)
-  → D179 refuted by D180, fb6ae77.
+- "Red grasp-robustness ceiling" was a one-campaign transient (8/8 after); 0/3 in a single campaign is never a ceiling — re-run with the correct NL term + skill-direct probe → D172 refuted by D173/DEBUG.md.
+- "BYO-model over-caution blocks tool-calls" — refuted by a positive control; gemini/mistral no-tool-call is model behaviour, not plumbing (tools passed, llama tool-called same path) → D179 refuted by D180, fb6ae77.
+- Eyes verdict-render framing (place-aware camera in `acceptance/capture.py`) is NOT a non-gated build: all of `acceptance/` is honest-verify SPINE (loop/check.sh regex) → any change to what the verdict frame SHOWS is a CEO gate. R281 crossed it unapproved+unverified → R282 quarantine; reverted to baseline. Retry only after owner GATE-APPROVED + real-face verify → E78.
 - OpenRouter `/key` `limit_remaining` is rate-limit headroom, NOT deposited credit — probe
   balance with one real turn before concluding "funded" → D181.
 - Any rate measured through `-p`/`--sim-go2` flag paths is NOT a bare-REPL face number; all
