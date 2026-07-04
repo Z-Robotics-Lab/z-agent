@@ -180,3 +180,4 @@
 {"schema":1,"ts":1783201550,"round":"R363","kind":"build","exit":0,"post_check":"ok","commit":"a36ff69","dur_s":425}
 {"schema":1,"ts":1783202182,"round":"R364","kind":"build","exit":0,"post_check":"ok","commit":"ece6d40","dur_s":512}
 {"schema":1,"ts":1783202841,"round":"R365","kind":"build","exit":0,"post_check":"ok","commit":"c0b75a1","dur_s":539}
+{"schema":1,"ts":1783203449,"round":"R366","kind":"build","exit":0,"post_check":"ok","commit":"90119fe","dur_s":488}
