@@ -111,6 +111,31 @@ _POST_PLACE_REGRASP_NUDGE = (
     "requested count (a quantity task with more objects still to place)."
 )
 
+# R274/E74 degenerate-spin guard. A flaky routing brain (R272/R273 non-determinism)
+# can keep issuing action skills (perception_grasp / navigate / detect / describe) turn
+# after turn WITHOUT ever calling verify — it burns the whole _MAX_NATIVE_TURNS budget
+# producing ZERO verdicts (~15min wall-clock on the sim), so nothing grounds AND the
+# eyes-judge never fires (no verdict snapshot). This is DISTINCT from the finish-on-fail
+# guard (which fires only when the model DID verify and it FAILED). Here the model never
+# measures at all. We count consecutive skill-only turns with no verify: at the SOFT
+# threshold nudge ONCE to force a measurement (a verify yields a real — usually False —
+# verdict, so the run terminates honestly AND the judge finally fires); at the HARD
+# threshold break to an honest fail (the trace grades RAN/empty, NEVER a forced green).
+# Planner-free + brain-agnostic: keys ONLY on "did a verify happen this turn", no goal
+# parsing, no per-object bookkeeping. Both thresholds sit well above a healthy task's
+# cadence (a normal fetch/place verifies within ~3 turns; the R272 healthy fetch verified
+# repeatedly, the R273 thrash verified ZERO times across all 24 turns).
+_UNPRODUCTIVE_NUDGE_AT = 6
+_MAX_TURNS_WITHOUT_VERIFY = 12
+_UNPRODUCTIVE_SPIN_NUDGE = (
+    "You have taken several actions in a row without measuring progress. STOP acting and "
+    "call verify(<the goal predicate>) NOW to check whether the goal is actually achieved "
+    "(e.g. holding_object('<name>') for a fetch, or resting_on_receptacle() >= <count> for "
+    "a place). Re-scanning / re-navigating / re-grasping without a verify makes no "
+    "measurable progress. If the verify FAILS, take ONE corrective action then verify again; "
+    "if it PASSES, call finish."
+)
+
 # The registry category whose tools are the kernel's domain-general ACTION surface
 # (file_read/file_write/file_edit/bash/glob/grep — see tools.__init__._TOOL_CATEGORIES
 # and worlds.dev.DEV_TOOL_ALLOWLIST, which is this category). The native loop offers
@@ -844,6 +869,11 @@ def run_turn_native(
     # nudge so a model that CANNOT reach a passing verify still terminates — the trace
     # then ends on a False step and grades honestly RAN/False, never a forced green.
     finish_on_fail_nudges = 0
+    # R274/E74 degenerate-spin guard: consecutive skill-dispatch turns with NO verify.
+    # Reset whenever the model verifies (measurable progress); a nudge is spent at the
+    # soft threshold, the loop breaks honestly at the hard one.
+    unproductive_turns = 0
+    unproductive_nudges = 0
     while turns < max_turns:
         messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
@@ -884,6 +914,7 @@ def run_turn_native(
             break  # end_turn, no tools — conversation complete
 
         finished = False
+        verified_this_turn = False  # R274/E74: did the model MEASURE progress this turn?
         result_dicts: list[dict[str, Any]] = []
         for tc in tool_calls:
             if tc.name == FINISH_TOOL:
@@ -918,6 +949,7 @@ def run_turn_native(
             if tc.name == VERIFY_TOOL:
                 expr = str((tc.input or {}).get("expr", ""))
                 _emit(f"verify {expr[:56]}")
+                verified_this_turn = True
                 res = runner.handle_verify(expr)
             else:
                 _emit(f"{tc.name} {_progress_args(tc.input)}".strip())
@@ -928,6 +960,27 @@ def run_turn_native(
         turns += 1
         if finished:
             break
+
+        # R274/E74 degenerate-spin guard (runs AFTER a non-empty tool-call turn that did
+        # not finish). A verify RESETS the counter (progress was measured); a skill-only
+        # turn increments it. At the soft threshold nudge ONCE to force a measurement; at
+        # the hard threshold break to an honest fail. Never fires on a healthy task (which
+        # verifies within a few turns) — only on the never-verify perception/nav spin.
+        if verified_this_turn:
+            unproductive_turns = 0
+        else:
+            unproductive_turns += 1
+            if (
+                unproductive_turns == _UNPRODUCTIVE_NUDGE_AT
+                and unproductive_nudges < _MAX_VERIFY_NUDGES
+            ):
+                unproductive_nudges += 1
+                _emit("re-prompting: measure progress with verify")
+                _append_user(session, _UNPRODUCTIVE_SPIN_NUDGE)
+                continue
+            if unproductive_turns >= _MAX_TURNS_WITHOUT_VERIFY:
+                _emit("degenerate spin: no verify progress — stopping honestly")
+                break
 
     return runner.build_trace(user_message)
 

@@ -709,3 +709,98 @@ def test_post_place_guard_is_bounded_never_wedges() -> None:
             break
     # Refuses a bounded number of times, then lets the grasp through (no infinite block).
     assert 0 < refusals <= 2
+
+
+# ---------------------------------------------------------------------------
+# R274/E74 — degenerate-spin guard: a brain that keeps acting but NEVER verifies
+# (the R272/R273 perception/nav thrash, 0 verdicts, ~15min) is broken to an honest
+# fail EARLY, after one nudge to force a measurement. Distinct from finish-on-fail
+# (which needs a FAILING verify to exist); here the model never verifies at all.
+# ---------------------------------------------------------------------------
+
+
+class _CallRecorder(FakeToolScriptBackend):
+    """A tool-script backend that records the messages of every backend.call."""
+
+    calls: list[list[dict]]
+
+    @classmethod
+    def make(cls, turns):  # type: ignore[no-untyped-def]
+        b = cls.from_tool_script(turns)
+        b.calls = []
+        return b
+
+    def call(self, **kw):  # type: ignore[override]
+        self.calls.append(list(kw.get("messages") or []))
+        return super().call(**kw)
+
+
+def _spin(n: int):
+    """n skill-only turns (walk, no verify) — the degenerate spin, plus a trailing end."""
+    return [tool_turn(("walk", {"distance": 0.1, "speed": 0.3})) for _ in range(n)] + [
+        tool_turn(end=True)
+    ]
+
+
+def test_degenerate_spin_without_verify_breaks_early_and_honestly() -> None:
+    """20 action turns with NO verify -> the guard breaks BEFORE max_turns (and before
+    the script ends), and the trace grades honestly (no steps, not verified)."""
+    from vector_os_nano.vcli.native_loop import (
+        _MAX_NATIVE_TURNS,
+        _MAX_TURNS_WITHOUT_VERIFY,
+    )
+
+    backend = _CallRecorder.make(_spin(20))
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("keep scanning forever", session=_session())
+
+    # Broke early: fewer backend calls than the hard cap AND well under max_turns.
+    assert len(backend.calls) <= _MAX_TURNS_WITHOUT_VERIFY
+    assert len(backend.calls) < _MAX_NATIVE_TURNS
+    # Honest: never verified -> zero graded steps -> fail closed.
+    oracle_names = verify_oracle_names(agent, eng)
+    report = VerdictReport.from_trace(trace, oracle_names)
+    assert len(trace.steps) == 0
+    assert report.verified is False
+
+
+def test_degenerate_spin_nudges_once_to_verify_before_breaking() -> None:
+    """At the soft threshold the runner injects ONE nudge telling the model to verify
+    (so a thrashing run finally emits a verdict + fires the eyes-judge)."""
+    from vector_os_nano.vcli.native_loop import _UNPRODUCTIVE_SPIN_NUDGE
+
+    backend = _CallRecorder.make(_spin(20))
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    eng.run_turn_native("keep scanning forever", session=_session())
+
+    # The nudge (a user message) reaches the model on some later call.
+    flat = "\n".join(str(m) for msgs in backend.calls for m in msgs)
+    assert _UNPRODUCTIVE_SPIN_NUDGE in flat
+
+
+def test_periodic_verify_never_trips_the_degenerate_guard() -> None:
+    """A long run that verifies periodically resets the counter each time, so the guard
+    NEVER fires even across more turns than the hard cap -> no regression of a healthy,
+    multi-step task (the verify is what proves progress, not the turn count)."""
+    from vector_os_nano.vcli.native_loop import _MAX_TURNS_WITHOUT_VERIFY
+
+    always_true = ("verify", {"expr": "at_position(0.0, 0.0, 1000.0)"})
+    walk = ("walk", {"distance": 0.1, "speed": 0.3})
+    # THREE 4-walk bursts, each closed by a PASSING verify (max unproductive run = 4 < 6).
+    # 12 total action-walks EXCEEDS the hard cap — a bare spin of that length WOULD break;
+    # the periodic verify resets the counter, so this healthy run must NOT be cut short.
+    burst = [tool_turn(walk), tool_turn(walk), tool_turn(walk), tool_turn(walk),
+             tool_turn(always_true)]
+    script = burst * 3 + [tool_turn(("finish", {}))]
+    assert sum(1 for t in script if t.tool_calls and t.tool_calls[0].name == "walk") \
+        >= _MAX_TURNS_WITHOUT_VERIFY
+    backend = _CallRecorder.make(script)
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("walk, verify, walk, verify, finish", session=_session())
+
+    # Guard did NOT cut it short: all three verify pairs recorded, ran the whole script.
+    assert len(trace.steps) == 3
+    assert len(backend.calls) == len(script)
