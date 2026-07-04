@@ -148,6 +148,30 @@ def test_go2_vnav_bridge_sensor_offset_matches_driver() -> None:
     )
 
 
+def test_piper_proxy_sensor_offset_matches_driver() -> None:
+    """The piper ROS2 proxy's _BODY_SENSOR_DX/_DZ mirror the same lidar offset.
+
+    ``piper_ros2_proxy.py`` reconstructs the body pose from ``/state_estimation``
+    (published by the vnav bridge in sensor frame) inside ``_sync_ik_base`` by
+    SUBTRACTING ``_BODY_SENSOR_DX/_BODY_SENSOR_DZ`` — a copy pinned by comment to
+    "must match go2_vnav_bridge.py _SENSOR_X/_SENSOR_Z (0.3 m forward, 0.2 m up)".
+    That makes it a FOURTH downstream mirror of the driver's authoritative
+    ``_LIDAR_OFFSET`` (after the manifest and the bridge, both guarded above),
+    and the one E149/E151 left comment-pinned only: a drifted offset would make
+    the piper IK base land at the wrong body position and the arm reach the wrong
+    place, silently, with no red test. The proxy has no ROS2 import at module
+    load, but we read its literals with ast anyway — symmetric with the bridge
+    guard and immune to any future import-time dependency.
+    """
+    proxy = _REPO_ROOT / "vector_os_nano" / "hardware" / "sim" / "piper_ros2_proxy.py"
+    assert _read_module_float_const(proxy, "_BODY_SENSOR_DX") == pytest.approx(
+        go2._LIDAR_OFFSET_X
+    )
+    assert _read_module_float_const(proxy, "_BODY_SENSOR_DZ") == pytest.approx(
+        go2._LIDAR_OFFSET_Z
+    )
+
+
 # ---------------------------------------------------------------------------
 # g1 humanoid — manifest mirrors mujoco_g1 module constants
 # ---------------------------------------------------------------------------
