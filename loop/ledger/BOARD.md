@@ -13,7 +13,7 @@
 | fetch.nl-new-world-courtyard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 1 | pending |
 | fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | fetch.nl-new-world-courtyard-purple | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 43 | pending |
-| fetch.nl-new-world-courtyard-red | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 44 | pending |
+| fetch.nl-new-world-courtyard-red | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 2 | pending |
 | fetch.nl-new-world-warehouse-blue | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 50 | pending |
 | fetch.nl-new-world-warehouse-purple | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 49 | pending |
