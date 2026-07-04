@@ -2,7 +2,7 @@
 
 ## verify-spine — how it plugs in
 
-verified-against: a7d3f1a
+verified-against: 3353a03
 
 **frozen — GATE-APPROVED required** (Invariant 1): every file below is honest-verify spine; do NOT edit without the CEO gate.
 
@@ -16,7 +16,7 @@ verified-against: a7d3f1a
 - Actor-causation channels (R2b): `vector_os_nano/vcli/cognitive/actor_causation.py::grade` — BASE (cmd_motion counter + planar/yaw displacement, channel-split per predicate), ARM (ctrl_motion + joint delta), GRIPPER (weld 0→1). Baseline via `actor_causation.py::capture` BEFORE the step's first skill; `ActorCaused.UNCAUSED` downgrades GROUNDED→RAN inside `classify_step_evidence`. `actor_causation.py::is_robot_predicate` decides whether a step is graded at all.
 - The machine verdict: `vector_os_nano/vcli/verdict.py::VerdictReport.from_trace(trace, oracle_names)` delegates `verified` VERBATIM to `evidence_passed` (contract-test-pinned). `VERDICT_SENTINEL` = "VECTOR_VERDICT".
 - VECTOR_VERDICT escapes cli.main via `vector_os_nano/vcli/cli.py::run_one_turn` (the `-p/--json` non-interactive entry, ~line 1841): `_emit` prints `report.to_sentinel_line()` on stdout and returns `report.exit_code()` (0 verified / 2 ran-not-verified / 1 error-or-no-trace). Chat-only / error turns emit `VerdictReport.no_trace` (fail-closed).
-- Seam for a new world: register oracles in `World.build_verify_namespace`; a new goal-conditioned bool predicate must ALSO be added to `_PREDICATE_ORACLES` (gate-approved) to GROUND as a bare call.
+- Seam for a new world (plug-and-play, Inv-3/4): register oracles in `World.build_verify_namespace` — that merge is single-sourced into `verify_oracle_names`, so a BYO name REACHES the grader with ZERO kernel edits. It then GROUNDS a goal two ways, NO gate: `pred() == True` (a bare-bool predicate made goal-explicit) or `state() == <const>` (E116; guard `tests/vcli/test_plug_and_play_boundary.py`). ONLY the bare `pred()` idiom needs the name in `_PREDICATE_ORACLES` — a gate-approved, first-party affordance (why the go2 quartet G-323-1 edits that set), NOT a requirement for a BYO contributor.
 
 ```
 anchors:
