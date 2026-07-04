@@ -89,3 +89,6 @@
 {"schema":1,"ts":1783121777,"round":"R272","kind":"build","exit":0,"post_check":"ok","commit":"6958416","dur_s":1951}
 {"schema":1,"ts":1783123237,"round":"R273","kind":"build","exit":0,"post_check":"ok","commit":"9e241a0","dur_s":1340}
 {"schema":1,"ts":1783125373,"round":"R274","kind":"build","exit":0,"post_check":"ok","commit":"b066f8e","dur_s":2016}
+{"schema":1,"ts":1783125878,"round":"R275","kind":"build","exit":0,"post_check":"quarantined","commit":"8bf3cfb","dur_s":385}
+{"schema":1,"ts":1783126107,"round":"R276","kind":"build","exit":0,"post_check":"ok","commit":"8bf3cfb","dur_s":109}
+{"schema":1,"ts":1783126432,"round":"R277","kind":"build","exit":0,"post_check":"quarantined","commit":"8bf3cfb","dur_s":205}
