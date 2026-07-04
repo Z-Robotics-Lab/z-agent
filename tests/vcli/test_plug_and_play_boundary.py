@@ -271,3 +271,94 @@ def test_byo_world_example_runs_clean() -> None:
     assert "ZERO kernel edits" in result.stdout, (
         f"example did not print its proof line; stdout:\n{result.stdout}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Invariant 1 (moat) × plug-and-play Verify — a BYO predicate is not merely
+# PRESENT in the namespace, it is truth-bearingly GRADED by the frozen
+# classifier, WITH ZERO KERNEL EDITS. The boundary tests above prove the
+# world seam REGISTERS a custom predicate; this proves the verify spine
+# ADJUDICATES it — and pins exactly which authoring idioms ground, so a
+# contributor is never silently stuck on a RAN verdict.
+# ---------------------------------------------------------------------------
+
+
+def _byo_oracle_names() -> "frozenset[str]":
+    """The live verify-namespace names a BYO world contributes.
+
+    Single-sourced from the world's OWN ``build_verify_namespace`` (rule 3 — the
+    classifier must grade the exact name the world contributed, never a second
+    hand-authored copy). ``_AcmeArmWorld`` contributes ``acme_is_gripping``; we
+    add a sibling STATE oracle name to exercise the state-vs-constant idiom.
+    """
+    world = _AcmeArmWorld()
+    contributed = set(world.build_verify_namespace(SimpleNamespace(gripping=True)))
+    assert "acme_is_gripping" in contributed
+    return frozenset(contributed | {"acme_gripper_pos"})
+
+
+def test_byo_predicate_is_graded_by_the_frozen_classifier_zero_kernel_edits() -> None:
+    """A BYO world's custom verify predicate GROUNDS through the spine classifier.
+
+    The North Star Verify contract is not "the predicate is in a dict" (the
+    boundary tests above) but "the predicate GRADES a goal". ``classify_verify_expr``
+    is the frozen spine that decides whether a verify expression is truth-bearing
+    over a world oracle. Feeding it the BYO namespace names — nothing hardcoded
+    into ``_PREDICATE_ORACLES`` — two idioms ground with ZERO kernel edits:
+
+    * a STATE oracle anchored to a constant (``acme_gripper_pos() == 1``), and
+    * a bare-boolean predicate made goal-explicit (``acme_is_gripping() == True``).
+
+    Both consume the world's ground truth (which the actor cannot author), so a
+    third party's Verify contribution is genuinely load-bearing, not decorative.
+    """
+    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+
+    live = _byo_oracle_names()
+    assert classify_verify_expr("acme_gripper_pos() == 1", live) == "GROUNDED"
+    assert classify_verify_expr("acme_is_gripping() == True", live) == "GROUNDED"
+
+
+def test_byo_bare_predicate_idiom_is_the_zero_edit_boundary() -> None:
+    """PIN the boundary: the BARE ``pred()`` idiom does NOT ground for a BYO name.
+
+    Bare-call grounding is reserved for the first-party ``_PREDICATE_ORACLES`` set
+    (a deliberate moat: only names KNOWN to be goal-conditioned booleans may ground
+    as a bare call — a bare STATE oracle such as ``get_position()`` must never count
+    as evidence). A BYO name is not in that hardcoded set, so ``acme_is_gripping()``
+    written bare classifies RAN — which is exactly why landing a first-party bare
+    predicate (e.g. the go2 quartet, G-323-1) requires the ``_PREDICATE_ORACLES``
+    edit, while a BYO contributor stays zero-edit by writing ``pred() == True``.
+
+    This is a CHARACTERIZATION guard, not a wish: if a refactor ever grounds a bare
+    BYO call, the moat semantics changed under us and this goes RED first.
+    """
+    from vector_os_nano.vcli.cognitive.evidence_classifier import (
+        _PREDICATE_ORACLES,
+        classify_verify_expr,
+    )
+
+    live = _byo_oracle_names()
+    assert "acme_is_gripping" not in _PREDICATE_ORACLES  # not a first-party predicate
+    assert classify_verify_expr("acme_is_gripping()", live) == "RAN"
+
+
+def test_byo_predicate_grounding_preserves_the_moat() -> None:
+    """The plug-and-play seam does NOT loosen the moat for a BYO predicate.
+
+    Every short-circuit / self-tautology hole the classifier closes for first-party
+    predicates must stay closed for a BYO one — otherwise "bring a verify-predicate"
+    would be a way to smuggle in a self-certifying grade (Invariant 1). Also: a name
+    the world never contributed cannot ground even in the grounding idioms.
+    """
+    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+
+    live = _byo_oracle_names()
+    # short-circuit: an oracle OR'd with a truthy constant is not gated by the oracle
+    assert classify_verify_expr("acme_is_gripping() == True or True", live) == "RAN"
+    # self-tautology: oracle compared against itself proves no goal
+    assert (
+        classify_verify_expr("acme_is_gripping() == acme_is_gripping()", live) == "RAN"
+    )
+    # a name absent from the live namespace cannot ground, even as pred() == True
+    assert classify_verify_expr("not_contributed() == True", frozenset()) == "RAN"
