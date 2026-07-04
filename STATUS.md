@@ -1,38 +1,39 @@
 # STATUS — arch/plug-and-play (snapshot, OVERWRITTEN every round; fields: doc-governance)
-updated: 2026-07-03 · R274 (E74 BUILD+VERIFY) — degenerate-spin guard landed; E70 judge-on-place VERIFIED.
+updated: 2026-07-03 · R278 (E75 VERIFY) — adopted R275-seq inflight; guard fires on a REAL thrash CONFIRMED.
 goal: PLUG-AND-PLAY runtime for physical AI — BYO robot/policy/skill/capability/model; plan·route·verify·recover; bare `vector-cli` + NL is the ONLY acceptance face.
-phase: active (NEW-robot capability still gated S4/D182; frontier = model non-determinism on the local/flash seam)
-last-round: R274 (E74 BUILD, non-gated). (1) Built a degenerate-spin GUARD in native_loop
-  (attacks the R272/R273 verify-face bottleneck: a flaky brain issues action skills turn
-  after turn WITHOUT verifying → burns all 24 turns/0 verdicts/~15min, judge never fires).
-  Turns-since-verify counter: nudge@6 (force a measurement → a real verdict + judge fires),
-  honest break@12 (trace grades RAN/empty, never a forced green). Planner-free (keys only on
-  'did a verify happen'). 24/24 unit green. (2) REAL-face non-regression: MODE=fetch green
-  GROUNDED verified=True 1/1, guard SILENT; eyes green aloft/others remain. (3) BONUS MODE=place
-  closed next#1/E70: judge_witness.log NON-empty for place (witness=PASS 4/4) — the R273
-  drain→eyes reorder makes the judge FIRE on place; place GROUNDED 2/2, guard silent, eyes:
-  green resting on receptacle/gripper empty. Guard non-regressive on BOTH faces.
-frontier: The guard tames the thrash SYMPTOM but is UNIT-proven only — both real runs this round
-  grounded CLEANLY (guard silent), so the guard FIRING on a real thrash is not yet observed. ROOT
-  causes stay owner/billing: the WEAK non-deterministic gemma4:e4b JUDGE (R272 PASS↔ABSTAIN, needs a
-  stronger VLM) + the flaky deepseek-v4-flash ROUTING brain (needs stronger brain or the D182 grounder).
-watch: Real-face recipe: bare vcli + NL; FORCE the deepseek provider + the deepseek-v4-flash model via
-  env override (.env defaults qwen, ARREARAGE 400); local ollama gemma4:e4b eyes+judge AUTO-routed by repl_accept
-  (do NOT set VLM/JUDGE url env). tools/acceptance/repl_accept.py <FETCH> <PLACE> <TAG> <MODE={fetch|
-  place|combo|seq|quantity}>. RUN under `systemd-run --user --scope -p MemoryMax=24G`; place ~10min,
-  seq/quantity ~15-20min → BACKGROUND+poll. Sim is IN-PROCESS python (pgrep the TAG; NEVER pkill mujoco).
-  LEDGER: append ≤1KB/row, field ≤280 chars, never rewrite. green place-decompose CAN thrash run-to-run
-  (E40/E72); the R274 guard now caps that at 12 turns instead of 24.
+phase: active (NEW-robot capability still gated S4/D182; frontier = guard goal-awareness + eyes-frame workspace framing)
+last-round: R278 (E75 VERIFY, non-gated). Cleared the R275->R277 stuck quarantine cycle: adopted the
+  R275 MODE=seq inflight run (had outlived R276/R277 un-adopted), regenerated BOARD, adjudicated the two
+  >2-round-old R274 provisionals. The seq run COMPLETED and DELIVERED next#1: turn1 place-blue thrashed
+  w/o verifying -> the R274 degenerate-spin guard NUDGED (log 'native re-prompting: measure progress') ->
+  brain issued verify holding_object -> honest RAN verified=False, NO 24-turn/~15min burn (eyes_seq1: empty
+  gripper facing shelf). Upgrades R274's UNIT-only claim to REAL-face observed. turn2 place-red GT-grounded
+  True(1/1) clean (guard non-regressive on the healthy turn). eyes vlm-judge FIRED non-empty on BOTH place
+  turns (judge_witness.log) = E70 wiring reproduced. Adjudicated: E74 runner.degenerate-spin-guard +
+  E70 verify.eyes-vlm-judge-place -> confirmed (supersedes R274). FINDINGS below.
+frontier: (1) The guard's turns-since-verify counter resets on ANY verify — turn2 interspersed an OFF-GOAL
+  `verify at_position` that reset it, so hard-break@12 stays UNOBSERVED and worst-case turns fall to the
+  _MAX_NATIVE_TURNS(63) cap; a GOAL-AWARE counter (reset only on a verify of the actual goal predicate) is
+  the refinement. (2) The offscreen eyes verdict-render off-centers the shelf -> vlm-judge workspace_in_frame=no
+  false-negs on BOTH place turns, incl seq2 which GT-grounded True — the judge fires but its verdict is a
+  framing artifact (weak gemma4:e4b + off-center frame). ROOT causes stay owner/billing (stronger VLM + brain).
+watch: Real-face recipe: bare vcli + NL; FORCE deepseek provider + deepseek-v4-flash via env (.env defaults
+  qwen, ARREARAGE); local ollama gemma4:e4b eyes+judge AUTO-routed by repl_accept (do NOT set VLM/JUDGE url).
+  tools/acceptance/repl_accept.py <FETCH> <PLACE> <TAG> <MODE={fetch|place|combo|seq|quantity}>. RUN under
+  `systemd-run --user --scope -p MemoryMax=24G`; place ~10min, seq ~20-25min -> BACKGROUND+poll (adopt next
+  round if it outlives the deadline). Sim is IN-PROCESS python (pgrep the TAG; NEVER pkill mujoco). LEDGER:
+  append <=1KB/row, string field <=280 chars (Python len), never rewrite a COMMITTED row. board.py WRITES
+  BOARD.md itself — run `python3 loop/board.py` (NO shell redirect; a redirect corrupts line 1).
 next:
-  1. [NON-gated VERIFY] Catch the R274 guard FIRING on a REAL thrash (MODE=seq two-object, or repeat
-     MODE=place until a decompose thrashes) — confirm it nudges then breaks EARLY (<12 turns, honest
-     RAN), not a 24-turn/15min hang. THEN promote E74 + verify.eyes-vlm-judge-place (E70) provisional→confirmed.
-  2. [NON-gated] Adjudicate R274 provisionals (§1b): runner.degenerate-spin-guard, verify.eyes-vlm-judge-place.
-  3. [OWNER GATE — the ONLY path to NEW ROBOT capability] Unblock S4 (3rd embodiment, BYO URDF+manifest,
-     one generic driver) OR D182 (world-owned NL→object grounder). CEO-gated ~34r. ↓gates.
+  1. [NON-gated BUILD] GOAL-AWARE degenerate-spin guard: reset the turns-since-verify counter only on a verify
+     of the ACTUAL goal predicate (not any predicate), so an at_position-thrash mode reaches hard-break@12. TDD.
+  2. [NON-gated BUILD/harness] Fix the eyes verdict-render framing so the workspace (shelf/bin) is in-frame ->
+     the vlm-judge can corroborate a place instead of workspace_in_frame=no false-neg. Cheap, unblocks eyes-place.
+  3. [OWNER GATE — the ONLY path to NEW ROBOT capability] Unblock S4 (3rd embodiment, BYO URDF+manifest, one
+     generic driver) OR D182 (world-owned NL->object grounder). CEO-gated ~34r. down-gates.
 gates: (queue — do NOT cross; format docs/RULES.md CEO-gates)
-  - S4 (one generic driver): a genuinely-new 3rd embodiment needs the ONE generic driver replacing per-driver MuJoCoGo2/G1 (WIRING:53) — CEO-gated (kernel/interface), multi-round SDD. ← next#3.
-  - SPINE (D182): world-owned NL→object grounder — fixes witness-only fidelity AND makes grasp-vs-wander deterministic (E46); also fixes ordinal E65. ← next#3.
+  - S4 (one generic driver): a genuinely-new 3rd embodiment needs the ONE generic driver replacing per-driver MuJoCoGo2/G1 (WIRING:53) — CEO-gated (kernel/interface), multi-round SDD. <- next#3.
+  - SPINE (D182): world-owned NL->object grounder — fixes witness-only fidelity AND makes grasp-vs-wander deterministic (E46); also fixes ordinal E65. <- next#3.
   - D178 near_object VLN · D176 cmd_motion seam · D168 place-oracle · relational near(a,b) · S5/S6 ladder · BILLING (qwen ROUTING brain + qwen3-vl JUDGE both Arrearage; a STRONGER local/funded VLM judge would fix R272 non-determ) · RELEASE: restructure merge to master (owner).
-  - SELF-APPROVAL AUDIT (R270): gate/token R261..R273 CLEAN (no GATE/CEO-APPROVED crossings; last was R187, audited clean R209).
+  - SELF-APPROVAL AUDIT (R270): gate/token R261..R278 CLEAN (no GATE/CEO-APPROVED crossings; last was R187, audited clean R209).
 last_review: R270

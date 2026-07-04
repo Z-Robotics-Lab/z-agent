@@ -1,5 +1,4 @@
-wrote /home/yusen/Desktop/vector_os_nano/loop/ledger/BOARD.md
-le)
+# Acceptance board (GENERATED — edit the ledger, not this file)
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
@@ -35,8 +34,8 @@ le)
 | quantity-place.nl-guardrail | confirmed ⚠ STALE | REFUTED 0/1 | bare-repl+nl | deepseek-chat | self-read | 69 | pending |
 | quantity-place.nl-isolation | refuted | REFUTED 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 5 | pending |
 | quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 72 | pending |
-| runner.degenerate-spin-guard | provisional ⚠ ADJUDICATE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 4 | pending |
-| verify.eyes-vlm-judge-place | provisional ⚠ ADJUDICATE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 4 | pending |
+| runner.degenerate-spin-guard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
+| verify.eyes-vlm-judge-place | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 0 | pending |
 | verify.eyes-vlm-judge-wired | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 6 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
