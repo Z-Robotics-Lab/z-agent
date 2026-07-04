@@ -133,6 +133,11 @@ def resolve_local_vlm_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
 
 
 JUDGE_FORCE_REMOTE_VAR: str = "VECTOR_JUDGE_FORCE_REMOTE"
+# The LOCAL judge model knob — DISTINCT from VECTOR_JUDGE_MODEL (which the local route
+# deliberately overrides because the supervisor exports a stale/arreared remote there). Lets a
+# round trial a STRONGER local ollama VLM as the second witness (gemma4:e4b is non-deterministic
+# PASS<->ABSTAIN<->FAIL, recorded-not-trusted — E72/E102). Unset → gemma4:e4b (byte-compatible).
+JUDGE_LOCAL_MODEL_VAR: str = "VECTOR_JUDGE_LOCAL_MODEL"
 
 
 def resolve_judge_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
@@ -161,7 +166,7 @@ def resolve_judge_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
     if ollama_probe():
         return {
             "VECTOR_JUDGE_BASE_URL": DEFAULT_LOCAL_VLM_URL,
-            "VECTOR_JUDGE_MODEL": DEFAULT_LOCAL_VLM_MODEL,
+            "VECTOR_JUDGE_MODEL": environ.get(JUDGE_LOCAL_MODEL_VAR) or DEFAULT_LOCAL_VLM_MODEL,
             "VECTOR_JUDGE_API_KEY": environ.get("VECTOR_JUDGE_API_KEY") or "ollama",
         }
     return {}

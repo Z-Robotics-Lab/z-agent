@@ -139,6 +139,24 @@ class TestResolveJudgeEnv:
         assert out["VECTOR_JUDGE_API_KEY"] == "sk-live"
         assert out["VECTOR_JUDGE_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
 
+    def test_local_model_overridable_via_distinct_var(self) -> None:
+        # A caller can point the LOCAL judge at a STRONGER ollama VLM (a candidate trusted 2nd
+        # discriminator — gemma4:e4b is non-deterministic PASS<->ABSTAIN<->FAIL, E72/E102) via
+        # VECTOR_JUDGE_LOCAL_MODEL. Default (unset) stays gemma4:e4b for byte-compatibility.
+        out = resolve_judge_env({"VECTOR_JUDGE_LOCAL_MODEL": "qwen2.5vl:7b"},
+                                ollama_probe=lambda: True)
+        assert out["VECTOR_JUDGE_MODEL"] == "qwen2.5vl:7b"
+        assert out["VECTOR_JUDGE_BASE_URL"] == DEFAULT_LOCAL_VLM_URL
+
+    def test_local_model_var_is_distinct_from_stale_remote_model(self) -> None:
+        # VECTOR_JUDGE_MODEL is the STALE remote the local route deliberately overrides (arreared
+        # qwen3-vl-plus); it must NEVER become the local model. VECTOR_JUDGE_LOCAL_MODEL is the
+        # ONLY local-model knob, so the two never conflict.
+        env = {"VECTOR_JUDGE_MODEL": "qwen3-vl-plus",
+               "VECTOR_JUDGE_LOCAL_MODEL": "qwen2.5vl:7b"}
+        out = resolve_judge_env(env, ollama_probe=lambda: True)
+        assert out["VECTOR_JUDGE_MODEL"] == "qwen2.5vl:7b"
+
 
 class TestReplCliArgv:
     """R232/E54: --verbose trace toggle so a DEBUG round's warehouse run captures [PGRASP]."""
