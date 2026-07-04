@@ -11,6 +11,7 @@ Heavy deps (cv2, mujoco) load lazily inside ``snapshot`` so importing this modul
 """
 from __future__ import annotations
 
+import math
 import os
 import subprocess
 import time
@@ -47,6 +48,57 @@ class CamSpec:
 def is_black(rgb: np.ndarray, thresh: float = _BLACK_MEAN) -> bool:
     """True if the frame is (near-)black — i.e. nothing rendered. Fail-closed witness signal."""
     return float(np.mean(rgb)) < thresh
+
+
+def place_view_camspec(pose, recept_center) -> CamSpec:
+    """A free-cam pose that frames BOTH the robot and the place receptacle side-by-side.
+
+    ``pose`` = the robot ``(x, y, heading)``; ``recept_center`` = the receptacle ``(cx, cy, rest_z)``.
+    The single verdict frame otherwise TRACKS the robot (``_render_agent_frame`` side-view), which
+    centres the dog but crops the receptacle off the frame edge on a PLACE — so the eyes vlm-judge
+    reads ``workspace_in_frame=no`` and ABSTAINs (R278/eyes_seq2.png). Here we lookat the MIDPOINT of
+    the two bodies and pull the distance back to cover their separation, so both sit in the frame.
+
+    Reuses the proven az 270 side azimuth (the room's y-axis maps to the frame's horizontal, so the
+    dog and the bin — separated along y — spread left/right rather than occluding one another) with a
+    slightly steeper elevation to see the object resting on the receptacle top. PURE: a function of
+    the poses only — it never reads a VerdictReport, so the camera can NEVER manufacture a pass.
+    """
+    rx, ry = float(pose[0]), float(pose[1])
+    cx, cy, rest_z = float(recept_center[0]), float(recept_center[1]), float(recept_center[2])
+    sep = math.hypot(rx - cx, ry - cy)
+    # Cover the separation + margin so both bodies fit; clamp so a stray-far pose can't shrink the
+    # bodies past what the VLM can read (min 2.8, ceiling 5.0 m).
+    distance = min(5.0, max(2.8, sep + 2.2))
+    return CamSpec(
+        lookat=((rx + cx) / 2.0, (ry + cy) / 2.0, rest_z),
+        azimuth=270.0,
+        elevation=-24.0,
+        distance=distance,
+    )
+
+
+def select_place_camspec(pose, extent, place_active: bool) -> "CamSpec | None":
+    """Place-framing CamSpec iff a PLACE has happened (``place_active``), else ``None``.
+
+    ``place_active`` is the GT signal that an object is at rest ON the receptacle
+    (``resting_on_receptacle() >= 1`` — the place-verdict oracle, read purely to AIM the camera).
+    It is place-SPECIFIC: on a fetch the object is in the gripper (not on the bin), so the caller
+    keeps the proven robot side-view — no fetch-frame regression. Robot position is NOT the gate:
+    a seq/combo place can leave the dog ~2 m from the bin, and the frame must still include the
+    receptacle (else ``workspace_in_frame=no`` ABSTAIN, R275/R278). ``extent`` is
+    ``(region, rest_z)`` from ``_place_receptacle_extent`` (region = ``(x_min,y_min,x_max,y_max)``).
+    Pure + fail-safe: not-active / missing input -> ``None``.
+    """
+    if not place_active or pose is None or extent is None:
+        return None
+    try:
+        region, rest_z = extent
+        cx = (float(region[0]) + float(region[2])) / 2.0
+        cy = (float(region[1]) + float(region[3])) / 2.0
+    except (TypeError, ValueError, IndexError):
+        return None
+    return place_view_camspec(pose, (cx, cy, float(rest_z)))
 
 
 def _free_cam(cam_spec: CamSpec):
@@ -124,12 +176,39 @@ def _base_pose(base):
 _STRIP_MAX_FRAMES = 60  # cap per-step strip renders so a very long turn can't churn GL unboundedly
 
 
-def _render_agent_frame(agent, path: str, *, cam_spec: "CamSpec | None" = None):
+def _maybe_place_camspec(agent, pose) -> "CamSpec | None":
+    """A receptacle-framing CamSpec when ``agent`` has PLACED an object on the scene's receptacle,
+    else ``None`` (keep the robot side-view). Reuses the world's SINGLE SOURCE OF TRUTH for both
+    the receptacle geometry (``_place_receptacle_extent`` — Rule 11 config-not-code) and the place
+    signal (``make_resting_on_receptacle`` — the SAME GT oracle the place verdict grades on), read
+    purely to AIM the camera. Fail-safe: any error (no receptacle, no sim, oracle refuses) ->
+    ``None``. READ-ONLY: it never touches the verdict (honesty — the camera can't manufacture a pass).
+    """
+    if pose is None:
+        return None
+    try:
+        from vector_os_nano.vcli.worlds.arm_sim_oracle import make_resting_on_receptacle
+        from vector_os_nano.vcli.worlds.robot import _place_receptacle_extent
+
+        extent = _place_receptacle_extent(agent)
+        if extent is None:
+            return None
+        region, rest_z = extent
+        place_active = make_resting_on_receptacle(agent, region, rest_z)() >= 1
+    except Exception:  # noqa: BLE001 — a framing hint must never sink the snapshot; robot view stands
+        return None
+    return select_place_camspec(pose, extent, place_active)
+
+
+def _render_agent_frame(agent, path: str, *, cam_spec: "CamSpec | None" = None,
+                        place_aware: bool = False):
     """Render a same-process third-person frame of ``agent._base`` to ``path`` from an ISOLATED qpos
     copy with a FRESH renderer on the CALLING thread (thread-safe vs the control thread — ADR-002
-    tricky Case 11). With ``cam_spec=None`` the camera TRACKS the robot (the single verdict frame);
-    pass a fixed ``cam_spec`` for the temporal strip. Returns the base pose ``(x, y, heading)``
-    (``(0,0,0)`` if unknown), or ``None`` when there is no connected sim. May raise — callers wrap.
+    tricky Case 11). With ``cam_spec=None`` the camera TRACKS the robot; pass a fixed ``cam_spec``
+    for the temporal strip. ``place_aware=True`` (the single VERDICT frame only) reframes to include
+    the receptacle when the robot is placing at it (E78) — the temporal strip stays robot-tracking so
+    its gait is readable. Returns the base pose ``(x, y, heading)`` (``(0,0,0)`` if unknown), or
+    ``None`` when there is no connected sim. May raise — callers wrap.
     """
     base = getattr(agent, "_base", None)
     if base is None:
@@ -141,7 +220,12 @@ def _render_agent_frame(agent, path: str, *, cam_spec: "CamSpec | None" = None):
 
     pose = _base_pose(base)
     if cam_spec is None:
-        if pose:
+        place_cam = _maybe_place_camspec(agent, pose) if place_aware else None
+        if place_cam is not None:
+            # A PLACE turn (robot AT the receptacle): frame robot + receptacle so the eyes judge
+            # sees the workspace (was cropped off-frame -> workspace_in_frame=no ABSTAIN, R278) → E78.
+            cam_spec = place_cam
+        elif pose:
             # SIDE view (az 270) for BOTH near and far — it shows the Go2 clearly UPRIGHT on four
             # legs. The default 3/4 view (az 135) reads the NEAR grasp's pitched-forward reach as
             # "robot lying / not upright" so the VLM judge FAILed every near frame (D142, verified
@@ -175,7 +259,9 @@ def snapshot_on_verdict(agent) -> str | None:
         os.makedirs(out_dir, exist_ok=True)
         stamp = os.environ.get("VECTOR_SNAPSHOT_TAG") or str(int(time.time() * 1000))
         path = os.path.join(out_dir, f"verdict_{stamp}.png")
-        return path if _render_agent_frame(agent, path) is not None else None
+        # place_aware: the single verdict frame reframes to include the receptacle on a place turn
+        # (E78); the temporal strip below stays robot-tracking for gait.
+        return path if _render_agent_frame(agent, path, place_aware=True) is not None else None
     except Exception:  # noqa: BLE001 — a snapshot must NEVER affect the turn / verdict
         return None
 
