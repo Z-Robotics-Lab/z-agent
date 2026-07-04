@@ -160,6 +160,30 @@ def test_wiring_rightmost_bottle_resolves_to_blue():
     assert hit == ("blue", "pickable_bottle_blue")
 
 
+# ---- R299/E90 regression: the yellow bottle (added R211, world-y=3.11) is now the
+# TRUE leftmost bottle, superseding the R209/R210 "SCENE_SWAP → leftmost=blue" expectation.
+# Among the live 3-bottle set {green 2.78, blue 3.00, yellow 3.11}, larger world-y ⇒ smaller
+# cx ⇒ more LEFT, so `最左边的瓶子` resolves to YELLOW — in BOTH baseline and swap (the swap
+# moves only blue↔green; the extreme yellow is unmoved, so the swap no longer probes
+# invariance). The skill-direct probe grasped yellow cleanly; the "regression" was a STALE BAR,
+# not a grasp-execution fault. This test would have flagged the expected-blue when yellow landed.
+_SCENE3 = {
+    "pickable_bottle_green": (2.0, 0.30, 0.32),
+    "pickable_bottle_blue": (2.0, 0.45, 0.32),
+    "pickable_bottle_yellow": (2.0, 0.60, 0.32),  # largest y ⇒ true leftmost
+}
+
+
+class _Scene3Arm:
+    def get_object_positions(self):
+        return dict(_SCENE3)
+
+
+def test_wiring_leftmost_is_yellow_not_blue_after_R211_scene_growth():
+    hit = _resolve_ordinal_via_catalog("把最左边的瓶子拿过来", _Scene3Arm(), _FakePerception())
+    assert hit is not None and hit[1] == "pickable_bottle_yellow"
+
+
 def test_wiring_no_ordinal_returns_none():
     assert _resolve_ordinal_via_catalog("把绿色的瓶子拿过来", _FakeArm(), _FakePerception()) is None
 

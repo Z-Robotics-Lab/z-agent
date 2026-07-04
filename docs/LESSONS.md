@@ -4,7 +4,7 @@ Append one line per lesson (round agents); review rounds consolidate. A line may
 only if its D#/E#/commit pointer resolves in the ledger or git. Details live at the pointer.
 
 ## Refuted (do NOT retry unless the stated condition changed)
-- fetch.nl-ordinal-position-invariance (最左边 under SCENE_SWAP) R210 GROUNDED 2/2 (age73) did NOT reproduce R284: N=2 both verified=False (run1 empty gripper UNCAUSED / run2 ended holding wrong YELLOW). Deterministic. Ordinal RESOLUTION intact (perception_grasp routed OK); grasp EXECUTION/stable-hold rotted. A "confirmed" green can rot silently → skeptic re-verify cadence works; sweep sibling stale fetch bars → E79.
+- fetch.nl-ordinal-position-invariance (最左边 under SCENE_SWAP) R210 GROUNDED 2/2 did NOT reproduce R284 (0/2). R299/E90 ROOT-CAUSED (skill-direct, swap + no-swap control): NOT grasp-exec rot — the R284 "grasp EXECUTION/stable-hold rotted" read was WRONG. Resolver+grasp are CORRECT: they grasp the TRUE leftmost bottle = YELLOW (y=3.11, image-leftmost since larger-y⇒smaller-cx), which was ADDED R211 AFTER this R209/R210 bar fixed leftmost=blue; yellow is UNMOVED by the swap so the swap no longer even probes invariance (answer=yellow both ways). STALE BAR, not code. R284's blue-verify was the BRAIN's guess; run1's empty gripper = brain thrash. Bar OBSOLETE (already superseded). Guard: test_ordinal_resolve.py::test_wiring_leftmost_is_yellow_not_blue_after_R211_scene_growth → E90/Case 17. A "confirmed" bar can rot silently → skeptic re-verify cadence works → E79.
 - "Model-sensitivity ceiling" on fetch was a HARNESS artifact, not the model — control the harness before concluding model capability → D171 refuted by D174.
 - "Red grasp-robustness ceiling" was a one-campaign transient (8/8 after); 0/3 in a single campaign is never a ceiling — re-run with the correct NL term + skill-direct probe → D172 refuted by D173/DEBUG.md.
 - "BYO-model over-caution blocks tool-calls" — refuted by a positive control; gemini/mistral no-tool-call is model behaviour, not plumbing (tools passed, llama tool-called same path) → D179 refuted by D180, fb6ae77.
@@ -145,6 +145,17 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 Compressed from docs/tricky-bugs.md (removed 2026-07-02); full original prose in git history.
 Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a green suite, or hid behind "every component correct in isolation". Routine bugs → git history.
 
+- **Case 17 (ordinal "grasp rotted" = a NEW object silently changed the answer, 2026-07-04)** —
+  fetch.nl-ordinal-position-invariance (`把最左边的瓶子` SCENE_SWAP) went GROUNDED 2/2 (R210) → REFUTED
+  0/2 (R284, logged as "held the WRONG yellow / grasp EXECUTION rotted"). Real cause (R299/E90, skill-
+  direct probe swap + no-swap control): resolver AND grasp are BOTH correct — they resolve `最左边的瓶子`
+  to YELLOW and grasp it cleanly in both configs. Yellow (world-y=3.11, larger-y ⇒ smaller image-cx ⇒
+  more LEFT than blue@3.0) was ADDED R211, AFTER the R209/R210 bar fixed "leftmost=blue" with only
+  green+blue present — so yellow silently BECAME the true leftmost, and being unmoved by the swap it
+  even masks the swap. R284's `verify holding(blue)` was the BRAIN's guess (a CAUSED verify attributes
+  the preceding action, not the skill's resolved target). Lesson: when an ORDINAL/relational NL bar
+  "regresses," re-derive the CURRENT referent from the live catalog first — a later-added object makes a
+  once-correct expected-target STALE with no resolver change; fix the bar/oracle, not the grasp. → E90
 - **Case 16 (ordinal "grasp miss" = handover-releases-hold, 2026-07-02)** — R194/R195 recorded the
   ordinal fetch `把最左边的瓶子拿过来` as a grasp-EXECUTION miss ("green knocked to the floor",
   verified=False), and 4 rounds chased grasp geometry / the ordinal→colour path. Real cause: the
@@ -226,26 +237,10 @@ Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a g
   (N,1)). Tell: `[GO2-PERCEPT] EdgeTAM unavailable — box-rect fallback` in the e2e log, NOT the A/B log.
   LESSON: when two runs of the SAME perception code disagree, suspect a SILENTLY-degrading optional model
   path before re-theorizing geometry; make segmenter-degrade LOUD; env-sync optional model deps.
-- **Case 5 (table-edge occlusion, 2026-06-20)** — on a tall pedestal (top z=0.28) the central GREEN rendered
-  0 px while RED/BLUE (same z/distance) were fine → looked like arm self-occlusion; but depth at green's
-  projected pixel read 3.708 m = the far doorway (camera saw THROUGH it). Root: the d435 (z~0.38, shallow
-  down-tilt) grazes the tabletop — objects within ~6 cm of the near TOP EDGE are occluded by the lip
-  (x≤10.82 → 0 px, x≥10.88 → ~1000 px). Fix: placement, objects ≥8 cm back (green at 10.88). LESSON: when
-  ONE identical object is invisible, sample DEPTH at its projected pixel — depth ≫ object distance means a
-  static-scene occluder.
-- **Case 4 (blob fusion, 2026-06-20)** — deictic grasp ~12 cm off (a 116px brown table sliver) only with the
-  Piper arm connected; 3 rounds chased self-occlusion. The arm only nudges the settle by mm, shifting WHICH
-  sliver wins an already-broken selection. Root: `front_object._SAT_MIN=140` is BELOW the table's saturation
-  (p90~146, max~160) → 1-3px chains FUSE cylinders+table into one blob → "most-central blob" grabs a sliver.
-  Fix: morphological OPENING (3×3) before connected-components; front=755px GREEN, grasp 2.3 cm (was 12.2).
-  LESSON: a threshold overlapping background is a connected-component TOPOLOGY bug — dump candidate blobs
-  (area/centroid/colour); fix the topology, not the threshold.
-- **Case 3 (dead PYTHONPATH, 2026-06, 13a9429)** — explore "worked" but on system python3 (mujoco 3.6)
-  instead of the repo venv (mujoco 3.9) where the MPC fix was verified: the uv rebuild renamed
-  `.venv-nano`→`.venv`; Python SILENTLY ignores nonexistent PYTHONPATH entries; hardcoded in 12+ scripts.
-  Fix: scripts prefer `.venv` with `.venv-nano` fallback, single source. LESSON: PYTHONPATH to a missing dir
-  fails silent — print `module.__file__` to verify WHICH copy loaded.
 ### Folded (oldest cases compressed to one line each; full prose in git at the hash)
+- **Case 3** (dead PYTHONPATH, 2026-06, 13a9429) — explore "worked" on system python3 (mujoco 3.6) not the repo `.venv` (3.9); Python silently ignores missing PYTHONPATH entries. LESSON: print `module.__file__` to verify WHICH copy loaded. → 13a9429
+- **Case 4** (blob fusion, 2026-06-20) — deictic grasp 12cm off (table sliver); `front_object._SAT_MIN=140` below table sat → 1-3px chains FUSE cylinders+table into one blob. LESSON: a threshold overlapping bg is a connected-component TOPOLOGY bug; morphological OPEN before components, not a threshold tweak.
+- **Case 5** (table-edge occlusion, 2026-06-20) — central GREEN 0px while RED/BLUE fine → depth at its pixel read 3.7m (saw THROUGH it): d435 lip occludes objects within ~6cm of the near top edge. LESSON: one identical object invisible → sample DEPTH at its projected pixel; depth ≫ distance = a static occluder.
 - **Case 0** (casadi missing, 2026-06-18) — [PASS]/odom-count/nav-flag all green but dog stays put; casadi
   omitted from the `[all]` extra, imported lazily → qp_fail 149/149 → zero torque. LESSON: NEVER certify
   motion from PASS/odom/nav — measure the position DELTA; hard deps ship in their install set or fail loud

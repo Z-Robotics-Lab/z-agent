@@ -40,5 +40,38 @@ directly → resolved (colour,label) = target-SELECTION; C runs PerceptionGraspS
 D reads holding_object for ALL 5 pickables = grasp-EXECUTION. Falsifies: H2 if B≠blue;
 H1/H3 if B=blue but D holds yellow/nothing; H4 if D holds blue cleanly.
 
+## EXPERIMENT RESULTS (skill-direct, VECTOR_SCENE_SWAP=1 then control no-swap)
+SWAP (var/evidence/R299/ord_swap_probe.log):
+- catalog: blue[10.88,3.0] green[10.9,2.78] yellow[10.9,3.11] (swap moved blue↔green only)
+- resolved (step B) = `(None, pickable_bottle_yellow)` — resolver picks YELLOW, not blue
+- held (step D) = yellow:True, all others False; skill_success=True, weld_formed=True,
+  grasp_world=[10.877,3.108,0.322]≈yellow. GRASP CLEAN.
+NO-SWAP control (ord_noswap_probe.log): resolved = YELLOW, held yellow:True, weld_formed. SAME.
+
 ## CONCLUDE
-(pending experiment)
+ROOT CAUSE: NOT grasp-execution and NOT a resolver bug — a SCENE-EVOLUTION STALE EXPECTATION.
+The resolver is CORRECT: among the 3 bottles {green, blue, yellow}, image-cx DECREASES as
+world-y INCREASES (E31/E33 baseline leftmost=green@y3.0 over blue@y2.78), so leftmost bottle =
+highest-y = YELLOW (y=3.11) in BOTH baseline and swap. Grasp-execution is CORRECT: it holds the
+resolved target (yellow) cleanly, weld formed, in both runs.
+The regression is an artifact of the BAR, not the code: the yellow bottle was ADDED at R211
+(y=3.11) — AFTER the ord-posinv bar was fixed at R209/R210 with only green+blue (then leftmost
+under swap = blue@y3.0). Yellow at 3.11 is more-left than blue at 3.0, so it silently became the
+true leftmost bottle. Worse, yellow is UNMOVED by the swap, so the swap no longer probes
+position-invariance at all (answer = yellow regardless). R284 "held wrong YELLOW" = the resolver
+correctly grasping the real leftmost; R284's blue verify was the BRAIN's guess, not the skill's
+resolution (my OBSERVE misread the CAUSED verify). R284 run1's empty gripper = a separate brain
+thrash (never completed a grasp), not a mechanism fault.
+Hypotheses: H1 REJECTED (grasp-exec correct). H3 REJECTED (blue central/imageable; yellow won on
+genuine cx, no fallback). H4 PARTIAL (run1 empty = brain; run2 yellow = correct resolver, not
+brain). H2 mechanism-CONFIRMED but REFRAMED: resolver picks yellow, and that is CORRECT for the
+current scene — the stale artifact is the bar's expected-blue.
+
+FIX/RESOLUTION (no code change to the spine): the bar `fetch.nl-ordinal-position-invariance` is
+OBSOLETE as written (already `superseded` on BOARD). Two honest options for a future ord-posinv
+probe: (a) EXCLUDE the unmoved yellow (query `最左边的瓶子` among only the swapped pair, or make
+the swap include yellow) so the swap actually flips the answer; (b) update the expected target to
+the true live leftmost (yellow) — but then it stops testing invariance. No grasp/perception fix
+is warranted; the mechanism grounds skill-direct 1/1 (+control 1/1).
+Regression guard: a unit test asserting `_resolve_ordinal_target` picks the highest-world-y bottle
+given the current 3-bottle catalog would have flagged the expected-blue as stale when yellow landed.
