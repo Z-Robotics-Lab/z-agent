@@ -116,3 +116,40 @@ def test_g1_stance_matches_default_angles_constant() -> None:
     assert len(_G1_STANCE_ORDER) == len(default_angles)
     for i, joint in enumerate(_G1_STANCE_ORDER):
         assert stance[joint] == pytest.approx(float(default_angles[i])), joint
+
+
+def test_g1_spawn_matches_driver_constants() -> None:
+    """Manifest spawn pose mirrors the driver's authoritative spawn/height consts.
+
+    The g1 manifest ``spawn`` header names _G1_SPAWN_X/_G1_SPAWN_Y/_G1_PELVIS_Z as
+    its source; drift either driver const and connect() would place the humanoid
+    somewhere the manifest no longer describes, with no test to catch it.
+    """
+    spawn = load_embodiment_config("g1").spawn
+    assert spawn.xy[0] == pytest.approx(g1._G1_SPAWN_X)
+    assert spawn.xy[1] == pytest.approx(g1._G1_SPAWN_Y)
+    assert spawn.base_height == pytest.approx(g1._G1_PELVIS_Z)
+
+
+def test_g1_lidar_offset_matches_driver() -> None:
+    """Manifest lidar mount offset mirrors _LIDAR_OFFSET_X / _LIDAR_OFFSET_Z.
+
+    The offset (pelvis-relative) sets where the beams originate; a silent drift
+    would make the manifest advertise a head-height sensor the driver no longer
+    mounts there.
+    """
+    lidar = next(s for s in load_embodiment_config("g1").sensors if s.role == "lidar")
+    assert lidar.pos[0] == pytest.approx(g1._LIDAR_OFFSET_X)
+    assert lidar.pos[2] == pytest.approx(g1._LIDAR_OFFSET_Z)
+
+
+def test_g1_policy_action_scale_and_nav_speed_match_driver() -> None:
+    """Manifest policy scalars E147 left uncovered — action_scale and nav_speed.
+
+    Both name a driver const in the manifest (``_ACTION_SCALE`` / ``_NAV_SPEED``)
+    yet the E147 policy-scalar guard checked neither, so a drifted RL action gain
+    or nav command speed would pass every existing test while the manifest lies.
+    """
+    spec = load_embodiment_config("g1").policy.spec
+    assert spec["action_scale"] == pytest.approx(g1._ACTION_SCALE)
+    assert spec["nav_speed"] == pytest.approx(g1._NAV_SPEED)
