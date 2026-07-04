@@ -2580,7 +2580,13 @@ def main(argv: list[str] | None = None) -> None:
                     )
 
                     # Execute async — CLI remains responsive
-                    def _on_vgg_complete(trace: Any) -> None:
+                    # `_user_input` freezes the triggering command at def-time
+                    # (B023): this closure runs on a BACKGROUND thread after the
+                    # REPL has read the NEXT input, so a free capture of the loop
+                    # variable `user_input` would record the wrong user turn.
+                    def _on_vgg_complete(
+                        trace: Any, _user_input: str = user_input
+                    ) -> None:
                         n_steps = len(trace.steps)
                         n_ok = sum(1 for s in trace.steps if s.success)
                         dur = trace.total_duration_sec
@@ -2631,7 +2637,7 @@ def main(argv: list[str] | None = None) -> None:
                             + (f" ({s.error})" if s.error else "")
                             for s in trace.steps
                         )
-                        session.append_user(user_input)
+                        session.append_user(_user_input)
                         session.append_assistant(
                             f"[VGG executed]\nGoal: {trace.goal_tree.goal}\n"
                             f"Result: {'success' if trace.success else 'partial failure'}\n"
