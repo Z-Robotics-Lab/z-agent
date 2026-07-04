@@ -35,7 +35,7 @@
 | quantity-place.nl-isolation | refuted | REFUTED 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 38 | pending |
 | quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 105 | pending |
 | runner.degenerate-spin-guard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 1 | pending |
-| runner.degenerate-spin-guard.no-regression | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 31 | pending |
+| runner.degenerate-spin-guard.no-regression | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | self-read | 0 | pending |
 | verify.eyes-place-judge-fires | confirmed | JUDGE-FIRES 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 13 | pending |
 | verify.eyes-vlm-judge-place | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 1 | pending |
 | verify.eyes-vlm-judge-wired | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 3 | pending |
@@ -140,3 +140,4 @@
 - E99 R309 [inconclusive] finish-on-fail quantity guardrail (resting_on_receptacle()>=N FAIL -> refuse finish+nudge to place obj-2) had NO loop-level test; only exercised by flaky ~15min sim (E38/E72/E96). — retry only if: native_loop finish-on-fail guard refactored
 - E100 R309 [inconclusive] STATUS framed the E96 quantity-decompose gap as the one non-gated build left. True, or is closing it CEO-gated? — retry only if: owner approves planner-plugin / D182 gate
 - E101 R310 [confirmed] R310 §7: do the 2 oldest confirmed BOARD rows (both age32, STALE by an R308/R309 supervisor clock-tick not regression) still hold on the REAL face? — retry only if: a stale row regresses on the real face, or owner unblocks S4/D182/D76
+- E102 R311 [confirmed] R311 opened with 2 newly-STALE age31 rows, both R280-derived (novel-geometry-purple-box + degenerate.no-regression), from the R310 append clock-tick — NOT an R310 miss: both were age30 at R310's commit. — retry only if: degenerate base regresses, or novel-geometry purple fetch regresses to RAN
