@@ -29,6 +29,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from vector_os_nano.embodiments import load_embodiment_config
@@ -75,6 +76,17 @@ g1 = pytest.importorskip(
     "vector_os_nano.hardware.sim.mujoco_g1",
     reason="mujoco binding required to read the g1 driver's authoritative constants",
 )
+piper = pytest.importorskip(
+    "vector_os_nano.hardware.sim.mujoco_piper",
+    reason="mujoco binding required to read the piper driver's authoritative constants",
+)
+piper_gripper = pytest.importorskip(
+    "vector_os_nano.hardware.sim.mujoco_piper_gripper",
+    reason="mujoco binding required to read the piper gripper driver's constant",
+)
+# The ROS2 proxy imports only numpy + stdlib at module load (rclpy is lazy), so it
+# imports cleanly with or without the mujoco binding.
+from vector_os_nano.hardware.sim import piper_ros2_proxy as piper_proxy  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -249,3 +261,56 @@ def test_g1_policy_action_scale_and_nav_speed_match_driver() -> None:
     spec = load_embodiment_config("g1").policy.spec
     assert spec["action_scale"] == pytest.approx(g1._ACTION_SCALE)
     assert spec["nav_speed"] == pytest.approx(g1._NAV_SPEED)
+
+
+# ---------------------------------------------------------------------------
+# piper arm — the ROS2 proxy's constant block mirrors the in-process driver
+# ---------------------------------------------------------------------------
+
+# ``piper_ros2_proxy.py`` opens its constants with the standing promise
+# "Constants (duplicate of MuJoCoPiper's — kept in sync)": the ROS2 proxy
+# hardcodes its OWN copy of the driver's IK/joint/site constants so its
+# blocking-IK path behaves identically to the in-process ``MuJoCoPiper``. The
+# E158 guard covered only ``_BODY_SENSOR_DX/_DZ`` (a mirror of the go2 *lidar*
+# offset, a different vein); the rest of the "kept in sync" block — joint names,
+# EE site, every IK convergence scalar, the top-down rotation + seeds, the home
+# pose, and the move rate — was pinned by comment ALONE. Drift any one (e.g.
+# tighten the driver's ``_IK_POS_TOL`` for better grasps, or rename a joint in
+# the MJCF and update only the driver) and the proxy would solve a DIFFERENT arm
+# pose than the in-process sim it claims to mirror, silently, with no red test.
+# Each tuple is (proxy attribute, authority module, authority attribute).
+_PIPER_PROXY_MIRRORS: tuple[tuple[str, object, str], ...] = (
+    ("_ARM_JOINT_NAMES", piper, "_ARM_JOINT_NAMES"),
+    ("_EE_SITE_NAME", piper, "_EE_SITE_NAME"),
+    ("_GRIPPER_JOINT_NAME", piper_gripper, "_JOINT_NAME"),
+    ("_IK_MAX_ITER", piper, "_IK_MAX_ITER"),
+    ("_IK_POS_TOL", piper, "_IK_POS_TOL"),
+    ("_IK_ROT_TOL", piper, "_IK_ROT_TOL"),
+    ("_IK_STEP_SIZE", piper, "_IK_STEP_SIZE"),
+    ("_IK_DAMPING", piper, "_IK_DAMPING"),
+    ("_R_TOP_DOWN", piper, "_R_TOP_DOWN"),
+    ("_IK_TOP_DOWN_SEEDS", piper, "_IK_TOP_DOWN_SEEDS"),
+    ("_HOME_JOINTS", piper, "_HOME_JOINTS"),
+    ("_MOVE_UPDATE_HZ", piper, "_MOVE_UPDATE_HZ"),
+)
+
+
+def test_piper_proxy_constants_mirror_driver() -> None:
+    """Every "kept in sync" proxy constant must equal its driver authority.
+
+    Reads both live module attributes (both import ROS2-free / sim-free) and
+    asserts equality, so a drift the E158 sensor-offset guard cannot see becomes
+    a red unit test. Missing constants fail loudly, so a rename on either side
+    can never silently disable the guard.
+    """
+    for proxy_name, authority_mod, authority_name in _PIPER_PROXY_MIRRORS:
+        assert hasattr(piper_proxy, proxy_name), f"proxy lost {proxy_name}"
+        assert hasattr(authority_mod, authority_name), (
+            f"authority {authority_mod.__name__} lost {authority_name}"
+        )
+        got = getattr(piper_proxy, proxy_name)
+        want = getattr(authority_mod, authority_name)
+        if isinstance(want, np.ndarray) or isinstance(got, np.ndarray):
+            assert np.array_equal(np.asarray(got), np.asarray(want)), proxy_name
+        else:
+            assert got == want, proxy_name
