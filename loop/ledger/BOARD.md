@@ -18,7 +18,7 @@
 | fetch.nl-new-world-warehouse-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 7 | pending |
 | fetch.nl-new-world-warehouse-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 7 | pending |
 | fetch.nl-new-world-warehouse-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 7 | pending |
-| fetch.nl-novel-geometry-purple-box | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 31 | pending |
+| fetch.nl-novel-geometry-purple-box | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 0 | pending |
 | fetch.nl-novel-object-yellow | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 57 | pending |
 | fetch.nl-ordinal-position-invariance | superseded | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 24 | pending |
 | fetch.nl-ordinal-spatial | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 43 | pending |
