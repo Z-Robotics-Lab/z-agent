@@ -23,6 +23,7 @@ from tools.acceptance.vlm_guard import (
     TRACE_ENV_VAR,
     VLM_BILLING_402_MARKER,
     VLMConfoundError,
+    budget_timeout,
     detect_perception_402,
     repl_cli_argv,
     resolve_judge_env,
@@ -231,3 +232,42 @@ class TestPersistEvidence:
         first = persist_evidence(str(snap), str(dest))
         second = persist_evidence(str(snap), str(dest))  # re-run must not raise / duplicate
         assert first == second
+
+
+class TestBudgetTimeout:
+    """Round-deadline-aware clamp on the harness's long per-turn expect() timeouts (R296/E87).
+
+    Root cause of the R294->R296 breakage: repl_accept's quantity path waits ``timeout=600``s
+    (x2) blind to ROUND_DEADLINE_EPOCH. A brain thrash that never emits ``grounded)`` runs the
+    FULL wait; when the round deadline lands mid-wait the supervisor moves on but the harness
+    keeps waiting under its own systemd scope, ORPHANING the vcli+MuJoCo sim into the next round
+    (observed: ~11min leaked sim -> next round's sim-live warning + stale-BOARD quarantine).
+    Clamping the wait to ``deadline - margin`` guarantees the harness reaches its ``finally``
+    teardown BEFORE the round ends. Pure/offline — ``now``/``deadline`` are injected ints.
+    """
+
+    def test_no_deadline_passes_default_through(self) -> None:
+        # Interactive run (no supervisor): byte-compatible with the historical fixed timeout.
+        assert budget_timeout(600, now=1000, deadline_epoch=0) == 600
+        assert budget_timeout(600, now=1000, deadline_epoch=None) == 600
+
+    def test_ample_budget_keeps_default(self) -> None:
+        # Deadline an hour out: min(default, remaining-margin) == default.
+        assert budget_timeout(600, now=1000, deadline_epoch=1000 + 3600) == 600
+
+    def test_tight_budget_clamps_below_default(self) -> None:
+        # 200s to deadline, 120s margin -> 80s budget < 600 default.
+        assert budget_timeout(600, now=1000, deadline_epoch=1000 + 200, margin=120) == 80
+
+    def test_past_deadline_returns_floor_not_negative(self) -> None:
+        # Already past (deadline-margin): never a zero/negative expect; fail fast at the floor.
+        assert budget_timeout(600, now=1000, deadline_epoch=1000 + 30, margin=120, floor=15) == 15
+        assert budget_timeout(600, now=2000, deadline_epoch=1000, margin=120, floor=15) == 15
+
+    def test_floor_is_respected_at_the_boundary(self) -> None:
+        # remaining-margin exactly == floor -> floor (>= floor branch), and one below -> floor.
+        assert budget_timeout(600, now=1000, deadline_epoch=1135, margin=120, floor=15) == 15
+        assert budget_timeout(600, now=1000, deadline_epoch=1134, margin=120, floor=15) == 15
+
+    def test_never_exceeds_default_even_with_huge_budget(self) -> None:
+        assert budget_timeout(300, now=0, deadline_epoch=10**9) == 300

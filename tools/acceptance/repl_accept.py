@@ -40,6 +40,7 @@ if ROOT not in sys.path:
 from tools.acceptance.vlm_guard import (  # noqa: E402
     VLM_BILLING_402_MARKER,
     VLMConfoundError,
+    budget_timeout,
     detect_perception_402,
     persist_evidence,
     repl_cli_argv,
@@ -47,6 +48,23 @@ from tools.acceptance.vlm_guard import (  # noqa: E402
     resolve_judge_env,
     resolve_local_vlm_env,
 )
+
+# Round-deadline-aware verdict-expect budget (R296/E87). A brain thrash that never emits
+# `grounded)` must not out-wait the round and orphan its sim into the next round's quarantine.
+# `_texp(default)` clamps the long per-turn expect to `deadline - margin` so the `finally`
+# teardown (rosm nuke) always runs BEFORE the deadline. No ROUND_DEADLINE_EPOCH (interactive)
+# -> the default is returned unchanged (byte-compatible with the historical fixed timeouts).
+_DEADLINE = int(os.environ.get("ROUND_DEADLINE_EPOCH", 0) or 0)
+
+
+def _texp(default: int) -> int:
+    """Budget-clamped expect timeout; logs when the round deadline shortens the wait."""
+    t = budget_timeout(default, time.time(), _DEADLINE)
+    if t < default:
+        print(f"[driver] verdict-expect timeout CLAMPED {default}s -> {t}s "
+              f"(round deadline in {_DEADLINE - int(time.time())}s; teardown-safe)", flush=True)
+    return t
+
 
 FETCH = sys.argv[1] if len(sys.argv) > 1 else "把绿色的瓶子拿过来"
 PLACE = sys.argv[2] if len(sys.argv) > 2 else "把绿色的瓶子放到架子上"
@@ -371,7 +389,7 @@ try:
     if MODE in ("both", "fetch"):
         print("\n[driver] FETCH turn...", flush=True)
         child.sendline(FETCH)
-        child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=300)
+        child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=_texp(300))
         _abort_on_vlm_402(SNAP)
         # E70 fix (R273): drain to the SETTLED post-verdict state BEFORE the eyes/judge
         # frame. snapshot_on_verdict writes verdict_*.png slightly AFTER the `grounded)`
@@ -384,7 +402,7 @@ try:
     if MODE in ("both", "place"):
         print("\n[driver] PLACE turn...", flush=True)
         child.sendline(PLACE)
-        child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=300)
+        child.expect([r"grounded\)", _VLM_402_PAT, pexpect.TIMEOUT], timeout=_texp(300))
         _abort_on_vlm_402(SNAP)
         # E70 fix (R273): SAME race as fetch — the place verdict PNG lands just AFTER the
         # marker. Drain to settled BEFORE the eyes/judge frame so the judge grades the REAL
@@ -417,10 +435,10 @@ try:
         print("\n[driver] QUANTITY turn (single N-object place utterance)...", flush=True)
         child.sendline(FETCH)
         n_verdicts = 0
-        if child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=600) == 0:
+        if child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=_texp(600)) == 0:
             n_verdicts += 1
             while n_verdicts < 6:
-                idx = child.expect([r"grounded\)", r"vector>", pexpect.TIMEOUT], timeout=600)
+                idx = child.expect([r"grounded\)", r"vector>", pexpect.TIMEOUT], timeout=_texp(600))
                 if idx == 0:
                     n_verdicts += 1
                 else:
@@ -446,7 +464,7 @@ try:
                               _clean_log(snap))
         print("\n[driver] SEQ turn 1 (place object 1)...", flush=True)
         child.sendline(FETCH)
-        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
+        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=_texp(300))
         drain_until_quiet(child, quiet=3.0, max_wait=120)
         _abort_on_vlm_402(SNAP)
         _eyes_frame(SNAP, "seq1")
@@ -454,7 +472,7 @@ try:
         print(f"\n[driver] SEQ turn 1 done — {n1} verdict(s) so far", flush=True)
         print("\n[driver] SEQ turn 2 (place object 2, after object 1 already placed)...", flush=True)
         child.sendline(PLACE)
-        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=300)
+        child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=_texp(300))
         drain_until_quiet(child, quiet=3.0, max_wait=120)
         _eyes_frame(SNAP, "seq2")
         allv = _verds(SNAP)

@@ -34,6 +34,38 @@ _OLLAMA_TAGS_URL: str = "http://localhost:11434/api/tags"
 # The distinct, greppable marker the driver prints when it aborts on a perception 402.
 VLM_BILLING_402_MARKER: str = "VLM-BILLING-402"
 
+# Round-deadline safety margin + floor for the harness's per-turn expect() clamp (R296/E87).
+_BUDGET_MARGIN_S: int = 120  # leave >=2min after the last expect for finally teardown (rosm nuke)
+_BUDGET_FLOOR_S: int = 15    # never a zero/negative expect — a turn about to ground gets a window
+
+
+def budget_timeout(default, now, deadline_epoch, *, margin=_BUDGET_MARGIN_S,
+                   floor=_BUDGET_FLOOR_S) -> int:
+    """Clamp a long ``pexpect.expect()`` timeout to the round's remaining wall-clock budget.
+
+    Root cause of the R294->R296 breakage: ``repl_accept`` waits ``timeout=600``s (x2 in the
+    quantity path) BLIND to ``ROUND_DEADLINE_EPOCH``. A brain thrash that never emits
+    ``grounded)`` runs the FULL wait; when the round deadline lands mid-wait the supervisor
+    moves on but the harness keeps waiting under its own systemd scope — ORPHANING the
+    vcli+MuJoCo sim into the next round (observed ~11min leaked sim -> the next round's
+    sim-live warning + a stale-BOARD quarantine). Bounding the wait to ``deadline - margin``
+    guarantees the harness reaches its ``finally`` teardown (``rosm nuke``) BEFORE the round
+    ends, so a leaked sim can't span rounds.
+
+    Pure: ``now`` / ``deadline_epoch`` are injected epoch seconds (the driver passes
+    ``time.time()`` / ``ROUND_DEADLINE_EPOCH``).
+      - ``deadline_epoch`` falsy (interactive, no supervisor) -> ``default`` unchanged
+        (byte-compatible with the historical fixed timeouts).
+      - else -> ``min(default, remaining - margin)``, never below ``floor`` (already past the
+        margin -> ``floor``, so the expect fails fast and the sim is torn down, not orphaned).
+    """
+    if not deadline_epoch:
+        return int(default)
+    budget = int(deadline_epoch) - int(now) - int(margin)
+    if budget < floor:
+        return int(floor)
+    return int(min(int(default), budget))
+
 # Signature is UNIQUE to the perception VLM: ``OpenRouter API client error <4xx>`` is raised
 # ONLY by vector_os_nano/perception/vlm_go2.py:_call_vlm on a non-retried 4xx. The planner
 # brain's own 402 uses a different string ("402 balance cap") and RECOVERS by downshifting
