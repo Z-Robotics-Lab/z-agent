@@ -11,13 +11,13 @@
 | fetch-place.nl-compound | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 40 | pending |
 | fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 36 | pending |
 | fetch.nl-new-world-courtyard | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 16 | pending |
-| fetch.nl-new-world-courtyard-blue | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 15 | pending |
+| fetch.nl-new-world-courtyard-blue | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch.nl-new-world-courtyard-purple | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 14 | pending |
 | fetch.nl-new-world-courtyard-red | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 14 | pending |
 | fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 17 | pending |
-| fetch.nl-new-world-warehouse-blue | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 1 | pending |
-| fetch.nl-new-world-warehouse-purple | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 1 | pending |
-| fetch.nl-new-world-warehouse-red | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 1 | pending |
+| fetch.nl-new-world-warehouse-blue | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
+| fetch.nl-new-world-warehouse-purple | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
+| fetch.nl-new-world-warehouse-red | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 24 | pending |
 | fetch.nl-novel-object-yellow | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 50 | pending |
 | fetch.nl-ordinal-position-invariance | superseded | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 17 | pending |
@@ -133,3 +133,4 @@
 - E70 R272 [refuted] A PLACE-mode run promotes verify.eyes-vlm-judge-wired AND extends the vlm-judge witness to place mode. — retry only if: n/a
 - E72 R273 [refuted] STATUS next#1 (deadline-crit): a DEDICATED clean seq re-run (turn1蓝 turn2红, avoiding green) re-confirms or supersedes quantity-place.nl-isolation (R270 provisional). — retry only if: n/a
 - E93 R303 [inconclusive] STATUS next#1: upgrade last STALE self-read warehouse FETCH colour bars (blue/purple/red age~62-63) self-read->vlm-judge, bare face, Inv.1 stricter-only, mirroring R301->R302 place eyes upgrade. — retry only if: promote 3 provisionals->confirmed next round on N>=2; funded qwen3-vl judge replaces ABSTAIN with trusted PASS
+- E94 R304 [confirmed] STATUS next#1+#2: promote 3 R303 warehouse-fetch vlm-judge provisionals->confirmed (E46 N>=2 boundary); upgrade last self-read non-house fetch bar courtyard-blue->vlm-judge. — retry only if: a warehouse colour regresses to RAN; promote courtyard-blue N>=2 next round
