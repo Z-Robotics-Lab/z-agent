@@ -185,3 +185,4 @@
 {"schema":1,"ts":1783204832,"round":"R368","kind":"build","exit":0,"post_check":"ok","commit":"6098b35","dur_s":495}
 {"schema":1,"ts":1783205132,"round":"R369","kind":"build","exit":1,"post_check":"quarantined","commit":"6098b35","dur_s":180}
 {"schema":1,"ts":1783205884,"round":"R370","kind":"review","exit":0,"post_check":"ok","commit":"e12832c","dur_s":632}
+{"schema":1,"ts":1783206630,"round":"R371","kind":"build","exit":0,"post_check":"ok","commit":"4436dc0","dur_s":626}

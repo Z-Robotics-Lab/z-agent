@@ -314,3 +314,65 @@ def test_piper_proxy_constants_mirror_driver() -> None:
             assert np.array_equal(np.asarray(got), np.asarray(want)), proxy_name
         else:
             assert got == want, proxy_name
+
+
+# ---------------------------------------------------------------------------
+# SO-101 home-pose value chain (Inv-1 verify moat).
+#
+# The home pose is the SO-101 rest configuration, copied into several
+# module-level literals: the config default (the RUNTIME AUTHORITY the home
+# skill actually commands via context.config["skills"]["home"]["joint_values"],
+# falling back to the skill literal only when a user omits the key), the verify
+# oracle ``arm_sim_oracle._HOME_JOINTS`` (what ``arm_at_home()`` grades against —
+# the moat), and four skill fallbacks (``_DEFAULT_HOME_JOINTS`` in
+# home/pick/place/handover).
+#
+# test_playground_predicates.py already pins oracle == home-fallback, but
+# NOTHING pinned either to the config AUTHORITY: edit config's joint_values (the
+# pose the arm truly goes to) without touching the fallback and the arm reaches a
+# DIFFERENT pose than the oracle grades — a silent Inv-1 breach with no red test.
+# test_config.py::test_default_home_joint_values checks only len/type, not the
+# value. This guard pins every copy to the config authority.
+#
+# scan._DEFAULT_SCAN_JOINTS shares the value TODAY but is a DISTINCT semantic
+# pose (scan != home) that may legitimately diverge, so it is deliberately
+# EXCLUDED — pinning it would encode a false invariant.
+# ---------------------------------------------------------------------------
+_HOME_POSE_FALLBACK_MODULES: tuple[tuple[str, str], ...] = (
+    ("vector_os_nano.skills.home", "_DEFAULT_HOME_JOINTS"),
+    ("vector_os_nano.skills.pick", "_DEFAULT_HOME_JOINTS"),
+    ("vector_os_nano.skills.place", "_DEFAULT_HOME_JOINTS"),
+    ("vector_os_nano.skills.handover", "_DEFAULT_HOME_JOINTS"),
+)
+
+
+def test_so101_home_pose_chain_mirrors_config_authority() -> None:
+    """Every SO-101 home-pose copy must equal the config runtime authority.
+
+    The verify oracle grades ``arm_at_home()`` against ``_HOME_JOINTS``; the arm
+    is actually commanded to ``config["skills"]["home"]["joint_values"]``. If the
+    two drift the moat silently grades the wrong pose, so this pins the oracle AND
+    the four skill fallbacks to the config authority. Missing attributes fail
+    loudly, so a rename cannot silently disable the guard.
+    """
+    import importlib
+
+    from vector_os_nano.core.config import load_config
+    from vector_os_nano.vcli.worlds.arm_sim_oracle import _HOME_JOINTS as oracle_home
+
+    authority = load_config()["skills"]["home"]["joint_values"]
+    assert isinstance(authority, list) and authority, (
+        "config lost the home joint_values authority"
+    )
+
+    # The moat: the oracle must grade against the pose the arm is truly commanded to.
+    assert list(oracle_home) == list(authority), (
+        "arm_sim_oracle._HOME_JOINTS drifted from the config home authority"
+    )
+
+    for mod_name, attr in _HOME_POSE_FALLBACK_MODULES:
+        mod = importlib.import_module(mod_name)
+        assert hasattr(mod, attr), f"{mod_name} lost {attr}"
+        assert list(getattr(mod, attr)) == list(authority), (
+            f"{mod_name}.{attr} drifted from the config home authority"
+        )
