@@ -15,9 +15,9 @@
 | fetch.nl-new-world-courtyard-purple | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 13 | pending |
 | fetch.nl-new-world-courtyard-red | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 13 | pending |
 | fetch.nl-new-world-warehouse | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 16 | pending |
-| fetch.nl-new-world-warehouse-blue | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 64 | pending |
-| fetch.nl-new-world-warehouse-purple | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 63 | pending |
-| fetch.nl-new-world-warehouse-red | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 63 | pending |
+| fetch.nl-new-world-warehouse-blue | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
+| fetch.nl-new-world-warehouse-purple | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
+| fetch.nl-new-world-warehouse-red | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch.nl-novel-geometry-purple-box | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 23 | pending |
 | fetch.nl-novel-object-yellow | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 49 | pending |
 | fetch.nl-ordinal-position-invariance | superseded | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 16 | pending |
@@ -132,3 +132,4 @@
 - E65 R268 [refuted] next#2 hygiene: adopt R266->R267 inflight; stale fetch.nl-ordinal-spatial (age69, R197 2/2) reproduces on bare face (v4-flash+gemma4:e4b) via MODE=fetch leftmost-bottle. — retry only if: ordinal grounding made scene-derived AND re-earned via fresh round-boundary + red-team like R197.
 - E70 R272 [refuted] A PLACE-mode run promotes verify.eyes-vlm-judge-wired AND extends the vlm-judge witness to place mode. — retry only if: n/a
 - E72 R273 [refuted] STATUS next#1 (deadline-crit): a DEDICATED clean seq re-run (turn1蓝 turn2红, avoiding green) re-confirms or supersedes quantity-place.nl-isolation (R270 provisional). — retry only if: n/a
+- E93 R303 [inconclusive] STATUS next#1: upgrade last STALE self-read warehouse FETCH colour bars (blue/purple/red age~62-63) self-read->vlm-judge, bare face, Inv.1 stricter-only, mirroring R301->R302 place eyes upgrade. — retry only if: promote 3 provisionals->confirmed next round on N>=2; funded qwen3-vl judge replaces ABSTAIN with trusted PASS
