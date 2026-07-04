@@ -26,9 +26,43 @@ is absent the driver import is skipped, never a false red.
 """
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import pytest
 
 from vector_os_nano.embodiments import load_embodiment_config
+
+# Repo root, four parents up from tests/unit/embodiments/<this file>.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _read_module_float_const(path: Path, name: str) -> float:
+    """Return the float value of a top-level ``name = <number>`` assignment.
+
+    Reads the value by parsing the source with :mod:`ast` — the module is NEVER
+    imported, so a module that pulls ROS2 / a sim binding at import time (e.g. the
+    vnav bridge) can still have its plain literal constants asserted in a
+    ROS2-free, sim-free unit test. Fails loudly if the constant is missing or is
+    not a numeric literal, so a rename can never silently disable the guard.
+    """
+    if not path.exists():
+        raise AssertionError(f"expected source file not found: {path}")
+    tree = ast.parse(path.read_text(), filename=str(path))
+    for node in tree.body:
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        elif isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        else:
+            continue
+        if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+            value = node.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, (int, float)):
+                return float(value.value)
+            raise AssertionError(f"{name} in {path.name} is not a numeric literal")
+    raise AssertionError(f"{name} not found as a top-level constant in {path.name}")
 
 # The drivers import the ``mujoco`` python binding at module load. That is a
 # cheap, sim-free import; skip cleanly if the binding is unavailable so the guard
@@ -91,6 +125,27 @@ def test_go2_lidar_offset_matches_driver() -> None:
     lidar = next(s for s in load_embodiment_config("go2").sensors if s.role == "lidar")
     assert lidar.pos[0] == pytest.approx(go2._LIDAR_OFFSET_X)
     assert lidar.pos[2] == pytest.approx(go2._LIDAR_OFFSET_Z)
+
+
+def test_go2_vnav_bridge_sensor_offset_matches_driver() -> None:
+    """The vnav bridge's _SENSOR_X/_SENSOR_Z mirror the driver's lidar offset.
+
+    ``scripts/go2_vnav_bridge.py`` publishes the lidar point-cloud at
+    ``_SENSOR_X/_SENSOR_Y/_SENSOR_Z`` with a comment "Must match mujoco_go2.py
+    _LIDAR_OFFSET". This is a THIRD downstream mirror of the driver const (after
+    the manifest, guarded above) and the last one E149 left comment-pinned only:
+    a drifted driver ``_LIDAR_OFFSET`` would make the bridge advertise the SLAM
+    point-cloud from an origin the driver no longer casts from, silently, with no
+    red test. The bridge imports rclpy + MuJoCoGo2 at module load, so we read its
+    literals with ast (no import), keeping the guard ROS2-free and sim-free.
+    """
+    bridge = _REPO_ROOT / "scripts" / "go2_vnav_bridge.py"
+    assert _read_module_float_const(bridge, "_SENSOR_X") == pytest.approx(
+        go2._LIDAR_OFFSET_X
+    )
+    assert _read_module_float_const(bridge, "_SENSOR_Z") == pytest.approx(
+        go2._LIDAR_OFFSET_Z
+    )
 
 
 # ---------------------------------------------------------------------------
