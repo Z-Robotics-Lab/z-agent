@@ -132,6 +132,114 @@ def test_no_domain_world_leaks_from_the_worlds_seam() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Invariant 4 — ALLOWLIST guard (denylist ``_CONCRETE_WORLD_MARKERS`` is
+# stale-prone: a brand-new ``worlds/<newthing>.py`` concrete world escapes it
+# silently, exactly the hardcoded-list failure mode fixed for the verdict
+# contracts in E152/E153). The robust complement flips the polarity: importing
+# the kernel/CLI must leak NOTHING under ``vcli.worlds.*`` except the explicit
+# SEAM allowlist. Any future concrete world/oracle that leaks goes RED with no
+# marker edit required. Ground truth = the import graph the actor cannot author;
+# strictly STRICTER than the denylist (Invariant 1 — the moat only tightens).
+# ---------------------------------------------------------------------------
+
+# The ONLY ``vcli.worlds`` modules the kernel/CLI may eagerly load: the package
+# itself (a PEP 562 lazy ``__getattr__`` shim — no concrete world at load) and
+# the two seam modules (base = the World Protocol, registry = discovery). Every
+# other ``vcli.worlds.*`` module is a concrete world or an embodiment oracle and
+# must load ONLY on resolution.
+_WORLDS_SEAM_ALLOWLIST = frozenset(
+    {
+        "vector_os_nano.vcli.worlds",
+        "vector_os_nano.vcli.worlds.base",
+        "vector_os_nano.vcli.worlds.registry",
+    }
+)
+
+_WORLDS_SUBMODULE_PROBE = r"""
+import sys
+import {module}
+loaded = sorted(
+    m for m in sys.modules
+    if m == "vector_os_nano.vcli.worlds"
+    or m.startswith("vector_os_nano.vcli.worlds.")
+)
+print("\n".join(loaded))
+"""
+
+
+def _worlds_modules_loaded_by_importing(module: str) -> list[str]:
+    """Every ``vcli.worlds*`` module present after importing *module* clean.
+
+    Fresh interpreter, so the answer reflects a pristine ``sys.modules`` rather
+    than whatever the pytest session already imported.
+    """
+    probe = _WORLDS_SUBMODULE_PROBE.format(module=module)
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"probe import of {module!r} failed:\n{result.stderr}"
+    )
+    return [ln for ln in result.stdout.splitlines() if ln.strip()]
+
+
+def _worlds_leak_outside_seam(module: str) -> tuple[list[str], list[str]]:
+    """Return ``(all_loaded, outside_seam)`` for a clean import of *module*."""
+    loaded = _worlds_modules_loaded_by_importing(module)
+    outside = [m for m in loaded if m not in _WORLDS_SEAM_ALLOWLIST]
+    return loaded, outside
+
+
+def test_kernel_import_leaks_no_worlds_module_outside_the_seam() -> None:
+    """Kernel import loads ONLY the seam — auto-covers future worlds (Invariant 4).
+
+    Unlike the denylist above, this catches a concrete world with ANY name (a new
+    ``worlds/mars_rover.py`` or a new ``*_oracle.py``) without editing a marker
+    list — the guard tracks the actual package, not a memorised enumeration.
+    """
+    loaded, outside = _worlds_leak_outside_seam("vector_os_nano.vcli.engine")
+    # Anti-vacuous: the seam MUST have loaded (proves the probe ran and the
+    # import graph was actually walked — an empty result is only meaningful when
+    # we know imports happened).
+    assert loaded, "probe loaded no vcli.worlds module at all — import likely failed"
+    assert outside == [], (
+        "importing the kernel engine eagerly loaded a NON-seam vcli.worlds "
+        f"module {outside!r}; only the seam {sorted(_WORLDS_SEAM_ALLOWLIST)} may "
+        "load at kernel import — concrete worlds/oracles load on resolution "
+        "(Invariant 4, allowlist guard)"
+    )
+
+
+def test_cli_entry_import_leaks_no_worlds_module_outside_the_seam() -> None:
+    """The acceptance-face CLI entry loads ONLY the seam (Invariant 4, allowlist)."""
+    loaded, outside = _worlds_leak_outside_seam("vector_os_nano.vcli.cli")
+    assert loaded, "probe loaded no vcli.worlds module at all — import likely failed"
+    assert outside == [], (
+        "importing the CLI entry module eagerly loaded a NON-seam vcli.worlds "
+        f"module {outside!r}; the acceptance-face entry point must stay world-free "
+        "until a world is resolved (Invariant 4, allowlist guard)"
+    )
+
+
+def test_allowlist_guard_fires_on_a_real_concrete_world_leak() -> None:
+    """DISCRIM (live, no mock): importing a real concrete world DOES trip the guard.
+
+    Proves the allowlist assertion is not vacuously green. ``worlds.dev`` is a
+    genuine concrete world; importing it must surface a non-seam module — so a
+    real kernel-side leak of any concrete world would be caught identically.
+    """
+    loaded, outside = _worlds_leak_outside_seam("vector_os_nano.vcli.worlds.dev")
+    assert "vector_os_nano.vcli.worlds.dev" in loaded
+    assert "vector_os_nano.vcli.worlds.dev" in outside, (
+        "the allowlist filter failed to flag a genuinely-leaked concrete world — "
+        "the guard would be vacuous"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Invariant 3 — a bring-your-own world plugs in with ZERO kernel edits
 # ---------------------------------------------------------------------------
 
