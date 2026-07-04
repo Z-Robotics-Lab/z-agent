@@ -39,7 +39,7 @@ vector_os_nano/vcli/worlds/g1_perception_oracle.py::make_detection_matches_gt
 
 ## embodiments — how it plugs in
 
-verified-against: a7d3f1a
+verified-against: e3d9cbc
 
 - Invariant 3: embodiments are CONFIG, not code — a robot enters via `vector_os_nano/embodiments/<id>/robot.yaml` (go2/, g1/ today), never a kernel or driver edit.
 - A robot.yaml is parsed fail-loud into frozen dataclasses by `vector_os_nano/embodiments/config.py::load_embodiment_config` → `config.py::parse_embodiment_config` → `EmbodimentConfig` (model / spawn / stance / sensors / policy / capabilities / grasp). Frozen dataclasses change ADDITIVELY only (new field last + default, Invariant 7).
