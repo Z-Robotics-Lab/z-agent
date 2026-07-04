@@ -182,3 +182,5 @@
 {"schema":1,"ts":1783202841,"round":"R365","kind":"build","exit":0,"post_check":"ok","commit":"c0b75a1","dur_s":539}
 {"schema":1,"ts":1783203449,"round":"R366","kind":"build","exit":0,"post_check":"ok","commit":"90119fe","dur_s":488}
 {"schema":1,"ts":1783204217,"round":"R367","kind":"build","exit":0,"post_check":"ok","commit":"cf5af01","dur_s":648}
+{"schema":1,"ts":1783204832,"round":"R368","kind":"build","exit":0,"post_check":"ok","commit":"6098b35","dur_s":495}
+{"schema":1,"ts":1783205132,"round":"R369","kind":"build","exit":1,"post_check":"quarantined","commit":"6098b35","dur_s":180}
