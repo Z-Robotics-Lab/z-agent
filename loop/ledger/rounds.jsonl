@@ -122,3 +122,4 @@
 {"schema":1,"ts":1783159509,"round":"R305","kind":"build","exit":1,"post_check":"quarantined","commit":"104b405","dur_s":902}
 {"schema":1,"ts":1783161616,"round":"R306","kind":"build","exit":0,"post_check":"ok","commit":"5f9bfac","dur_s":1987}
 {"schema":1,"ts":1783163618,"round":"R307","kind":"build","exit":0,"post_check":"ok","commit":"e75db2a","dur_s":1882}
+{"schema":1,"ts":1783164750,"round":"R308","kind":"build","exit":0,"post_check":"ok","commit":"07a29f9","dur_s":1012}

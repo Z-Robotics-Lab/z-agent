@@ -841,3 +841,69 @@ def test_repeated_identical_verify_does_not_dodge_the_spin_guard() -> None:
     assert len(trace.steps) < 6
     # The counter must have crossed the hard threshold -> at least that many turns ran.
     assert len(backend.calls) >= _MAX_TURNS_WITHOUT_VERIFY
+
+
+# ---------------------------------------------------------------------------
+# D23 / R199-quantity — finish-on-fail guardrail: a brain that verifies the goal
+# predicate, gets FAIL (only SOME of N objects placed for 把两个瓶子放到架子上), and
+# tries to stop is REFUSED and pushed to place the NEXT object. This is the exact
+# brain-agnostic, planner-free machinery the WHOLE quantity-place ledger rests on
+# (E38 real-seq CONFIRMED, E39/E40 chat GROUNDED, E96 v4-flash REFUTED at the brain)
+# — but it was only ever exercised by a flaky ~15min sim (E72/E96 thrash, E96 non-
+# reproducible). Pinned deterministically here so a native_loop refactor can never
+# silently drop the guard (which would let a quantity task force-green on obj-1).
+# Distinct from the degenerate-spin guard above (which fires when the model NEVER
+# verifies); this fires only when the model DID verify and it FAILED.
+# ---------------------------------------------------------------------------
+
+
+def test_finish_after_a_failed_verify_is_refused_then_the_run_continues() -> None:
+    """FAIL verify -> finish is refused with the quantity nudge -> the run keeps going
+    and a later PASSING verify lets it finish. Without the guard the finish at turn 2
+    ends the run (2 calls); the guard makes it reach the passing verify + real finish."""
+    from vector_os_nano.vcli.native_loop import _FINISH_ON_FAIL_NUDGE
+
+    fail = ("verify", {"expr": "at_position(100.0, 100.0, 0.001)"})  # base at origin -> False
+    ok = ("verify", {"expr": "at_position(0.0, 0.0, 1000.0)"})  # huge tol -> True
+    script = [
+        tool_turn(fail),
+        tool_turn(("finish", {})),  # refused: latest verify FAILED
+        tool_turn(ok),
+        tool_turn(("finish", {})),  # allowed: latest verify now PASSES
+    ]
+    backend = _CallRecorder.make(script)
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("把两个瓶子放到架子上", session=_session())
+
+    # Ran the whole script: the refused finish did NOT terminate the run early.
+    assert len(backend.calls) == len(script)
+    # The refusal carried the quantity/multi-object nudge back to the model.
+    flat = "\n".join(str(m) for msgs in backend.calls for m in msgs)
+    assert _FINISH_ON_FAIL_NUDGE in flat
+    # Both verify steps recorded (fail then pass) — an honest trace, not a forced green.
+    assert len(trace.steps) == 2
+
+
+def test_finish_on_fail_guardrail_is_bounded_and_never_forces_a_green() -> None:
+    """A brain that ONLY ever verifies FAIL and repeatedly tries to finish (can never
+    reach the requested count) still TERMINATES: the finish-on-fail nudge is bounded
+    like the D23 verify nudge, so it can never wedge the turn — and the trace grades
+    honestly (the goal predicate never passed), NEVER a forced green."""
+    from vector_os_nano.vcli.native_loop import _MAX_VERIFY_NUDGES
+
+    fail = ("verify", {"expr": "at_position(100.0, 100.0, 0.001)"})
+    # 1 failing verify then finish forever: after _MAX_VERIFY_NUDGES refusals the guard
+    # lets the finish through, so the run ends (does NOT consume the infinite finishes).
+    script = [tool_turn(fail)] + [tool_turn(("finish", {})) for _ in range(6)]
+    backend = _CallRecorder.make(script)
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("把两个瓶子放到架子上", session=_session())
+
+    # Exactly 1 verify + _MAX_VERIFY_NUDGES refused finishes + 1 allowed finish.
+    assert len(backend.calls) == 1 + _MAX_VERIFY_NUDGES + 1
+    # The only verify FAILED -> the goal is NOT verified: the guard never fabricates a pass.
+    oracle_names = verify_oracle_names(agent, eng)
+    report = VerdictReport.from_trace(trace, oracle_names)
+    assert report.verified is False
