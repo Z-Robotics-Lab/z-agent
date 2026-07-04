@@ -61,6 +61,8 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
   — byte-identical content but numstat scores it a DELETION → append-only gate FAILS, quarantines
   the NEXT round. Content-preserving reformats are NOT restored (a 2nd rewrite compounds); leave +
   document. The gate caught it correctly — the bug was the write method, not the check → E27.
+  RECURRED R285→quarantine (same load-all json.dumps rewrite of acceptance+experiments); R286 fix
+  confirmed 0 rows lost (normalized set-diff==0) and applied the leave-reordered + pure-append cure → E81.
 - ORDINAL/positional NL ("最右边的瓶子") CAN ground: the model resolves rightmost→blue (the
   non-central, dog's-right bottle) via `describe_scene`(VLM)+`detect`, then perception_grasp.
   BUT it is model-STRATEGY-fragile — it only works if the model PRE-RESOLVES the ordinal to a
