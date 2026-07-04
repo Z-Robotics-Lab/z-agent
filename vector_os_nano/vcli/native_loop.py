@@ -573,6 +573,15 @@ class NativeStepRunner:
         """
         return self._last_verify_result is False
 
+    @property
+    def last_verify_result(self) -> bool | None:
+        """The model's MOST-RECENT verify result (None until it verifies once). Read by
+        the loop's goal-aware degenerate-spin guard to decide whether a verify MEASURED
+        something NEW (novel (predicate,result)) versus re-read an already-known
+        sub-check — the latter is not progress and must not keep resetting the counter.
+        """
+        return self._last_verify_result
+
     # ------------------------------------------------------------------
     # Skill dispatch (capture baseline before the first skill of a step)
     # ------------------------------------------------------------------
@@ -869,11 +878,18 @@ def run_turn_native(
     # nudge so a model that CANNOT reach a passing verify still terminates — the trace
     # then ends on a False step and grades honestly RAN/False, never a forced green.
     finish_on_fail_nudges = 0
-    # R274/E74 degenerate-spin guard: consecutive skill-dispatch turns with NO verify.
-    # Reset whenever the model verifies (measurable progress); a nudge is spent at the
-    # soft threshold, the loop breaks honestly at the hard one.
+    # R274/E74 degenerate-spin guard: consecutive turns without MEASURABLE PROGRESS.
+    # R279/E76 makes the reset GOAL-AWARE: a verify only resets the counter when it
+    # measures something NEW — a (predicate, result) not seen before this loop. Re-reading
+    # an already-known passing sub-check (the at_position-thrash: a flaky brain interleaves
+    # ONE off-goal verify every few turns purely to keep the counter pinned) is NOT
+    # progress, so those repeats let the counter climb to the honest hard break instead of
+    # dodging it forever (R278 frontier: a single interleaved verify pushed worst-case
+    # turns back to the _MAX_NATIVE_TURNS cap). Planner-free + brain-agnostic: keys only on
+    # the model's OWN verify expr + its result, never on the goal string.
     unproductive_turns = 0
     unproductive_nudges = 0
+    seen_verify_outcomes: set[tuple[str, bool]] = set()
     while turns < max_turns:
         messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
@@ -914,7 +930,10 @@ def run_turn_native(
             break  # end_turn, no tools — conversation complete
 
         finished = False
-        verified_this_turn = False  # R274/E74: did the model MEASURE progress this turn?
+        # R279/E76: did the model MEASURE NEW progress this turn? True only when a verify
+        # yields a (predicate, result) not seen before — a novel measurement. A re-read of
+        # an already-known outcome leaves this False so the spin counter keeps climbing.
+        progressed_this_turn = False
         result_dicts: list[dict[str, Any]] = []
         for tc in tool_calls:
             if tc.name == FINISH_TOOL:
@@ -949,8 +968,14 @@ def run_turn_native(
             if tc.name == VERIFY_TOOL:
                 expr = str((tc.input or {}).get("expr", ""))
                 _emit(f"verify {expr[:56]}")
-                verified_this_turn = True
                 res = runner.handle_verify(expr)
+                # R279/E76 goal-aware reset: a verify is PROGRESS only if it measures a
+                # (normalized predicate, result) not seen before. Re-reading the same
+                # already-known outcome (the at_position-thrash) is not progress.
+                key = (" ".join(expr.split()), runner.last_verify_result)
+                if runner.last_verify_result is not None and key not in seen_verify_outcomes:
+                    seen_verify_outcomes.add(key)
+                    progressed_this_turn = True
             else:
                 _emit(f"{tc.name} {_progress_args(tc.input)}".strip())
                 res = runner.dispatch_skill(tc.name, dict(tc.input or {}))
@@ -962,11 +987,13 @@ def run_turn_native(
             break
 
         # R274/E74 degenerate-spin guard (runs AFTER a non-empty tool-call turn that did
-        # not finish). A verify RESETS the counter (progress was measured); a skill-only
-        # turn increments it. At the soft threshold nudge ONCE to force a measurement; at
+        # not finish). R279/E76: a NOVEL verify (new (predicate,result)) RESETS the counter
+        # — real progress was measured; a skill-only turn OR a re-read of an already-known
+        # outcome increments it. At the soft threshold nudge ONCE to force a measurement; at
         # the hard threshold break to an honest fail. Never fires on a healthy task (which
-        # verifies within a few turns) — only on the never-verify perception/nav spin.
-        if verified_this_turn:
+        # keeps measuring NEW state within a few turns) — only on the never-verify
+        # perception/nav spin OR a thrash that dodges the break by re-reading one sub-check.
+        if progressed_this_turn:
             unproductive_turns = 0
         else:
             unproductive_turns += 1

@@ -781,19 +781,24 @@ def test_degenerate_spin_nudges_once_to_verify_before_breaking() -> None:
 
 
 def test_periodic_verify_never_trips_the_degenerate_guard() -> None:
-    """A long run that verifies periodically resets the counter each time, so the guard
-    NEVER fires even across more turns than the hard cap -> no regression of a healthy,
-    multi-step task (the verify is what proves progress, not the turn count)."""
+    """A long run that verifies periodically with a DISTINCT measurement each time resets
+    the counter, so the guard NEVER fires even across more turns than the hard cap -> no
+    regression of a healthy, multi-step task (a NEW measurement is what proves progress,
+    not the turn count). R279/E76: the reset is goal-aware — each burst closes on a NOVEL
+    (predicate,result), not the SAME sub-check re-read (that is the thrash, tested below)."""
     from vector_os_nano.vcli.native_loop import _MAX_TURNS_WITHOUT_VERIFY
 
-    always_true = ("verify", {"expr": "at_position(0.0, 0.0, 1000.0)"})
     walk = ("walk", {"distance": 0.1, "speed": 0.3})
-    # THREE 4-walk bursts, each closed by a PASSING verify (max unproductive run = 4 < 6).
-    # 12 total action-walks EXCEEDS the hard cap — a bare spin of that length WOULD break;
-    # the periodic verify resets the counter, so this healthy run must NOT be cut short.
-    burst = [tool_turn(walk), tool_turn(walk), tool_turn(walk), tool_turn(walk),
-             tool_turn(always_true)]
-    script = burst * 3 + [tool_turn(("finish", {}))]
+    # THREE 4-walk bursts, each closed by a DISTINCT passing verify (novel expr -> real
+    # progress; max unproductive run = 4 < 6). 12 total action-walks EXCEEDS the hard cap —
+    # a bare spin of that length WOULD break; the periodic NEW measurement resets the
+    # counter, so this healthy run must NOT be cut short.
+    bursts = []
+    for tol in (1000.0, 1001.0, 1002.0):
+        verify = ("verify", {"expr": f"at_position(0.0, 0.0, {tol})"})
+        bursts += [tool_turn(walk), tool_turn(walk), tool_turn(walk), tool_turn(walk),
+                   tool_turn(verify)]
+    script = bursts + [tool_turn(("finish", {}))]
     assert sum(1 for t in script if t.tool_calls and t.tool_calls[0].name == "walk") \
         >= _MAX_TURNS_WITHOUT_VERIFY
     backend = _CallRecorder.make(script)
@@ -804,3 +809,35 @@ def test_periodic_verify_never_trips_the_degenerate_guard() -> None:
     # Guard did NOT cut it short: all three verify pairs recorded, ran the whole script.
     assert len(trace.steps) == 3
     assert len(backend.calls) == len(script)
+
+
+def test_repeated_identical_verify_does_not_dodge_the_spin_guard() -> None:
+    """R279/E76 goal-aware reset: re-reading the SAME passing sub-check (the at_position-
+    thrash where a flaky brain interleaves ONE off-goal verify to keep resetting the spin
+    counter) is NOT progress -> only the FIRST occurrence of a given (predicate,result)
+    resets; the repeats let the counter climb to the honest hard break. Without this a
+    thrash dodges break@12 and falls back to the _MAX_NATIVE_TURNS cap (R278 frontier)."""
+    from vector_os_nano.vcli.native_loop import (
+        _MAX_NATIVE_TURNS,
+        _MAX_TURNS_WITHOUT_VERIFY,
+    )
+
+    walk = ("walk", {"distance": 0.1, "speed": 0.3})
+    # The SAME always-passing off-goal verify, re-read every burst. Under the OLD "any
+    # verify resets" it would reset forever; under goal-aware reset only burst 1 counts.
+    same_verify = ("verify", {"expr": "at_position(0.0, 0.0, 1000.0)"})
+    burst = [tool_turn(walk), tool_turn(walk), tool_turn(walk), tool_turn(same_verify)]
+    # Long enough that a novelty guard breaks (~turn 16) well before the script ends.
+    script = burst * 6 + [tool_turn(("finish", {}))]
+    backend = _CallRecorder.make(script)
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    trace = eng.run_turn_native("re-read the same sub-check forever", session=_session())
+
+    # Broke early on the thrash: fewer backend calls than the full script AND under the cap.
+    assert len(backend.calls) < len(script)
+    assert len(backend.calls) < _MAX_NATIVE_TURNS
+    # Only the novel verifies were reached before the honest break (not all 6 repeats).
+    assert len(trace.steps) < 6
+    # The counter must have crossed the hard threshold -> at least that many turns ran.
+    assert len(backend.calls) >= _MAX_TURNS_WITHOUT_VERIFY
