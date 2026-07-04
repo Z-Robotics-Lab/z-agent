@@ -23,7 +23,7 @@
 | fetch.nl-ordinal-position-invariance | refuted | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | fetch.nl-ordinal-spatial | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 17 | pending |
 | fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 25 | pending |
-| fetch.nl-scene-clutter | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 57 | pending |
+| fetch.nl-scene-clutter | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 0 | pending |
 | g1.navigation | confirmed ⚠ STALE | GROUNDED 1/2 | bare-repl+nl | deepseek-v4-flash | self-read | 68 | pending |
 | g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 60 | pending |
 | kernel.model-unavailable-surfacing | confirmed | PASS 1/1 | bare-repl+nl | openrouter (zero credit spent) | self-read | 25 | pending |
