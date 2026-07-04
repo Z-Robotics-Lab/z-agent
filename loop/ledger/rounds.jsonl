@@ -113,3 +113,4 @@
 {"schema":1,"ts":1783146555,"round":"R296","kind":"build","exit":0,"post_check":"ok","commit":"bb99263","dur_s":1017}
 {"schema":1,"ts":1783148038,"round":"R297","kind":"build","exit":0,"post_check":"ok","commit":"be03410","dur_s":1363}
 {"schema":1,"ts":1783149081,"round":"R298","kind":"build","exit":0,"post_check":"ok","commit":"2818cca","dur_s":923}
+{"schema":1,"ts":1783150339,"round":"R299","kind":"build","exit":0,"post_check":"ok","commit":"23215cf","dur_s":1138}
