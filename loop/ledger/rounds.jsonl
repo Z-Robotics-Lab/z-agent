@@ -88,3 +88,4 @@
 {"schema":1,"ts":1783119706,"round":"R271","kind":"build","exit":0,"post_check":"ok","commit":"d9062e2","dur_s":1172}
 {"schema":1,"ts":1783121777,"round":"R272","kind":"build","exit":0,"post_check":"ok","commit":"6958416","dur_s":1951}
 {"schema":1,"ts":1783123237,"round":"R273","kind":"build","exit":0,"post_check":"ok","commit":"9e241a0","dur_s":1340}
+{"schema":1,"ts":1783125373,"round":"R274","kind":"build","exit":0,"post_check":"ok","commit":"b066f8e","dur_s":2016}
