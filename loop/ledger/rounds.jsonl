@@ -147,3 +147,5 @@
 {"schema":1,"ts":1783185697,"round":"R330","kind":"review","exit":0,"post_check":"ok","commit":"44704a5","dur_s":528}
 {"schema":1,"ts":1783186150,"round":"R331","kind":"build","exit":0,"post_check":"ok","commit":"195991f","dur_s":333}
 {"schema":1,"ts":1783186532,"round":"R332","kind":"build","exit":0,"post_check":"ok","commit":"1a97c8c","dur_s":262}
+{"schema":1,"ts":1783186956,"round":"R333","kind":"build","exit":0,"post_check":"ok","commit":"b6685d8","dur_s":304}
+{"schema":1,"ts":1783187259,"round":"R334","kind":"build","exit":1,"post_check":"quarantined","commit":"b6685d8","dur_s":183}
