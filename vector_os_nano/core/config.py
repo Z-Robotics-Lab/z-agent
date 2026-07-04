@@ -16,11 +16,14 @@ package root. User overrides are deep-merged on top.
 from __future__ import annotations
 
 import copy
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

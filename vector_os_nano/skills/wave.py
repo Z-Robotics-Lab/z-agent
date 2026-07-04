@@ -28,6 +28,12 @@ _RAISE_DURATION: float = 2.0
 _WAVE_DURATION: float = 0.8
 _PAUSE: float = 0.15
 
+# SO-101 home rest pose — used only if config omits skills.home.joint_values.
+# Mirrors config/default.yaml (the runtime authority) and the identical constant
+# in home/pick/place/handover; pinned to the authority by
+# tests/unit/embodiments/test_manifest_driver_fidelity.py so a drift is a red test.
+_DEFAULT_HOME_JOINTS: list[float] = [-0.014, -1.238, 0.562, 0.858, 0.311]
+
 
 @skill(
     aliases=["wave", "hello", "hi", "greet", "招手", "打招呼", "挥手", "你好"],
@@ -90,7 +96,7 @@ class WaveSkill:
             context.config
             .get("skills", {})
             .get("home", {})
-            .get("joint_values", [-0.014, -1.238, 0.562, 0.858, 0.311])
+            .get("joint_values", _DEFAULT_HOME_JOINTS)
         )
         context.arm.move_joints(home_joints, duration=_RAISE_DURATION)
 

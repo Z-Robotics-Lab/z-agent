@@ -343,6 +343,12 @@ _HOME_POSE_FALLBACK_MODULES: tuple[tuple[str, str], ...] = (
     ("vector_os_nano.skills.pick", "_DEFAULT_HOME_JOINTS"),
     ("vector_os_nano.skills.place", "_DEFAULT_HOME_JOINTS"),
     ("vector_os_nano.skills.handover", "_DEFAULT_HOME_JOINTS"),
+    # wave is the FIFTH skill that returns the arm home; E161 missed it because it
+    # inlined the pose literal into its ``.get(..., [...])`` fallback instead of a
+    # ``_DEFAULT_HOME_JOINTS`` constant like the other four. Made symmetric here so
+    # the same guard pins it to the config authority (else a drifted default.yaml
+    # leaves wave sending the arm to a pose the oracle no longer grades).
+    ("vector_os_nano.skills.wave", "_DEFAULT_HOME_JOINTS"),
 )
 
 
@@ -376,3 +382,35 @@ def test_so101_home_pose_chain_mirrors_config_authority() -> None:
         assert list(getattr(mod, attr)) == list(authority), (
             f"{mod_name}.{attr} drifted from the config home authority"
         )
+
+
+def test_config_missing_file_fallback_home_pose_matches_default_yaml(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """load_config's hardcoded missing-file fallback must carry default.yaml's home pose.
+
+    ``core.config.load_config`` deep-merges on top of default.yaml, but when that
+    file is absent it falls back to a WHOLE inline defaults dict (``except
+    FileNotFoundError``). That inline dict hardcodes its OWN copy of the SO-101
+    home ``joint_values`` — the one copy E161 left unpinned. If default.yaml's home
+    pose is edited but this fallback is not, a user who loses default.yaml gets an
+    arm commanded to a stale pose the verify oracle (``arm_at_home()``) no longer
+    grades: a silent Inv-1 breach with no red test. Pin the fallback to the YAML
+    authority by driving the REAL missing-file branch and comparing.
+    """
+    import yaml
+
+    from vector_os_nano.core import config as config_mod
+
+    # The runtime authority, read straight from the YAML — never via the fallback.
+    default_yaml = config_mod._DEFAULT_YAML
+    assert default_yaml.exists(), f"default.yaml missing: {default_yaml}"
+    authority = yaml.safe_load(default_yaml.read_text())["skills"]["home"]["joint_values"]
+
+    # Force the missing-file branch: point _DEFAULT_YAML at a path that does not exist.
+    monkeypatch.setattr(config_mod, "_DEFAULT_YAML", tmp_path / "nonexistent.yaml")
+    fallback_home = config_mod.load_config()["skills"]["home"]["joint_values"]
+
+    assert list(fallback_home) == list(authority), (
+        "config.py missing-file fallback home pose drifted from default.yaml authority"
+    )
