@@ -55,7 +55,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 - The ledger is append-only, so a provisional row's `status` is NEVER rewritten; §1b
   adjudication = APPEND a later row whose `supersedes` points back. checks_schema.py's
   provisional age-check must exempt an already-superseded row or it nags forever and wedges
-  every future round once age>2 (R187: R184 row superseded R186, flagged R187) → E24/D183.
+  every future round once age>2 (R187: R184 row superseded R186, flagged R187) → E24/D183. BUT preflight.sh's INFO counter still uses naive `grep -c provisional` → over-reports (67 vs TRUE-owed 0); NOT real debt — cross-check check.sh GREEN + BOARD; fix MANIFEST-gated → CEO G-354-1/E144.
 - APPEND a ledger row as ONE pre-formatted line with `>>`; NEVER load-all→`json.dumps`→write-all:
   default dumps re-serializes EXISTING rows (adds `, ` separators, flips `\uXXXX`↔literal em-dash)
   — byte-identical content but numstat scores it a DELETION → append-only gate FAILS, quarantines
