@@ -58,3 +58,35 @@ class TestIntentRouter:
         result = self.router.route("去厨房看看")
         if result is not None:
             assert result == sorted(result)
+
+
+class TestAnnotationsResolvable:
+    """Regression guard (E162 class): every annotation in intent_router must
+    resolve. `from __future__ import annotations` stringizes them, so an
+    undefined name (e.g. `Any` never imported) silently survives every green
+    suite yet raises NameError the moment any tool calls typing.get_type_hints
+    — a dead/untested path, exactly like config.py's undefined `logger`."""
+
+    def test_all_callable_annotations_resolve(self):
+        import inspect
+        import typing
+
+        from vector_os_nano.vcli import intent_router as mod
+
+        unresolved = []
+        members = [(mod.__name__, mod)]
+        for name, obj in vars(mod).items():
+            if inspect.isclass(obj) and obj.__module__ == mod.__name__:
+                for mname, meth in vars(obj).items():
+                    if inspect.isfunction(meth):
+                        members.append((f"{name}.{mname}", meth))
+            elif inspect.isfunction(obj) and obj.__module__ == mod.__name__:
+                members.append((name, obj))
+
+        for label, obj in members:
+            try:
+                typing.get_type_hints(obj)
+            except NameError as exc:
+                unresolved.append(f"{label}: {exc}")
+
+        assert not unresolved, f"unresolved annotations (undefined names): {unresolved}"

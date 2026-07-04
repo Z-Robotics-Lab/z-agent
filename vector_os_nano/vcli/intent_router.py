@@ -11,6 +11,8 @@ when intent is ambiguous.
 """
 from __future__ import annotations
 
+from typing import Any
+
 
 # (keywords, categories) — checked in order, all matches accumulated
 _RULES: list[tuple[frozenset[str], tuple[str, ...]]] = [

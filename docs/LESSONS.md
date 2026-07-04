@@ -85,6 +85,7 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 - A same-second mutate→revert RED-proof can leave the GREEN re-confirm falsely RED (CPython `.pyc` mtime invalidation is second-granularity → reuses mutated bytecode); clear `__pycache__` before the confirm → E160.
 
 ## Recipes (proven invocations — copy, don't re-derive)
+- Hunt the E162 dead-branch class MECHANICALLY, package-wide: `ruff check vector_os_nano tools loop scripts --select F821`. Under `from __future__ import annotations` an undefined name in a STRINGIZED annotation survives every green suite (never evaluated at runtime) yet raises `NameError` under `typing.get_type_hints` — a dead/untested path exactly like config.py's undefined `logger`. Found `intent_router.should_use_vgg(skill_registry: Any)` never imported `Any`. Regression guard = resolve `get_type_hints` for every callable in the module (proven to fire on injected drift); NOT a spine path → no gate → E163.
 - Bare-REPL NL acceptance, in-process sim: `VECTOR_NO_ROS2=1 MUJOCO_GL=egl` +
   `tools/acceptance/repl_accept.py` (MODE=fetch|place|neg|combo); env from .env.example → D181/D182.
 - g1 headless under the bare-REPL face needs `MUJOCO_GL=egl` (suppresses the GLFW viewer)
