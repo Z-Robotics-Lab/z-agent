@@ -73,7 +73,7 @@ vector_os_nano/vcli/engine.py::init_vgg
 
 ## native-loop — how it plugs in
 
-verified-against: 6bfd0de
+verified-against: a52226e
 
 - The model-driven ReAct producer: `vector_os_nano/vcli/native_loop.py::run_turn_native(engine, user_message, …)` drives `engine._backend.call(messages, tools, system)` in a loop (cap `_MAX_NATIVE_TURNS=24`) and returns an `ExecutionTrace`. It NEVER computes `verified` — the caller `vector_os_nano/vcli/cli.py::run_one_turn` feeds the trace to `VerdictReport.from_trace`.
 - Trace assembly: `native_loop.py::NativeStepRunner` — `dispatch_skill` captures the actor-causation baseline before a step's FIRST skill; `handle_verify` evaluates the model's expr via the live GoalVerifier, grades causation (`NativeStepRunner._grade`), and appends EXACTLY ONE StepRecord per (action-chain → verify) pair; `build_trace` finishes.
