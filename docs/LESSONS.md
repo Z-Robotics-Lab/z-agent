@@ -4,6 +4,7 @@ Append one line per lesson (round agents); review rounds consolidate. A line may
 only if its D#/E#/commit pointer resolves in the ledger or git. Details live at the pointer.
 
 ## Refuted (do NOT retry unless the stated condition changed)
+- fetch.nl-ordinal-position-invariance (最左边 under SCENE_SWAP) R210 GROUNDED 2/2 (age73) did NOT reproduce R284: N=2 both verified=False (run1 empty gripper UNCAUSED / run2 ended holding wrong YELLOW). Deterministic. Ordinal RESOLUTION intact (perception_grasp routed OK); grasp EXECUTION/stable-hold rotted. A "confirmed" green can rot silently → skeptic re-verify cadence works; sweep sibling stale fetch bars → E79.
 - "Model-sensitivity ceiling" on fetch was a HARNESS artifact, not the model — control the harness before concluding model capability → D171 refuted by D174.
 - "Red grasp-robustness ceiling" was a one-campaign transient (8/8 after); 0/3 in a single campaign is never a ceiling — re-run with the correct NL term + skill-direct probe → D172 refuted by D173/DEBUG.md.
 - "BYO-model over-caution blocks tool-calls" — refuted by a positive control; gemini/mistral no-tool-call is model behaviour, not plumbing (tools passed, llama tool-called same path) → D179 refuted by D180, fb6ae77.
