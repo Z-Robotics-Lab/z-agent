@@ -150,6 +150,13 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 Compressed from docs/tricky-bugs.md (removed 2026-07-02); full original prose in git history.
 Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a green suite, or hid behind "every component correct in isolation". Routine bugs → git history.
 
+- **Case 18 (a drift guard uncovered a DEAD safety-net, 2026-07-04)** — a test DRIVING config.py's
+  missing-file fallback (monkeypatch `_DEFAULT_YAML`→nonexistent, call `load_config()`) crashed with
+  `NameError: 'logger' is not defined` at config.py:116, not the drift AssertionError I hunted: the
+  `except FileNotFoundError` graceful-defaults branch logged `logger.warning` but config.py never
+  imported logging — the whole hardcoded-defaults safety-net was dead code that raised, survived every
+  green suite because no test ran the branch (default.yaml always present). Lesson: guard degradation
+  branches by EXECUTING them, not by reading their literals. Fix: add logging import + module logger. → E162
 - **Case 17 (ordinal "grasp rotted" = a NEW object silently changed the answer, 2026-07-04)** —
   fetch.nl-ordinal-position-invariance (`把最左边的瓶子` SCENE_SWAP) went GROUNDED 2/2 (R210) → REFUTED
   0/2 (R284, logged as "held the WRONG yellow / grasp EXECUTION rotted"). Real cause (R299/E90, skill-
@@ -229,20 +236,9 @@ Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a g
   builds — nq is a SCENE property. Fix: gate on `model.nu >= 19` (nu=12 bare / 19 arm); slice at
   joint_qpos_start + num_actuated. LESSON: never discriminate robot morphology by nq — use nu or a
   named-element probe; an in-bounds all-zeros write is the textbook silent latent bug.
-- **Case 7 (placed_count gate, 2026-06-21)** — latent, caught by design-probe: a pedestal-top place (~z=0.32)
-  looks successful but `placed_count(region)`=0 forever — `make_placed_count` counts only z < _LIFT_MIN_Z
-  (0.10) = "on the floor"; D34 kinematics reach further the higher it goes, biasing exactly where it can't
-  ground. Resolved by an empirical reach-grid probe: floor place (10.60, 2.70, 0.05) settles z~0.04 < 0.10 →
-  GROUNDED. LESSON: a verify oracle encodes IMPLICIT geometry — read its gate and MEASURE that a target
-  satisfies BOTH reach AND the oracle; never loosen the gate (verify only ever stricter).
-- **Case 6 (EdgeTAM degrade, 2026-06-23, R39)** — nav→grasp chain completes but holding_object False;
-  grasp-z 0.13/0.044 vs true 0.32; an A/B probe's clean 2.8 cm made "off-axis lateral IK" look airtight.
-  Root (two layers): `timm` declared but absent from .venv → EdgeTAM failed to LOAD → box-rect fallback →
-  depth centroid averaged can+table; then `float(object_score_logits[i])` raised (transformers≥5 returns
-  (N,1)). Tell: `[GO2-PERCEPT] EdgeTAM unavailable — box-rect fallback` in the e2e log, NOT the A/B log.
-  LESSON: when two runs of the SAME perception code disagree, suspect a SILENTLY-degrading optional model
-  path before re-theorizing geometry; make segmenter-degrade LOUD; env-sync optional model deps.
 ### Folded (oldest cases compressed to one line each; full prose in git at the hash)
+- **Case 7** (placed_count gate, 2026-06-21) — pedestal-top place (z~0.32) looks OK but `placed_count`=0 forever: `make_placed_count` counts only z<_LIFT_MIN_Z(0.10); D34 reaches further the higher it goes. LESSON: a verify oracle encodes IMPLICIT geometry — measure the target satisfies BOTH reach AND the gate; never loosen (verify only stricter). → git history
+- **Case 6** (EdgeTAM degrade, 2026-06-23, R39) — nav→grasp completes but holding_object False; `timm` absent → EdgeTAM failed to LOAD → box-rect fallback → depth centroid averaged can+table. LESSON: when two runs of the SAME perception code disagree, suspect a silently-degrading optional-model path before re-theorizing geometry; make degrade LOUD; env-sync optional deps. → git history
 - **Case 3** (dead PYTHONPATH, 2026-06, 13a9429) — explore "worked" on system python3 (mujoco 3.6) not the repo `.venv` (3.9); Python silently ignores missing PYTHONPATH entries. LESSON: print `module.__file__` to verify WHICH copy loaded. → 13a9429
 - **Case 4** (blob fusion, 2026-06-20) — deictic grasp 12cm off (table sliver); `front_object._SAT_MIN=140` below table sat → 1-3px chains FUSE cylinders+table into one blob. LESSON: a threshold overlapping bg is a connected-component TOPOLOGY bug; morphological OPEN before components, not a threshold tweak.
 - **Case 5** (table-edge occlusion, 2026-06-20) — central GREEN 0px while RED/BLUE fine → depth at its pixel read 3.7m (saw THROUGH it): d435 lip occludes objects within ~6cm of the near top edge. LESSON: one identical object invisible → sample DEPTH at its projected pixel; depth ≫ distance = a static occluder.
