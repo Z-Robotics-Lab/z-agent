@@ -104,3 +104,4 @@
 {"schema":1,"ts":1783137903,"round":"R287","kind":"build","exit":0,"post_check":"ok","commit":"24552fb","dur_s":1057}
 {"schema":1,"ts":1783139023,"round":"R288","kind":"build","exit":0,"post_check":"ok","commit":"7865de8","dur_s":1000}
 {"schema":1,"ts":1783139985,"round":"R289","kind":"build","exit":0,"post_check":"ok","commit":"2033c75","dur_s":842}
+{"schema":1,"ts":1783141226,"round":"R290","kind":"review","exit":0,"post_check":"ok","commit":"6c03a22","dur_s":1121}
