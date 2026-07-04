@@ -142,3 +142,4 @@
 {"schema":1,"ts":1783182376,"round":"R325","kind":"build","exit":0,"post_check":"ok","commit":"3353a03","dur_s":760}
 {"schema":1,"ts":1783183199,"round":"R326","kind":"build","exit":0,"post_check":"ok","commit":"a607e0c","dur_s":703}
 {"schema":1,"ts":1783183975,"round":"R327","kind":"build","exit":0,"post_check":"ok","commit":"f5d696b","dur_s":656}
+{"schema":1,"ts":1783184489,"round":"R328","kind":"build","exit":0,"post_check":"ok","commit":"1305e67","dur_s":394}
