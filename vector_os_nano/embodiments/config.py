@@ -18,6 +18,7 @@ Design notes:
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -142,6 +143,23 @@ def _as_tuple(value: Any) -> tuple[Any, ...]:
     raise EmbodimentConfigError(f"expected a list, got {type(value).__name__}: {value!r}")
 
 
+def _finite(value: Any, ctx: str) -> float:
+    """Coerce to float and REJECT non-finite (NaN/±inf) — external-input validation.
+
+    A BYO robot.yaml is untrusted plug-and-play input; a NaN/inf spawn, stance,
+    or sensor value would silently poison sim geometry and the verify predicates
+    that read it (Inv-1). Fail loud instead (security floor: reject NaN/inf/
+    out-of-range before acting), consistent with the loader's fail-loud contract.
+    """
+    try:
+        f = float(value)
+    except (TypeError, ValueError) as exc:
+        raise EmbodimentConfigError(f"{ctx}: expected a number, got {value!r}") from exc
+    if not math.isfinite(f):
+        raise EmbodimentConfigError(f"{ctx}: must be a finite number, got {value!r}")
+    return f
+
+
 def _parse_model(raw: dict[str, Any], ctx: str) -> ModelSpec:
     m = _require(raw, "model", ctx)
     mctx = f"{ctx}.model"
@@ -159,9 +177,9 @@ def _parse_spawn(raw: dict[str, Any], ctx: str) -> SpawnSpec:
     if len(xy) != 2:
         raise EmbodimentConfigError(f"{sctx}.xy must have exactly 2 values, got {xy!r}")
     return SpawnSpec(
-        xy=(float(xy[0]), float(xy[1])),
-        base_height=float(_require(s, "base_height", sctx)),
-        heading=float(s.get("heading", 0.0)),
+        xy=(_finite(xy[0], f"{sctx}.xy[0]"), _finite(xy[1], f"{sctx}.xy[1]")),
+        base_height=_finite(_require(s, "base_height", sctx), f"{sctx}.base_height"),
+        heading=_finite(s.get("heading", 0.0), f"{sctx}.heading"),
     )
 
 
@@ -176,8 +194,16 @@ def _parse_sensors(raw: dict[str, Any], ctx: str) -> tuple[SensorSpec, ...]:
                 role=str(_require(sraw, "role", sctx)),
                 mount_body=str(_require(sraw, "mount_body", sctx)),
                 name=(str(sraw["name"]) if sraw.get("name") is not None else None),
-                pos=(tuple(float(v) for v in _as_tuple(pos)) if pos is not None else None),
-                euler=(tuple(float(v) for v in _as_tuple(euler)) if euler is not None else None),
+                pos=(
+                    tuple(_finite(v, f"{sctx}.pos[{k}]") for k, v in enumerate(_as_tuple(pos)))
+                    if pos is not None
+                    else None
+                ),
+                euler=(
+                    tuple(_finite(v, f"{sctx}.euler[{k}]") for k, v in enumerate(_as_tuple(euler)))
+                    if euler is not None
+                    else None
+                ),
                 params=dict(sraw.get("params", {}) or {}),
             )
         )
@@ -227,7 +253,7 @@ def parse_embodiment_config(raw: dict[str, Any], ctx: str = "robot.yaml") -> Emb
         display_name=str(_require(raw, "display_name", ctx)),
         model=_parse_model(raw, ctx),
         spawn=_parse_spawn(raw, ctx),
-        stance={str(k): float(v) for k, v in stance_raw.items()},
+        stance={str(k): _finite(v, f"{ctx}.stance[{k}]") for k, v in stance_raw.items()},
         sensors=_parse_sensors(raw, ctx),
         policy=_parse_policy(raw, ctx),
         capabilities=_parse_capabilities(raw, ctx),

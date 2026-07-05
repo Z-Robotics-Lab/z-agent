@@ -184,6 +184,55 @@ def test_missing_required_field_raises_clear_error() -> None:
     assert "spawn" in str(exc.value)
 
 
+def _minimal_raw() -> dict:
+    """A complete, valid manifest dict — negative tests mutate ONE numeric field."""
+    return {
+        "id": "byo",
+        "display_name": "BYO",
+        "model": {"path": "x.xml", "root_body": "base"},
+        "spawn": {"xy": [1.0, 2.0], "base_height": 0.3, "heading": 0.0},
+        "stance": {"j": 0.0},
+        "policy": {"ref": "p"},
+        "capabilities": {},
+    }
+
+
+@pytest.mark.parametrize(
+    "mutate, needle",
+    [
+        (lambda r: r["spawn"]["xy"].__setitem__(0, float("nan")), "xy"),
+        (lambda r: r["spawn"].__setitem__("base_height", float("inf")), "base_height"),
+        (lambda r: r["spawn"].__setitem__("heading", float("-inf")), "heading"),
+        (lambda r: r["stance"].__setitem__("j", float("nan")), "stance"),
+        (
+            lambda r: r.__setitem__(
+                "sensors",
+                [{"role": "camera", "mount_body": "b", "pos": [float("nan"), 0.0, 0.0]}],
+            ),
+            "pos",
+        ),
+    ],
+)
+def test_non_finite_numeric_field_fails_loud(mutate, needle) -> None:
+    """External-input validation: a BYO manifest with a NaN/inf spawn/stance/
+    sensor value must fail loud (security floor), not silently poison sim geometry.
+    """
+    raw = _minimal_raw()
+    mutate(raw)
+    with pytest.raises(EmbodimentConfigError) as exc:
+        parse_embodiment_config(raw, ctx="byo/robot.yaml")
+    assert needle in str(exc.value)
+    assert "finite" in str(exc.value)
+
+
+def test_finite_manifest_still_loads() -> None:
+    """The finiteness guard must not regress a valid all-finite manifest."""
+    cfg = parse_embodiment_config(_minimal_raw(), ctx="byo/robot.yaml")
+    assert cfg.spawn.xy == (1.0, 2.0)
+    assert cfg.spawn.base_height == pytest.approx(0.3)
+    assert cfg.stance["j"] == pytest.approx(0.0)
+
+
 def test_both_embodiments_distinct() -> None:
     go2 = load_embodiment_config("go2")
     g1 = load_embodiment_config("g1")
