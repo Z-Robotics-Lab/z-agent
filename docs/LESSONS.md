@@ -79,7 +79,7 @@ Append one line per lesson (round agents); review rounds consolidate. Drop a lin
   end): (a) the VLM drops the 瓶子 category (R193 grasped a can) → E30; (b) deterministic `_parse_ordinal`+
   `_resolve_ordinal_target` in perception_grasp was necessary but INSUFFICIENT until an ordinal-PASSTHROUGH
   native_loop prompt stopped the brain pre-resolving to a wrong colour → E31. E2E GROUNDED R197 → E33.
-- g1_accept.py full RED+GREEN >10min (GREEN model flails ~14 turns): run BACKGROUND — a foreground Bash-cap timeout SIGTERMs mid-GREEN, orphaning the g1 sim (R217) → R219/R223.
+- g1_accept.py full RED+GREEN >10min (GREEN model flails ~14 turns): run BACKGROUND — a foreground Bash-cap timeout SIGTERMs mid-GREEN, orphaning the g1 sim (R217) → R219/R223. GENERAL: ANY bare-cli re-verify whose sim-build+grasp can exceed ~9min (harder grasp, clutter, ≥2 sim-start retries) MUST run in a BACKGROUND job with an INTERNAL `timeout 900` + scoped teardown on exit — the host FOREGROUND tool cap is 10min and CLAMPS a larger `--timeout`, cutting the fetch mid-grasp with NO verdict (E227 clutter INCONCLUSIVE foreground → E228 same run GROUNDED in background, unchanged capability). Use `.venv/bin/python`, not bare `python` (absent on the background shell PATH) → E227/E228.
 - g1.perception NON-REPRODUCIBLE (R223 RAN 0/17): the oracle unions ALL same-colour seg pixels, but the OLD
   scene had MULTIPLE red geoms (2 stools + a can) → centroid on the cluster while dino boxed ONE → box↔centroid
   >60px ~2/3 of samples. RESOLVED R224 (WORLD config Inv.3; oracle+tol UNCHANGED=Inv.1): inject ONE dominant
