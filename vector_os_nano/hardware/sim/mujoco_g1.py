@@ -492,6 +492,10 @@ class MuJoCoG1:
         self._offsets: _G1Offsets | None = None
         self._viewer: Any = None
         self._cam_renderer: Any = None
+        # Dims the cached head-cam renderer was built at; re-create on change so
+        # each get_camera_frame() honors ITS width/height (E168 — the E167 go2
+        # per-call-dims contract, mirrored to this sibling humanoid driver).
+        self._cam_renderer_dims: tuple[int, int] | None = None
         # Embodiment manifest (Rule 11): spawn pose + nominal stance read from
         # embodiments/g1/robot.yaml instead of the _G1_SPAWN_*/_DEFAULT_ANGLES
         # constants. Loaded once at connect(); stance vector built in the model's
@@ -643,6 +647,7 @@ class MuJoCoG1:
             except Exception:
                 pass
             self._cam_renderer = None
+            self._cam_renderer_dims = None
         if self._viewer is not None:
             try:
                 self._viewer.close()
@@ -1139,8 +1144,20 @@ class MuJoCoG1:
         d = self._data
         assert m is not None and d is not None
 
-        if self._cam_renderer is None:
+        # The head camera is SHARED across resolutions: the bare look/describe
+        # path renders at the 640x480 default (VLM) while a configured
+        # G1HeadPerception(width=W, height=H) / the g1 perception oracle render
+        # at their own dims. A cache-once renderer (E167 defect) let the FIRST
+        # caller's resolution silently win, so honor each call's dims — re-create
+        # only when they change, closing the old GL context first.
+        if self._cam_renderer_dims != (width, height):
+            if self._cam_renderer is not None:
+                try:
+                    self._cam_renderer.close()
+                except Exception:  # noqa: BLE001 — best-effort GL teardown
+                    pass
             self._cam_renderer = mj.Renderer(m, height, width)
+            self._cam_renderer_dims = (width, height)
 
         try:
             cam_id = m.cam(_SCENE_CAM_NAME).id
@@ -1170,7 +1187,6 @@ class MuJoCoG1:
         cam_xmat: (9,) row-major rotation matrix; -Z column is optical axis.
         """
         self._require_connection()
-        mj = _get_mujoco()
         m = self._model
         d = self._data
         assert m is not None and d is not None
@@ -1190,7 +1206,6 @@ class MuJoCoG1:
         ground-plane projection needs to turn a detected pixel into a world (x, y).
         """
         self._require_connection()
-        mj = _get_mujoco()
         m = self._model
         assert m is not None
         try:
