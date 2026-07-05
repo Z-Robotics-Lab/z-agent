@@ -190,3 +190,4 @@
 {"schema":1,"ts":1783208305,"round":"R373","kind":"build","exit":0,"post_check":"ok","commit":"fe112fd","dur_s":738}
 {"schema":1,"ts":1783208898,"round":"R374","kind":"build","exit":0,"post_check":"ok","commit":"1de4001","dur_s":473}
 {"schema":1,"ts":1783209609,"round":"R375","kind":"build","exit":0,"post_check":"ok","commit":"c002fb0","dur_s":591}
+{"schema":1,"ts":1783210672,"round":"R376","kind":"build","exit":0,"post_check":"ok","commit":"74b3719","dur_s":943}

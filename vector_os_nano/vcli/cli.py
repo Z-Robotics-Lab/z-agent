@@ -25,7 +25,7 @@ from typing import Any, Callable
 
 import re
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -197,27 +197,43 @@ _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 
 
 def render_response(text: str, width: int = 80) -> Panel:
-    """Render V's response with syntax-highlighted code blocks and paths."""
+    """Render V's response with syntax-highlighted code blocks and paths.
+
+    Fenced blocks are rendered via ``rich.syntax.Syntax`` keyed on the block's
+    language tag (```python / ```bash / ...) so the highlighting is REAL and
+    language-driven; an unknown/absent tag degrades to plain text rather than
+    crashing the REPL. Prose between blocks keeps path/inline-code colouring.
+    """
     parts = _CODE_BLOCK_RE.split(text)
 
-    group = Text()
+    renderables: list = []
+    prose = Text()
     i = 0
     while i < len(parts):
         if i + 2 < len(parts) and (i % 3) == 0:
-            _append_highlighted_text(group, parts[i])
+            _append_highlighted_text(prose, parts[i])
             i += 1
             lang = parts[i] or "text"
             code = parts[i + 1]
             i += 2
-            group.append("\n")
-            for line in code.splitlines():
-                group.append(f"  {line}\n", style="#88c0d0")
+            renderables.append(prose)
+            renderables.append(
+                Syntax(
+                    code.rstrip("\n"),
+                    lang,
+                    theme="ansi_dark",
+                    background_color="default",
+                    word_wrap=True,
+                )
+            )
+            prose = Text()
         else:
-            _append_highlighted_text(group, parts[i])
+            _append_highlighted_text(prose, parts[i])
             i += 1
+    renderables.append(prose)
 
     return Panel(
-        group,
+        Group(*renderables),
         title=V_LABEL,
         title_align="left",
         border_style=TEAL,
