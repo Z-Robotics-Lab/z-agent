@@ -1477,9 +1477,25 @@ class MuJoCoGo2:
         mj = _get_mujoco()
         import numpy as np
         model = self._mj.model
-        if not hasattr(self, "_seg_renderer"):
+        # The segmentation renderer is the THIRD sibling of the head-cam renderer
+        # family (RGB/depth honor per-call dims via _ensure_render, E167; g1 mirror
+        # E168). It too is SHARED across resolutions — the sole caller
+        # (Go2GraspPerception.get_depth_frame) applies the mask only when
+        # self_mask.shape == depth.shape, so a first-call resolution locked in
+        # (cache-once) would silently FAIL that guard on a differently-sized later
+        # call, dropping the self-filter and letting the arm become a grasp
+        # distractor (D30). Honor each call's dims — re-create only on change,
+        # closing the old GL context first (E170).
+        if getattr(self, "_seg_renderer_dims", None) != (width, height):
+            old = getattr(self, "_seg_renderer", None)
+            if old is not None:
+                try:
+                    old.close()  # release the old GL context before replacing
+                except Exception:  # noqa: BLE001 — best-effort GL teardown
+                    pass
             self._seg_renderer = mj.Renderer(model, height, width)
             self._seg_renderer.enable_segmentation_rendering()
+            self._seg_renderer_dims = (width, height)
         if not hasattr(self, "_piper_geom_ids"):
             # Collect EVERY body in the arm subtree (descendants of piper_base_link),
             # not just "piper*"-named ones — the gripper/finger bodies are named
