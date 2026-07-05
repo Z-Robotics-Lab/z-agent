@@ -171,6 +171,48 @@ def test_place_metadata_delta_is_only_handover_on_shipped():
     assert by_metadata == set(_PLACE_SKILLS) | {"handover"}, by_metadata
 
 
+class _ByoTool:
+    """A duck-typed BYO motor tool carrying the metadata flags SkillWrapperTool would compute,
+    so ``dispatch_skill`` reads them exactly as it does for a real wrapped BYO skill."""
+
+    def __init__(self, name: str, *, is_grasp: bool = False, releases: bool = False) -> None:
+        self.name = name
+        self._is_grasp = is_grasp
+        self._releases_object = releases
+
+    def execute(self, params: Any, context: Any) -> Any:
+        from vector_os_nano.vcli.tools.base import ToolResult
+        return ToolResult(content=f"{self.name} ok")
+
+
+def test_byo_place_then_grasp_refused_through_dispatch():
+    """End-to-end at the loop level: a BYO place skill (novel name, metadata-only — NOT in any
+    name-list) ARMS the guard, and a BYO grasp skill (novel name) is then REFUSED until a verify
+    closes the place — the North-Star plug-and-play protection the name-lists could not give."""
+    from types import SimpleNamespace
+
+    from vector_os_nano.vcli.native_loop import NativeStepRunner
+
+    tnl = importlib.import_module("tests.unit.vcli.test_native_loop")
+    agent, _base = tnl._make_agent(0.0, 0.0)
+    motor = {
+        "dropoff": _ByoTool("dropoff", releases=True),
+        "snatch": _ByoTool("snatch", is_grasp=True),
+    }
+    verifier = SimpleNamespace(verify=lambda expr: True)
+    runner = NativeStepRunner(
+        agent, verifier, frozenset({"resting_on_receptacle"}), motor, SimpleNamespace()
+    )
+    # (1) BYO place succeeds -> arms the guard (name-list never mentions "dropoff").
+    assert runner.dispatch_skill("dropoff", {}).is_error is False
+    # (2) an immediate BYO re-grasp is refused (was silently allowed pre-fix).
+    blocked = runner.dispatch_skill("snatch", {"object": "cup"})
+    assert blocked.is_error is True
+    # (3) a verify closes the place -> the next grasp runs.
+    runner.handle_verify("resting_on_receptacle() >= 1")
+    assert runner.dispatch_skill("snatch", {"object": "cup"}).is_error is False
+
+
 def test_navigation_and_perception_never_classified():
     """A base-only / perception skill must never arm the guard or be refused as a grasp."""
     for name in ("navigate", "detect", "describe"):
