@@ -22,6 +22,7 @@ import math
 import subprocess
 import time
 from typing import Any
+from vector_os_nano.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +304,7 @@ class IsaacSimArmProxy:
             raise ValueError(
                 f"Expected {_DOF} joint positions, got {len(positions)}"
             )
+        ensure_finite_joint_targets(positions, "IsaacSimArmProxy.move_joints")
 
         self._publish_command(positions)
 

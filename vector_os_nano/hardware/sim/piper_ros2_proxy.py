@@ -32,6 +32,7 @@ import time
 from typing import Any
 
 import numpy as np
+from vector_os_nano.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 
@@ -333,6 +334,7 @@ class PiperROS2Proxy:
             raise ValueError(
                 f"PiperROS2Proxy.move_joints: expected 6 positions, got {len(positions)}"
             )
+        ensure_finite_joint_targets(positions, "PiperROS2Proxy.move_joints")
         start = self.get_joint_positions()
         steps = max(1, int(duration * _MOVE_UPDATE_HZ))
         dt = duration / steps

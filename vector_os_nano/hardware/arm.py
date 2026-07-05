@@ -11,7 +11,36 @@ No hardware imports. No ROS2 imports.
 """
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+import math
+from typing import Iterable, Protocol, runtime_checkable
+
+
+def ensure_finite_joint_targets(
+    positions: Iterable[float],
+    ctx: str = "move_joints",
+) -> None:
+    """Reject non-finite (NaN/±inf) actuator targets before commanding.
+
+    Security floor (rules/common/security.md): reject NaN/inf before acting on
+    an actuator. A non-finite joint target written into a sim ``ctrl`` array or
+    a real servo command silently poisons the robot state and every downstream
+    verify while the move reports success — a fail-open. Every concrete
+    ``move_joints`` MUST call this at its entry so a bad value from config
+    (``skills.<name>.joint_values``), IK output, or the ROS2 bridge fails loud
+    and index-scoped at the boundary rather than being commanded.
+
+    Length (dof mismatch) stays a separate, pre-existing contract — this gate
+    checks only finiteness and is a no-op on an empty sequence.
+
+    Raises:
+        ValueError: if any target is NaN, +inf or -inf.
+    """
+    for i, v in enumerate(positions):
+        if not math.isfinite(v):
+            raise ValueError(
+                f"{ctx}: joint target[{i}] is non-finite ({v!r}); "
+                "refusing to command NaN/inf to the actuator"
+            )
 
 
 @runtime_checkable
@@ -73,7 +102,8 @@ class ArmProtocol(Protocol):
             True if motion completed successfully, False on timeout or error.
 
         Raises:
-            ValueError: If len(positions) != dof.
+            ValueError: If len(positions) != dof, or any target is non-finite
+                (NaN/±inf) — see ``ensure_finite_joint_targets``.
             RuntimeError: If not connected.
         """
         ...

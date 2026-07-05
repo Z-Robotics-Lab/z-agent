@@ -19,6 +19,7 @@ import logging
 import math
 from pathlib import Path
 from typing import Any
+from vector_os_nano.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,7 @@ class MuJoCoArm:
                 f"MuJoCoArm.move_joints: expected {self.dof} positions, "
                 f"got {len(positions)}"
             )
+        ensure_finite_joint_targets(positions, "MuJoCoArm.move_joints")
 
         mj = _get_mujoco()
         import time as _time  # noqa: PLC0415

@@ -35,6 +35,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from vector_os_nano.hardware.arm import ensure_finite_joint_targets
 
 if TYPE_CHECKING:  # pragma: no cover
     from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
@@ -360,6 +361,7 @@ class MuJoCoPiper:
                 f"MuJoCoPiper.move_joints: expected {self.dof} positions, "
                 f"got {len(positions)}"
             )
+        ensure_finite_joint_targets(positions, "MuJoCoPiper.move_joints")
 
         data = self._go2._mj.data
         start = [float(data.ctrl[aid]) for aid in self._arm_actuator_ids]

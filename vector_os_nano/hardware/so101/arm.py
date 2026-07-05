@@ -25,6 +25,7 @@ from vector_os_nano.hardware.so101.joint_config import (
     rad_to_enc,
 )
 from vector_os_nano.hardware.so101.serial_bus import SerialBus
+from vector_os_nano.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,7 @@ class SO101Arm:
                 f"SO101Arm.move_joints: expected {self.dof} positions, "
                 f"got {len(positions)}"
             )
+        ensure_finite_joint_targets(positions, "SO101Arm.move_joints")
 
         current = self.get_joint_positions()
         n_waypoints = _DEFAULT_WAYPOINTS

@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from vector_os_nano.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +275,7 @@ class SimulatedArm:
                 f"SimulatedArm.move_joints: expected {self.dof} positions, "
                 f"got {len(positions)}"
             )
+        ensure_finite_joint_targets(positions, "SimulatedArm.move_joints")
 
         p = _get_pybullet()
         for idx, pos in zip(self._arm_joint_indices, positions):
