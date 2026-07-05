@@ -154,6 +154,11 @@ only if its D#/E#/commit pointer resolves in the ledger or git. Details live at 
 Compressed from docs/tricky-bugs.md (removed 2026-07-02); full original prose in git history.
 Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a green suite, or hid behind "every component correct in isolation". Routine bugs → git history.
 
+- **Case 19 (an accepted "inert" ruling silently became a LIVE gate, 2026-07-04)** — D72 ruled `has_arm` an
+  ENRICHMENT flag (`resolve_capability_profile`, runtime-OR-declared) safe because "no gate reads it"; D175 then
+  gated manipulation on `has_arm` (`native_loop`), invalidating that premise — a manifest declaring `has_arm:true`
+  with no runtime `_arm` is offered pick/place/… it can't execute. LATENT (both manifests declare `has_arm:false`).
+  LESSON: a ruling calling a design "inert because nothing consumes X" reopens the moment a later round consumes X — grep every consumer. Fix CEO-gated (D72). Pinned test_declared_arm_gate_tension.py → E172/G-383-1
 - **Case 18 (a drift guard uncovered a DEAD safety-net, 2026-07-04)** — a test DRIVING config.py's
   missing-file fallback (monkeypatch `_DEFAULT_YAML`→nonexistent, call `load_config()`) crashed with
   `NameError: 'logger' is not defined` at config.py:116, not the drift AssertionError I hunted: the
@@ -234,13 +239,8 @@ Only IMPLICIT bugs belong here — symptom pointed away from cause, survived a g
   copied PICKABLES → IK FK on a stale base (matched at spawn only). Fix: DofLayout-derived
   `_lo = root_qpos_adr; _n = 7 + num_actuated`. LESSON: byte-identical compiled MODEL ≠ byte-identical qpos
   ORDER — blast-radius-grep ALL absolute qpos[N]/qvel[N] reads in CONSUMERS and e2e a MOVED (not spawn) pose.
-- **Case 8 (arm-stow nq guard, 2026-06-24, S3b)** — bare-go2 connect() raised `broadcast (8,) into shape (0,)`
-  at arm-stow after attach flipped the scene-build; legacy build was in-bounds + all-zeros = SILENT no-op.
-  Root: `nq >= 27` assumed "arm ⇒ nq≥27"; the room's 3 pickable freejoints put BARE go2 at nq=40 in BOTH
-  builds — nq is a SCENE property. Fix: gate on `model.nu >= 19` (nu=12 bare / 19 arm); slice at
-  joint_qpos_start + num_actuated. LESSON: never discriminate robot morphology by nq — use nu or a
-  named-element probe; an in-bounds all-zeros write is the textbook silent latent bug.
 ### Folded (oldest cases compressed to one line each; full prose in git at the hash)
+- **Case 8** (arm-stow nq guard, 2026-06-24, S3b) — bare-go2 arm-stow raised `broadcast (8,) into (0,)` after attach; `nq>=27` assumed "arm⇒nq≥27" but 3 pickable freejoints put BARE go2 at nq=40 (nq is a SCENE property). Fix: gate on `model.nu>=19`; slice at joint_qpos_start+num_actuated. LESSON: never discriminate morphology by nq — use nu/named-element probe. → git history
 - **Case 7** (placed_count gate, 2026-06-21) — pedestal-top place (z~0.32) looks OK but `placed_count`=0 forever: `make_placed_count` counts only z<_LIFT_MIN_Z(0.10); D34 reaches further the higher it goes. LESSON: a verify oracle encodes IMPLICIT geometry — measure the target satisfies BOTH reach AND the gate; never loosen (verify only stricter). → git history
 - **Case 6** (EdgeTAM degrade, 2026-06-23, R39) — nav→grasp completes but holding_object False; `timm` absent → EdgeTAM failed to LOAD → box-rect fallback → depth centroid averaged can+table. LESSON: when two runs of the SAME perception code disagree, suspect a silently-degrading optional-model path before re-theorizing geometry; make degrade LOUD; env-sync optional deps. → git history
 - **Case 3** (dead PYTHONPATH, 2026-06, 13a9429) — explore "worked" on system python3 (mujoco 3.6) not the repo `.venv` (3.9); Python silently ignores missing PYTHONPATH entries. LESSON: print `module.__file__` to verify WHICH copy loaded. → 13a9429

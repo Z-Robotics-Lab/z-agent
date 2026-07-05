@@ -22,8 +22,21 @@ Authority (deliberate, behavior-preserving — S5a):
     runtime-OR-declared: present iff the live agent has the member OR the body's
     ``robot.yaml`` manifest declares it. This makes the go2+Piper runtime-attach
     honest — bare go2's manifest declares ``has_arm:false`` yet a Piper is bound at
-    runtime, so the runtime member wins. No current gate reads these flags, so the
-    reconcile cannot change today's behavior; it is the forward seam for S5b+.
+    runtime, so the runtime member wins. ``has_gripper`` / ``lidar`` remain the
+    forward seam for S5b+ (no gate reads them).
+
+STALE-PREMISE WARNING (D72 vs D175 — latent misgate, gate G-383-1): D72 introduced
+the enrichment flags as "behavior-inert — no current gate reads them", but D175 then
+made ``has_arm`` a LIVE manipulation gate (``native_loop._build_motor_tools`` withholds
+pick/place/... when ``not has_arm``). So ``has_arm`` is NO LONGER inert: its
+runtime-OR-declared authority lets a body that DECLARES ``has_arm:true`` but has bound
+no runtime ``_arm`` be offered a manipulation surface it cannot execute — the false-reach
+the D175 gate exists to prevent. LATENT only because both shipped manifests declare
+``has_arm:false``; a plug-and-play manipulator manifest would hit it. The GATED flags
+``has_base`` / ``camera`` are runtime-authoritative for exactly this reason. Making
+``has_arm`` runtime-authoritative to match touches accepted ruling D72 -> a CEO gate
+(G-383-1), NOT a self-approved change. Pinned by
+``tests/vcli/test_declared_arm_gate_tension.py``.
 
 Shifting the GATED flags' authority to the declared manifest (so a body's offered
 toolset follows its robot.yaml even before runtime members bind) is a deliberate
