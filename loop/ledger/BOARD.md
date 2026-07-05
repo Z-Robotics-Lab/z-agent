@@ -1,5 +1,4 @@
-wrote /home/yusen/Desktop/vector_os_nano/loop/ledger/BOARD.md
-le)
+# Acceptance board (GENERATED — edit the ledger, not this file)
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
@@ -26,7 +25,7 @@ le)
 | fetch.nl-plain-colour | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat+judge:gemma4:e4b | vlm-judge | 9 | pending |
 | fetch.nl-scene-clutter | confirmed | GROUNDED 1/1 | bare-repl+nl | deepseek-chat+judge:gemma4:e4b | vlm-judge | 7 | pending |
 | g1.navigation | confirmed | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
-| g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 416 | pending |
+| g1.perception | provisional | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 0 | pending |
 | kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 1/1 | bare-repl+nl | openrouter (zero credit spent) | self-read | 405 | pending |
 | place.nl-new-world-courtyard | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 408 | pending |
 | place.nl-new-world-warehouse | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 408 | pending |
@@ -265,3 +264,4 @@ le)
 - E230 R705 [confirmed] fetch.nl-new-world-courtyard-purple (age~414 STALE confirmed, the oldest BOARD row) still grounds on the live bare-cli face. — retry only if: n/a — standing STALE-row re-verify cadence; next oldest: courtyard-red (age~414), g1.navigation/perception (age~410-412)
 - E231 R707 [confirmed] fetch.nl-new-world-courtyard-red (age~416 STALE confirmed, oldest BOARD row) still grounds on the live bare-cli face? — retry only if: courtyard red fetch regresses to RAN/FAILED or pickable_can_red removed; re-check age>~25
 - E232 R709 [confirmed] g1.navigation (age~412 STALE confirmed, oldest BOARD row) still grounds on the live bare-cli face? — retry only if: g1 nav regresses to RAN/FAILED, or g1 config/at_position oracle changes; re-check age>~25
+- E233 R710 [confirmed] R710 §7: does oldest STALE confirmed row g1.perception (age~416) still GROUND on the real bare face; substrate rot-free (WIRING accurate, gates/tokens clean since R700, LESSONS in cap); does an R709 headline survive independent re-red-team? — retry only if: g1.perception regresses to RAN, or g1 config/detection_matches_gt oracle changes; re-check age>~25
