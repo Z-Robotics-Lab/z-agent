@@ -11,7 +11,10 @@ when intent is ambiguous.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # (keywords, categories) — checked in order, all matches accumulated
@@ -335,8 +338,18 @@ class IntentRouter:
                 match = skill_registry.match(user_message)
                 if match is not None:
                     return True
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — a BYO registry must not crash routing
+                # Inv-4 bring-a-skill: skill_registry is a BYO surface. Swallowing
+                # a raise routing-safely (fall through to the heuristics below) is
+                # correct, but doing it SILENTLY hides a broken BYO registry with
+                # zero signal (the E183 persona vein). Behaviour is unchanged; the
+                # WARNING makes the degraded routing observable.
+                logger.warning(
+                    "skill_registry.match(%r) raised %r; routing falls through to "
+                    "keyword heuristics (BYO skill match ignored this turn)",
+                    user_message,
+                    exc,
+                )
 
         # Meta / first-person-request guard → tool_use (answer directly). Reaching
         # here means the message did NOT match a registered skill (or there is no

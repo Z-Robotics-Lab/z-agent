@@ -2,43 +2,43 @@
 
 | capability | status | verdict n/m | face | provider | eyes | age (rounds) | commit |
 |---|---|---|---|---|---|---|---|
-| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 215 | f159306 |
-| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 215 | f159306 |
-| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 215 | f159306 |
-| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 211 | 61fde80 |
-| describe.nl-go2-courtyard | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 143 | pending |
-| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 87 | pending |
-| fetch-place.nl-compound | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 130 | pending |
-| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 87 | pending |
-| fetch.nl-new-world-courtyard | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 106 | pending |
-| fetch.nl-new-world-courtyard-blue | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 89 | pending |
-| fetch.nl-new-world-courtyard-purple | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 104 | pending |
-| fetch.nl-new-world-courtyard-red | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 104 | pending |
-| fetch.nl-new-world-warehouse | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 107 | pending |
-| fetch.nl-new-world-warehouse-blue | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 90 | pending |
-| fetch.nl-new-world-warehouse-purple | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 90 | pending |
-| fetch.nl-new-world-warehouse-red | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 90 | pending |
-| fetch.nl-novel-geometry-purple-box | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 82 | pending |
-| fetch.nl-novel-object-yellow | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 140 | pending |
-| fetch.nl-ordinal-position-invariance | superseded | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 107 | pending |
-| fetch.nl-ordinal-spatial | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 126 | pending |
-| fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 87 | pending |
-| fetch.nl-scene-clutter | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 107 | pending |
-| g1.navigation | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 102 | pending |
-| g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 100 | pending |
-| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 1/1 | bare-repl+nl | openrouter (zero credit spent) | self-read | 89 | pending |
-| place.nl-new-world-courtyard | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 92 | pending |
-| place.nl-new-world-warehouse | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 92 | pending |
-| place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 96 | pending |
-| quantity-place.nl | refuted | REFUTED 0/4 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 88 | pending |
-| quantity-place.nl-guardrail | superseded | REFUTED 0/0 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 86 | pending |
-| quantity-place.nl-isolation | refuted | REFUTED 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 121 | pending |
-| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 188 | pending |
-| runner.degenerate-spin-guard | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 84 | pending |
-| runner.degenerate-spin-guard.no-regression | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | self-read | 83 | pending |
-| verify.eyes-place-judge-fires | confirmed ⚠ STALE | JUDGE-FIRES 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 96 | pending |
-| verify.eyes-vlm-judge-place | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 84 | pending |
-| verify.eyes-vlm-judge-wired | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 86 | pending |
+| byo-model.gemini-3.5-flash | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:google/gemini-3.5-flash | self-read | 482 | f159306 |
+| byo-model.llama-3.3-70b | refuted | RAN 0/2 | bare-repl+nl | openrouter:meta-llama/llama-3.3-70b-instruct | self-read | 482 | f159306 |
+| byo-model.mistral-medium-3-5 | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:mistralai/mistral-medium-3-5 | self-read | 482 | f159306 |
+| byo-model.openai-gpt-4o-mini | superseded | NOT-RUN 0/0 | bare-repl+nl | openrouter:openai/gpt-4o-mini | self-read | 478 | 61fde80 |
+| describe.nl-go2-courtyard | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 410 | pending |
+| fetch-place.nl-category-only | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 354 | pending |
+| fetch-place.nl-compound | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 397 | pending |
+| fetch.nl-negated-distractor | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 354 | pending |
+| fetch.nl-new-world-courtyard | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 373 | pending |
+| fetch.nl-new-world-courtyard-blue | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 356 | pending |
+| fetch.nl-new-world-courtyard-purple | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 371 | pending |
+| fetch.nl-new-world-courtyard-red | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 371 | pending |
+| fetch.nl-new-world-warehouse | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 374 | pending |
+| fetch.nl-new-world-warehouse-blue | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 357 | pending |
+| fetch.nl-new-world-warehouse-purple | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 357 | pending |
+| fetch.nl-new-world-warehouse-red | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 357 | pending |
+| fetch.nl-novel-geometry-purple-box | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 349 | pending |
+| fetch.nl-novel-object-yellow | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash | self-read | 407 | pending |
+| fetch.nl-ordinal-position-invariance | superseded | RAN 0/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 374 | pending |
+| fetch.nl-ordinal-spatial | refuted | RAN 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 393 | pending |
+| fetch.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 354 | pending |
+| fetch.nl-scene-clutter | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 374 | pending |
+| g1.navigation | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | self-read | 369 | pending |
+| g1.perception | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | self-read | 367 | pending |
+| kernel.model-unavailable-surfacing | confirmed ⚠ STALE | PASS 1/1 | bare-repl+nl | openrouter (zero credit spent) | self-read | 356 | pending |
+| place.nl-new-world-courtyard | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 359 | pending |
+| place.nl-new-world-warehouse | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 359 | pending |
+| place.nl-plain-colour | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 363 | pending |
+| quantity-place.nl | refuted | REFUTED 0/4 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 355 | pending |
+| quantity-place.nl-guardrail | superseded | REFUTED 0/0 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 353 | pending |
+| quantity-place.nl-isolation | refuted | REFUTED 0/1 | bare-repl+nl | deepseek-v4-flash | self-read | 388 | pending |
+| quantity-place.nl-robustness | superseded | GROUNDED 1/1 | bare-repl+nl | deepseek-chat | self-read | 455 | pending |
+| runner.degenerate-spin-guard | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash | vlm-judge | 351 | pending |
+| runner.degenerate-spin-guard.no-regression | superseded | NOT-RUN 0/0 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | self-read | 350 | pending |
+| verify.eyes-place-judge-fires | confirmed ⚠ STALE | JUDGE-FIRES 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 363 | pending |
+| verify.eyes-vlm-judge-place | confirmed ⚠ STALE | GROUNDED 2/2 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 351 | pending |
+| verify.eyes-vlm-judge-wired | confirmed ⚠ STALE | GROUNDED 1/1 | bare-repl+nl | deepseek-v4-flash+judge:gemma4:e4b | vlm-judge | 353 | pending |
 
 ## Open refuted / do-not-retry (from experiments.jsonl)
 - E1 R150 [confirmed] an append-only DECISIONS ledger can be compacted without losing accepted rulings — retry only if: n/a — folds stay CEO-gated (doc-governance)
@@ -220,3 +220,4 @@
 - E181 R392 [plateau] Both levers SHUT; is the tool-registry silent last-wins overwrite (ToolRegistry.register base.py:208) a FRESH non-gated plug-and-play fail-open — a BYO world shadowing a kernel tool by name? — retry only if: sim slot frees OR owner answers a queued gate
 - E182 R393 [plateau] Both levers SHUT; is the UNSCANNED vocab-derivation surface (vocab_from_registry.build_decompose_vocab; ledger vocab=0) a FRESH non-gated plug-and-play fail-open? — retry only if: sim slot frees OR owner answers a queued gate
 - E183 R394 [confirmed] Inv-4 persona surface grep-confirmed UNSCANNED (E60=content only). Audit _select_persona (prompt.py) for a plug-and-play fail-open/silent-swallow. — retry only if: persona silent-swallow regressed (regr=test_prompt.py::TestByoPersonaFallback); persona axis now SCANNED
+- E184 R661 [confirmed] Both levers SHUT; adopt R394 WIP: IntentRouter.should_use_vgg consults a BYO skill_registry.match() under `except: pass` (ROUTE pillar) — fresh Inv-4 bring-a-skill surface, silent-swallow like E183 persona? — retry only if: regressed (regr=tests/unit/vcli/test_intent_router_skill_registry_swallow.py); ROUTE bring-a-skill now SCANNED
