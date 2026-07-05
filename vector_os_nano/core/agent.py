@@ -24,6 +24,29 @@ from vector_os_nano.core.world_model import WorldModel
 logger = logging.getLogger(__name__)
 
 
+# The structured-effect signal that a skill ends with the gripper still HOLDING an object.
+_GRIPPER_HOLDING_EFFECT: str = "holding"
+
+
+def _skill_ends_holding(skill: Any) -> bool:
+    """True iff *skill*'s structured effect declares it ends with the gripper HOLDING an object.
+
+    The plug-and-play half of the auto-``home`` drop guard (R386/E175): ``execute_skill`` appends
+    a ``home`` step, and HomeSkill unconditionally OPENS the gripper (``skills/home.py``), so
+    appending it after a grasp-and-hold skill silently DROPS the object just grasped — the same
+    '掉了' hazard the E60 post-place guard prevents, on the GRASP side. Reading the skill's OWN
+    effect contract makes the guard complete for a BYO grasp-hold skill the kernel has never
+    named (no kernel edit), UNIONed with the ``pick(mode='hold')`` runtime check. Scans the
+    effect dict ONLY (never prose); fail-safe False on a malformed/absent effects declaration.
+    """
+    effects = getattr(skill, "effects", {})
+    if not isinstance(effects, dict):
+        return False
+    if effects.get("gripper_state") == _GRIPPER_HOLDING_EFFECT:
+        return True
+    return "held_object" in effects and effects.get("held_object") is not None
+
+
 class Agent:
     """Robot arm / mobile base control via structured skill calls.
 
@@ -263,13 +286,20 @@ class Agent:
                 postconditions=[],
             ))
 
-        # Add home at end if not already there — but NOT when:
-        # - pick mode='hold' (HomeSkill opens gripper, would drop held object)
-        # - gripper_close / gripper_open (HomeSkill opens gripper, overrides state)
+        # Add home at end if not already there — but NOT when the skill must keep its end-state
+        # gripper, because HomeSkill unconditionally OPENS the gripper:
+        # - pick mode='hold' (would drop the held object) — runtime param, not a static effect
+        # - gripper_close / gripper_open (home overrides the deliberate gripper state)
         # - home itself
+        # - ANY skill whose STRUCTURED effect declares it ends holding an object
+        #   (``_skill_ends_holding``) — the plug-and-play half so a BYO grasp-and-hold skill the
+        #   kernel never named is not silently dropped, and the shipped grasp-hold skills
+        #   (pick_top_down / mobile_pick / perception_grasp) stop dropping what they grasped
+        #   (R386/E175, unioned with the name/param list; ``pick`` ends open -> unaffected).
         skip_home = (
             (skill_name == "pick" and params.get("mode") == "hold")
             or skill_name in ("gripper_close", "gripper_open", "home")
+            or _skill_ends_holding(skill_obj)
         )
         if not skip_home and (not steps or steps[-1].skill_name != "home"):
             steps.append(TaskStep(
