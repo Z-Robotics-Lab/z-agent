@@ -89,6 +89,88 @@ def test_built_perception_is_localizer_usable():
 
 
 # ---------------------------------------------------------------------------
+# Head-camera resolution: single-sourced + pinned to the real bridge (E165).
+#
+# The go2 head-camera render resolution is a CROSS-FILE mirror: the real frame
+# source (Go2ROS2Proxy.get_camera_frame) publishes it, the grasp intrinsics
+# derive from it (mujoco_intrinsics), and manipulation_setup wired it with a
+# "must match the bridge" comment. Before R376 that contract had NO enforcement
+# and the Go2GraspPerception class default had drifted to a STALE 640x480 (the
+# original feature commit's arbitrary value), while the authoritative sources
+# all agree on 320x240 -> the look/explore acceptance path (_build_go2_perception
+# uses the class default) rendered at a resolution the real robot never publishes
+# (a sim-vs-real fidelity divergence + an internal look-vs-grasp inconsistency).
+# These guards pin the single-sourced constant to every consumer.
+# ---------------------------------------------------------------------------
+
+
+def test_head_cam_resolution_is_single_sourced_and_authoritative():
+    """The one head-cam resolution constant is the authoritative 320x240."""
+    from vector_os_nano.perception.go2_grasp_perception import (
+        GO2_HEAD_CAM_HEIGHT,
+        GO2_HEAD_CAM_WIDTH,
+    )
+
+    assert (GO2_HEAD_CAM_WIDTH, GO2_HEAD_CAM_HEIGHT) == (320, 240)
+
+
+def test_class_default_matches_the_single_source():
+    """Go2GraspPerception defaults to the shared constant, not a stale 640x480."""
+    from vector_os_nano.perception.go2_grasp_perception import (
+        GO2_HEAD_CAM_HEIGHT,
+        GO2_HEAD_CAM_WIDTH,
+        Go2GraspPerception,
+    )
+
+    p = Go2GraspPerception(_FullCameraBase())  # no explicit width/height
+    assert (p._w, p._h) == (GO2_HEAD_CAM_WIDTH, GO2_HEAD_CAM_HEIGHT)
+
+
+def test_look_path_perception_matches_grasp_path_resolution():
+    """_build_go2_perception (look/explore) and manipulation_setup (grasp) build
+    perception at the SAME resolution — no look-vs-grasp divergence."""
+    from vector_os_nano.perception.go2_grasp_perception import (
+        GO2_HEAD_CAM_HEIGHT,
+        GO2_HEAD_CAM_WIDTH,
+    )
+
+    look = _build_go2_perception(_FullCameraBase())
+    assert (look._w, look._h) == (GO2_HEAD_CAM_WIDTH, GO2_HEAD_CAM_HEIGHT)
+
+
+def test_constant_matches_real_bridge_frame_source_default():
+    """DRIFT GUARD: the head-cam constant must equal the authoritative real frame
+    source (Go2ROS2Proxy.get_camera_frame) default — mechanically enforcing the
+    "must match the bridge" comment so the two can never silently drift apart."""
+    import inspect
+
+    from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+    from vector_os_nano.perception.go2_grasp_perception import (
+        GO2_HEAD_CAM_HEIGHT,
+        GO2_HEAD_CAM_WIDTH,
+    )
+
+    sig = inspect.signature(Go2ROS2Proxy.get_camera_frame)
+    assert sig.parameters["width"].default == GO2_HEAD_CAM_WIDTH
+    assert sig.parameters["height"].default == GO2_HEAD_CAM_HEIGHT
+
+
+def test_intrinsics_internally_consistent_at_single_source():
+    """Intrinsics derived at the constant resolution stay principal-point-centred
+    (cx=w/2, cy=h/2) — the render and intrinsics agree within the instance."""
+    from vector_os_nano.perception.go2_grasp_perception import (
+        GO2_HEAD_CAM_HEIGHT,
+        GO2_HEAD_CAM_WIDTH,
+        Go2GraspPerception,
+    )
+
+    intr = Go2GraspPerception(_FullCameraBase()).get_intrinsics()
+    assert intr.width == GO2_HEAD_CAM_WIDTH and intr.height == GO2_HEAD_CAM_HEIGHT
+    assert intr.cx == GO2_HEAD_CAM_WIDTH / 2.0
+    assert intr.cy == GO2_HEAD_CAM_HEIGHT / 2.0
+
+
+# ---------------------------------------------------------------------------
 # describe seam: caption() / visual_query() route to Go2VLMPerception.describe_scene
 # (R248 — the brain's `describe` recovery raised AttributeError because
 # Go2GraspPerception exposed detect() but not caption()/visual_query()).

@@ -30,6 +30,17 @@ from vector_os_nano.perception.depth_projection import mujoco_intrinsics
 
 logger = logging.getLogger(__name__)
 
+# Single source of truth for the go2 head-camera render resolution. This is the
+# AUTHORITATIVE value: the real frame source (Go2ROS2Proxy.get_camera_frame),
+# the grasp intrinsics (depth_projection.mujoco_intrinsics) and the documented
+# on-robot d435 bridge all publish/expect 320x240. Keep the class default and
+# every launcher pinned here so the look/explore path and the grasp path can
+# never diverge, and so sim never renders at a resolution the real robot cannot
+# produce. Machine-guarded against Go2ROS2Proxy's default in
+# tests/vcli/test_go2_perception_wiring.py (E165).
+GO2_HEAD_CAM_WIDTH: int = 320
+GO2_HEAD_CAM_HEIGHT: int = 240
+
 
 class Go2GraspPerception:
     """Real RGB-D + VLM + EdgeTAM perception over a MuJoCoGo2 base.
@@ -49,8 +60,8 @@ class Go2GraspPerception:
         vlm: Any = None,
         tracker: Any = None,
         describe_vlm: Any = None,
-        width: int = 640,
-        height: int = 480,
+        width: int = GO2_HEAD_CAM_WIDTH,
+        height: int = GO2_HEAD_CAM_HEIGHT,
     ) -> None:
         self._base = base
         self._vlm = vlm

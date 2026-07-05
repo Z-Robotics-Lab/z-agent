@@ -56,11 +56,18 @@ def register_manipulation_skills(agent: Any, base: Any, *, enable_env: bool = Tr
     # Perception-driven grasp (the honest North-Star path): real RGB-D from the
     # go2 head camera -> VLM/colour resolve -> EdgeTAM mask -> rendered-depth
     # pointcloud -> 3D grasp point (NEVER ground truth) -> IK -> weld.
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
+    from vector_os_nano.perception.go2_grasp_perception import (
+        GO2_HEAD_CAM_HEIGHT,
+        GO2_HEAD_CAM_WIDTH,
+        Go2GraspPerception,
+    )
     from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
 
-    # The go2 head camera / bridge publishes 320x240; intrinsics must match.
-    agent._perception = Go2GraspPerception(base, width=320, height=240)
+    # The go2 head camera / bridge publishes the single-sourced head-cam
+    # resolution; intrinsics must match it (guarded in test_go2_perception_wiring).
+    agent._perception = Go2GraspPerception(
+        base, width=GO2_HEAD_CAM_WIDTH, height=GO2_HEAD_CAM_HEIGHT
+    )
     agent._skill_registry.register(PerceptionGraspSkill())
     logger.info("[manip] perception-grasp wired: Go2GraspPerception + PerceptionGraspSkill")
     return True
