@@ -504,3 +504,4 @@
 {"schema":1,"ts":1783278952,"round":"R687","kind":"build","exit":0,"post_check":"ok","commit":"f7a7b8a","dur_s":175}
 {"schema":1,"ts":1783279563,"round":"R688","kind":"build","exit":0,"post_check":"ok","commit":"1c72ac2","dur_s":491}
 {"schema":1,"ts":1783280070,"round":"R689","kind":"build","exit":0,"post_check":"ok","commit":"f47c1c8","dur_s":387}
+{"schema":1,"ts":1783280587,"round":"R690","kind":"review","exit":0,"post_check":"ok","commit":"76fdbc4","dur_s":397}
