@@ -28,6 +28,27 @@ def _require_base() -> object:
     return _ctx.base
 
 
+def ensure_finite_travel(value: float, axis: str) -> float:
+    """Reject a non-finite BLOCKING-locomotion target before commanding motion.
+
+    walk_forward/turn use their numeric argument as a loop-TERMINATION threshold
+    (``covered >= abs(distance_m)`` / ``delta >= abs(angle_rad)``), never passing
+    it to ``set_velocity`` — so the hardware/base finiteness gate
+    (``ensure_finite_base_velocity``, E189) structurally cannot catch it. A NaN/inf
+    target makes the comparison always False, so the robot moves at the default
+    speed for the ENTIRE timeout window on a poisoned command, invisible to the
+    honest-verify spine. This is the same external-input-finiteness vein as the
+    actuator guards (E187 loader / E188 arm / E189 base-vel / E190 nav-goal),
+    at the blocking-primitive boundary. Reject NaN/inf before acting.
+    """
+    if not math.isfinite(value):
+        raise ValueError(
+            f"non-finite locomotion target: {axis}={value!r} "
+            f"(reject NaN/inf before commanding motion)"
+        )
+    return value
+
+
 # ---------------------------------------------------------------------------
 # State queries
 # ---------------------------------------------------------------------------
@@ -109,6 +130,7 @@ def walk_forward(distance_m: float, speed: float = 0.4) -> bool:
         RuntimeError: If no hardware is connected.
     """
     _require_base()
+    ensure_finite_travel(distance_m, "distance_m")
     start = get_position()
     set_velocity(speed, 0.0, 0.0)
     deadline = time.monotonic() + 30.0
@@ -141,6 +163,7 @@ def turn(angle_rad: float, rate: float = 1.0) -> bool:
         RuntimeError: If no hardware is connected.
     """
     _require_base()
+    ensure_finite_travel(angle_rad, "angle_rad")
     start_heading = get_heading()
     direction = 1.0 if angle_rad >= 0 else -1.0
     set_velocity(0.0, 0.0, direction * abs(rate))
