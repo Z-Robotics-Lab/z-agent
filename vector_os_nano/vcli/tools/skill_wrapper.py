@@ -35,6 +35,14 @@ MOTOR_KEYWORDS: frozenset[str] = frozenset(
 # skill.
 ARM_HARDWARE_KEYWORDS: frozenset[str] = frozenset({"arm", "gripper"})
 
+# Structured-metadata gripper-state signals that classify a skill as a GRASP or a RELEASE
+# (place) for the E60 post-place re-grasp guard (``native_loop.dispatch_skill``). Scanned over
+# the STRUCTURED contract (preconditions + effects) ONLY — never the prose description — so the
+# guard is complete for a plug-and-play skill the kernel has never named (North-Star BYO skill,
+# no kernel edit), not just the shipped ``_GRASP_SKILLS`` / ``_PLACE_SKILLS`` name-lists.
+_GRIPPER_EMPTY_PRECOND: str = "gripper_empty"
+_GRIPPER_HOLDING_PRECOND: str = "gripper_holding_any"
+
 # The package all SIMULATED hardware adapters live under. A connected component
 # whose module is this package (or a sub-module of it) is a simulation; anything
 # else is real hardware. Precise package match (exact, or prefix + ".") so a name
@@ -74,6 +82,8 @@ class SkillWrapperTool:
         self._agent = agent
         self._is_motor: bool = self._detect_motor(skill)
         self._requires_arm: bool = self._detect_arm_requirement(skill)
+        self._is_grasp: bool = self._detect_grasp(skill)
+        self._releases_object: bool = self._detect_release(skill)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -106,6 +116,34 @@ class SkillWrapperTool:
         structured += " " + str(getattr(skill, "effects", {}))
         structured = structured.lower()
         return any(kw in structured for kw in ARM_HARDWARE_KEYWORDS)
+
+    @staticmethod
+    def _detect_grasp(skill: Any) -> bool:
+        """Return True iff the skill GRASPS an object — its structured precondition requires an
+        EMPTY gripper. The signal the E60 post-place guard uses to REFUSE a re-grasp that would
+        undo an unverified placement; keyed on the precondition (not the effect) so a skill that
+        grasps-then-drops (``pick`` effect ``gripper_state: open``) is still caught. Complete for
+        a BYO grasp skill the kernel's ``_GRASP_SKILLS`` name-list has never seen."""
+        pre = [str(p).lower() for p in getattr(skill, "preconditions", [])]
+        return _GRIPPER_EMPTY_PRECOND in pre
+
+    @staticmethod
+    def _detect_release(skill: Any) -> bool:
+        """Return True iff the skill RELEASES a held object (a place / handover) — its structured
+        precondition requires a HELD object AND its effect EMPTIES the gripper. The signal that
+        ARMS the E60 post-place guard. Both halves required so ``gripper_open`` (empties, but no
+        held-object precondition) and ``pick`` (empty-gripper precondition) are excluded. Complete
+        for a BYO place skill the kernel's ``_PLACE_SKILLS`` name-list has never seen."""
+        pre = [str(p).lower() for p in getattr(skill, "preconditions", [])]
+        if _GRIPPER_HOLDING_PRECOND not in pre:
+            return False
+        effects = getattr(skill, "effects", {})
+        if not isinstance(effects, dict):
+            return False
+        empties = effects.get("gripper_state") == "open" or (
+            "held_object" in effects and effects.get("held_object") is None
+        )
+        return bool(empties)
 
     @staticmethod
     def _build_schema(parameters: dict[str, Any]) -> dict[str, Any]:

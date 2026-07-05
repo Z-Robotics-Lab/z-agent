@@ -97,6 +97,32 @@ _GRASP_SKILLS: frozenset[str] = frozenset(
 # Place skills whose SUCCESS empties the gripper onto a receptacle.
 _PLACE_SKILLS: frozenset[str] = frozenset({"mobile_place", "place", "place_top_down"})
 
+
+def _skill_is_grasp(skill_tool: Any) -> bool:
+    """Whether *skill_tool* GRASPS an object (the re-grasp the post-place guard refuses).
+
+    UNION of the curated ``_GRASP_SKILLS`` name-list and the skill's OWN structured metadata
+    (``SkillWrapperTool._is_grasp``, precondition ``gripper_empty``) so the guard is complete for
+    a plug-and-play grasp skill the kernel has never named (North-Star BYO skill, no kernel edit).
+    Byte-IDENTICAL to the name-list for every shipped skill — the shipped ``gripper_empty``-
+    precondition skills are EXACTLY ``_GRASP_SKILLS`` (R385/E174)."""
+    return skill_tool.name in _GRASP_SKILLS or bool(getattr(skill_tool, "_is_grasp", False))
+
+
+def _skill_is_place(skill_tool: Any) -> bool:
+    """Whether a SUCCESSFUL *skill_tool* releases a held object and empties the gripper (arms the
+    post-place guard).
+
+    UNION of the curated ``_PLACE_SKILLS`` name-list and the skill's OWN structured metadata
+    (``SkillWrapperTool._releases_object``: precondition ``gripper_holding_any`` AND a gripper-
+    emptying effect). A strict SUPERSET of the name-list: it ADDS the shipped ``handover`` (which
+    empties the gripper — the same '掉了' re-grasp risk, previously un-guarded) plus any BYO place
+    skill; it never drops a shipped place. Strictly stricter (more arming ⇒ more re-grasp refusal),
+    bounded by ``_MAX_VERIFY_NUDGES`` so it can never wedge (R385/E174)."""
+    return skill_tool.name in _PLACE_SKILLS or bool(
+        getattr(skill_tool, "_releases_object", False)
+    )
+
 # Re-prompt sent when the model tries to RE-GRASP immediately after a successful place
 # without first verifying it. Brain-agnostic + planner-free: it names the real check
 # (resting_on_receptacle) without parsing the goal for N — the model still owns the
@@ -630,7 +656,7 @@ class NativeStepRunner:
         # model that will not verify still terminates (the guard can never wedge).
         if (
             self._place_awaiting_verify
-            and name in _GRASP_SKILLS
+            and _skill_is_grasp(tool)
             and self._post_place_regrasp_nudges < _MAX_VERIFY_NUDGES
         ):
             self._post_place_regrasp_nudges += 1
@@ -657,7 +683,7 @@ class NativeStepRunner:
                 self._step_diag = str(diag)
         # R257/E60: a SUCCESSFUL place empties the gripper on purpose -> arm the
         # post-place guard so the very next re-grasp is refused until a verify closes it.
-        if name in _PLACE_SKILLS and not getattr(result, "is_error", False):
+        if _skill_is_place(tool) and not getattr(result, "is_error", False):
             self._place_awaiting_verify = True
         return result
 
