@@ -202,3 +202,4 @@
 {"schema":1,"ts":1783219597,"round":"R385","kind":"build","exit":0,"post_check":"ok","commit":"d16b1c2","dur_s":1172}
 {"schema":1,"ts":1783220882,"round":"R386","kind":"build","exit":0,"post_check":"ok","commit":"1ad72ca","dur_s":1165}
 {"schema":1,"ts":1783222147,"round":"R387","kind":"build","exit":0,"post_check":"ok","commit":"2ef1ce1","dur_s":1145}
+{"schema":1,"ts":1783222608,"round":"R388","kind":"build","exit":0,"post_check":"ok","commit":"cecf1e6","dur_s":341}
