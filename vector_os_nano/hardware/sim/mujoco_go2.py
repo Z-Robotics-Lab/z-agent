@@ -1370,16 +1370,46 @@ class MuJoCoGo2:
         mounted on the robot — no free-camera approximation.
         """
         self._require_connection()
-        mj = _get_mujoco()
-
-        if not hasattr(self, "_cam_renderer"):
-            self._cam_renderer = mj.Renderer(self._mj.model, height, width)
-            self._cam_renderer.scene.flags[mj.mjtRndFlag.mjRND_SHADOW] = True
-            self._cam_renderer.scene.flags[mj.mjtRndFlag.mjRND_REFLECTION] = True
+        renderer = self._ensure_render("_cam_renderer", width, height, depth=False)
 
         cam_id = self._mj.model.cam("d435_rgb").id
-        self._cam_renderer.update_scene(self._mj.data, camera=cam_id)
-        return self._cam_renderer.render().copy()
+        renderer.update_scene(self._mj.data, camera=cam_id)
+        return renderer.render().copy()
+
+    def _ensure_render(
+        self, attr: str, width: int, height: int, *, depth: bool,
+    ) -> Any:
+        """Return the cached head-camera renderer sized to (width, height),
+        re-creating it only when the requested dims differ from the cached one.
+
+        The head camera is SHARED across resolutions: the look/explore/describe
+        path renders bare (640x480 for the VLM) while the grasp path renders at
+        320x240 (so its RGB mask aligns pixel-for-pixel with its depth +
+        intrinsics). A renderer that ignored per-call dims (cache-once) let the
+        FIRST caller's resolution silently win — a 640x480 look before a 320x240
+        grasp handed grasp a 640x480 RGB against 320x240 depth (mask/depth
+        misalignment -> wrong 3D grasp point). Each call now renders at the
+        resolution IT requested.
+        """
+        mj = _get_mujoco()
+        dims_attr = attr + "_dims"
+        if getattr(self, dims_attr, None) != (width, height):
+            old = getattr(self, attr, None)
+            if old is not None:
+                try:
+                    old.close()  # release the old GL context before replacing
+                except Exception:  # noqa: BLE001 — best-effort teardown
+                    pass
+            renderer = mj.Renderer(self._mj.model, height, width)
+            if depth:
+                renderer.enable_depth_rendering()
+                renderer.scene.flags[mj.mjtRndFlag.mjRND_SHADOW] = True
+            else:
+                renderer.scene.flags[mj.mjtRndFlag.mjRND_SHADOW] = True
+                renderer.scene.flags[mj.mjtRndFlag.mjRND_REFLECTION] = True
+            setattr(self, attr, renderer)
+            setattr(self, dims_attr, (width, height))
+        return getattr(self, attr)
 
     def get_depth_frame(
         self, width: int = 640, height: int = 480,
@@ -1390,16 +1420,11 @@ class MuJoCoGo2:
         'd435_depth' camera — same mounting as RGB for pixel alignment.
         """
         self._require_connection()
-        mj = _get_mujoco()
-
-        if not hasattr(self, "_depth_renderer"):
-            self._depth_renderer = mj.Renderer(self._mj.model, height, width)
-            self._depth_renderer.enable_depth_rendering()
-            self._depth_renderer.scene.flags[mj.mjtRndFlag.mjRND_SHADOW] = True
+        renderer = self._ensure_render("_depth_renderer", width, height, depth=True)
 
         cam_id = self._mj.model.cam("d435_depth").id
-        self._depth_renderer.update_scene(self._mj.data, camera=cam_id)
-        raw = self._depth_renderer.render().copy()
+        renderer.update_scene(self._mj.data, camera=cam_id)
+        raw = renderer.render().copy()
 
         import numpy as np
         depth = raw.astype(np.float32)
