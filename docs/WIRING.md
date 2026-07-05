@@ -2,7 +2,7 @@
 
 ## verify-spine — how it plugs in
 
-verified-against: 5ad1ad8
+verified-against: f49ac05
 
 **frozen — GATE-APPROVED required** (Invariant 1): every file below is honest-verify spine; do NOT edit without the CEO gate.
 
@@ -15,7 +15,7 @@ verified-against: 5ad1ad8
 - World oracles are factories in `vector_os_nano/vcli/worlds/go2_sim_oracle.py::make_at_position` / `make_facing` / `make_visited` (plus arm_sim_oracle.py, g1_perception_oracle.py::make_detection_matches_gt) — bound over live sim GT the actor cannot author.
 - Actor-causation channels (R2b): `vector_os_nano/vcli/cognitive/actor_causation.py::grade` — BASE (cmd_motion counter + planar/yaw displacement, channel-split per predicate), ARM (ctrl_motion + joint delta), GRIPPER (weld 0→1). Baseline via `actor_causation.py::capture` BEFORE the step's first skill; `ActorCaused.UNCAUSED` downgrades GROUNDED→RAN inside `classify_step_evidence`. `actor_causation.py::is_robot_predicate` decides whether a step is graded at all.
 - The machine verdict: `vector_os_nano/vcli/verdict.py::VerdictReport.from_trace(trace, oracle_names)` delegates `verified` VERBATIM to `evidence_passed` (contract-test-pinned). `VERDICT_SENTINEL` = "VECTOR_VERDICT".
-- VECTOR_VERDICT escapes cli.main via `vector_os_nano/vcli/cli.py::run_one_turn` (the `-p/--json` non-interactive entry, ~line 1841): `_emit` prints `report.to_sentinel_line()` on stdout and returns `report.exit_code()` (0 verified / 2 ran-not-verified / 1 error-or-no-trace). Chat-only / error turns emit `VerdictReport.no_trace` (fail-closed).
+- VECTOR_VERDICT escapes cli.main via `vector_os_nano/vcli/cli.py::run_one_turn` (the `-p/--json` non-interactive entry, ~line 1857): `_emit` prints `report.to_sentinel_line()` on stdout and returns `report.exit_code()` (0 verified / 2 ran-not-verified / 1 error-or-no-trace). Chat-only / error turns emit `VerdictReport.no_trace` (fail-closed).
 - Seam for a new world (plug-and-play, Inv-3/4): register oracles in `World.build_verify_namespace` — that merge is single-sourced into `verify_oracle_names`, so a BYO name REACHES the grader with ZERO kernel edits. It then GROUNDS a goal two ways, NO gate: `pred() == True` (a bare-bool predicate made goal-explicit) or `state() == <const>` (E116; guard `tests/vcli/test_plug_and_play_boundary.py`). ONLY the bare `pred()` idiom needs the name in `_PREDICATE_ORACLES` — a gate-approved, first-party affordance (why the go2 quartet G-323-1 edits that set), NOT a requirement for a BYO contributor.
 
 ```
@@ -39,7 +39,7 @@ vector_os_nano/vcli/worlds/g1_perception_oracle.py::make_detection_matches_gt
 
 ## embodiments — how it plugs in
 
-verified-against: 5ad1ad8
+verified-against: f49ac05
 
 - Invariant 3: embodiments are CONFIG, not code — a robot enters via `vector_os_nano/embodiments/<id>/robot.yaml` (go2/, g1/ today), never a kernel or driver edit.
 - A robot.yaml is parsed fail-loud into frozen dataclasses by `vector_os_nano/embodiments/config.py::load_embodiment_config` → `config.py::parse_embodiment_config` → `EmbodimentConfig` (model / spawn / stance / sensors / policy / capabilities / grasp). Frozen dataclasses change ADDITIVELY only (new field last + default, Invariant 7).
