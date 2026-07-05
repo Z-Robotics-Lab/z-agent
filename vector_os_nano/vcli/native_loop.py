@@ -166,6 +166,12 @@ _MUTATING_CODE_TOOLS: frozenset[str] = frozenset({"file_write", "file_edit", "ba
 # arm connected" drags the compound to RAN-False). Gated on the SAME single-source
 # ``resolve_capability_profile`` as the has_base/navigate gate so the two can't drift.
 # Perception skills (describe/detect) are embodiment-agnostic and are NEVER gated here.
+# The CURATED half of the manipulation-gate classifier (see ``_skill_needs_arm``). Encodes
+# domain knowledge a metadata scan CANNOT derive: ``scan``/``describe`` drive the arm-mounted
+# head-cam and ``wave`` homes the arm, yet their STRUCTURED metadata is arm-silent, so a
+# keyword scan alone would wrongly offer them to an armless body. This list is UNIONED with
+# the skill's own structured arm/gripper declaration (``SkillWrapperTool._requires_arm``) so
+# the gate is also complete for plug-and-play skills the kernel has never named (R384/E173).
 _ARM_REQUIRING_SKILLS: frozenset[str] = frozenset(
     {"pick", "place", "pick_top_down", "place_top_down", "mobile_place",
      "home", "wave", "scan", "handover", "gripper_open", "gripper_close",
@@ -175,6 +181,28 @@ _ARM_REQUIRING_SKILLS: frozenset[str] = frozenset(
      # Gated on armless only (go2+arm keeps it). Frontier: an arm-free describe path.
      "describe"}
 )
+
+
+def _skill_needs_arm(skill_tool: Any) -> bool:
+    """Whether an armless body must NOT be offered *skill_tool* (the D175 manipulation gate).
+
+    UNION of two signals so the gate is complete for plug-and-play skills, not just the
+    shipped set:
+      1. the curated ``_ARM_REQUIRING_SKILLS`` name-list — domain knowledge a metadata scan
+         can't derive (``scan``/``describe`` use the arm-mounted head-cam; ``wave``/``home``
+         home the arm) whose structured metadata is arm-silent;
+      2. the skill's OWN structured arm/gripper declaration (``SkillWrapperTool._requires_arm``,
+         scanned over preconditions+effects) — catches a BYO manipulation skill the kernel has
+         never named (North-Star plug-and-play, no kernel edit).
+
+    Strictly STRICTER than the name-list alone (Invariant 1: the sandbox only gets stricter):
+    every skill the list already withholds stays withheld; the metadata half only ADDS
+    withholding, never offers. Behavior-identical for every shipped skill on every shipped
+    body — the only armless-offered shipped skill (``detect``) is arm-silent (R384/E173).
+    """
+    if skill_tool.name in _ARM_REQUIRING_SKILLS:
+        return True
+    return bool(getattr(skill_tool, "_requires_arm", False))
 
 # at_position tolerance (metres) — single-sourced for the system-prompt vocab from
 # the go2 oracle so the model's verify expr and the verifier agree. Read live with
@@ -1109,8 +1137,9 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
                     continue  # world room-navigate is door-chain walk; ours is the avoidance route
                 if skill_tool.name == "detect" and "detect" in tools:
                     continue  # the learned grounding-dino route (Source 4) wins over the classical DetectSkill
-                if not has_arm and skill_tool.name in _ARM_REQUIRING_SKILLS:
+                if not has_arm and _skill_needs_arm(skill_tool):
                     continue  # armless embodiment (g1): no manipulation tools it can't execute
+                    # (name-list OR the skill's own arm/gripper metadata — plug-and-play safe)
                 tools[skill_tool.name] = skill_tool
         except Exception as exc:  # noqa: BLE001
             logger.debug("native_loop: wrap_skills failed: %s", exc)

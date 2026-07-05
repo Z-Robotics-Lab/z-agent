@@ -24,6 +24,17 @@ MOTOR_KEYWORDS: frozenset[str] = frozenset(
     {"arm", "gripper", "base", "motor", "joint", "move", "navigate"}
 )
 
+# Keywords that indicate a skill actuates an ARM/GRIPPER specifically — a SUBSET of
+# MOTOR_KEYWORDS that deliberately EXCLUDES base/move/navigate so a base-only body
+# (e.g. armless g1) keeps its navigation skills. Feeds the manipulation capability
+# gate (``native_loop._build_motor_tools``): a body with no arm is not offered a
+# plug-and-play skill that declares arm/gripper hardware, even one whose NAME the
+# kernel has never seen (North-Star BYO-skill, no kernel edit). Scanned over the
+# STRUCTURED hardware contract (preconditions + effects) ONLY — never the prose
+# description — so an incidental "arm" in a sentence can't false-withhold a non-arm
+# skill.
+ARM_HARDWARE_KEYWORDS: frozenset[str] = frozenset({"arm", "gripper"})
+
 # The package all SIMULATED hardware adapters live under. A connected component
 # whose module is this package (or a sub-module of it) is a simulation; anything
 # else is real hardware. Precise package match (exact, or prefix + ".") so a name
@@ -62,6 +73,7 @@ class SkillWrapperTool:
         self._skill = skill
         self._agent = agent
         self._is_motor: bool = self._detect_motor(skill)
+        self._requires_arm: bool = self._detect_arm_requirement(skill)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -78,6 +90,22 @@ class SkillWrapperTool:
         description_text = str(getattr(skill, "description", ""))
         combined = (preconditions_text + " " + effects_text + " " + description_text).lower()
         return any(kw in combined for kw in MOTOR_KEYWORDS)
+
+    @staticmethod
+    def _detect_arm_requirement(skill: Any) -> bool:
+        """Return True iff the skill's STRUCTURED metadata declares it actuates an arm/gripper.
+
+        The plug-and-play fail-safe for the manipulation capability gate: an armless body
+        is not offered a BYO skill that declares arm/gripper hardware, even one the kernel's
+        curated name-list has never heard of. Scans preconditions + effects ONLY (the
+        structured hardware contract), never the prose description — so a sentence that merely
+        mentions an arm can't false-withhold a non-arm skill. Strictly a WITHHOLD signal
+        (Invariant 1: the sandbox only gets stricter).
+        """
+        structured = " ".join(str(p) for p in getattr(skill, "preconditions", []))
+        structured += " " + str(getattr(skill, "effects", {}))
+        structured = structured.lower()
+        return any(kw in structured for kw in ARM_HARDWARE_KEYWORDS)
 
     @staticmethod
     def _build_schema(parameters: dict[str, Any]) -> dict[str, Any]:
