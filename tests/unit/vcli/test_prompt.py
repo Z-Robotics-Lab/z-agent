@@ -359,3 +359,88 @@ class TestNoAgent:
         result = _build(agent=None)
         combined = " ".join(b["text"] for b in result)
         assert "Available Skills" not in combined
+
+
+# ---------------------------------------------------------------------------
+# BYO-world persona registration (plug-and-play): a malformed persona_blocks()
+# must degrade to the default persona AND leave an observable log — never a
+# SILENT swallow (global coding-style floor: never silently swallow on a
+# control path; the "bring a persona" contract requires the drop be visible).
+# ---------------------------------------------------------------------------
+
+
+class _RaisingPersonaWorld:
+    """A BYO world whose persona_blocks() raises (author bug)."""
+
+    def persona_blocks(self) -> tuple[str, str]:
+        raise ValueError("boom in BYO persona_blocks")
+
+
+class _EmptyPersonaWorld:
+    """A BYO world whose persona_blocks() returns falsy blocks."""
+
+    def persona_blocks(self) -> tuple[str, str]:
+        return ("", "")
+
+
+class _BadAritysWorld:
+    """A BYO world whose persona_blocks() returns the wrong shape."""
+
+    def persona_blocks(self):  # type: ignore[no-untyped-def]
+        return ("only-one-element",)
+
+
+class _GoodPersonaWorld:
+    """A well-formed BYO world persona."""
+
+    def persona_blocks(self) -> tuple[str, str]:
+        return ("BYO-ROLE-SENTINEL", "BYO-TOOLS-SENTINEL")
+
+
+class TestByoPersonaFallback:
+    def test_raising_persona_falls_back_to_default(self) -> None:
+        """A world whose persona_blocks() raises -> default persona, no crash."""
+        result = _build(world=_RaisingPersonaWorld())
+        first_text = result[0]["text"]
+        assert "verified coding and automation agent" in first_text
+
+    def test_raising_persona_is_logged_not_silent(self, caplog) -> None:  # type: ignore[no-untyped-def]
+        """The swallowed BYO persona failure must be logged (never silent)."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+            _build(world=_RaisingPersonaWorld())
+        assert any(
+            "persona" in r.getMessage().lower() for r in caplog.records
+        ), "a dropped BYO persona must leave a WARNING log, not vanish silently"
+
+    def test_empty_persona_falls_back_and_logs(self, caplog) -> None:  # type: ignore[no-untyped-def]
+        """A world returning falsy persona blocks -> default + a WARNING log."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+            result = _build(world=_EmptyPersonaWorld())
+        assert "verified coding and automation agent" in result[0]["text"]
+        assert any("persona" in r.getMessage().lower() for r in caplog.records)
+
+    def test_bad_arity_persona_falls_back_and_logs(self, caplog) -> None:  # type: ignore[no-untyped-def]
+        """A world returning a wrong-shape tuple -> default + a WARNING log."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+            result = _build(world=_BadAritysWorld())
+        assert "verified coding and automation agent" in result[0]["text"]
+        assert any("persona" in r.getMessage().lower() for r in caplog.records)
+
+    def test_valid_byo_persona_wins_and_is_silent(self, caplog) -> None:  # type: ignore[no-untyped-def]
+        """A well-formed BYO persona is used verbatim and logs NOTHING."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+            result = _build(world=_GoodPersonaWorld())
+        combined = " ".join(b["text"] for b in result)
+        assert "BYO-ROLE-SENTINEL" in combined
+        assert "BYO-TOOLS-SENTINEL" in combined
+        assert not any(
+            "persona" in r.getMessage().lower() for r in caplog.records
+        ), "a valid BYO persona must not emit a fallback warning"

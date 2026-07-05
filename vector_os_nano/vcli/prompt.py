@@ -14,8 +14,11 @@ Public API:
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Static prompt text — these are cacheable. One persona pair per world.
@@ -179,8 +182,22 @@ def _select_persona(agent: Any, world: Any) -> tuple[str, str]:
             role, tools = world.persona_blocks()
             if role and tools:
                 return role, tools
+            # A registered persona that returns falsy blocks is a BYO author
+            # bug: degrade to the default, but never let it vanish silently.
+            logger.warning(
+                "world %r persona_blocks() returned empty blocks; using "
+                "default persona (bring-a-persona contract: fix persona_blocks)",
+                type(world).__name__,
+            )
         except Exception:
-            pass
+            # Malformed persona_blocks() (raises / wrong arity). Fail SAFE to
+            # the default persona, but LOG — a silently swallowed BYO persona
+            # is a silent-wrong on the plug-and-play control path.
+            logger.warning(
+                "world %r persona_blocks() failed; using default persona",
+                type(world).__name__,
+                exc_info=True,
+            )
     if agent is not None:
         return ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTIONS
     return DEV_ROLE_PROMPT, DEV_TOOL_INSTRUCTIONS
