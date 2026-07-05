@@ -20,12 +20,66 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import math
 import re
 from typing import Any
 
 from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
 
 _LOG = logging.getLogger(__name__)
+
+
+def _loads_finite(json_str: str) -> Any:
+    """Parse untrusted LLM plan JSON, rejecting non-finite numbers LOUDLY.
+
+    The decomposer parses whatever the model emits — untrusted input. Two default
+    ``json.loads`` foot-guns let a non-finite number into the plan tree, where it
+    reaches a primitive (``strategy_params["distance"]`` -> ``walk_forward``, the
+    E187-E191 sink vein). The sinks themselves already gate NaN/inf (E188-E191), so
+    this is DEFENSE-IN-DEPTH at the single boundary the whole vein funnels through,
+    NOT a currently-open hole — the E154 root-fix > enumerate-the-sinks recipe and
+    the security floor "validate ALL external input at the boundary":
+
+      1. The bareword tokens ``NaN`` / ``Infinity`` / ``-Infinity`` — accepted by
+         default. ``parse_constant`` rejects them at parse time.
+      2. An OVERFLOWING numeric literal (e.g. ``1e999``) — Python coerces it to
+         ``inf`` WITHOUT ``parse_constant`` ever firing, so the parsed tree is also
+         recursively scanned for any non-finite float.
+
+    Raises ``json.JSONDecodeError`` on either (or on malformed syntax), so callers'
+    existing ``except json.JSONDecodeError`` treats a non-finite plan as unparseable
+    garbage and falls back to a safe single-step plan — never a phantom plan carrying
+    NaN/inf. Finite plans round-trip unchanged (no false-reject).
+    """
+
+    def _reject_constant(token: str) -> float:
+        raise json.JSONDecodeError(
+            f"non-finite JSON constant {token!r} rejected", json_str, 0
+        )
+
+    data = json.loads(json_str, parse_constant=_reject_constant)
+    _reject_nonfinite_numbers(data, json_str)
+    return data
+
+
+def _reject_nonfinite_numbers(obj: Any, json_str: str) -> None:
+    """Recursively raise if any float in a parsed JSON tree is non-finite.
+
+    Catches the overflow-literal foot-gun (``1e999`` -> ``inf``) that bypasses
+    ``parse_constant``. ``bool`` is an ``int`` subclass and always finite, so only
+    genuine ``float`` values are checked; ints/strings/None are inert.
+    """
+    if isinstance(obj, float):
+        if not math.isfinite(obj):
+            raise json.JSONDecodeError(
+                "non-finite number in plan JSON rejected", json_str, 0
+            )
+    elif isinstance(obj, dict):
+        for value in obj.values():
+            _reject_nonfinite_numbers(value, json_str)
+    elif isinstance(obj, list):
+        for value in obj:
+            _reject_nonfinite_numbers(value, json_str)
 
 
 # ---------------------------------------------------------------------------
@@ -487,7 +541,7 @@ Loop example — "do <something> to every detected object, one by one":
             json_str = self._extract_json(raw_text)
             if json_str is not None:
                 try:
-                    data = json.loads(json_str)
+                    data = _loads_finite(json_str)
                 except json.JSONDecodeError as exc:
                     _LOG.warning(
                         "GoalDecomposer: JSON parse error (attempt %d/%d): %s",
@@ -638,7 +692,7 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
             return self._fallback_goal_tree(task)
 
         try:
-            data = json.loads(json_str)
+            data = _loads_finite(json_str)
         except json.JSONDecodeError as exc:
             _LOG.warning("GoalDecomposer: JSON parse error: %s", exc)
             return self._fallback_goal_tree(task)
