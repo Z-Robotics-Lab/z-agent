@@ -522,3 +522,4 @@
 {"schema":1,"ts":1783291377,"round":"R705","kind":"build","exit":0,"post_check":"ok","commit":"07f5daa","dur_s":986}
 {"schema":1,"ts":1783291720,"round":"R706","kind":"build","exit":0,"post_check":"ok","commit":"24d305a","dur_s":223}
 {"schema":1,"ts":1783292575,"round":"R707","kind":"build","exit":0,"post_check":"ok","commit":"9f58438","dur_s":735}
+{"schema":1,"ts":1783293383,"round":"R708","kind":"build","exit":0,"post_check":"quarantined","commit":"af39900","dur_s":688}
