@@ -15,7 +15,41 @@ No hardware imports. No ROS2 imports.
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Protocol, runtime_checkable
+
+
+def ensure_finite_base_velocity(
+    vx: float,
+    vy: float,
+    vyaw: float,
+    ctx: str = "set_velocity",
+) -> None:
+    """Reject non-finite (NaN/±inf) base-velocity commands before acting.
+
+    Security floor (rules/common/security.md): reject NaN/inf before acting on an
+    actuator. ``set_velocity`` is the streaming command boundary for every mobile
+    base — driven by the Nav2 ``/cmd_vel_nav`` bridge, a BYO skill's walk/turn args,
+    and NL-parsed velocities. A non-finite component written into a sim command
+    array (or published onto ``/cmd_vel_nav``) silently poisons the robot state; a
+    NaN also corrupts the ``_cmd_motion`` R2b actor-causation signal the Inv-1 verify
+    spine reads (``nan > MOTION_EPS`` is False, so a real motion registers as none)
+    while the command still reaches the actuator — a fail-open. Every concrete
+    ``set_velocity`` MUST call this at its entry so a bad value fails loud and
+    axis-scoped at the boundary rather than being commanded.
+
+    Note ``np.clip`` is NOT sufficient: it clamps ±inf but PROPAGATES NaN
+    (``np.clip(nan, lo, hi) == nan``), so a magnitude clamp cannot stand in for this.
+
+    Raises:
+        ValueError: if vx, vy or vyaw is NaN, +inf or -inf.
+    """
+    for name, v in (("vx", vx), ("vy", vy), ("vyaw", vyaw)):
+        if not math.isfinite(v):
+            raise ValueError(
+                f"{ctx}: base velocity {name} is non-finite ({v!r}); "
+                "refusing to command NaN/inf to the actuator"
+            )
 
 
 @runtime_checkable

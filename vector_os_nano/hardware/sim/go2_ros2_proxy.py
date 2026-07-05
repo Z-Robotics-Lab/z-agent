@@ -14,6 +14,8 @@ import time
 import logging
 from typing import Any, Callable
 
+from vector_os_nano.hardware.base import ensure_finite_base_velocity
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -422,6 +424,7 @@ class Go2ROS2Proxy:
 
     def set_velocity(self, vx: float, vy: float, vyaw: float) -> None:
         """Publish a Twist command on /cmd_vel_nav (non-blocking)."""
+        ensure_finite_base_velocity(vx, vy, vyaw, "Go2ROS2Proxy.set_velocity")
         if self._node is None:
             return
         from geometry_msgs.msg import Twist

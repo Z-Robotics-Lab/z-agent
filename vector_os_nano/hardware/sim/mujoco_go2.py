@@ -37,6 +37,7 @@ from typing import Any
 import numpy as np
 from vector_os_nano.embodiments.config import load_embodiment_config
 from vector_os_nano.embodiments.dof_layout import DofLayout
+from vector_os_nano.hardware.base import ensure_finite_base_velocity
 from vector_os_nano.hardware.sim.mujoco_g1 import obstacles_from_model
 
 # TEMP DIAGNOSTIC (off unless VECTOR_MPC_LOG set): count/log swallowed MPC solver
@@ -1213,6 +1214,7 @@ class MuJoCoGo2:
         /cmd_vel_nav callback / safety-check from overriding a walk()
         or turn() in progress. The token holder (same thread) passes.
         """
+        ensure_finite_base_velocity(vx, vy, vyaw, "MuJoCoGo2.set_velocity")
         self._require_connection()
         _gated = (time.time() < self._skill_ctrl_until
                   and threading.get_ident() != self._skill_ctrl_tid)

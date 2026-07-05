@@ -52,6 +52,7 @@ from typing import Any
 import numpy as np
 from vector_os_nano.embodiments.config import load_embodiment_config
 from vector_os_nano.embodiments.dof_layout import DofLayout
+from vector_os_nano.hardware.base import ensure_finite_base_velocity
 from vector_os_nano.hardware.sim.sensors.g1_lidar import g1_lidar_scan
 
 logger = logging.getLogger(__name__)
@@ -750,6 +751,7 @@ class MuJoCoG1:
         A stop (0,0,0) adds zero magnitude, so a step that only stopped never satisfies
         the grader's MOTION_EPS. Mirrors MuJoCoGo2.set_velocity's counter.
         """
+        ensure_finite_base_velocity(vx, vy, vyaw, "MuJoCoG1.set_velocity")
         cvx, cvy, cvyaw = float(vx), float(vy), float(vyaw)
         self._cmd[0] = cvx
         self._cmd[1] = cvy
