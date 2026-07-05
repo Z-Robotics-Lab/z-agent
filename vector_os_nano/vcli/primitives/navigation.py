@@ -12,6 +12,7 @@ import math
 import time
 from typing import TYPE_CHECKING
 
+from vector_os_nano.hardware.base import ensure_finite_nav_goal
 from vector_os_nano.vcli.primitives import PrimitiveContext
 
 if TYPE_CHECKING:
@@ -70,6 +71,7 @@ def publish_goal(x: float, y: float) -> None:
         raise RuntimeError(
             "Primitives not initialized. Call init_primitives() first."
         )
+    ensure_finite_nav_goal(x, y, "publish_goal")
     if _ctx.nav_client is not None:
         _ctx.nav_client.navigate_to(x, y)
     elif _ctx.base is not None and hasattr(_ctx.base, "navigate_to"):

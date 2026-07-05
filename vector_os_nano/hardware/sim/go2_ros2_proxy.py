@@ -14,7 +14,10 @@ import time
 import logging
 from typing import Any, Callable
 
-from vector_os_nano.hardware.base import ensure_finite_base_velocity
+from vector_os_nano.hardware.base import (
+    ensure_finite_base_velocity,
+    ensure_finite_nav_goal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -503,6 +506,7 @@ class Go2ROS2Proxy:
         Returns True when within 0.8 m of goal, False on timeout or when
         FAR graph is unavailable.
         """
+        ensure_finite_nav_goal(x, y, "Go2ROS2Proxy.navigate_to")
         if self._node is None:
             logger.warning("[NAV] navigate_to called but node not connected")
             return False

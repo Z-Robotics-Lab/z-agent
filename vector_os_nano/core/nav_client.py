@@ -40,6 +40,8 @@ import logging
 import time
 from typing import Any
 
+from vector_os_nano.hardware.base import ensure_finite_nav_goal
+
 logger = logging.getLogger(__name__)
 
 
@@ -250,6 +252,7 @@ class NavStackClient:
         Returns:
             True if goal reached; False on failure, rejection, or timeout.
         """
+        ensure_finite_nav_goal(x, y, "NavStackClient.navigate_to")
         if not self.is_available:
             logger.warning("NavStackClient: not available, cannot navigate")
             return False

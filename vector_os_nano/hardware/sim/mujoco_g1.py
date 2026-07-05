@@ -52,7 +52,10 @@ from typing import Any
 import numpy as np
 from vector_os_nano.embodiments.config import load_embodiment_config
 from vector_os_nano.embodiments.dof_layout import DofLayout
-from vector_os_nano.hardware.base import ensure_finite_base_velocity
+from vector_os_nano.hardware.base import (
+    ensure_finite_base_velocity,
+    ensure_finite_nav_goal,
+)
 from vector_os_nano.hardware.sim.sensors.g1_lidar import g1_lidar_scan
 
 logger = logging.getLogger(__name__)
@@ -890,6 +893,7 @@ class MuJoCoG1:
         """
         from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
 
+        ensure_finite_nav_goal(x, y, "MuJoCoG1.navigate_to")
         self._require_connection()
         tol = max(tol, _NAV_TOL_FLOOR)
 

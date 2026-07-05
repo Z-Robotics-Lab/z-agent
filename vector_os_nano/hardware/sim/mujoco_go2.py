@@ -37,7 +37,10 @@ from typing import Any
 import numpy as np
 from vector_os_nano.embodiments.config import load_embodiment_config
 from vector_os_nano.embodiments.dof_layout import DofLayout
-from vector_os_nano.hardware.base import ensure_finite_base_velocity
+from vector_os_nano.hardware.base import (
+    ensure_finite_base_velocity,
+    ensure_finite_nav_goal,
+)
 from vector_os_nano.hardware.sim.mujoco_g1 import obstacles_from_model
 
 # TEMP DIAGNOSTIC (off unless VECTOR_MPC_LOG set): count/log swallowed MPC solver
@@ -1781,6 +1784,7 @@ class MuJoCoGo2:
         """
         from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
 
+        ensure_finite_nav_goal(x, y, "MuJoCoGo2.navigate_to")
         self._require_connection()
 
         # ---- Step 1: snapshot current pose and plan path ---------------------

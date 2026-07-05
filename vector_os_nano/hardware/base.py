@@ -52,6 +52,39 @@ def ensure_finite_base_velocity(
             )
 
 
+def ensure_finite_nav_goal(
+    x: float,
+    y: float,
+    ctx: str = "navigate_to",
+) -> None:
+    """Reject non-finite (NaN/±inf) navigation-goal targets before dispatching.
+
+    Security floor (rules/common/security.md): reject NaN/inf before acting.
+    ``navigate_to(x, y)`` / ``publish_goal(x, y)`` is the pose-target command
+    boundary for every mobile base — reachable from NL/CaP-X (the vcli navigation
+    primitive) and the ``navigate`` tool call (``json.loads`` accepts the ``NaN``/
+    ``Infinity`` tokens, so a tool arg ``{"x": NaN}`` parses to ``float('nan')``).
+
+    Unlike a velocity command, the goal is handed to an EXTERNAL nav stack: the
+    go2 ROS2 proxy publishes it onto ``/goal_point`` (FAR planner) and the
+    ``NavStackClient`` publishes it onto the waypoint topic or a NAV2 action goal.
+    A non-finite goal poisons that external planner while staying invisible to the
+    honest-verify spine (the robot may still be commanded toward it) — a fail-open.
+    Every concrete ``navigate_to`` and the ``publish_goal`` primitive MUST call this
+    at entry so a bad value fails loud and axis-scoped at the boundary rather than
+    escaping onto a ROS2 topic.
+
+    Raises:
+        ValueError: if x or y is NaN, +inf or -inf.
+    """
+    for name, v in (("x", x), ("y", y)):
+        if not math.isfinite(v):
+            raise ValueError(
+                f"{ctx}: nav goal {name} is non-finite ({v!r}); "
+                "refusing to publish a NaN/inf goal to the nav stack"
+            )
+
+
 @runtime_checkable
 class BaseProtocol(Protocol):
     """Abstract interface for any mobile robot base (quadruped, wheeled, tracked).
