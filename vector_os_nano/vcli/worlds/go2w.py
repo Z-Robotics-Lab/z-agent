@@ -192,6 +192,154 @@ class Go2WNavigateSkill:
                            error_message=f"timeout at ({p['x']:.2f},{p['y']:.2f})")
 
 
+# ---- 抓取层（任务③）：臂/夹爪鸭子合同 + pick 技能 --------------------------------
+class Go2WArm:
+    """内核 holding_object oracle 的臂侧合同：关节/FK/物体 GT 全为桥读数。
+
+    桥的陈旧守卫（>5s 未更新 503）保证这里读到的必是新鲜数据，oracle 的
+    fail-safe（异常->False）承接 503——僵尸桥/断流永远判 False，不会假绿。
+    """
+
+    _connected = True
+
+    def get_joint_positions(self) -> list:
+        return [float(v) for v in _get("arm")["pos"][:6]]
+
+    def fk(self, joint_positions) -> tuple:
+        """oracle 惯用法 fk(get_joint_positions())——紧跟关节读数调用，直接返回
+        当前夹持中心的 SIM GT（等价于当前关节的 FK，且更诚实）。"""
+        e = _get("ee")
+        return [e["x"], e["y"], e["z"]], None
+
+    def get_object_positions(self) -> dict:
+        o = _get("object")
+        return {"box": [o["x"], o["y"], o["z"]]}
+
+    def get_object_velocities(self) -> dict:
+        o = _get("object")
+        return {"box": [o.get("vx", 0.0), o.get("vy", 0.0), o.get("vz", 0.0)]}
+
+
+class Go2WGripper:
+    """is_holding：合爪指令下实测指缝仍被撑开（>14mm）——纯物理读数，抓取状态机
+    自报的 done 不参与。weld_is_active：actor-causation 的 0->1 抓取信号
+    （握持且箱子贴在夹持中心 12cm 内）。"""
+
+    _HOLD_APERTURE_MIN = 0.014
+
+    def _state(self):
+        a = _get("arm")
+        pos, cmd = a.get("pos") or [], a.get("cmd") or []
+        if len(pos) < 8 or len(cmd) < 8:
+            return None
+        aperture = float(pos[6]) - float(pos[7])          # j7 - j8 >= 0
+        cmd_closed = abs(float(cmd[6])) + abs(float(cmd[7])) < 0.005
+        return aperture, cmd_closed
+
+    def is_holding(self) -> bool:
+        try:
+            st = self._state()
+        except Exception:  # noqa: BLE001 — 桥 503/断流 fail-safe
+            return False
+        if st is None:
+            return False
+        aperture, cmd_closed = st
+        return cmd_closed and aperture > self._HOLD_APERTURE_MIN
+
+    def weld_is_active(self) -> dict:
+        try:
+            if not self.is_holding():
+                return {"box": False}
+            e = _get("ee")
+            o = _get("object")
+            d = math.dist((o["x"], o["y"], o["z"]), (e["x"], e["y"], e["z"]))
+            return {"box": d < 0.12}
+        except Exception:  # noqa: BLE001 — fail-safe（分级 fail-closed）
+            return {"box": False}
+
+
+@skill(aliases=["pick", "grasp", "pick_up", "抓", "捡", "拿起", "捡起", "抓取"])
+class Go2WPickSkill:
+    """接近 + 抓取：先把狗开到箱子工作域内（导航栈绕障），再触发 Isaac 侧
+    PiPER IK 状态机（PREGRASP->DESCEND->CLOSE->LIFT），轮询到 done/failed。
+
+    状态机的 done 只作流程信号；最终裁决 = holding_object('box') oracle 读 GT
+    （箱子被举离地 >10cm 且贴在夹持中心 8cm 内且夹爪物理握持）。
+    """
+
+    name = "pick"
+    description = (
+        "Drive near the graspable box and pick it up with the PiPER arm. "
+        "Blocks through approach + grasp; verify with holding_object('box').")
+    parameters = {
+        "target": {"type": "string", "default": "box", "required": False,
+                   "description": "scene object name (only 'box' exists today)"},
+    }
+    preconditions = ["gripper_empty"]          # -> _is_grasp（E60 守卫识别）
+    effects = {"gripper_state": "closed", "held_object": "box"}
+
+    _REACH_SWEET = (0.15, 0.52)   # 触发抓取时箱子距狗身的水平距离窗（臂基座前置 6cm）
+    _APPROACH_STANDOFF = 0.38     # 接近航点：箱子后撤这么多米
+
+    def _approach(self, sys):
+        """开到工作域：以 GT 距离为准（目标是物理够得着，不是 SLAM 说到了）。"""
+        for attempt in range(3):
+            o, gt, pose = _get("object"), _get("gt"), _get("pose")
+            d = math.hypot(o["x"] - gt["x"], o["y"] - gt["y"])
+            if self._REACH_SWEET[0] <= d <= self._REACH_SWEET[1]:
+                return True, d
+            # 方向用 GT 差（与 SLAM 系平移偏移无关）；落点转回 SLAM 系发航点
+            ux, uy = (o["x"] - gt["x"]) / max(d, 1e-6), (o["y"] - gt["y"]) / max(d, 1e-6)
+            sx = pose["x"] + (d - self._APPROACH_STANDOFF) * ux
+            sy = pose["y"] + (d - self._APPROACH_STANDOFF) * uy
+            print(f"[SKILL] pick approach#{attempt+1}: d={d:.2f} -> waypoint ({sx:.2f},{sy:.2f})",
+                  file=sys.stderr, flush=True)
+            t0 = _time.time()
+            _post("waypoint", {"x": sx, "y": sy})
+            while _time.time() - t0 < 240:
+                _time.sleep(5)
+                _post("waypoint", {"x": sx, "y": sy})
+                o, gt, pose = _get("object"), _get("gt"), _get("pose")
+                d = math.hypot(o["x"] - gt["x"], o["y"] - gt["y"])
+                if d <= self._REACH_SWEET[1] - 0.05:
+                    p = _get("pose")
+                    _post("waypoint", {"x": p["x"], "y": p["y"]})  # 冻结
+                    _time.sleep(6)
+                    break
+        o, gt = _get("object"), _get("gt")
+        d = math.hypot(o["x"] - gt["x"], o["y"] - gt["y"])
+        return self._REACH_SWEET[0] <= d <= self._REACH_SWEET[1] + 0.06, d
+
+    def execute(self, params=None, context=None, **kw):
+        import sys
+        try:
+            ok, d = self._approach(sys)
+        except Exception as e:  # noqa: BLE001 — 桥边界
+            return SkillResult(success=False, error_message=f"approach failed: {e}")
+        if not ok:
+            return SkillResult(success=False, error_message=(
+                f"could not reach grasp window: box at {d:.2f}m "
+                f"(need {self._REACH_SWEET[0]}-{self._REACH_SWEET[1]}m)"))
+        print(f"[SKILL] pick: in window d={d:.2f}, firing grasp", file=sys.stderr, flush=True)
+        try:
+            _post("grasp", {"object": "box"})
+        except Exception as e:  # noqa: BLE001
+            return SkillResult(success=False, error_message=f"grasp trigger failed: {e}")
+        t0 = _time.time()
+        while _time.time() - t0 < 240:
+            _time.sleep(5)
+            try:
+                st = _get("grasp_status").get("status", "")
+            except Exception:  # noqa: BLE001 — 瞬断容忍
+                continue
+            if st == "done":
+                return SkillResult(success=True, result_data={
+                    "message": "grasp state machine done; verify with holding_object('box')"})
+            if st.startswith("failed"):
+                return SkillResult(success=False, error_message=f"grasp {st}")
+        return SkillResult(success=False, error_message="grasp timeout (240s wall)")
+
+
 @skill(aliases=["explore", "探索", "自主探索", "建图", "去探索"])
 class Go2WExploreSkill:
     """阻塞式自主探索：触发 TARE，轮询独立裁判（explored_volume）直到
@@ -266,10 +414,14 @@ class IsaacGo2WEmbodiment:
 
     def __init__(self) -> None:
         self._base = self
-        self._arm = None
+        # 臂/夹爪鸭子合同（任务③）：内核 arm_sim_oracle 的 holding_object /
+        # actor-causation weld 信号经这两个对象读桥（SIM GT）。
+        self._arm = Go2WArm()
+        self._gripper = Go2WGripper()
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(Go2WNavigateSkill())
         self._skill_registry.register(Go2WExploreSkill())
+        self._skill_registry.register(Go2WPickSkill())
 
     def _build_context(self):
         """SkillWrapperTool 合同：技能执行上下文（本 embodiment 即 base）。"""
@@ -340,7 +492,9 @@ class IsaacGo2WWorld:
             "call the explore skill (blocking; it reports explored_volume before/"
             "after); verify exploration progress with "
             "explored_volume() > <the before reading + ~60> using the numbers the "
-            "skill returned.",
+            "skill returned. To pick up the box: call the pick skill (it drives "
+            "near the box and grasps with the arm), then verify with "
+            "holding_object('box').",
         )
 
     def register_tools(self, registry: Any, agent: Any) -> None:
@@ -348,7 +502,16 @@ class IsaacGo2WWorld:
         registry.register(Go2WWhereTool(), category="go2w")
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
-        return {"go2w_at": go2w_at, "explored_volume": explored_volume}
+        ns: dict[str, Any] = {"go2w_at": go2w_at, "explored_volume": explored_volume}
+        # holding_object：复用内核 arm_sim_oracle 工厂（与 shipped 世界同一套
+        # 判定语义：夹爪物理握持 + 物体举离 >0.10m + 距夹持中心 <0.08m，全 GT）。
+        # 绑定到 agent 的 _arm/_gripper 鸭子合同上；agent 为 None 时 fail-safe False。
+        try:
+            from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+            ns["holding_object"] = make_holding_object(agent)
+        except Exception:  # noqa: BLE001 — oracle 缺席时宁缺毋假
+            pass
+        return ns
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
         return None
@@ -369,7 +532,7 @@ class IsaacGo2WWorld:
                 "map-frame (x, y) positions; autonomous exploration is graded by "
                 "explored_volume() growth."
             ),
-            verify_functions=frozenset({"go2w_at", "explored_volume"}),
+            verify_functions=frozenset({"go2w_at", "explored_volume", "holding_object"}),
         )
 
     def derive_vocab_from_registry(self) -> bool:
