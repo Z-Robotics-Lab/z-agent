@@ -28,15 +28,15 @@ from zeno.core.agent import Agent
 logger = logging.getLogger(__name__)
 
 
-class VectorMCPServer:
-    """MCP server backed by a Zeno Agent + VectorEngine.
+class ZenoMCPServer:
+    """MCP server backed by a Zeno Agent + ZenoEngine.
 
     Registers all skills as tools (via mcp/tools.py) and world state +
     camera renders as resources (via mcp/resources.py).
 
     Args:
         agent: A fully initialised Agent instance (hardware container).
-        engine: A fully initialised VectorEngine instance.
+        engine: A fully initialised ZenoEngine instance.
         session: A Session instance for conversation history.
     """
 
@@ -178,13 +178,19 @@ class VectorMCPServer:
         await server.serve()
 
 
+# Compat alias — renamed VectorMCPServer -> ZenoMCPServer (fork identity). The
+# MCP wire name is already Server("zeno"); this only renames the Python class.
+# test_mcp_server imports VectorMCPServer by name, so the alias keeps it green.
+VectorMCPServer = ZenoMCPServer
+
+
 # ---------------------------------------------------------------------------
 # Engine builder
 # ---------------------------------------------------------------------------
 
 
 def _build_engine(agent: Agent) -> tuple[Any, Any]:
-    """Build a VectorEngine + Session from an Agent (hardware container).
+    """Build a ZenoEngine + Session from an Agent (hardware container).
 
     Mirrors the CLI engine creation flow in vcli/cli.py.
 
@@ -192,13 +198,16 @@ def _build_engine(agent: Agent) -> tuple[Any, Any]:
         agent: A fully initialised Agent (hardware container).
 
     Returns:
-        (engine, session) tuple ready for VectorMCPServer.
+        (engine, session) tuple ready for ZenoMCPServer.
     """
     from zeno.vcli.config import resolve_credentials  # noqa: PLC0415
     from zeno.vcli.backends import create_backend  # noqa: PLC0415
     from zeno.vcli.tools import CategorizedToolRegistry, discover_categorized_tools  # noqa: PLC0415
     from zeno.vcli.tools.skill_wrapper import wrap_skills  # noqa: PLC0415
     from zeno.vcli.prompt import build_system_prompt  # noqa: PLC0415
+    # Imported under the compat alias VectorEngine (== ZenoEngine): this exact
+    # name is the monkeypatch seam that test_level66 stubs by attribute name, so
+    # it is kept in lockstep with that test. New call sites use ZenoEngine.
     from zeno.vcli.engine import VectorEngine  # noqa: PLC0415
     from zeno.vcli.session import create_session  # noqa: PLC0415
     from zeno.vcli.worlds import resolve_world  # noqa: PLC0415
@@ -359,7 +368,7 @@ def create_sim_stack(headless: bool = True) -> Agent:
                   If False, open an interactive viewer.
 
     Returns:
-        A fully connected Agent ready for VectorEngine use.
+        A fully connected Agent ready for ZenoEngine use.
     """
     from zeno.hardware.sim.mujoco_arm import MuJoCoArm  # noqa: PLC0415
     from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper  # noqa: PLC0415
@@ -426,7 +435,7 @@ def create_hardware_stack() -> Agent:
     Starts: SO-101 arm + RealSense D405 + Moondream VLM + EdgeTAM tracker.
 
     Returns:
-        A fully connected Agent ready for VectorEngine use.
+        A fully connected Agent ready for ZenoEngine use.
     """
     cfg = _load_config_with_fallback()
     api_key = cfg.get("llm", {}).get("api_key") or os.environ.get("OPENROUTER_API_KEY")
@@ -618,7 +627,7 @@ async def main() -> None:
     # Build engine + session
     engine, session = _build_engine(agent)
 
-    server = VectorMCPServer(agent, engine, session)
+    server = ZenoMCPServer(agent, engine, session)
     try:
         if args.stdio:
             await server.run_stdio()
