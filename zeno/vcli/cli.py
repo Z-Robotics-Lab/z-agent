@@ -341,7 +341,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Select an explicit registered world by id (e.g. 'go2w'). Highest "
             "precedence — beats --scenario and the agent-driven default. Resolves "
             "through the world registry; unknown ids fail loud with the valid set. "
-            "Env default: VECTOR_WORLD. Combine with VECTOR_WORLD_PLUGINS to load a "
+            "Env default: ZENO_WORLD (legacy VECTOR_WORLD still read as a fallback). "
+            "Combine with ZENO_WORLD_PLUGINS (legacy VECTOR_WORLD_PLUGINS) to load a "
             "third-party world module before resolution."
         ),
     )
@@ -386,7 +387,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Campaign #13 M1 (default OFF): run the -p turn through the frontier-model "
             "NATIVE TOOL-USE producer (engine.run_turn_native) instead of the legacy "
             "decompose plan. The verdict block is unchanged. Also enableable via "
-            "VECTOR_NATIVE_LOOP=1."
+            "ZENO_NATIVE_LOOP=1 (legacy VECTOR_NATIVE_LOOP=1 still honoured)."
         ),
     )
     parser.add_argument(
@@ -397,7 +398,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "STEP 5 native-attempt-then-fallback (default OFF): in the -p turn, ATTEMPT "
             "the native tool-use producer first; if it took NO action (could not route "
             "the goal) FALL BACK to the legacy decompose plan. A SEPARATE additive mode "
-            "from --native-loop. Also enableable via VECTOR_NATIVE_FIRST=1."
+            "from --native-loop. Also enableable via ZENO_NATIVE_FIRST=1 (legacy "
+            "VECTOR_NATIVE_FIRST=1 still honoured)."
         ),
     )
     return parser.parse_args(argv)
