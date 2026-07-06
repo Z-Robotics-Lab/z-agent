@@ -302,6 +302,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--world",
+        default=os.environ.get("VECTOR_WORLD") or None,
+        metavar="ID",
+        help=(
+            "Select an explicit registered world by id (e.g. 'go2w'). Highest "
+            "precedence — beats --scenario and the agent-driven default. Resolves "
+            "through the world registry; unknown ids fail loud with the valid set. "
+            "Env default: VECTOR_WORLD. Combine with VECTOR_WORLD_PLUGINS to load a "
+            "third-party world module before resolution."
+        ),
+    )
+    parser.add_argument(
         "--headless",
         action="store_true",
         help="Suppress the MuJoCo viewer window (default: window opens when --sim is active)",
@@ -695,22 +707,76 @@ def ask_permission(tool_name: str, params: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
-    """Select the active world, honouring an explicit playground ``--scenario``.
+def _load_world_plugins() -> None:
+    """Import every module named in ``VECTOR_WORLD_PLUGINS`` for its register() side-effect.
 
-    Precedence:
-      1. ``--scenario <id>`` selected -> the playground world for that scenario
-         WINS. Loading the playground package (an explicit, user-requested track)
-         registers its scenarios into the world registry via the lazy hook; we
-         then resolve the named world. The kernel still never hard-imports the
-         playground — this import only happens because the user asked for it.
-      2. Otherwise -> ``resolve_world(agent)`` (exactly today's behaviour:
+    Plug-and-play discovery (Invariant 3): a third-party world lives in its OWN
+    module and self-registers into the process-wide world registry on import
+    (``register()`` runs at module load). Set ``VECTOR_WORLD_PLUGINS`` to a
+    comma-separated list of importable module names; each is imported here so its
+    world id becomes resolvable by ``--world``. A module that fails to import (bad
+    name, missing dep) is warned about and skipped — one broken plugin never
+    crashes the CLI or blocks the others. No-op when the env var is unset/empty.
+    """
+    spec = os.environ.get("VECTOR_WORLD_PLUGINS", "").strip()
+    if not spec:
+        return
+    import importlib
+
+    for name in (m.strip() for m in spec.split(",")):
+        if not name:
+            continue
+        try:
+            importlib.import_module(name)
+        except Exception as exc:  # noqa: BLE001 — one bad plugin must not crash the CLI
+            logger.warning(
+                "VECTOR_WORLD_PLUGINS: failed to import world plugin %r: %s", name, exc
+            )
+            console.print(
+                f"[yellow]World plugin '{name}' failed to load:[/yellow] {exc}"
+            )
+
+
+def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
+    """Select the active world, honouring ``--world`` then ``--scenario``.
+
+    Plugin discovery runs first: ``VECTOR_WORLD_PLUGINS`` modules are imported so
+    a BYO world's ``register()`` side-effect lands in the registry before we
+    resolve a name.
+
+    Precedence (highest first):
+      1. ``--world <id>`` (or env ``VECTOR_WORLD``) -> resolve that registered
+         world by id through the process-wide registry. Beats --scenario and the
+         agent-driven default — an explicit named world always wins.
+      2. ``--scenario <id>`` -> the playground world for that scenario. Loading
+         the playground package (an explicit, user-requested track) registers its
+         scenarios into the world registry via the lazy hook; we then resolve the
+         named world. The kernel still never hard-imports the playground — this
+         import only happens because the user asked for it.
+      3. Otherwise -> ``resolve_world(agent)`` (exactly today's behaviour:
          a connected agent selects the robot world, else the default dev world).
 
-    Fails loud on an unknown scenario id with the valid set — never a silent
+    Fails loud on an unknown world/scenario id with the valid set — never a silent
     fallback to another world.
     """
-    from vector_os_nano.vcli.worlds import resolve_world, resolve_world_named
+    from vector_os_nano.vcli.worlds import (
+        get_world_registry,
+        resolve_world,
+        resolve_world_named,
+    )
+
+    # Discover BYO world plugins BEFORE resolution, so a --world id contributed by
+    # a plugin module's register() is resolvable below.
+    _load_world_plugins()
+
+    # 1. Explicit --world wins. Resolve by id straight through the registry.
+    world_id = getattr(args, "world", None)
+    if world_id:
+        try:
+            return get_world_registry().resolve(world_id)
+        except KeyError as exc:
+            console.print(f"[red]Unknown world:[/red] {exc}")
+            raise
 
     scenario = getattr(args, "scenario", None)
     if not scenario:
