@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""SkillWrapperTool — wraps Vector OS Nano @skill instances as vcli Tool objects.
+"""SkillWrapperTool — wraps Zeno @skill instances as vcli Tool objects.
 
 Any class that implements the Skill protocol (name, description, parameters,
 preconditions, effects, execute) can be wrapped without importing real hardware.
@@ -63,7 +63,7 @@ _TYPE_MAP: dict[str, str] = {
 
 
 class SkillWrapperTool:
-    """Wraps a Vector OS Nano @skill instance as a vcli Tool.
+    """Wraps a Zeno @skill instance as a vcli Tool.
 
     The wrapper is intentionally thin — it does not import any concrete skill
     class, so it works with any object that satisfies the Skill protocol.

@@ -1,19 +1,19 @@
 {
   "mcpServers": {
-    "vector-os-nano": {
-      "command": "/home/yusen/Desktop/zeno/.venv/bin/python",
+    "zeno": {
+      "command": "/home/yusen/Desktop/vector_os_nano/.venv/bin/python",
       "args": [
         "-m",
         "zeno.mcp",
         "--hardware",
         "--stdio"
       ],
-      "cwd": "/home/yusen/Desktop/zeno"
+      "cwd": "/home/yusen/Desktop/vector_os_nano"
     },
     "vector-graph": {
       "command": "vector-graph-mcp",
       "args": [
-        "/home/yusen/Desktop/zeno"
+        "/home/yusen/Desktop/vector_os_nano"
       ]
     },
     "elp": {

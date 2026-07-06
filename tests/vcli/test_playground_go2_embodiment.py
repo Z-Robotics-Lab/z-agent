@@ -11,7 +11,7 @@ Proves the playground/seam generalizes beyond the arm. Covers:
   PlaygroundWorld) and the --scenario launch path,
 - a kernel-integration test: the go2 PlaygroundWorld wired into VectorEngine, the
   base predicates evaluated THROUGH the real GoalVerifier off the merged
-  namespace (the "test with vector-os-nano" gate),
+  namespace (the "test with zeno" gate),
 - the decompose vocab: with a connected base the engine puts the base primitives
   (walk_forward/turn/scan_360) AND go2 skills in vocab; an arm-only agent never
   sees them,

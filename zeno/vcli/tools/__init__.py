@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""vcli.tools — Tool registry and discovery for Vector CLI's agentic harness."""
+"""vcli.tools — Tool registry and discovery for Zeno's agentic harness."""
 from __future__ import annotations
 
 from zeno.vcli.tools.base import (

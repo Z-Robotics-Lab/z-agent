@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Vector CLI — interactive REPL entry point.
+"""Zeno — interactive REPL entry point.
 
 Ties together VectorEngine, Session, PermissionContext, and all tools
 into an interactive agent loop with V's personality.
@@ -286,8 +286,8 @@ _last_response: str = ""
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="vector-cli",
-        description="Vector CLI — Agentic CLI for Vector OS Nano",
+        prog="zeno",
+        description="Zeno — Agentic CLI for Zeno",
     )
     parser.add_argument("--sim", action="store_true", help="Start with MuJoCo arm simulation")
     parser.add_argument("--sim-go2", action="store_true", help="Start with Go2 quadruped simulation")
@@ -633,7 +633,7 @@ def format_banner(model: str, agent: Any = None, scenario: str | None = None) ->
     line so a user can see at a glance which preset scene the session is in.
     """
     lines = [
-        f"Vector CLI v{VERSION}",
+        f"Zeno v{VERSION}",
         f"Model: {model}",
     ]
     if scenario:
@@ -672,7 +672,7 @@ def print_banner(
             console.print(f"[bold {TEAL}]{line[:term_w - 1]}[/]")
             time.sleep(0.08)
     else:
-        console.print(f"[bold {TEAL}]Vector OS Nano[/]")
+        console.print(f"[bold {TEAL}]Zeno[/]")
 
     console.print(f"[dim]{'':>{min(40, term_w - 10)}}v{VERSION}[/]")
     time.sleep(0.15)
@@ -1292,7 +1292,7 @@ def _handle_slash_command(
         console.print()
         console.print(
             Panel(
-                "V -- the AI core of Vector OS Nano.\n"
+                "V -- the AI core of Zeno.\n"
                 "Built by Vector Robotics at CMU Robotics Institute.\n\n"
                 "Capabilities:\n"
                 "  Robot control    start sims, walk, explore, pick, place, navigate\n"
@@ -1358,7 +1358,7 @@ def _handle_slash_command(
             export_dir = Path.home() / ".vector" / "exports"
             export_dir.mkdir(parents=True, exist_ok=True)
             export_path = export_dir / f"{session.session_id}.md"
-            lines: list[str] = [f"# Vector CLI Session\n\nSession: {session.session_id}\n"]
+            lines: list[str] = [f"# Zeno Session\n\nSession: {session.session_id}\n"]
             for entry in session._entries:
                 etype = entry.get("type")
                 if etype == "user":
@@ -2501,7 +2501,7 @@ def main(argv: list[str] | None = None) -> None:
             # ---- Read input ----
             try:
                 raw = pt_session.prompt(
-                    HTML(f'<style fg="{TEAL}" bold="true">vector&gt;</style> '),
+                    HTML(f'<style fg="{TEAL}" bold="true">zeno&gt;</style> '),
                     bottom_toolbar=_get_toolbar,
                 )
             except EOFError:

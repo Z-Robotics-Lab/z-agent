@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Persistent world state for Vector OS Nano SDK.
+"""Persistent world state for Zeno SDK.
 
 Tracks objects, robot state, and spatial relations across a session.
 Provides predicate evaluation for skill precondition/postcondition checking.

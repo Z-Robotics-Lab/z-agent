@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -u
-cd /home/yusen/Desktop/zeno
+cd /home/yusen/Desktop/vector_os_nano
 export VECTOR_PROVIDER=deepseek
 export DEEPSEEK_MODEL=deepseek-chat
 export VECTOR_NO_ROS2=1

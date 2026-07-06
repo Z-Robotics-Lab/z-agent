@@ -98,7 +98,7 @@ class TestSeedWalk:
     def test_exploration_loop_has_seed_walk(self):
         """_exploration_loop should walk before creating nav flag."""
         explore_path = os.path.expanduser(
-            "~/Desktop/zeno/zeno/skills/go2/explore.py"
+            "~/Desktop/vector_os_nano/zeno/skills/go2/explore.py"
         )
         with open(explore_path) as f:
             content = f.read()
@@ -118,7 +118,7 @@ class TestSeedWalk:
     def test_seed_walk_short_distance(self):
         """Seed walk should be short (< 2m)."""
         explore_path = os.path.expanduser(
-            "~/Desktop/zeno/zeno/skills/go2/explore.py"
+            "~/Desktop/vector_os_nano/zeno/skills/go2/explore.py"
         )
         with open(explore_path) as f:
             content = f.read()
@@ -131,7 +131,7 @@ class TestSeedWalk:
     def test_nav_flag_not_created_immediately(self):
         """Nav flag should NOT be the first action in _exploration_loop."""
         explore_path = os.path.expanduser(
-            "~/Desktop/zeno/zeno/skills/go2/explore.py"
+            "~/Desktop/vector_os_nano/zeno/skills/go2/explore.py"
         )
         with open(explore_path) as f:
             content = f.read()
@@ -152,7 +152,7 @@ class TestBridgeDiagnostics:
     def test_bridge_has_publish_counters(self):
         """Bridge should track message publish counts."""
         bridge_path = os.path.expanduser(
-            "~/Desktop/zeno/scripts/go2_vnav_bridge.py"
+            "~/Desktop/vector_os_nano/scripts/go2_vnav_bridge.py"
         )
         with open(bridge_path) as f:
             content = f.read()
@@ -163,7 +163,7 @@ class TestBridgeDiagnostics:
     def test_bridge_logs_diagnostics(self):
         """Bridge should periodically log publish counts."""
         bridge_path = os.path.expanduser(
-            "~/Desktop/zeno/scripts/go2_vnav_bridge.py"
+            "~/Desktop/vector_os_nano/scripts/go2_vnav_bridge.py"
         )
         with open(bridge_path) as f:
             content = f.read()
@@ -187,7 +187,7 @@ class TestTareConfig:
         Reduced from 4.0/1.5 to prevent waypoints penetrating walls in the MuJoCo house.
         """
         cfg_path = os.path.expanduser(
-            "~/Desktop/zeno/config/tare_go2_indoor.yaml"
+            "~/Desktop/vector_os_nano/config/tare_go2_indoor.yaml"
         )
         import yaml
         with open(cfg_path) as f:
@@ -201,7 +201,7 @@ class TestTareConfig:
     def test_auto_start_disabled(self):
         """kAutoStart should be false — ExploreSkill sends /start_exploration."""
         cfg_path = os.path.expanduser(
-            "~/Desktop/zeno/config/tare_go2_indoor.yaml"
+            "~/Desktop/vector_os_nano/config/tare_go2_indoor.yaml"
         )
         with open(cfg_path) as f:
             content = f.read()

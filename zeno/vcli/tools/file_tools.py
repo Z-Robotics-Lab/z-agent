@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""File tools for Vector CLI agentic harness: read, write, edit.
+"""File tools for Zeno agentic harness: read, write, edit.
 
 Public exports:
     FileReadTool  — read file with optional offset/limit, line-numbered output

@@ -4,7 +4,7 @@
 """Entry point: python -m zeno.mcp
 
 Runs the MCP server with stdio transport so Claude Code can communicate
-with the Vector OS Nano simulated robot.
+with the Zeno simulated robot.
 
 Examples:
     python -m zeno.mcp                 # headless sim (default)

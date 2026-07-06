@@ -4,7 +4,7 @@
 """External system integrations.
 
 Each subpackage adapts a sibling project's ROS2 / IPC contract to
-Vector OS Nano's internal types (``world_model``, ``scene_graph``,
+Zeno's internal types (``world_model``, ``scene_graph``,
 ``skill`` context, etc.) without copying the upstream sources.
 
 Subpackages here MUST NOT import upstream Python sources at module-load

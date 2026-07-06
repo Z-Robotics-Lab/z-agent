@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""MCP Server for Vector OS Nano.
+"""MCP Server for Zeno.
 
 Exposes robot skills as MCP tools and world/camera state as MCP resources.
 Primary transport: stdio (for Claude Code integration).
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class VectorMCPServer:
-    """MCP server backed by a Vector OS Nano Agent + VectorEngine.
+    """MCP server backed by a Zeno Agent + VectorEngine.
 
     Registers all skills as tools (via mcp/tools.py) and world state +
     camera renders as resources (via mcp/resources.py).
@@ -49,7 +49,7 @@ class VectorMCPServer:
         self._agent = agent
         self._engine = engine
         self._session = session
-        self._server = Server("vector-os-nano")
+        self._server = Server("zeno")
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -276,8 +276,8 @@ def _start_camera_viewer(perception: Any) -> None:
     cam = perception._camera if hasattr(perception, "_camera") else perception
 
     def _viewer_loop() -> None:
-        cv2.namedWindow("Vector OS MCP", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Vector OS MCP", 1280, 480)
+        cv2.namedWindow("Zeno MCP", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Zeno MCP", 1280, 480)
 
         while True:
             try:
@@ -336,7 +336,7 @@ def _start_camera_viewer(perception: Any) -> None:
                 else:
                     combined = rgb_display
 
-                cv2.imshow("Vector OS MCP", combined)
+                cv2.imshow("Zeno MCP", combined)
                 if cv2.waitKey(33) == 27:
                     break
             except Exception:
@@ -565,7 +565,7 @@ async def main() -> None:
     import argparse  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(
-        description="Vector OS Nano MCP Server",
+        description="Zeno MCP Server",
         epilog=(
             "examples:\n"
             "  python -m zeno.mcp --sim            # sim + viewer + SSE on :8100\n"

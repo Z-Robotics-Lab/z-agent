@@ -11,7 +11,7 @@ Tests are headless (MUJOCO_GL=egl) and cover:
   5. walk() produces forward displacement (2 s cmd → base x >0.3 m, base z >0.5).
 
 Run:
-    cd /home/yusen/Desktop/zeno
+    cd /home/yusen/Desktop/vector_os_nano
     PATH=/usr/bin:$PATH MUJOCO_GL=egl .venv/bin/python -m pytest tests/unit/hardware/sim/test_g1_room.py -q
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 # ---------------------------------------------------------------------------
 
 _G1_SCENE_XML = Path(
-    "/home/yusen/Desktop/zeno/zeno/hardware/sim/mjcf/g1/scene_g1_12dof_room.xml"
+    "/home/yusen/Desktop/vector_os_nano/zeno/hardware/sim/mjcf/g1/scene_g1_12dof_room.xml"
 )
 
 

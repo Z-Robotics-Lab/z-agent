@@ -36,7 +36,7 @@ import sys
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/zeno"
+ROOT = "/home/yusen/Desktop/vector_os_nano"
 RED = sys.argv[1] if len(sys.argv) > 1 else "找前面的红色的东西"
 GREEN = sys.argv[2] if len(sys.argv) > 2 else "找前面的绿色的东西"
 TAG = sys.argv[3] if len(sys.argv) > 3 else "g1r"

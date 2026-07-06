@@ -1,7 +1,7 @@
-"""Vector OS Nano -- Quick Start (10 lines).
+"""Zeno -- Quick Start (10 lines).
 
 Requirements:
-    pip install vector-os-nano
+    pip install zeno
 
 Hardware:
     SO-101 arm connected via USB (/dev/ttyACM0 on Linux, COM3 on Windows)

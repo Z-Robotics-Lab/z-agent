@@ -31,7 +31,7 @@ import time
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/zeno"
+ROOT = "/home/yusen/Desktop/vector_os_nano"
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 # Perception-VLM billing-confound guards (R231/E54): default the local Ollama route +

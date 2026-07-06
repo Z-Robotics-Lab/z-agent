@@ -110,7 +110,7 @@ class TestVectorMCPServer:
     def test_server_name(self) -> None:
         """Underlying MCP server has the correct name."""
         server, agent, engine, session = _make_server()
-        assert server._server.name == "vector-os-nano"
+        assert server._server.name == "zeno"
 
     def test_list_tools_includes_natural_language(self) -> None:
         """list_tools returns the natural_language meta-tool."""

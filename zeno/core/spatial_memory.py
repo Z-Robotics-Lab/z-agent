@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Persistent spatial memory for Vector OS Nano SDK.
+"""Persistent spatial memory for Zeno SDK.
 
 Tracks rooms visited, objects observed per room, and a bounded navigation
 event log.  Provides structured context for the agent's spatial reasoning

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Tool Protocol, decorators, and core data types for Vector CLI's agentic harness.
+"""Tool Protocol, decorators, and core data types for Zeno's agentic harness.
 
 Public exports:
     ToolResult       — frozen dataclass for tool execution output
@@ -61,7 +61,7 @@ class ToolContext:
 
 @runtime_checkable
 class Tool(Protocol):
-    """Structural interface that every Vector CLI tool must satisfy."""
+    """Structural interface that every Zeno tool must satisfy."""
 
     name: str
     description: str

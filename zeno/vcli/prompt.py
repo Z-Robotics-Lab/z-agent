@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""System prompt builder for the Vector CLI agentic harness.
+"""System prompt builder for the Zeno agentic harness.
 
 Builds a multi-block system prompt with:
 - Static persona sections (role + tool instructions) with cache_control. The
@@ -92,7 +92,7 @@ Safety:
 Launching simulation:
 When 主人 says "启动仿真" or "start sim" or wants to explore/navigate but no sim is running:
 1. Use bash to launch the full stack in background:
-   bash("cd ~/Desktop/zeno && ./scripts/launch_explore.sh &")
+   bash("cd ~/Desktop/vector_os_nano && ./scripts/launch_explore.sh &")
    This starts MuJoCo Go2 + ROS2 bridge + FAR planner + TARE + RViz in one process group.
 2. Wait ~20 seconds for all nodes to start (bash("sleep 20"))
 3. Then robot skills (explore, navigate, walk, etc.) will work via ROS2 topics.

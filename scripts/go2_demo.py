@@ -5,7 +5,7 @@
 """Go2 locomotion visual demo — MuJoCo viewer.
 
 Usage:
-    cd ~/Desktop/zeno
+    cd ~/Desktop/vector_os_nano
     .venv-nano/bin/python scripts/go2_demo.py              # auto: MPC if available, else sinusoidal
     .venv-nano/bin/python scripts/go2_demo.py --mpc        # force MPC backend
     .venv-nano/bin/python scripts/go2_demo.py --sinusoidal # force sinusoidal backend

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Camera-to-base calibration transform for Vector OS skills.
+"""Camera-to-base calibration transform for Zeno skills.
 
 Loads the affine transform matrix produced by the workspace calibration
 script (workspace_calibration.yaml) and applies it to convert 3D positions

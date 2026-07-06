@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Intent-based tool routing for Vector CLI.
+"""Intent-based tool routing for Zeno.
 
 Classifies user messages by keyword matching to select relevant tool
 categories. Reduces token cost by sending only related tools to the LLM.

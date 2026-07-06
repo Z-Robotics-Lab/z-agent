@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Multi-layer permission system for Vector CLI's agentic harness.
+"""Multi-layer permission system for Zeno's agentic harness.
 
 Public exports:
     PermissionContext — stateful permission checker for a single agent session

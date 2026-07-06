@@ -1,4 +1,4 @@
-# Z Agent — progress
+# Zeno — progress
 
 更新：2026-07-06。fork 自 VectorRobotics/vector-os-nano @ R715 (12f3e15)，分支 main。
 

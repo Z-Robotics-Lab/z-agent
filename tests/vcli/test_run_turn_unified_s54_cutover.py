@@ -113,7 +113,7 @@ def _dev_engine(backend: Any, resolver: Any, persist_dir: Path,
 
 def test_greeting_answers_directly_no_action_plan(tmp_path: Path) -> None:
     """"hello" -> answer-only path. Backend called once; no decomposition."""
-    backend = _SpyChatBackend("Hi, I'm Vector OS.")
+    backend = _SpyChatBackend("Hi, I'm Zeno.")
     engine = _dev_engine(backend, lambda _n, _p: "y", tmp_path,
                          intent_router=IntentRouter())
     session = create_session(directory=tmp_path / "_sessions")
@@ -123,7 +123,7 @@ def test_greeting_answers_directly_no_action_plan(tmp_path: Path) -> None:
     assert isinstance(result, UnifiedTurnResult)
     # Routed to the cheap answer path via the conversational guard — NOT a plan.
     assert result.intent.route == "tool_use"
-    assert result.text == "Hi, I'm Vector OS."
+    assert result.text == "Hi, I'm Zeno."
     # The ONLY trace is the trivially-verified answer-only step (no action plan).
     assert result.trace is not None
     assert len(result.trace.steps) == 1

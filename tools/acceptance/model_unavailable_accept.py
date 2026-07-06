@@ -20,7 +20,7 @@ import time
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/zeno"
+ROOT = "/home/yusen/Desktop/vector_os_nano"
 CASE = sys.argv[1] if len(sys.argv) > 1 else "404"
 MODEL = {
     "400": "vector/does-not-exist-xyz",      # invalid model id

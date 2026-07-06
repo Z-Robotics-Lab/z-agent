@@ -40,7 +40,7 @@ import sys
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/zeno"
+ROOT = "/home/yusen/Desktop/vector_os_nano"
 CHAIN = sys.argv[1] if len(sys.argv) > 1 else "导航到坐标(11,3)，然后找前面的红色的东西"
 TAG = sys.argv[2] if len(sys.argv) > 2 else "g1chain"
 SNAP = f"/tmp/g1_chain_accept/{TAG}"

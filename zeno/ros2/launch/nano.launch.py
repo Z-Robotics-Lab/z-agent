@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Vector OS Nano full-system launch file.
+"""Zeno full-system launch file.
 
 Launches the hardware bridge, perception, skill server, world model service,
 and agent node in staggered order so each layer is ready before the next starts.
@@ -27,7 +27,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description() -> LaunchDescription:
-    """Return the Vector OS Nano full-system launch description."""
+    """Return the Zeno full-system launch description."""
 
     # ------------------------------------------------------------------
     # Launch arguments

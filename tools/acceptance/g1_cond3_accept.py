@@ -48,7 +48,7 @@ import sys
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/zeno"
+ROOT = "/home/yusen/Desktop/vector_os_nano"
 CHAIN = sys.argv[1] if len(sys.argv) > 1 else (
     "导航到坐标(12,3.5)，看看前面有没有红色的东西；"
     "如果没有红色物体就导航到坐标(8,3)，如果看到了红色物体就导航到坐标(9.5,4)"

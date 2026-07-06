@@ -12,7 +12,7 @@ Runs MuJoCoGo2 (MPC backend) and publishes ROS2 topics for Nav2:
 
 Usage:
     source /opt/ros/jazzy/setup.bash
-    cd ~/Desktop/zeno
+    cd ~/Desktop/vector_os_nano
     PYTHONPATH=".venv-nano/lib/python3.12/site-packages:\
 .venv-nano/lib/python3.12/site-packages/cmeel.prefix/lib/python3.12/site-packages:\
 /home/yusen/Desktop/go2-convex-mpc/src:\

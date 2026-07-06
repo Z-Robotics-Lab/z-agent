@@ -1,4 +1,4 @@
-<h1 align="center">Z Agent</h1>
+<h1 align="center">Zeno</h1>
 
 <p align="center">
   <b>Z-Robotics-Lab's agent runtime for physical AI: natural language in, verified robot behavior out.</b>
@@ -36,7 +36,7 @@ an Isaac Sim digital twin driven through the CMU autonomy stack
 the real robot.
 
 Status: under active development (fork bootstrap in progress — see [progress.md](progress.md)).
-The quickstart below will change as the runtime is slimmed and renamed (`vector-cli` → `za`).
+The quickstart below reflects the ground-up rename to Zeno (`vector-cli` → `zeno`).
 
 ## Quick Start (inherited; being reworked)
 
@@ -46,7 +46,7 @@ cd z-agent
 uv venv .venv && source .venv/bin/activate
 uv pip install -e .
 cp .env.example .env    # fill in ONE provider block
-vector-cli              # interactive agent REPL
+zeno                    # interactive agent REPL
 ```
 
 Go2W world (requires the [go2W_Sim](https://github.com/Z-Robotics-Lab/go2W_Sim) digital twin
@@ -73,4 +73,4 @@ vector> explore            # TARE autonomous exploration, verified by explored-v
 Apache License 2.0. Copyright 2024-2026 Vector Robotics (upstream) and Z-Robotics-Lab
 (fork changes). See [LICENSE](LICENSE) and [NOTICE](NOTICE); upstream attribution preserved.
 "Vector Robotics" and "Vector OS Nano" are trademarks of Vector Robotics — this fork is
-renamed to Z Agent accordingly.
+renamed to Zeno accordingly.

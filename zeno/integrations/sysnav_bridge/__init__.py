@@ -6,7 +6,7 @@
 SysNav (https://github.com/zwandering/SysNav, PolyForm-Noncommercial)
 runs as a sibling ROS2 workspace. This package adapts its published
 ``tare_planner/ObjectNodeList`` and ``tare_planner/RoomNodeList``
-messages onto Vector OS Nano's internal ``WorldModel`` / ``SceneGraph``
+messages onto Zeno's internal ``WorldModel`` / ``SceneGraph``
 without copying or redistributing any SysNav source code.
 
 See ``docs/sysnav_integration.md`` for the full bringup procedure,

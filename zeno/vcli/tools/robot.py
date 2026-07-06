@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Robot tools for the Vector CLI agentic harness.
+"""Robot tools for the Zeno agentic harness.
 
 WorldQueryTool  — read-only view into the agent's world model (objects + robot pose).
 RobotStatusTool — read-only snapshot of connected hardware (arm, gripper, base, perception).

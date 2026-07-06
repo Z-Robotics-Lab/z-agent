@@ -36,7 +36,7 @@ import sys
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/zeno"
+ROOT = "/home/yusen/Desktop/vector_os_nano"
 # (tx, ty) legs — demanded literal coordinates the human states in NL.
 # Overridable via env (G1_NAV_A / G1_NAV_B, "x,y") so a re-verify round can demand DIFFERENT
 # coords than a prior run — non-memorized selectivity (a resolver that walks to arbitrary

@@ -2,7 +2,7 @@
 # Go2 + Vector Nav Stack + TARE Autonomous Exploration — one-command launch
 #
 # Usage:
-#   cd ~/Desktop/zeno
+#   cd ~/Desktop/vector_os_nano
 #   ./scripts/launch_explore.sh              # MuJoCo viewer + RViz
 #   ./scripts/launch_explore.sh --no-gui     # headless MuJoCo
 #

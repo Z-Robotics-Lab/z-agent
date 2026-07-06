@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Vector OS Nano — Python SDK for robot arm and mobile base control.
+"""Zeno — Python SDK for robot arm and mobile base control.
 
 Quick start:
 

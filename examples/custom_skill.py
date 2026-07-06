@@ -4,7 +4,7 @@ Custom skills are automatically exposed to the LLM planner. When the user
 says "wave 5 times", the planner selects WaveSkill and passes {"times": 5}.
 
 Requirements:
-    pip install vector-os-nano
+    pip install zeno
 
 Usage:
     python examples/custom_skill.py

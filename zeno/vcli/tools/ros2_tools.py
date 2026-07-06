@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""ROS2 diagnostic tools for Vector CLI.
+"""ROS2 diagnostic tools for Zeno.
 
 Three tools for LLM-driven robot diagnostics:
 - ros2_topics: list topics, check hz, echo messages

@@ -80,7 +80,7 @@ def _make_executor(verifier: GoalVerifier) -> GoalExecutor:
 
 
 def test_answer_plan_builder_shape() -> None:
-    tree = GoalDecomposer.answer_plan("who are you?", "I am Vector OS.")
+    tree = GoalDecomposer.answer_plan("who are you?", "I am Zeno.")
     assert isinstance(tree, GoalTree)
     assert len(tree.sub_goals) == 1
     sg = tree.sub_goals[0]
@@ -88,7 +88,7 @@ def test_answer_plan_builder_shape() -> None:
     assert sg.strategy == "answer"
     assert sg.verify == "True"
     assert sg.foreach is None
-    assert sg.strategy_params["answer"] == "I am Vector OS."
+    assert sg.strategy_params["answer"] == "I am Zeno."
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +387,7 @@ def test_decomposer_keeps_answer_only_on_answer_strategy() -> None:
                 "strategy": "answer",
                 "timeout_sec": 30,
                 "depends_on": [],
-                "strategy_params": {"answer": "I am Vector OS."},
+                "strategy_params": {"answer": "I am Zeno."},
                 "answer_only": True,
             }
         ],

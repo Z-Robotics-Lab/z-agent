@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stop all Gazebo Harmonic processes for Vector OS Nano.
+# Stop all Gazebo Harmonic processes for Zeno.
 #
 # Usage:
 #   ./scripts/stop_gazebo.sh

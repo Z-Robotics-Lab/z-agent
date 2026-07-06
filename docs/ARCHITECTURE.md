@@ -1,4 +1,4 @@
-# Vector OS Nano — Architecture
+# Zeno — Architecture
 
 - Status: Canonical durable design doc. High-level + durable; legacy implementation
   deep-dive removed (git history keeps it).
@@ -14,7 +14,7 @@
 
 ## 1. Vision
 
-Vector OS Nano is not another model — it is an **agent-orchestration runtime built around
+Zeno is not another model — it is an **agent-orchestration runtime built around
 models, in service of robots**. The four things models do *unreliably* on their own are
 exactly the OS's job: **plan** the task, **route** each step to the right model AND skill,
 **verify** every step against a machine-checkable predicate, and **recover** on verified

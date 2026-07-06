@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -u
-cd /home/yusen/Desktop/zeno
+cd /home/yusen/Desktop/vector_os_nano
 export VECTOR_PROVIDER=deepseek VECTOR_NO_ROS2=1 DEEPSEEK_MODEL=deepseek-chat
 # Control: negate the RED CAN, demand the GREEN BOTTLE. Rules out a can-bias/grab-nearest
 # confound. Blue bottle also present as an un-negated distractor.

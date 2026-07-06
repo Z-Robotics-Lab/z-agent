@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Navigation and terrain diagnostic tools for Vector CLI."""
+"""Navigation and terrain diagnostic tools for Zeno."""
 from __future__ import annotations
 
 import json

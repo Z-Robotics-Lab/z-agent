@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""ROS2 integration layer for Vector OS Nano. Optional.
+"""ROS2 integration layer for Zeno. Optional.
 
 Usage:
     from zeno.ros2 import ROS2_AVAILABLE

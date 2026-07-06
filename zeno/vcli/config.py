@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Persistent configuration for Vector CLI.
+"""Persistent configuration for Zeno.
 
 Stores API keys, default model, provider preferences in ~/.vector/config.yaml.
 Also discovers Claude Code OAuth tokens from ~/.claude/.credentials.json.
@@ -215,7 +215,7 @@ def resolve_credentials(
             return or_key, "openrouter", or_model, or_base
 
     if not api_key:
-        # Vector CLI's own OAuth credentials (independent rate limits)
+        # Zeno's own OAuth credentials (independent rate limits)
         from zeno.vcli.oauth import load_credentials
         own_creds = load_credentials()
         if own_creds:

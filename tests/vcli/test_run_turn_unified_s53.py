@@ -139,7 +139,7 @@ def _goal_tree_json(file_path: str, content: str, verify: str) -> str:
 
 def test_chat_greeting_answer_parity(tmp_path: Path) -> None:
     """A greeting routes to the answer path: same text as ReAct, verified loop."""
-    backend = _ChatBackend("Hi! I'm Vector OS.")
+    backend = _ChatBackend("Hi! I'm Zeno.")
     engine = _dev_engine(backend, lambda _n, _p: "y", tmp_path,
                          intent_router=IntentRouter())
     session = create_session(directory=tmp_path / "_sessions")
@@ -151,8 +151,8 @@ def test_chat_greeting_answer_parity(tmp_path: Path) -> None:
 
     assert isinstance(result, UnifiedTurnResult)
     # PARITY: the answer text matches what the ReAct loop produced (+ streamed it).
-    assert result.text == "Hi! I'm Vector OS."
-    assert "".join(streamed) == "Hi! I'm Vector OS."
+    assert result.text == "Hi! I'm Zeno."
+    assert "".join(streamed) == "Hi! I'm Zeno."
     # CLOSED LOOP: an answer-only trace was produced and verifies true.
     assert result.intent.route == "tool_use"
     assert result.trace is not None

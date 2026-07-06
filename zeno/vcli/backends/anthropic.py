@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Anthropic API backend for Vector CLI.
+"""Anthropic API backend for Zeno.
 
 Uses the anthropic Python SDK with streaming and prompt caching.
 """

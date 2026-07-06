@@ -14,7 +14,7 @@ Publishes the topics the CMU/Ji Zhang nav stack expects:
 
 Usage:
     source /opt/ros/jazzy/setup.bash
-    cd ~/Desktop/zeno
+    cd ~/Desktop/vector_os_nano
     ./scripts/launch_vnav.sh
 """
 from __future__ import annotations

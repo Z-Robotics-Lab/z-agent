@@ -12,7 +12,7 @@ Covers:
 - the world registry wiring (resolve_world_named -> PlaygroundWorld),
 - a kernel-integration test: PlaygroundWorld wired into VectorEngine, the merged
   verifier namespace evaluated THROUGH the real GoalVerifier (the "test with
-  vector-os-nano" gate).
+  zeno" gate).
 
 No MuJoCo / network — the arm is a deterministic fake.
 """

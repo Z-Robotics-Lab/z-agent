@@ -4,11 +4,11 @@ For most users, the launch file is simpler:
     ros2 launch vector_os nano.launch.py serial_port:=/dev/ttyACM0
 
 This example shows how to start a single ROS2 node from Python directly,
-which is useful when integrating Vector OS into an existing ROS2 system.
+which is useful when integrating Zeno into an existing ROS2 system.
 
 Requirements:
     Ubuntu 22.04 + ROS2 Humble
-    pip install vector-os-nano[all]
+    pip install zeno[all]
     source /opt/ros/humble/setup.bash
 
 Usage:

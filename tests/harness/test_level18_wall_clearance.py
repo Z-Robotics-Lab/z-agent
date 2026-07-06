@@ -139,7 +139,7 @@ class TestBridgeObstacleCheck:
 
     def _read_bridge(self):
         path = os.path.expanduser(
-            "~/Desktop/zeno/scripts/go2_vnav_bridge.py"
+            "~/Desktop/vector_os_nano/scripts/go2_vnav_bridge.py"
         )
         with open(path) as f:
             return f.read()
@@ -192,7 +192,7 @@ class TestTareCollisionMargins:
 
     def _load_tare_config(self):
         cfg_path = os.path.expanduser(
-            "~/Desktop/zeno/config/tare_go2_indoor.yaml"
+            "~/Desktop/vector_os_nano/config/tare_go2_indoor.yaml"
         )
         with open(cfg_path) as f:
             return f.read(), yaml.safe_load(f)

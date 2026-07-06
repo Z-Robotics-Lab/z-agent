@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""vcli — Vector CLI agentic harness.
+"""vcli — Zeno agentic harness.
 
 Public surface::
 

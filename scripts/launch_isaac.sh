@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch Isaac Sim Docker container for Vector OS Nano.
+# Launch Isaac Sim Docker container for Zeno.
 #
 # Usage:
 #   ./scripts/launch_isaac.sh [--gui] [--scene flat|room|apartment]

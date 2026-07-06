@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Configuration loading and validation for Vector OS Nano SDK.
+"""Configuration loading and validation for Zeno SDK.
 
 Public API:
     load_config(user_config=None) -> dict

@@ -4,7 +4,7 @@ SimulatedArm is planned for Task T10 (Wave 4). This example shows what
 the interface will look like once it is available.
 
 Requirements (future):
-    pip install vector-os-nano[sim]
+    pip install zeno[sim]
 
 Note:
     This example will raise ImportError until zeno.hardware.sim is
@@ -17,7 +17,7 @@ except ImportError:
     print(
         "SimulatedArm is not yet available.\n"
         "It is scheduled for Task T10 (Wave 4).\n"
-        "Install PyBullet with: pip install vector-os-nano[sim]"
+        "Install PyBullet with: pip install zeno[sim]"
     )
     raise SystemExit(1)
 

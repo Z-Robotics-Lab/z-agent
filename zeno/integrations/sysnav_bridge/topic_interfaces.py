@@ -99,7 +99,7 @@ class ObjectNodeListShadow:
 class RoomNodeShadow:
     """Typed shadow of ``tare_planner/RoomNode``.
 
-    Only the fields Vector OS Nano consumes are mirrored. ``polygon`` is
+    Only the fields Zeno consumes are mirrored. ``polygon`` is
     represented as a tuple of (x, y) points — the upstream
     ``PolygonStamped`` carries 3D points but rooms are floor-plane in
     practice.
