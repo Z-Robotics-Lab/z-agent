@@ -826,6 +826,44 @@ def _register_world_tools(world: Any, registry: Any, agent: Any) -> None:
         )
 
 
+def _world_setup(world: Any, agent: Any) -> None:
+    """Call the active world's optional ``setup(agent)`` lifecycle hook.
+
+    Runs once, right after the world is resolved and its tools registered. A
+    world without ``setup`` (dev/robot and every world that omits it) is a no-op,
+    so this is byte-identical for existing worlds. A BYO world uses it to warm a
+    bridge/cache. Best-effort — a failing setup is warned and swallowed so it
+    never blocks the session start.
+    """
+    hook = getattr(world, "setup", None)
+    if hook is None:
+        return
+    try:
+        hook(agent)
+    except Exception as exc:  # noqa: BLE001 — setup must not block the REPL
+        logger.warning(
+            "world %r setup failed: %s", getattr(world, "name", repr(world)), exc
+        )
+
+
+def _world_teardown(world: Any) -> None:
+    """Call the active world's optional ``teardown()`` lifecycle hook at exit.
+
+    Mirror of ``_world_setup``: runs once on session shutdown. A world without
+    ``teardown`` is a no-op. Best-effort — a failing teardown is warned and
+    swallowed so it never masks the real exit path.
+    """
+    hook = getattr(world, "teardown", None)
+    if hook is None:
+        return
+    try:
+        hook()
+    except Exception as exc:  # noqa: BLE001 — teardown must not mask exit
+        logger.warning(
+            "world %r teardown failed: %s", getattr(world, "name", repr(world)), exc
+        )
+
+
 def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
     """Switch the LIVE session into the playground ``scenario_id`` (mid-session).
 
@@ -873,9 +911,51 @@ def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
     return world
 
 
+def _build_world_embodiment(args: argparse.Namespace) -> Any:
+    """Build the agent from an explicit ``--world`` embodiment (the BYO front door).
+
+    When ``--world <id>`` selects a world that provides a ``build_embodiment()``
+    hook, the object it returns becomes the session's agent — a first-class,
+    ``--sim``-free path for a bring-your-own embodiment (e.g. go2w drives its
+    Isaac stack over an HTTP bridge, no in-process MuJoCo). Duck-typed and
+    optional: a world without the hook (or returning None) leaves the agent None
+    (the plain dev/robot session), so this is byte-identical for every existing
+    world. Resolution goes through the same registry + plugin discovery the world
+    resolver uses, so a plugin-contributed world id is reachable here too.
+
+    Best-effort: a failure resolving/building is warned and degrades to None —
+    the session still starts (as a no-agent world), never crashing the CLI.
+    """
+    world_id = getattr(args, "world", None)
+    if not world_id:
+        return None
+    try:
+        from vector_os_nano.vcli.worlds import get_world_registry
+
+        _load_world_plugins()  # a plugin may contribute this world id
+        world = get_world_registry().resolve(world_id)  # KeyError surfaces in resolver
+        builder = getattr(world, "build_embodiment", None)
+        if builder is None:
+            return None
+        embodiment = builder()
+        if embodiment is not None:
+            logger.info("world %r provided a build_embodiment agent", world_id)
+        return embodiment
+    except KeyError:
+        # An unknown --world id is reported (fail-loud) by _resolve_active_world,
+        # which runs right after this; don't double-report here — just no agent.
+        return None
+    except Exception as exc:  # noqa: BLE001 — a BYO embodiment must not crash the CLI
+        logger.warning("world %r build_embodiment failed: %s", world_id, exc)
+        return None
+
+
 def _init_agent(args: argparse.Namespace) -> Any:
     if not (args.sim or args.sim_go2):
-        return None
+        # No in-process simulator: an explicit --world may still supply a
+        # first-class embodiment as the agent (the BYO front door). Absent that,
+        # the session runs agent-less exactly as before.
+        return _build_world_embodiment(args)
     try:
         from vector_os_nano.core.agent import Agent  # type: ignore[import]
         if args.sim:
@@ -1777,6 +1857,9 @@ def _build_turn_context(
     # category here — no kernel edit. Runs regardless of agent so a robot-flavour
     # BYO world driven WITHOUT --sim still gets its tools.
     _register_world_tools(world, registry, agent)
+    # BYO-world one-time activation: setup(agent) runs once the world is fully
+    # resolved + its tools registered. No-op for any world that omits the hook.
+    _world_setup(world, agent)
 
     # Permissions
     permissions = PermissionContext(no_permission=args.no_permission)
@@ -2183,6 +2266,9 @@ def main(argv: list[str] | None = None) -> None:
     # category here — no kernel edit. Runs regardless of agent so a robot-flavour
     # BYO world driven WITHOUT --sim still gets its tools.
     _register_world_tools(world, registry, agent)
+    # BYO-world one-time activation: setup(agent) runs once the world is fully
+    # resolved + its tools registered. No-op for any world that omits the hook.
+    _world_setup(world, agent)
 
     # Permissions
     permissions = PermissionContext(no_permission=args.no_permission)
@@ -2894,6 +2980,10 @@ def main(argv: list[str] | None = None) -> None:
                     )
                 except Exception as _exc:
                     console.print(f"[yellow]Scene graph save failed: {_exc}[/yellow]")
+        # BYO-world lifecycle: release the active world's resources at REPL exit.
+        # A mid-session /scenario switch swaps app_state["world"], so tear down the
+        # CURRENT world (best-effort; no-op unless the world defines teardown()).
+        _world_teardown(app_state.get("world"))
 
 
 if __name__ == "__main__":
