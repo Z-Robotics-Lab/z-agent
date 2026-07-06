@@ -49,7 +49,7 @@ def _default_lock_path() -> Path:
     if runtime and os.path.isdir(runtime):
         return Path(runtime) / "vector_sim.lock"
     return Path(f"/tmp/vector_sim_{os.getuid()}.lock")
-# A live SIMULATOR (not an idle vector-cli REPL): an actual mujoco/explore process, or a cli launched
+# A live SIMULATOR (not an idle zeno REPL): an actual mujoco/explore process, or a cli launched
 # WITH a sim flag (`--sim` / `--sim-go2`). Bracket patterns so `pgrep -f` never matches its own (or
 # our) command line. NB: an in-process sim launched by NL inside a REPL (no `--sim` in argv) is not
 # detected by cmdline alone — that interactive case relies on the human pausing automated loops.

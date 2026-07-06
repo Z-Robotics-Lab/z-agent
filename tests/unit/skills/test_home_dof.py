@@ -7,7 +7,7 @@ must NOT crash ('expected 6 positions, got 5') — home adapts to the arm's DoF 
 falling back to the URDF-zero neutral pose (`[0.0]*dof`, what MuJoCoPiper.home()
 itself uses). SO-101 (5-DoF) behavior is byte-identical.
 
-This is backlog #2: the bug blocked the bare-`vector-cli` + NL fetch path because
+This is backlog #2: the bug blocked the bare-`zeno` + NL fetch path because
 the planner/executor calls `home` on the go2+Piper arm, which raised.
 """
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """g1 cross-embodiment × cross-model bare-REPL acceptance driver.
 
-Proves TWO plug-and-play axes AT ONCE on the ONLY acceptance face (bare `vector-cli`
+Proves TWO plug-and-play axes AT ONCE on the ONLY acceptance face (bare `zeno`
 REPL + NL, no -p / no --sim flag):
   - bring-your-own-ROBOT: g1 (Unitree humanoid, 2nd embodiment, camera-only, NO arm)
     started BY NL in the go2 apartment room.
@@ -83,7 +83,7 @@ def launch_explore_running() -> bool:
 
 
 def wait_prompt(child, timeout=90):
-    child.expect(r"vector>", timeout=timeout)
+    child.expect(r"zeno>", timeout=timeout)
 
 
 def drain_until_quiet(child, quiet=3.0, max_wait=180):
@@ -160,7 +160,7 @@ def parse_verdicts(snap: str) -> list[tuple[str, bool]]:
 
 
 _llm_preflight()
-print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim); RED={RED!r} GREEN={GREEN!r} provider={PROVIDER}", flush=True)
+print(f"[driver] spawning BARE zeno REPL (no -p/--sim); RED={RED!r} GREEN={GREEN!r} provider={PROVIDER}", flush=True)
 child = pexpect.spawn(
     f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli", "--native-loop"],
     env=env, cwd=ROOT, encoding="utf-8", codec_errors="replace",

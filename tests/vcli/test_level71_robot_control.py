@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Level 71 — vector-cli robot-control paths (arm sim).
+"""Level 71 — zeno robot-control paths (arm sim).
 
-Locks down the fixes that make `vector-cli --sim` and the in-REPL
+Locks down the fixes that make `zeno --sim` and the in-REPL
 `start_simulation` flow actually control the SO-101 arm on macOS:
 
 - RobotContextProvider is arm-aware (no false "No hardware connected").

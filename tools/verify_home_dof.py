@@ -5,7 +5,7 @@
 The home skill hard-defaulted the 5-DoF SO-101 home pose; on the go2+Piper (6-DoF)
 arm move_joints raised 'expected 6 positions, got 5'. Because Agent.execute_skill()
 APPENDS a trailing `home` step to most manipulation plans (pick/scan/...), this bug
-crashed the WHOLE planner/executor path — blocking the bare-vector-cli + NL fetch.
+crashed the WHOLE planner/executor path — blocking the bare-zeno + NL fetch.
 
 This drives `home` through the real Agent/GoalExecutor against a REAL go2+Piper sim
 (not a mock): it proves the previously-crashing executor->HomeSkill->real-arm path

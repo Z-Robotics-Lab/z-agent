@@ -3,12 +3,12 @@
 
 """D163/D164 C(b): _start_go2 single-sources the in-process Go2 builder.
 
-The acceptance face is the bare `vector-cli` REPL + NL. There, "启动带手臂的 go2
+The acceptance face is the bare `zeno` REPL + NL. There, "启动带手臂的 go2
 仿真" routes to SimStartTool._start_go2, which historically ALWAYS launched the
 external ROS2 launch_explore.sh stack (MuJoCo + bridge + nav + TARE) as a
 subprocess and connected via Go2ROS2Proxy — a path that FAILED fetch/place
 (D163). The proven path is the lightweight in-process MuJoCoGo2 builder that
-`vector-cli --sim-go2` uses.
+`zeno --sim-go2` uses.
 
 D164 Decision C(b) — HYBRID: repoint the NL launcher at the in-process builder
 when VECTOR_NO_ROS2=1, via a SINGLE-SOURCE extraction (Rule 3/11) so cli.py's

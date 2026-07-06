@@ -7,7 +7,7 @@ Ties together VectorEngine, Session, PermissionContext, and all tools
 into an interactive agent loop with V's personality.
 
     python -m zeno.vcli.cli [options]
-    # or via console_scripts: vector-cli [options]
+    # or via console_scripts: zeno [options]
 """
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
 
 
 class VectorCompleter(Completer):
-    """Context-aware completer for the vector-cli REPL.
+    """Context-aware completer for the zeno REPL.
 
     - Typing `/` shows all slash commands with descriptions
     - Typing `/model ` shows known model names
@@ -418,7 +418,7 @@ def _print_native_enabled() -> bool:
     Mirrors the owner-approved REPL cutover (``_repl_native_enabled``) on the
     NON-interactive acceptance entrypoint: ``run_one_turn`` ATTEMPTS the native
     tool-use producer first, then FALLS BACK to the legacy decompose+execute when
-    native took NO action — so bare ``vector-cli -p`` + natural language exercises the
+    native took NO action — so bare ``zeno -p`` + natural language exercises the
     redesign by default (CLAUDE.md North Star "Acceptance interface"), the same way
     the interactive REPL already does. Default ON; ``VECTOR_PRINT_NATIVE`` in
     {0, false, off, no} forces the pure-legacy ``-p`` path (byte-identical to the
@@ -452,9 +452,9 @@ def _native_trace_acted(trace: Any) -> bool:
 def _repl_native_enabled() -> bool:
     """REPL CUTOVER (2026-06-19, owner-approved): native is the DEFAULT REPL turn path.
 
-    The interactive ``vector-cli`` REPL attempts the frontier-model NATIVE TOOL-USE
+    The interactive ``zeno`` REPL attempts the frontier-model NATIVE TOOL-USE
     producer first (then falls back to the legacy planner) so the owner's ONLY
-    acceptance interface — bare ``vector-cli`` + natural language — exercises the
+    acceptance interface — bare ``zeno`` + natural language — exercises the
     redesign (CLAUDE.md North Star -> "Acceptance interface"). Default ON.
     ``VECTOR_REPL_NATIVE`` in {0, false, off, no} forces the pure-legacy REPL
     (byte-identical to the pre-cutover turn path) — a reversible escape hatch.
@@ -1231,7 +1231,7 @@ def _handle_slash_command(
             creds = login_oauth()
             if creds:
                 console.print(f"[green]  Authenticated.[/] Token saved to ~/.vector/oauth_credentials.json")
-                console.print(f"[dim]  Restart vector-cli to use your subscription.[/dim]\n")
+                console.print(f"[dim]  Restart zeno to use your subscription.[/dim]\n")
             else:
                 console.print("[red]  Authentication failed or timed out.[/]")
                 console.print("[dim]  Make sure you have an active Claude subscription.[/dim]\n")
@@ -1244,7 +1244,7 @@ def _handle_slash_command(
                 config["anthropic_api_key"] = key.strip()
                 config["provider"] = "anthropic"
                 save_config(config)
-                console.print(f"[green]  Saved.[/] Restart vector-cli to apply.")
+                console.print(f"[green]  Saved.[/] Restart zeno to apply.")
             else:
                 console.print("[dim]  Cancelled.[/dim]")
 
@@ -1257,7 +1257,7 @@ def _handle_slash_command(
                 config["provider"] = "openrouter"
                 config["base_url"] = "https://openrouter.ai/api/v1"
                 save_config(config)
-                console.print(f"[green]  Saved.[/] Restart vector-cli to apply.")
+                console.print(f"[green]  Saved.[/] Restart zeno to apply.")
             else:
                 console.print("[dim]  Cancelled.[/dim]")
 
@@ -2028,7 +2028,7 @@ def _safe_verdict_snapshot(agent: Any) -> None:
 
 def _sim_lock_enabled(args: Any) -> bool:
     """True when the global ONE-sim lock should wrap this turn — ``VECTOR_SIM_LOCK=1`` AND a sim is
-    launched (ADR-002 Stage 0). Default OFF: interactive ``vector-cli`` and the test suite are
+    launched (ADR-002 Stage 0). Default OFF: interactive ``zeno`` and the test suite are
     unaffected; the EvolvingLoop and the acceptance harnesses opt in via the env so EVERY automated
     sim serializes through this one owner (no double-lock: only the sim-running cli process holds it).
     """
@@ -2569,7 +2569,7 @@ def main(argv: list[str] | None = None) -> None:
                 continue
 
             # CUTOVER (2026-06-19, owner-approved): native-attempt-then-fallback is the
-            # REPL's DEFAULT turn path, so bare `vector-cli` + natural language runs the
+            # REPL's DEFAULT turn path, so bare `zeno` + natural language runs the
             # redesign's NATIVE TOOL-USE producer (CLAUDE.md North Star "Acceptance
             # interface"). For an action-shaped turn, ATTEMPT native first; if it
             # DISPATCHED an action it OWNS the turn (its honest verdict is rendered).

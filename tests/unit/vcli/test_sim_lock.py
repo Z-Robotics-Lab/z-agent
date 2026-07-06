@@ -131,7 +131,7 @@ def test_nuke_spares_preexisting_sims(monkeypatch):
 
 def test_sim_patterns_target_sims_not_idle_repl():
     """#2: detection matches actual sims (mujoco / a --sim-flagged cli / explore) but NOT an idle
-    vector-cli REPL, exercised as regexes against representative command lines."""
+    zeno REPL, exercised as regexes against representative command lines."""
     import re
 
     def matches(cmdline: str) -> bool:
@@ -141,7 +141,7 @@ def test_sim_patterns_target_sims_not_idle_repl():
     assert matches("/opt/mujoco/bin/mujoco_viewer")                                # mujoco proc
     assert matches("bash scripts/launch_explore.sh")                               # explore
     assert not matches("python -m zeno.vcli.cli")                        # idle REPL (no sim)
-    assert not matches("vector-cli")                                              # idle REPL
+    assert not matches("zeno")                                                    # idle REPL
 
 
 def test_default_lock_path_is_home_independent(monkeypatch, tmp_path):

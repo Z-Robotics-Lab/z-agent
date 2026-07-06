@@ -32,7 +32,7 @@ leg1 (12,3.5) keeps red ~0.9 m dead-ahead (perceive GT stays in head-cam); leg3 
 turn-around back-hop over open floor (red may leave view — irrelevant, perceive already
 grounded).
 
-Mirrors g1_chain_accept.py's proven PTY plumbing; the ONLY acceptance face (bare vector-cli
+Mirrors g1_chain_accept.py's proven PTY plumbing; the ONLY acceptance face (bare zeno
 REPL + NL, no -p / no --sim flag). Reads per-step `verify <expr> ok (actor=...)` lines + the
 turn `verdict <EV> verified=<bool> (n/m grounded)` as the moat-oracle GT.
 
@@ -86,7 +86,7 @@ def launch_explore_running() -> bool:
 
 
 def wait_prompt(child, timeout=90):
-    child.expect(r"vector>", timeout=timeout)
+    child.expect(r"zeno>", timeout=timeout)
 
 
 def drain_until_quiet(child, quiet=3.0, max_wait=180):
@@ -172,7 +172,7 @@ def parse_step_verifies(snap: str) -> list[tuple[str, bool]]:
 
 
 _llm_preflight()
-print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim); CHAIN={CHAIN!r} provider={PROVIDER}", flush=True)
+print(f"[driver] spawning BARE zeno REPL (no -p/--sim); CHAIN={CHAIN!r} provider={PROVIDER}", flush=True)
 child = pexpect.spawn(
     f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli", "--native-loop"],
     env=env, cwd=ROOT, encoding="utf-8", codec_errors="replace",

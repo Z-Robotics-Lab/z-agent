@@ -2,10 +2,10 @@
 Merged from docs/cli-tool-system.md + docs/skill-protocol.md (git history keeps the long forms).
 
 ## VectorEngine 概述
-<!-- pull: 想知道 vector-cli / MCP 的执行引擎是什么 -->
+<!-- pull: 想知道 zeno / MCP 的执行引擎是什么 -->
 
 VectorEngine 是唯一执行引擎，CLI 和 MCP 共用:
-`vector-cli / vector-os-mcp → VectorEngine → native tool-use producer (legacy VGG = 回退) → skill.execute()`。
+`zeno / zeno-mcp → VectorEngine → native tool-use producer (legacy VGG = 回退) → skill.execute()`。
 用户说自然语言，agent 通过工具系统控制机器人、编辑代码、诊断问题 —— 一个 session 完成所有事。
 
 ## 当前 producer 架构（2026-06 cutover 后 — 权威）

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
-"""Bare-`vector-cli` + NL end-to-end FETCH acceptance (the non-negotiable face).
+"""Bare-`zeno` + NL end-to-end FETCH acceptance (the non-negotiable face).
 
 Every prior fetch harness builds ``VectorEngine`` / the go2+Piper rig IN-PROCESS and
 calls ``run_turn_native`` directly — internal, never the product. THIS harness drives

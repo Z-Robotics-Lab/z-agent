@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Level 64 — Phase B.1.2: verify-as-eval, evidence gate, and vector-eval.
+"""Level 64 — Phase B.1.2: verify-as-eval, evidence gate, and zeno-eval.
 
 Acceptance criteria (docs/agent-kernel-phase-b-plan.md, B-2):
 - trace save/load round-trips; replay reproduces pass/fail.

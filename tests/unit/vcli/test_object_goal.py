@@ -2,7 +2,7 @@
 # Copyright (c) 2024-2026 Vector Robotics
 """D17 — goal-authenticity for OBJECT (grasp/pick) goals.
 
-The fakeable-grasp false-green: a bare ``vector-cli`` + NL "抓前面的东西" let the model
+The fakeable-grasp false-green: a bare ``zeno`` + NL "抓前面的东西" let the model
 satisfy a PHYSICAL grasp by ``file_write('grabbed.txt')`` then verifying
 ``file_exists('grabbed.txt')``. ``file_exists`` is a PREDICATE oracle (classifies
 GROUNDED) AND a non-robot predicate (never actor-causation-graded), so every prior gate

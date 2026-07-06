@@ -1,7 +1,7 @@
 """g1 2nd-embodiment GROUNDED-NAV bare-REPL acceptance (KIND escalation past DETECT).
 
 Proves the 2nd embodiment ACTS (not just perceives) on the ONLY acceptance face
-(bare `vector-cli --native-loop` + NL, no -p / no --sim flag), IN-PROCESS
+(bare `zeno --native-loop` + NL, no -p / no --sim flag), IN-PROCESS
 (VECTOR_NO_ROS2=1 -> MuJoCoG1; launch_explore.sh must stay EMPTY throughout).
 
 Chain per leg (all planner-reachable, mapped this round):
@@ -163,7 +163,7 @@ def nav_calls(snap: str) -> list[tuple[str, str]]:
 
 
 _llm_preflight()
-print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim); A={LEG_A} B={LEG_B} provider={PROVIDER}", flush=True)
+print(f"[driver] spawning BARE zeno REPL (no -p/--sim); A={LEG_A} B={LEG_B} provider={PROVIDER}", flush=True)
 child = pexpect.spawn(
     f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli", "--native-loop"],
     env=env, cwd=ROOT, encoding="utf-8", codec_errors="replace",
@@ -184,7 +184,7 @@ def nav_turn(child, tx, ty, tag):
 
 
 try:
-    child.expect(r"vector>", timeout=60)
+    child.expect(r"zeno>", timeout=60)
     print("\n[driver] REPL up. Starting g1 sim by NL...", flush=True)
     started = False
     for attempt in range(4):

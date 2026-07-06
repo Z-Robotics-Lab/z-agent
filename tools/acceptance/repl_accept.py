@@ -1,6 +1,6 @@
 """D163 bare-REPL acceptance driver.
 
-Drives the ACTUAL bare `vector-cli` REPL under a PTY (NO -p, NO --sim-go2 flag)
+Drives the ACTUAL bare `zeno` REPL under a PTY (NO -p, NO --sim-go2 flag)
 with natural-language commands, exactly as a user would:
 
     启动带手臂的 go2 仿真   -> SimStartTool._start_go2 (VECTOR_NO_ROS2=1 -> in-process)
@@ -192,14 +192,14 @@ def launch_explore_running() -> bool:
 
 
 def wait_prompt(child, timeout=90):
-    # prompt_toolkit repaints; match the stable "vector>" marker.
-    child.expect(r"vector>", timeout=timeout)
+    # prompt_toolkit repaints; match the stable "zeno>" marker.
+    child.expect(r"zeno>", timeout=timeout)
 
 
 def drain_until_quiet(child, quiet=3.0, max_wait=180):
     """Block until the REPL output goes SILENT for ``quiet`` seconds (turn fully done).
 
-    The `vector>` prompt is echoed AND repainted constantly by prompt_toolkit, so
+    The `zeno>` prompt is echoed AND repainted constantly by prompt_toolkit, so
     ``wait_prompt`` matches the just-typed command line instantly and returns BEFORE the
     turn finishes — injecting the next command mid-turn, where prompt_toolkit eats/garbles
     it (root cause of the D171 place-turn no-op; DEBUG.md H4). Instead of matching a
@@ -324,7 +324,7 @@ def _llm_preflight() -> None:
 
 
 _llm_preflight()
-print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim-go2); FETCH={FETCH!r} PLACE={PLACE!r}", flush=True)
+print(f"[driver] spawning BARE zeno REPL (no -p/--sim-go2); FETCH={FETCH!r} PLACE={PLACE!r}", flush=True)
 # Bare module invocation with --native-loop only (mirrors the wrapper, sans flags).
 # VECTOR_ACCEPT_VERBOSE=1 adds --verbose (logging-only; face unchanged) so a DEBUG round
 # captures the [PGRASP]/[SCAN] per-heading detection trace into repl.raw.log (R232/E54).
@@ -345,7 +345,7 @@ try:
     wait_prompt(child, timeout=60)
     print("\n[driver] REPL up. Starting sim by NL...", flush=True)
     # Sim build: MuJoCoGo2 connect + arm + perception + scene graph. Sync on the sim
-    # tool-completion marker "sim start go2 ok", NOT the echoed `vector>` prompt (which
+    # tool-completion marker "sim start go2 ok", NOT the echoed `zeno>` prompt (which
     # matches instantly and made us inject the next command mid-turn — DEBUG.md H4).
     # The sim-start NL is MODEL-routed and non-deterministic: some brains invoke the
     # SimStartTool directly, some reply with a clarifying question (deepseek-chat asked
@@ -438,7 +438,7 @@ try:
         if child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=_texp(600)) == 0:
             n_verdicts += 1
             while n_verdicts < 6:
-                idx = child.expect([r"grounded\)", r"vector>", pexpect.TIMEOUT], timeout=_texp(600))
+                idx = child.expect([r"grounded\)", r"zeno>", pexpect.TIMEOUT], timeout=_texp(600))
                 if idx == 0:
                     n_verdicts += 1
                 else:
@@ -491,11 +491,11 @@ try:
         # finish, then the post-hoc parser below collects EVERY verdict emitted.
         print("\n[driver] COMBO turn (single multi-clause utterance)...", flush=True)
         child.sendline(FETCH)
-        # Sync on each `grounded)` verdict, NOT the prompt. wait_prompt matches `vector>`,
-        # which the just-ECHOED command line ("vector> 把红色…") matches INSTANTLY — that
+        # Sync on each `grounded)` verdict, NOT the prompt. wait_prompt matches `zeno>`,
+        # which the just-ECHOED command line ("zeno> 把红色…") matches INSTANTLY — that
         # early-return aborted the turn mid-grasp (both prior combo runs). A compound plan
         # emits one verdict per checked step (grasp, then place), with NO prompt between
-        # tool calls. So: wait ONLY for the first (grasp) verdict — do not offer vector>
+        # tool calls. So: wait ONLY for the first (grasp) verdict — do not offer zeno>
         # here or the echo matches it — then accept further verdicts until the prompt
         # (turn finished) returns. Grasp+place pipelines are slow (perception+MPC+walk+
         # grasp, then walk+place+12s settle), hence the long per-verdict timeouts.
@@ -503,7 +503,7 @@ try:
         if child.expect([r"grounded\)", pexpect.TIMEOUT], timeout=480) == 0:
             n_verdicts += 1
             while n_verdicts < 4:
-                idx = child.expect([r"grounded\)", r"vector>", pexpect.TIMEOUT], timeout=480)
+                idx = child.expect([r"grounded\)", r"zeno>", pexpect.TIMEOUT], timeout=480)
                 if idx == 0:
                     n_verdicts += 1
                 else:

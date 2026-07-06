@@ -4,7 +4,7 @@
 """E2E pipeline test: MuJoCo → explore → SceneGraph → navigate.
 
 Headless MuJoCo (no GUI, no ROS2, no nav stack). Tests the core
-pipeline that a user experiences via vector-cli:
+pipeline that a user experiences via zeno:
 
     1. Start sim (MuJoCoGo2 room scene)
     2. Walk through house (populate SceneGraph)

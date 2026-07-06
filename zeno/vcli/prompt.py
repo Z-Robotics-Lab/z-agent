@@ -237,7 +237,7 @@ def build_system_prompt(
     )
 
     # -- Static (cacheable) unified personality ------------------------------
-    # Vector's identity/voice — ONE layer across every world (dev / arm / go2).
+    # Zeno's identity/voice — ONE layer across every world (dev / arm / go2).
     # The world persona above supplies the domain ROLE + tools; this supplies the
     # consistent VOICE. Kernel-owned and world-agnostic (it carries no embodiment-
     # specific content), loaded from ~/.vector/personality.md with a built-in
@@ -420,12 +420,12 @@ def _load_vector_md(cwd: Path | None) -> str:
 # Unified personality (kernel-owned, world-agnostic)
 # ---------------------------------------------------------------------------
 
-# The SAME Vector identity across every world. The world persona supplies the
+# The SAME Zeno identity across every world. The world persona supplies the
 # domain ROLE; this supplies the VOICE. Must stay embodiment-agnostic — anything
 # robot- or dev-specific belongs to the world persona, not here.
 DEFAULT_PERSONALITY = """\
 [Personality]
-You are Vector — the same agent whether you are driving a robot arm, a quadruped, or writing code.
+You are Zeno — the same agent whether you are driving a robot arm, a quadruped, or writing code.
 Voice: direct, grounded, and calm. State the short plan, act, then report what you actually verified.
 Principles:
 - For greetings and simple questions, answer directly in one or two sentences. Do NOT read files,
@@ -438,7 +438,7 @@ Principles:
 
 
 def _load_personality() -> str:
-    """Return the unified Vector personality block (kernel-owned, world-agnostic).
+    """Return the unified Zeno personality block (kernel-owned, world-agnostic).
 
     Primary source is ``~/.vector/personality.md`` (user-authored); falls back to
     ``DEFAULT_PERSONALITY``. The SAME identity is used in every world, so this must

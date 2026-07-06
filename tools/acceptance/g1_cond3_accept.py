@@ -34,7 +34,7 @@ Acceptance (cond3_ok) — ALL of:
 NO spine edit: VerdictReport.from_trace already grades per-sub-goal against the live verify
 namespace; at_position + detection_matches_gt already grade every leg. This only exercises a
 data-dependent sub-goal tree the moat already composes. The ONLY acceptance face is the bare
-vector-cli REPL + NL (no -p / no --sim). Mirrors g1_chain3_accept.py's PTY plumbing.
+zeno REPL + NL (no -p / no --sim). Mirrors g1_chain3_accept.py's PTY plumbing.
 
 Usage: python g1_cond3_accept.py [chain_nl] [tag]
 """
@@ -89,7 +89,7 @@ def launch_explore_running() -> bool:
 
 
 def wait_prompt(child, timeout=90):
-    child.expect(r"vector>", timeout=timeout)
+    child.expect(r"zeno>", timeout=timeout)
 
 
 def drain_until_quiet(child, quiet=3.0, max_wait=180):
@@ -187,7 +187,7 @@ def _has_at_position(steps, x: float, y: float) -> bool:
 
 
 _llm_preflight()
-print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim); CHAIN={CHAIN!r} provider={PROVIDER}", flush=True)
+print(f"[driver] spawning BARE zeno REPL (no -p/--sim); CHAIN={CHAIN!r} provider={PROVIDER}", flush=True)
 child = pexpect.spawn(
     f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli", "--native-loop"],
     env=env, cwd=ROOT, encoding="utf-8", codec_errors="replace",

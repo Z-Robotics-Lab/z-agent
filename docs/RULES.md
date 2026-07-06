@@ -37,7 +37,7 @@ Interface & assertions:
   `mj.Renderer` cam) · real `Go2ROS2Proxy` (ROS2 `/cmd_vel`, odometry, Livox MID360, D435).
 - Physics bounds: standing z∈[0.20,0.45]; sitting z<0.35; not-fallen z>0.15.
 
-Acceptance: bare `vector-cli` REPL + NL, eyes on the sim (docs/VERIFY.md is the contract).
+Acceptance: bare `zeno` REPL + NL, eyes on the sim (docs/VERIFY.md is the contract).
 Commit a WIP floor BEFORE a long verify; evidence → var/evidence/, never /tmp.
 
 ## Red-team (before recording any headline claim)
@@ -198,7 +198,7 @@ Terse craft rules for THIS repo; the constitution (AGENTS.md) carries the invari
   back into replan. Validate ALL external input (params/msgs/sensor); reject NaN/inf/
   out-of-range sensor values before acting; rate-limit actuators.
 - Testing: TDD RED-first; unit + integration + END-TO-END; a green unit suite is NEVER
-  acceptance. e2e drives the whole pipeline through bare `vector-cli` + NL. ~80% coverage;
+  acceptance. e2e drives the whole pipeline through bare `zeno` + NL. ~80% coverage;
   mock hardware.
 - ROS2 & safety-critical: lifecycle nodes for hardware; QoS RELIABLE(cmd)/BEST_EFFORT
   (sensor); no alloc/blocking in RT paths; watchdogs on every hardware interface; E-stop

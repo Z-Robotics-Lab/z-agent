@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 """G1 cross-EMBODIMENT capstone: a humanoid commanded entirely in natural language
-through the BARE vector-cli REPL — switch embodiment, navigate, and perceive via a
+through the BARE zeno REPL — switch embodiment, navigate, and perceive via a
 LEARNED model — every step graded by the byte-unchanged verify moat, HONESTLY.
 
 This is the consolidated cross-embodiment demo (it SUPERSEDES the per-round g1

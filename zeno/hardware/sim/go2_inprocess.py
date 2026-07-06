@@ -10,7 +10,7 @@ Go2 locomotion skills, persistent scene graph, and VLM perception.
 
 Both launchers call it so they can never drift:
 
-* ``vector-cli --sim-go2``      -> :func:`zeno.vcli.cli._init_agent`
+* ``zeno --sim-go2``      -> :func:`zeno.vcli.cli._init_agent`
 * bare-REPL NL "启动 go2 仿真"     -> ``SimStartTool._start_go2`` (VECTOR_NO_ROS2=1)
 
 It deliberately does NOT launch the external ROS2 nav stack — callers that want

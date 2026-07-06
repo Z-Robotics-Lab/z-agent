@@ -629,5 +629,5 @@ async def main() -> None:
 
 
 def main_sync() -> None:
-    """Synchronous entry point — used by the vector-os-mcp console script."""
+    """Synchronous entry point — used by the zeno-mcp console script."""
     asyncio.run(main())

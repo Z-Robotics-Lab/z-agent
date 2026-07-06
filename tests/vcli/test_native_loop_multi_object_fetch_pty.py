@@ -34,7 +34,7 @@ re-perceive+approach+weld the second — graded by the UNTOUCHED honest spine.
 
 The LIVE-model lever that gets the producer to EMIT this sequence (multi-object
 prompt guidance in native_loop._build_system_prompt) is verified separately
-through bare ``vector-cli`` + NL + the eyes harness; this seal pins the spine
+through bare ``zeno`` + NL + the eyes harness; this seal pins the spine
 gradability + physical feasibility deterministically.
 
 Both bottles sit in-reach + adjacent on the near pick table (blue 10.90,2.78 ·

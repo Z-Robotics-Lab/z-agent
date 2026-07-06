@@ -100,7 +100,7 @@ def test_kernel_import_leaks_no_concrete_world() -> None:
 def test_cli_entry_import_leaks_no_concrete_world() -> None:
     """Importing the CLI entry module must not load any concrete world (Invariant 4).
 
-    ``vcli.cli`` is the *acceptance-face* module — the bare ``vector-cli`` REPL is
+    ``vcli.cli`` is the *acceptance-face* module — the bare ``zeno`` REPL is
     built from it. Guarding the engine alone is not enough: the property that
     matters operationally is that importing the thing the user actually launches
     stays world-free (worlds load only when one is resolved for a session).

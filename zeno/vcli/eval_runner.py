@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""vector-eval — headless verify-as-eval harness for the dev world.
+"""zeno-eval — headless verify-as-eval harness for the dev world.
 
 Runs a list of ``{task, expect?}`` cases through the VGG kernel over the dev
 world and uses the kernel's *own* per-step verify predicates as a self-grading
@@ -156,8 +156,8 @@ def build_dev_engine(allow_ask: bool = False) -> Any:
     api_key, provider, model, base_url = resolve_credentials()
     if not api_key:
         raise SystemExit(
-            "vector-eval: no API key configured — set ANTHROPIC_API_KEY or run "
-            "`vector-cli` and /login first."
+            "zeno-eval: no API key configured — set ANTHROPIC_API_KEY or run "
+            "`zeno` and /login first."
         )
     backend = create_backend(provider=provider, api_key=api_key, model=model, base_url=base_url)
 
@@ -213,7 +213,7 @@ def _engine_run_task(engine: Any) -> Callable[[str], Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="vector-eval",
+        prog="zeno-eval",
         description="Headless verify-as-eval over the dev world.",
     )
     parser.add_argument(
@@ -229,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cases = _load_cases(args.eval_file)
     if not cases:
-        print("vector-eval: no cases in eval file")
+        print("zeno-eval: no cases in eval file")
         return 2  # distinct from "a case failed" (1)
 
     engine = build_dev_engine(allow_ask=args.allow)

@@ -174,8 +174,8 @@ trustworthily on the industrial floor.
    The kernel NEVER imports a world; worlds register INTO the kernel.
 ```
 
-Two entry points — the `vector-cli` REPL and the `vector-os-mcp` server — share this one
-engine. Bare `vector-cli` + NL runs the **native** producer by default
+Two entry points — the `zeno` REPL and the `zeno-mcp` server — share this one
+engine. Bare `zeno` + NL runs the **native** producer by default
 (`VECTOR_REPL_NATIVE=0` = reversible legacy hatch).
 
 ---
@@ -282,5 +282,5 @@ One terse line per package. No line numbers (they rot — read the file). Paths 
 - `vcli/tools/` · `intent_router.py` · `dynamic_prompt.py` · `prompt.py` · `session.py` ·
   `permissions.py` — general tools, category-filtered routing, the composable system prompt,
   persona blocks, conversation/transcript state, and the 8-layer permission gate.
-- `mcp/` + `ros2/` + `integrations/` — the `vector-os-mcp` server entry point, the ROS2
+- `mcp/` + `ros2/` + `integrations/` — the `zeno-mcp` server entry point, the ROS2
   bridge (high-fidelity Linux backend), and external integrations.

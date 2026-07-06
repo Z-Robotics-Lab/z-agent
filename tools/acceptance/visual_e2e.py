@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
-"""visual_e2e — the visual-acceptance harness (ADR-002): drive a REAL bare ``vector-cli`` turn,
+"""visual_e2e — the visual-acceptance harness (ADR-002): drive a REAL bare ``zeno`` turn,
 capture a SAME-PROCESS frame, grade it with the frozen GT oracle (the ``VECTOR_VERDICT``) AND the
 visual second witness (VisionJudge), and combine them through the DOWNGRADE-ONLY AcceptanceGate.
 
@@ -159,7 +159,7 @@ def _cleanup() -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="visual-acceptance E2E harness (ADR-002)")
-    ap.add_argument("--command", required=True, help="the natural-language turn for bare vector-cli")
+    ap.add_argument("--command", required=True, help="the natural-language turn for bare zeno")
     ap.add_argument("--n", type=int, default=1, help="trials (sim runs are serialized)")
     ap.add_argument("--snapshot-dir", default="/tmp/vector_visual_e2e")
     ap.add_argument("--live", action="store_true", help="use the REAL LLM/VLM (no fake seam)")

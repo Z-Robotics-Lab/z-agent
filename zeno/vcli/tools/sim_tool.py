@@ -199,7 +199,7 @@ class SimStartTool:
             else:
                 # Default: mujoco backend (existing paths unchanged)
                 if sim_type == "arm":
-                    # Pure-NL case: user launched plain vector-cli (no --sim flag),
+                    # Pure-NL case: user launched plain zeno (no --sim flag),
                     # then asked to start the arm sim. The startup re-exec guard
                     # did not fire. If a window is wanted but the viewer cannot open
                     # in this interpreter, re-exec the whole CLI under mjpython --sim.
@@ -359,7 +359,7 @@ class SimStartTool:
     def _reexec_under_mjpython_with_sim() -> None:
         """Re-exec the whole CLI under mjpython --sim for the pure-NL case.
 
-        Called when the user asks for an arm sim from a plain `vector-cli`
+        Called when the user asks for an arm sim from a plain `zeno`
         session (no --sim flag, so the startup re-exec guard did not fire)
         and a window was requested but is not available.
 
@@ -484,7 +484,7 @@ class SimStartTool:
 
         # D163/D164 C(b): the bare-REPL NL acceptance face. When VECTOR_NO_ROS2=1
         # build the PROVEN fully-in-process MuJoCoGo2 agent via the ONE shared
-        # helper that `vector-cli --sim-go2` also uses (Rule 3/11) — no external
+        # helper that `zeno --sim-go2` also uses (Rule 3/11) — no external
         # ROS2 launch_explore.sh stack, no Go2ROS2Proxy. The ROS2-stack path below
         # is preserved (D164 C: (a) preserved-deferred) for explore/navigate-point.
         if os.environ.get("VECTOR_NO_ROS2", "0") == "1":

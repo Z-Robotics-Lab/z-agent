@@ -13,7 +13,7 @@ Each test pins a confirmed finding's fix so it cannot regress:
 - comment-only code is not a successful execution
 - template value substitution is word-boundary aware
 - the code sandbox excludes the subprocess-spawning tests_pass predicate
-- vector-eval distinguishes an empty suite from a failed case
+- zeno-eval distinguishes an empty suite from a failed case
 
 Pure kernel logic — no robot, no network, no mujoco fixtures.
 """
@@ -229,7 +229,7 @@ def test_code_sandbox_excludes_tests_pass(tmp_path: Path, monkeypatch) -> None:
     assert "file_exists" in ns      # read-only predicates retained
 
 
-# --- Fix K: vector-eval empty suite ----------------------------------------
+# --- Fix K: zeno-eval empty suite ----------------------------------------
 
 
 def test_eval_main_empty_suite_distinct_code(tmp_path: Path) -> None:

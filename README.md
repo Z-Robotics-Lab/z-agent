@@ -53,8 +53,8 @@ Go2W world (requires the [go2W_Sim](https://github.com/Z-Robotics-Lab/go2W_Sim) 
 on the same host — the agent will bring the sim + nav stack + RViz up itself):
 
 ```
-vector> 去 (2, 0)          # navigate: agent brings up the chain, drives, verifies arrival
-vector> explore            # TARE autonomous exploration, verified by explored-volume growth
+zeno> 去 (2, 0)            # navigate: agent brings up the chain, drives, verifies arrival
+zeno> explore              # TARE autonomous exploration, verified by explored-volume growth
 ```
 
 ## Architecture (the parts that matter)

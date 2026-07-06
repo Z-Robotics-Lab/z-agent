@@ -11,7 +11,7 @@ The helper is pure (no sim, no PTY, no subprocess): it maps
 (trial_index, verdict_dict, exit_code) -> rec dict, which is exactly the
 per-run record the harness appends to its results list. A fake verdict dict
 with per_step entries that carry result_data['diagnosis'] is enough to
-exercise it — no real vector-cli / MuJoCo / LLM needed.
+exercise it — no real zeno / MuJoCo / LLM needed.
 """
 from __future__ import annotations
 

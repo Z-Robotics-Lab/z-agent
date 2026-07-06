@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""pty_cli — drive the REAL vector-cli through a stdlib PTY and read its verdict.
+"""pty_cli — drive the REAL zeno through a stdlib PTY and read its verdict.
 
 R2a PART C: this is the project's #1-failure fix made concrete. Instead of a
 ``~/sandbox`` script that pokes the engine directly (bypassing the product), this
@@ -302,8 +302,8 @@ def run_cli_turn(
 # REPL session driver — drive the INTERACTIVE REPL (not -p) by NL, capture output.
 # ---------------------------------------------------------------------------
 #
-# The REPL CUTOVER acceptance instrument: the interactive ``vector-cli`` REPL is the
-# owner's ONLY test interface (bare ``vector-cli`` + natural language). Unlike the
+# The REPL CUTOVER acceptance instrument: the interactive ``zeno`` REPL is the
+# owner's ONLY test interface (bare ``zeno`` + natural language). Unlike the
 # ``-p`` path it emits a HUMAN-readable verdict line ("verdict GROUNDED verified=True
 # (1/1 grounded)"), not the ``VECTOR_VERDICT`` JSON sentinel — so this driver returns
 # the full transcript and the caller asserts on the rendered text. Same STDLIB-only

@@ -616,7 +616,7 @@ class IsaacGo2WWorld:
     def build_embodiment(self) -> "IsaacGo2WEmbodiment":
         """BYO front door: the agent this world drives (no --sim needed).
 
-        Returns a fresh IsaacGo2WEmbodiment so ``vector-cli --world go2w`` gets a
+        Returns a fresh IsaacGo2WEmbodiment so ``zeno --world go2w`` gets a
         connected, navigation-capable agent that talks to the Isaac stack over the
         HTTP bridge — the same object a --sim run would fill the agent slot with.
         """

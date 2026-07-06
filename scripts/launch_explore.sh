@@ -141,7 +141,7 @@ PIDS+=($!)
 
 echo ""
 echo "Ready! Dog is standing still."
-echo "  Use vector-cli to control:"
+echo "  Use zeno to control:"
 echo "    explore     — start autonomous exploration"
 echo "    go to X     — navigate to a room"
 echo "    stop        — halt all movement"
