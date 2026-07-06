@@ -13,13 +13,13 @@ build/
 .venv-nano/
 .sdd*/
 agents/devlog/
-vector_os_nano/hardware/sim/mjcf/go2/scene_flat.xml
-vector_os_nano/hardware/sim/mjcf/go2/scene_room.xml
+zeno/hardware/sim/mjcf/go2/scene_flat.xml
+zeno/hardware/sim/mjcf/go2/scene_room.xml
 # go2+Piper + g1 generated room scenes (regenerated on every connect / by the scene-builder
 # test; were churning the tree on each sim round — R8/D78). Source = go2_room.xml template +
 # build_room_scene(); these are pure build artifacts.
-vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml
-vector_os_nano/hardware/sim/mjcf/g1/scene_g1_12dof_room.xml
+zeno/hardware/sim/mjcf/go2/scene_room_piper.xml
+zeno/hardware/sim/mjcf/g1/scene_g1_12dof_room.xml
 venv/
 *.log
 .mypy_cache/
@@ -29,7 +29,7 @@ config/workspace_calibration.yaml
 config/user.yaml
 *.npz
 *.ply
-# Note: vector_os_nano/ is the SOURCE PACKAGE, not a venv. Do NOT ignore it.
+# Note: zeno/ is the SOURCE PACKAGE, not a venv. Do NOT ignore it.
 test_run.py
 test_hardware.py
 test_llm.py
@@ -50,9 +50,9 @@ MUJOCO_LOG.TXT
 .coverage
 
 # stale generated MuJoCo scenes (machine-specific abs paths; runtime gen lives in mjcf/go2/)
-vector_os_nano/hardware/sim/scene_room.xml
-vector_os_nano/hardware/sim/scene_room_piper.xml
-vector_os_nano/hardware/sim/scene_flat.xml
+zeno/hardware/sim/scene_room.xml
+zeno/hardware/sim/scene_room_piper.xml
+zeno/hardware/sim/scene_flat.xml
 
 # internal/deferred design notes (kept on disk, not shipped)
 docs/pick_top_down_known_issues.md

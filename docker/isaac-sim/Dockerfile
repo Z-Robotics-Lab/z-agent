@@ -1,4 +1,4 @@
-# Isaac Sim Docker image for Vector OS Nano
+# Isaac Sim Docker image for Zeno
 #
 # Base: NVIDIA Isaac Sim 5.1.0 (Ubuntu 22.04, Python 3.11)
 # Adds: ROS2 Humble + CycloneDDS + Vector bridge scripts

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!--
-  Vector OS Nano — Go2 external sensors
+  Zeno — Go2 external sensors
   Adds Livox MID-360 lidar + RealSense D435 to Go2 URDF.
 
   Sensor mounting matches real Go2 hardware:

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Thin alias: equivalent to `vector-cli --sim`.
+# Thin alias: equivalent to `zeno --sim`.
 #
-# `vector-cli --sim` now auto-detects macOS and re-execs under mjpython so
+# `zeno --sim` now auto-detects macOS and re-execs under mjpython so
 # a viewer window opens by default. This script is kept for backward
 # compatibility and convenience.
 #
 # Use --headless to suppress the viewer window:
-#   vector-cli --sim --headless
+#   zeno --sim --headless
 #
-# Pass any extra vector-cli flags after `--sim`:
-#   vector-sim --model anthropic/claude-haiku-4-5
+# Pass any extra zeno flags after `--sim`:
+#   zeno-sim --model anthropic/claude-haiku-4-5
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,4 +22,4 @@ if [[ ! -x "$venv_python" ]]; then
   exit 1
 fi
 
-exec "$venv_python" -m vector_os_nano.vcli.cli --sim "$@"
+exec "$venv_python" -m zeno.vcli.cli --sim "$@"
