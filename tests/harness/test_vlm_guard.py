@@ -289,3 +289,60 @@ class TestBudgetTimeout:
 
     def test_never_exceeds_default_even_with_huge_budget(self) -> None:
         assert budget_timeout(300, now=0, deadline_epoch=10**9) == 300
+
+
+class TestZenoEnvFallback:
+    """Zeno rename: the guards read/inject ZENO_ product names FIRST, keeping the
+    legacy VECTOR_ names as a silent fallback (upstream .env / external harnesses
+    still set them). These pin the ZENO_-only path the existing VECTOR_ suite doesn't.
+    """
+
+    def test_local_vlm_zeno_url_respected(self) -> None:
+        # ZENO_VLM_URL alone (no VECTOR_) = caller already routed perception → untouched.
+        out = resolve_local_vlm_env(
+            {"ZENO_VLM_URL": "http://elsewhere:1234/v1"}, ollama_probe=lambda: False
+        )
+        assert out == {}
+
+    def test_local_vlm_zeno_allow_remote_optout(self) -> None:
+        out = resolve_local_vlm_env(
+            {"ZENO_ALLOW_REMOTE_VLM": "1"}, ollama_probe=lambda: False
+        )
+        assert out == {}
+
+    def test_local_vlm_injects_both_prefixes(self) -> None:
+        # Injected route carries ZENO_ primary AND the VECTOR_ mirror (additive).
+        out = resolve_local_vlm_env({}, ollama_probe=lambda: True)
+        assert out["ZENO_VLM_URL"] == DEFAULT_LOCAL_VLM_URL
+        assert out["VECTOR_VLM_URL"] == DEFAULT_LOCAL_VLM_URL
+        assert out["ZENO_VLM_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
+        assert out["VECTOR_VLM_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
+
+    def test_judge_zeno_force_remote_optout(self) -> None:
+        # ZENO_JUDGE_FORCE_REMOTE=1 alone opts out of the local route.
+        assert resolve_judge_env({"ZENO_JUDGE_FORCE_REMOTE": "1"},
+                                 ollama_probe=lambda: True) == {}
+
+    def test_judge_injects_both_prefixes(self) -> None:
+        out = resolve_judge_env({}, ollama_probe=lambda: True)
+        assert out["ZENO_JUDGE_BASE_URL"] == DEFAULT_LOCAL_VLM_URL
+        assert out["VECTOR_JUDGE_BASE_URL"] == DEFAULT_LOCAL_VLM_URL
+        assert out["ZENO_JUDGE_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
+        assert out["VECTOR_JUDGE_MODEL"] == DEFAULT_LOCAL_VLM_MODEL
+
+    def test_judge_zeno_local_model_override(self) -> None:
+        out = resolve_judge_env({"ZENO_JUDGE_LOCAL_MODEL": "qwen2.5vl:7b"},
+                                ollama_probe=lambda: True)
+        assert out["ZENO_JUDGE_MODEL"] == "qwen2.5vl:7b"
+        assert out["VECTOR_JUDGE_MODEL"] == "qwen2.5vl:7b"
+
+    def test_judge_zeno_api_key_preserved(self) -> None:
+        out = resolve_judge_env({"ZENO_JUDGE_API_KEY": "sk-zeno"},
+                                ollama_probe=lambda: True)
+        assert out["ZENO_JUDGE_API_KEY"] == "sk-zeno"
+        assert out["VECTOR_JUDGE_API_KEY"] == "sk-zeno"
+
+    def test_verbose_from_zeno_accept_verbose(self) -> None:
+        # ZENO_ACCEPT_VERBOSE alone enables --verbose.
+        argv = repl_cli_argv({"ZENO_ACCEPT_VERBOSE": "1"})
+        assert argv[-1] == "--verbose"

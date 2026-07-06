@@ -51,12 +51,15 @@ _VLM_IMAGE_MAX_DIM: int = 160  # resize before encoding to keep base64 < 10KB (r
 _VLM_IMAGE_MAX_DIM_LOCAL: int = 512  # local models can handle larger images
 
 # ---------------------------------------------------------------------------
-# Local VLM backend (Ollama) — env var overrides
-# Set VECTOR_VLM_URL=http://localhost:11434/v1 to use local Ollama
-# Set VECTOR_VLM_MODEL=gemma4:e4b to select the local model
+# Local VLM backend (Ollama) — env var overrides (ZENO_-first, VECTOR_ fallback)
+# Set ZENO_VLM_URL=http://localhost:11434/v1 to use local Ollama
+# Set ZENO_VLM_MODEL=gemma4:e4b to select the local model
+# (legacy VECTOR_VLM_URL / VECTOR_VLM_MODEL still honoured via read_env fallback)
 # ---------------------------------------------------------------------------
-_LOCAL_VLM_URL: str | None = os.environ.get("VECTOR_VLM_URL")
-_LOCAL_VLM_MODEL: str | None = os.environ.get("VECTOR_VLM_MODEL")
+from zeno.vcli.env import read_env  # noqa: E402
+
+_LOCAL_VLM_URL: str | None = read_env("VLM_URL")
+_LOCAL_VLM_MODEL: str | None = read_env("VLM_MODEL")
 _USE_LOCAL_VLM: bool = _LOCAL_VLM_URL is not None
 
 

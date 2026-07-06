@@ -31,6 +31,20 @@ DEFAULT_LOCAL_VLM_URL: str = "http://localhost:11434/v1"
 DEFAULT_LOCAL_VLM_MODEL: str = "gemma4:e4b"
 _OLLAMA_TAGS_URL: str = "http://localhost:11434/api/tags"
 
+
+def _env_first(environ, suffix: str, default: str = "") -> str:
+    """Read ``ZENO_<suffix>`` then ``VECTOR_<suffix>`` from a passed-in ``environ``
+    mapping (these guards take ``environ`` as an arg for testability, so they can't
+    use zeno.vcli.env.read_env which reads the process os.environ). First
+    present-and-non-empty wins; else ``default``. Additive: the legacy VECTOR_ name
+    stays honoured for external harnesses / the upstream .env.
+    """
+    for prefix in ("ZENO_", "VECTOR_"):
+        val = environ.get(prefix + suffix)
+        if val:
+            return val
+    return default
+
 # The distinct, greppable marker the driver prints when it aborts on a perception 402.
 VLM_BILLING_402_MARKER: str = "VLM-BILLING-402"
 
@@ -120,23 +134,33 @@ def resolve_local_vlm_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
 
     ``ollama_probe`` is injectable so the unit test runs offline.
     """
-    if environ.get("VECTOR_VLM_URL"):
+    # ZENO_-first reads, legacy VECTOR_ fallback (external harnesses still set VECTOR_*).
+    if environ.get("ZENO_VLM_URL") or environ.get("VECTOR_VLM_URL"):
         return {}
-    if environ.get("VECTOR_ALLOW_REMOTE_VLM") == "1":
+    if (environ.get("ZENO_ALLOW_REMOTE_VLM") or environ.get("VECTOR_ALLOW_REMOTE_VLM")) == "1":
         return {}
     if ollama_probe():
+        # Inject ZENO_ primary + VECTOR_ mirror (additive) — the spawned zeno child
+        # reads via read_env (ZENO_-first, VECTOR_ fallback), so either works.
         return {
+            "ZENO_VLM_URL": DEFAULT_LOCAL_VLM_URL,
             "VECTOR_VLM_URL": DEFAULT_LOCAL_VLM_URL,
+            "ZENO_VLM_MODEL": DEFAULT_LOCAL_VLM_MODEL,
             "VECTOR_VLM_MODEL": DEFAULT_LOCAL_VLM_MODEL,
         }
     raise VLMConfoundError(_RECIPE)
 
 
+# Suffix-only names — read ZENO_<suffix> first, VECTOR_<suffix> fallback (via _env_first).
+# The public *_VAR constants keep the legacy VECTOR_ string (external callers/tests use them as
+# a canonical key) while the reads below honour the ZENO_ product name first.
+JUDGE_FORCE_REMOTE_SUFFIX: str = "JUDGE_FORCE_REMOTE"
 JUDGE_FORCE_REMOTE_VAR: str = "VECTOR_JUDGE_FORCE_REMOTE"
-# The LOCAL judge model knob — DISTINCT from VECTOR_JUDGE_MODEL (which the local route
+# The LOCAL judge model knob — DISTINCT from ZENO_JUDGE_MODEL (which the local route
 # deliberately overrides because the supervisor exports a stale/arreared remote there). Lets a
 # round trial a STRONGER local ollama VLM as the second witness (gemma4:e4b is non-deterministic
 # PASS<->ABSTAIN<->FAIL, recorded-not-trusted — E72/E102). Unset → gemma4:e4b (byte-compatible).
+JUDGE_LOCAL_MODEL_SUFFIX: str = "JUDGE_LOCAL_MODEL"
 JUDGE_LOCAL_MODEL_VAR: str = "VECTOR_JUDGE_LOCAL_MODEL"
 
 
@@ -161,13 +185,20 @@ def resolve_judge_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
     upright / intact / workspace-in-frame), never "did the task succeed". ``ollama_probe`` is
     injectable so the unit test runs offline.
     """
-    if environ.get(JUDGE_FORCE_REMOTE_VAR) == "1":
+    if _env_first(environ, JUDGE_FORCE_REMOTE_SUFFIX) == "1":
         return {}
     if ollama_probe():
+        # Inject ZENO_JUDGE_* primary + VECTOR_JUDGE_* mirror (additive) — vision_judge
+        # in the spawned child reads via read_env (ZENO_-first, VECTOR_ fallback).
+        _local_model = _env_first(environ, JUDGE_LOCAL_MODEL_SUFFIX) or DEFAULT_LOCAL_VLM_MODEL
+        _api_key = _env_first(environ, "JUDGE_API_KEY") or "ollama"
         return {
+            "ZENO_JUDGE_BASE_URL": DEFAULT_LOCAL_VLM_URL,
             "VECTOR_JUDGE_BASE_URL": DEFAULT_LOCAL_VLM_URL,
-            "VECTOR_JUDGE_MODEL": environ.get(JUDGE_LOCAL_MODEL_VAR) or DEFAULT_LOCAL_VLM_MODEL,
-            "VECTOR_JUDGE_API_KEY": environ.get("VECTOR_JUDGE_API_KEY") or "ollama",
+            "ZENO_JUDGE_MODEL": _local_model,
+            "VECTOR_JUDGE_MODEL": _local_model,
+            "ZENO_JUDGE_API_KEY": _api_key,
+            "VECTOR_JUDGE_API_KEY": _api_key,
         }
     return {}
 
@@ -177,6 +208,9 @@ def resolve_judge_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
 # it restores zeno.skills / .perception loggers to full output WITHOUT changing any
 # behaviour (planner, perception, verify all run identically), so the face stays intact.
 _BASE_REPL_ARGV: tuple[str, ...] = ("-m", "zeno.vcli.cli", "--native-loop")
+# Read ZENO_ACCEPT_VERBOSE first, legacy VECTOR_ACCEPT_VERBOSE fallback (via _env_first).
+# TRACE_ENV_VAR keeps the legacy VECTOR_ string as the canonical public key.
+TRACE_ENV_SUFFIX: str = "ACCEPT_VERBOSE"
 TRACE_ENV_VAR: str = "VECTOR_ACCEPT_VERBOSE"
 
 
@@ -192,7 +226,7 @@ def repl_cli_argv(environ) -> list[str]:
     every existing run is byte-identical to before.
     """
     argv = list(_BASE_REPL_ARGV)
-    val = str(environ.get(TRACE_ENV_VAR, "")).strip().lower()
+    val = _env_first(environ, TRACE_ENV_SUFFIX).strip().lower()
     if val and val not in ("0", "false", "no"):
         argv.append("--verbose")
     return argv

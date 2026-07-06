@@ -49,10 +49,17 @@ def run_once(
     # VECTOR_SIM_LOCK=1: the bare-cli child acquires the global one-sim lock (ADR-002 Stage 0), so
     # every sim this harness drives serializes host-wide. The cli child is the SOLE lock owner — the
     # harness does NOT also lock (that would deadlock its own child).
+    # Inject the ZENO_ product-name keys as PRIMARY and mirror the legacy VECTOR_
+    # keys (additive) so an un-migrated reader in the child still resolves them.
+    # The child (zeno.vcli.cli) reads via read_env (ZENO_-first, VECTOR_ fallback),
+    # so either prefix works; writing both keeps the runtime identity ZENO_-facing.
     env = {
+        "ZENO_SNAPSHOT_DIR": snapshot_dir,
         "VECTOR_SNAPSHOT_DIR": snapshot_dir,
         "MUJOCO_GL": "egl",
+        "ZENO_NO_ROS2": "1",
         "VECTOR_NO_ROS2": "1",
+        "ZENO_SIM_LOCK": "1",
         "VECTOR_SIM_LOCK": "1",
         # Use the REAL HOME so the OFFLINE model caches resolve (root-caused 2026-06-30: the PTY
         # harness sets a temp HOME to isolate ~/.vector, but that also moves ~/.cache, so with
@@ -71,7 +78,9 @@ def run_once(
         # GROUNDS verified=True with the strip OFF. The strip is a DOWNGRADE-ONLY temporal witness
         # (bonus), so default it OFF — the core acceptance (GT weld + VLM judges the verdict frame)
         # works without it. Re-enable via VECTOR_EYES_STRIP=1 once the GL-context sharing is fixed.
-        **({"VECTOR_SNAPSHOT_STRIP": "1"} if os.environ.get("VECTOR_EYES_STRIP") == "1" else {}),
+        **({"ZENO_SNAPSHOT_STRIP": "1", "VECTOR_SNAPSHOT_STRIP": "1"}
+           if (os.environ.get("ZENO_EYES_STRIP") or os.environ.get("VECTOR_EYES_STRIP")) == "1"
+           else {}),
         # The detector (grounding-dino) + segmenter (EdgeTAM) are CACHED locally; force the
         # HF hub OFFLINE so a flaky network can't make perception (detect / the far-fetch
         # recovery's localize) try to phone home to huggingface.co and fail (observed: the
@@ -80,7 +89,9 @@ def run_once(
         "TRANSFORMERS_OFFLINE": "1",
     }
     if with_arm:
-        env["VECTOR_SIM_WITH_ARM"] = "1"  # attach the in-process Piper for fetch/grasp turns
+        # attach the in-process Piper for fetch/grasp turns (ZENO_ primary + VECTOR_ mirror)
+        env["ZENO_SIM_WITH_ARM"] = "1"
+        env["VECTOR_SIM_WITH_ARM"] = "1"
     # fresh strip manifest per trial
     try:
         os.remove(os.path.join(snapshot_dir, "strip.jsonl"))

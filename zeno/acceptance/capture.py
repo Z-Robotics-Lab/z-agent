@@ -16,6 +16,8 @@ import subprocess
 import time
 from dataclasses import dataclass
 
+from zeno.vcli.env import read_env
+
 import numpy as np
 
 # Below this mean pixel brightness a frame is treated as black / unrendered — a fail-closed
@@ -168,12 +170,12 @@ def snapshot_on_verdict(agent) -> str | None:
     base is connected on ``agent._base``. Returns the path, or ``None`` if nothing was captured.
     Takes ONLY the agent — no access to the ``VerdictReport``, so it CANNOT change it. NEVER raises.
     """
-    out_dir = os.environ.get("VECTOR_SNAPSHOT_DIR")
+    out_dir = read_env("SNAPSHOT_DIR")
     if not out_dir:
         return None
     try:
         os.makedirs(out_dir, exist_ok=True)
-        stamp = os.environ.get("VECTOR_SNAPSHOT_TAG") or str(int(time.time() * 1000))
+        stamp = read_env("SNAPSHOT_TAG") or str(int(time.time() * 1000))
         path = os.path.join(out_dir, f"verdict_{stamp}.png")
         return path if _render_agent_frame(agent, path) is not None else None
     except Exception:  # noqa: BLE001 — a snapshot must NEVER affect the turn / verdict
@@ -181,7 +183,7 @@ def snapshot_on_verdict(agent) -> str | None:
 
 
 def _strip_enabled() -> bool:
-    return os.environ.get("VECTOR_SNAPSHOT_STRIP", "0").strip().lower() in ("1", "true", "on", "yes")
+    return read_env("SNAPSHOT_STRIP", "0").strip().lower() in ("1", "true", "on", "yes")
 
 
 def capture_strip_frame(agent, idx: int) -> str | None:
@@ -190,7 +192,7 @@ def capture_strip_frame(agent, idx: int) -> str | None:
     ``frame_{idx}.png`` from the same process AND appends the base pose to ``strip.jsonl`` — the
     deterministic pose track that is the HARD motion channel. Inert: never raises, never grades.
     """
-    out_dir = os.environ.get("VECTOR_SNAPSHOT_DIR")
+    out_dir = read_env("SNAPSHOT_DIR")
     if not out_dir or not _strip_enabled():
         return None
     try:
