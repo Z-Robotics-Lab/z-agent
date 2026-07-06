@@ -149,12 +149,30 @@ def test_default_lock_path_is_home_independent(monkeypatch, tmp_path):
     override HOME, and a ~-relative lock would split per sandbox and stop serializing."""
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HOME", "/some/sandbox/home")
+    monkeypatch.delenv("ZENO_SIM_LOCK_PATH", raising=False)
     monkeypatch.delenv("VECTOR_SIM_LOCK_PATH", raising=False)
     p = str(sim_lock._default_lock_path())
     assert "/some/sandbox/home" not in p and str(tmp_path) in p
-    # explicit override is honored
+    # FROZEN cross-repo name: the default lock file is vector_sim.lock (NOT zeno_sim.lock) —
+    # it is the host-level mutex SHARED with the sibling vector_os_nano repo (Inv.#5).
+    assert p.endswith("/vector_sim.lock")
+    # explicit override is honored (legacy VECTOR_ name)
     monkeypatch.setenv("VECTOR_SIM_LOCK_PATH", "/tmp/explicit_sim.lock")
     assert str(sim_lock._default_lock_path()) == "/tmp/explicit_sim.lock"
+
+
+def test_sim_lock_path_zeno_alias(monkeypatch, tmp_path):
+    """ZENO_SIM_LOCK_PATH is a ZENO_-first alias for the same shared lock's path; ZENO_ wins
+    over the legacy VECTOR_SIM_LOCK_PATH when both are set."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.delenv("ZENO_SIM_LOCK_PATH", raising=False)
+    monkeypatch.delenv("VECTOR_SIM_LOCK_PATH", raising=False)
+    # ZENO_ alone is honoured
+    monkeypatch.setenv("ZENO_SIM_LOCK_PATH", "/tmp/zeno_override.lock")
+    assert str(sim_lock._default_lock_path()) == "/tmp/zeno_override.lock"
+    # ZENO_ wins over VECTOR_
+    monkeypatch.setenv("VECTOR_SIM_LOCK_PATH", "/tmp/vector_override.lock")
+    assert str(sim_lock._default_lock_path()) == "/tmp/zeno_override.lock"
 
 
 def test_live_sim_pids_excludes_self():
