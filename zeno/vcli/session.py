@@ -187,7 +187,7 @@ class Session:
                 if text:
                     # Truncate long assistant responses to first sentence
                     first_line = text.split("\n")[0][:100]
-                    summary_lines.append(f"V: {first_line}")
+                    summary_lines.append(f"Zeno: {first_line}")
 
         if summary_lines:
             summary_text = (

@@ -81,3 +81,22 @@ def test_repeated_compaction_stays_valid(tmp_path):
         _seed_tool_exchange(session, 3)
         session.compact(keep_recent=12)
     _assert_no_orphan_tool(convert_messages(session.to_messages(), "sys"))
+
+
+def test_compaction_summary_labels_assistant_as_zeno(tmp_path):
+    """The earlier-conversation summary must label assistant turns 'Zeno:', not 'V:'.
+
+    This summary is re-injected into the model's context; a 'V:' prefix reasserts
+    the legacy Vector-derived persona name and contradicts the Zeno identity.
+    """
+    session = create_session(directory=tmp_path)
+    for i in range(14):  # > keep_recent so old turns get summarized
+        session.append_user(f"question {i}")
+        session.append_assistant(text=f"answer {i}")
+    session.compact(keep_recent=4)
+    summary = next(
+        e["content"] for e in session._entries
+        if e.get("type") == "user" and "Earlier conversation summary" in e.get("content", "")
+    )
+    assert "Zeno: answer" in summary, summary
+    assert "V: answer" not in summary, summary

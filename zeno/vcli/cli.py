@@ -1228,7 +1228,7 @@ def _handle_slash_command(
             console.print(f"  [{TEAL}]/login anthropic[/]   Enter Anthropic API key manually")
             console.print(f"  [{TEAL}]/login openrouter[/]  Enter OpenRouter key (multi-model)")
             console.print()
-            console.print("[dim]  /login claude gives V its own rate limit pool, independent of Claude Code.[/dim]\n")
+            console.print("[dim]  /login claude gives Zeno its own rate limit pool, independent of Claude Code.[/dim]\n")
             return True
 
         config = load_config()

@@ -15,7 +15,6 @@ _handle_slash_command with a capturing console.
 from __future__ import annotations
 
 import inspect
-from pathlib import Path
 from typing import Any
 
 import zeno.vcli.cli as cli
@@ -66,6 +65,21 @@ def test_export_assistant_prefix_is_zeno() -> None:
     text = export_path.read_text(encoding="utf-8")
     assert "**Zeno:**" in text, text
     assert "**V:**" not in text, text
+
+
+def test_login_help_names_zeno_not_v() -> None:
+    """The /login help line must credit Zeno, not the legacy short name 'V'.
+
+    Old copy: "/login claude gives V its own rate limit pool ...". Reachable by
+    typing bare /login in the REPL (no provider argument).
+    """
+    with cli.console.capture() as cap:
+        cli._handle_slash_command(
+            "login", [], registry=_DummyRegistry(), app_state={}
+        )
+    text = cap.get()
+    assert "gives Zeno its own rate limit pool" in text, text
+    assert "gives V its own" not in text, text
 
 
 def test_bottom_toolbar_brand_token_is_zeno() -> None:
