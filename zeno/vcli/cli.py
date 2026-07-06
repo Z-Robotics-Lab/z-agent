@@ -4,7 +4,7 @@
 """Zeno — interactive REPL entry point.
 
 Ties together VectorEngine, Session, PermissionContext, and all tools
-into an interactive agent loop with V's personality.
+into an interactive agent loop with Zeno's personality.
 
     python -m zeno.vcli.cli [options]
     # or via console_scripts: zeno [options]
@@ -1322,15 +1322,15 @@ def _handle_slash_command(
         console.print()
         console.print(
             Panel(
-                "V -- the AI core of Zeno.\n"
+                "Zeno -- the AI core of Z-Robotics-Lab's robotics stack.\n"
                 "Built by Z-Robotics-Lab. Forked from Vector Robotics (CMU RI).\n\n"
                 "Capabilities:\n"
                 "  Robot control    start sims, walk, explore, pick, place, navigate\n"
                 "  Codebase work    read/write/edit files, run bash, search code\n"
                 "  Perception       query world model, check hardware status\n"
                 "  Web              fetch URLs for documentation and references\n\n"
-                "V owns the hardware. Arms, grippers, quadrupeds, cameras -- V's body.\n"
-                "V speaks your language. Safety is non-negotiable.",
+                "Zeno owns the hardware. Arms, grippers, quadrupeds, cameras -- Zeno's body.\n"
+                "Zeno speaks your language. Safety is non-negotiable.",
                 title=V_LABEL,
                 title_align="left",
                 border_style=TEAL,
