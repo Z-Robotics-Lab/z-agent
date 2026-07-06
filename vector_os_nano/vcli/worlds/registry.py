@@ -42,6 +42,34 @@ WorldFactory = Callable[[], "World"]
 DEV_WORLD = "dev"
 ROBOT_WORLD = "robot"
 
+# First-class BYO worlds shipped in this package but registered LAZILY: the
+# factory imports the concrete world module only on resolution, so Invariant 4
+# holds (importing the kernel/CLI never loads the world). ``go2w`` is a flagship
+# BYO world (Unitree Go2W in Isaac Sim); its alias preserves the original plugin
+# id. Each entry maps a resolvable id -> (module, class) imported on demand.
+GO2W_WORLD = "go2w"
+GO2W_WORLD_ALIAS = "isaac-go2w"
+_LAZY_BUILTIN_WORLDS: dict[str, tuple[str, str]] = {
+    GO2W_WORLD: ("vector_os_nano.vcli.worlds.go2w", "IsaacGo2WWorld"),
+    GO2W_WORLD_ALIAS: ("vector_os_nano.vcli.worlds.go2w", "IsaacGo2WWorld"),
+}
+
+
+def _make_lazy_world_factory(module: str, cls: str) -> WorldFactory:
+    """Build a zero-arg factory that imports *module* and instantiates *cls* on call.
+
+    The import is deferred to call time so registering the factory does NOT load
+    the concrete world (Invariant 4). Importing the module also runs its own
+    ``register()`` (idempotent, replace=True), which is harmless — the factory
+    still returns a fresh instance of the resolved class.
+    """
+    def _factory() -> "World":
+        import importlib
+
+        return getattr(importlib.import_module(module), cls)()
+
+    return _factory
+
 
 class WorldRegistry:
     """A small name -> world-factory registry with agent-driven resolution.
@@ -117,7 +145,11 @@ def _ensure_builtin_worlds(registry: "WorldRegistry") -> None:
     file, so importing them does not cross the kernel/domain boundary; domain
     worlds (playground, robot scenes) register through their own lazy callables.
     """
-    if DEV_WORLD in registry._factories and ROBOT_WORLD in registry._factories:
+    if (
+        DEV_WORLD in registry._factories
+        and ROBOT_WORLD in registry._factories
+        and all(wid in registry._factories for wid in _LAZY_BUILTIN_WORLDS)
+    ):
         return
     from vector_os_nano.vcli.worlds.dev import DevWorld
     from vector_os_nano.vcli.worlds.robot import RobotWorld
@@ -126,6 +158,14 @@ def _ensure_builtin_worlds(registry: "WorldRegistry") -> None:
         registry.register(DEV_WORLD, DevWorld)
     if ROBOT_WORLD not in registry._factories:
         registry.register(ROBOT_WORLD, RobotWorld)
+    # First-class BYO worlds (go2w) as LAZY factories: the id is resolvable /
+    # listed by names() without importing the concrete world until it is resolved
+    # (Invariant 4). The concrete module's own register() may later replace these
+    # with a direct class factory — both point at the same class, so resolution is
+    # identical either way.
+    for wid, (module, cls) in _LAZY_BUILTIN_WORLDS.items():
+        if wid not in registry._factories:
+            registry.register(wid, _make_lazy_world_factory(module, cls))
 
 
 # Process-wide default registry. The kernel and (later) the playground register

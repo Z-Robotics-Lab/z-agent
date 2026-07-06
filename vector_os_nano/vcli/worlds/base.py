@@ -118,3 +118,48 @@ class World(Protocol):
         defaults.
         """
         ...
+
+    # ----- OPTIONAL hooks (duck-typed) --------------------------------------
+    # The four hooks below are NOT part of the required Protocol surface: they
+    # are looked up with ``getattr(world, "<hook>", None)`` by the CLI, so a world
+    # that omits them is byte-identical to today. They let a *bring-your-own*
+    # world (e.g. go2w) be a first-class embodiment provider WITHOUT --sim and run
+    # its own lifecycle — with ZERO kernel edits. A ``Protocol`` cannot express
+    # "optional method", so they are documented here rather than declared with
+    # ``...`` bodies (which would make them mandatory for ``isinstance``).
+    #
+    # def build_embodiment(self) -> Any:
+    #     """Return the AGENT object this world drives, or None to use no agent.
+    #
+    #     Called by the CLI (``_init_agent``) when ``--world`` selects this world
+    #     and no ``--sim``/``--sim-go2`` is given: the returned object becomes the
+    #     session's agent (the same slot a MuJoCo Agent fills). Duck-typed — it
+    #     need only expose whatever the session reads (``_base``, ``_arm``,
+    #     ``_skill_registry``, ``_spatial_memory`` — all optional). Omit the hook
+    #     (or return None) to keep the no-agent dev-style session.
+    #     """
+    #
+    # def setup(self, agent: Any) -> None:
+    #     """One-time activation side-effects, called AFTER the world is resolved.
+    #
+    #     Runs once at session start with the resolved agent (which may be the
+    #     object ``build_embodiment`` returned, or None). Best-effort — a failure
+    #     is warned and swallowed so a broken setup never blocks the REPL. Use for
+    #     connecting a bridge, warming a cache, etc. Omit for no setup.
+    #     """
+    #
+    # def health(self) -> dict[str, Any]:
+    #     """Return a JSON-serialisable health/status snapshot for this world.
+    #
+    #     Declared for BYO worlds to expose liveness (bridge reachable, sim up).
+    #     NOT wired into any call site yet — reserved surface; a future health
+    #     probe / status command reads it. Omit if there is nothing to report.
+    #     """
+    #
+    # def teardown(self) -> None:
+    #     """Release resources at session exit (mirror of ``setup``).
+    #
+    #     Called on REPL shutdown. Best-effort — a failure is warned and swallowed
+    #     so teardown never masks the real exit. Use to disconnect a bridge, close
+    #     a context, etc. Omit for no teardown.
+    #     """

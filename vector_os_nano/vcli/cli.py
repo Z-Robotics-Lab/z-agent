@@ -302,6 +302,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--world",
+        default=os.environ.get("VECTOR_WORLD") or None,
+        metavar="ID",
+        help=(
+            "Select an explicit registered world by id (e.g. 'go2w'). Highest "
+            "precedence — beats --scenario and the agent-driven default. Resolves "
+            "through the world registry; unknown ids fail loud with the valid set. "
+            "Env default: VECTOR_WORLD. Combine with VECTOR_WORLD_PLUGINS to load a "
+            "third-party world module before resolution."
+        ),
+    )
+    parser.add_argument(
         "--headless",
         action="store_true",
         help="Suppress the MuJoCo viewer window (default: window opens when --sim is active)",
@@ -695,22 +707,76 @@ def ask_permission(tool_name: str, params: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
-    """Select the active world, honouring an explicit playground ``--scenario``.
+def _load_world_plugins() -> None:
+    """Import every module named in ``VECTOR_WORLD_PLUGINS`` for its register() side-effect.
 
-    Precedence:
-      1. ``--scenario <id>`` selected -> the playground world for that scenario
-         WINS. Loading the playground package (an explicit, user-requested track)
-         registers its scenarios into the world registry via the lazy hook; we
-         then resolve the named world. The kernel still never hard-imports the
-         playground — this import only happens because the user asked for it.
-      2. Otherwise -> ``resolve_world(agent)`` (exactly today's behaviour:
+    Plug-and-play discovery (Invariant 3): a third-party world lives in its OWN
+    module and self-registers into the process-wide world registry on import
+    (``register()`` runs at module load). Set ``VECTOR_WORLD_PLUGINS`` to a
+    comma-separated list of importable module names; each is imported here so its
+    world id becomes resolvable by ``--world``. A module that fails to import (bad
+    name, missing dep) is warned about and skipped — one broken plugin never
+    crashes the CLI or blocks the others. No-op when the env var is unset/empty.
+    """
+    spec = os.environ.get("VECTOR_WORLD_PLUGINS", "").strip()
+    if not spec:
+        return
+    import importlib
+
+    for name in (m.strip() for m in spec.split(",")):
+        if not name:
+            continue
+        try:
+            importlib.import_module(name)
+        except Exception as exc:  # noqa: BLE001 — one bad plugin must not crash the CLI
+            logger.warning(
+                "VECTOR_WORLD_PLUGINS: failed to import world plugin %r: %s", name, exc
+            )
+            console.print(
+                f"[yellow]World plugin '{name}' failed to load:[/yellow] {exc}"
+            )
+
+
+def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
+    """Select the active world, honouring ``--world`` then ``--scenario``.
+
+    Plugin discovery runs first: ``VECTOR_WORLD_PLUGINS`` modules are imported so
+    a BYO world's ``register()`` side-effect lands in the registry before we
+    resolve a name.
+
+    Precedence (highest first):
+      1. ``--world <id>`` (or env ``VECTOR_WORLD``) -> resolve that registered
+         world by id through the process-wide registry. Beats --scenario and the
+         agent-driven default — an explicit named world always wins.
+      2. ``--scenario <id>`` -> the playground world for that scenario. Loading
+         the playground package (an explicit, user-requested track) registers its
+         scenarios into the world registry via the lazy hook; we then resolve the
+         named world. The kernel still never hard-imports the playground — this
+         import only happens because the user asked for it.
+      3. Otherwise -> ``resolve_world(agent)`` (exactly today's behaviour:
          a connected agent selects the robot world, else the default dev world).
 
-    Fails loud on an unknown scenario id with the valid set — never a silent
+    Fails loud on an unknown world/scenario id with the valid set — never a silent
     fallback to another world.
     """
-    from vector_os_nano.vcli.worlds import resolve_world, resolve_world_named
+    from vector_os_nano.vcli.worlds import (
+        get_world_registry,
+        resolve_world,
+        resolve_world_named,
+    )
+
+    # Discover BYO world plugins BEFORE resolution, so a --world id contributed by
+    # a plugin module's register() is resolvable below.
+    _load_world_plugins()
+
+    # 1. Explicit --world wins. Resolve by id straight through the registry.
+    world_id = getattr(args, "world", None)
+    if world_id:
+        try:
+            return get_world_registry().resolve(world_id)
+        except KeyError as exc:
+            console.print(f"[red]Unknown world:[/red] {exc}")
+            raise
 
     scenario = getattr(args, "scenario", None)
     if not scenario:
@@ -727,6 +793,75 @@ def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
         # re-raise so an unknown scenario id never silently degrades to a default.
         console.print(f"[red]Unknown scenario:[/red] {exc}")
         raise
+
+
+def _register_world_tools(world: Any, registry: Any, agent: Any) -> None:
+    """Invoke the active world's ``register_tools`` hook (Phase-C seam).
+
+    The CLI registers the kernel's general tools (code/general via
+    ``discover_categorized_tools``) and the robot skill wrappers (via
+    ``wrap_skills``) for every world. A *world* contributes its own domain tools
+    here — the same hook the World Protocol declares (worlds/base.py) and the
+    engine already honours for ``register_capabilities`` (engine.py init_vgg).
+
+    Zero behaviour change for the two kernel worlds: ``DevWorld.register_tools``
+    and ``RobotWorld.register_tools`` are no-ops (they register nothing into the
+    passed registry — the CLI already did their tool assembly), so calling this
+    for them adds nothing. A BYO world (e.g. go2w) registers its tools straight
+    into the CLI's ``CategorizedToolRegistry`` under its own category, which is
+    then visible to ``to_anthropic_schemas`` (a fresh category is never in the
+    disabled set). Mirrors the ``hasattr`` + best-effort guard the engine uses for
+    capabilities: a BYO world's registration failing must warn, never crash the
+    CLI.
+    """
+    hook = getattr(world, "register_tools", None)
+    if hook is None:
+        return
+    try:
+        hook(registry, agent)
+    except Exception as exc:  # noqa: BLE001 — a BYO world must not crash the CLI
+        logger.warning(
+            "world %r register_tools failed: %s",
+            getattr(world, "name", repr(world)), exc,
+        )
+
+
+def _world_setup(world: Any, agent: Any) -> None:
+    """Call the active world's optional ``setup(agent)`` lifecycle hook.
+
+    Runs once, right after the world is resolved and its tools registered. A
+    world without ``setup`` (dev/robot and every world that omits it) is a no-op,
+    so this is byte-identical for existing worlds. A BYO world uses it to warm a
+    bridge/cache. Best-effort — a failing setup is warned and swallowed so it
+    never blocks the session start.
+    """
+    hook = getattr(world, "setup", None)
+    if hook is None:
+        return
+    try:
+        hook(agent)
+    except Exception as exc:  # noqa: BLE001 — setup must not block the REPL
+        logger.warning(
+            "world %r setup failed: %s", getattr(world, "name", repr(world)), exc
+        )
+
+
+def _world_teardown(world: Any) -> None:
+    """Call the active world's optional ``teardown()`` lifecycle hook at exit.
+
+    Mirror of ``_world_setup``: runs once on session shutdown. A world without
+    ``teardown`` is a no-op. Best-effort — a failing teardown is warned and
+    swallowed so it never masks the real exit path.
+    """
+    hook = getattr(world, "teardown", None)
+    if hook is None:
+        return
+    try:
+        hook()
+    except Exception as exc:  # noqa: BLE001 — teardown must not mask exit
+        logger.warning(
+            "world %r teardown failed: %s", getattr(world, "name", repr(world)), exc
+        )
 
 
 def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
@@ -776,9 +911,51 @@ def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
     return world
 
 
+def _build_world_embodiment(args: argparse.Namespace) -> Any:
+    """Build the agent from an explicit ``--world`` embodiment (the BYO front door).
+
+    When ``--world <id>`` selects a world that provides a ``build_embodiment()``
+    hook, the object it returns becomes the session's agent — a first-class,
+    ``--sim``-free path for a bring-your-own embodiment (e.g. go2w drives its
+    Isaac stack over an HTTP bridge, no in-process MuJoCo). Duck-typed and
+    optional: a world without the hook (or returning None) leaves the agent None
+    (the plain dev/robot session), so this is byte-identical for every existing
+    world. Resolution goes through the same registry + plugin discovery the world
+    resolver uses, so a plugin-contributed world id is reachable here too.
+
+    Best-effort: a failure resolving/building is warned and degrades to None —
+    the session still starts (as a no-agent world), never crashing the CLI.
+    """
+    world_id = getattr(args, "world", None)
+    if not world_id:
+        return None
+    try:
+        from vector_os_nano.vcli.worlds import get_world_registry
+
+        _load_world_plugins()  # a plugin may contribute this world id
+        world = get_world_registry().resolve(world_id)  # KeyError surfaces in resolver
+        builder = getattr(world, "build_embodiment", None)
+        if builder is None:
+            return None
+        embodiment = builder()
+        if embodiment is not None:
+            logger.info("world %r provided a build_embodiment agent", world_id)
+        return embodiment
+    except KeyError:
+        # An unknown --world id is reported (fail-loud) by _resolve_active_world,
+        # which runs right after this; don't double-report here — just no agent.
+        return None
+    except Exception as exc:  # noqa: BLE001 — a BYO embodiment must not crash the CLI
+        logger.warning("world %r build_embodiment failed: %s", world_id, exc)
+        return None
+
+
 def _init_agent(args: argparse.Namespace) -> Any:
     if not (args.sim or args.sim_go2):
-        return None
+        # No in-process simulator: an explicit --world may still supply a
+        # first-class embodiment as the agent (the BYO front door). Absent that,
+        # the session runs agent-less exactly as before.
+        return _build_world_embodiment(args)
     try:
         from vector_os_nano.core.agent import Agent  # type: ignore[import]
         if args.sim:
@@ -1673,6 +1850,17 @@ def _build_turn_context(
         for _c in ("robot", "diag", "system"):
             registry.disable_category(_c)
 
+    # BYO-world tools (Phase-C hook): after the kernel's general tools + skill
+    # wrappers are assembled, let the active world contribute its own domain
+    # tools into the SAME registry. No-op for dev/robot (their register_tools is
+    # a no-op); a plug-and-play world (go2w) adds its tools under its own
+    # category here — no kernel edit. Runs regardless of agent so a robot-flavour
+    # BYO world driven WITHOUT --sim still gets its tools.
+    _register_world_tools(world, registry, agent)
+    # BYO-world one-time activation: setup(agent) runs once the world is fully
+    # resolved + its tools registered. No-op for any world that omits the hook.
+    _world_setup(world, agent)
+
     # Permissions
     permissions = PermissionContext(no_permission=args.no_permission)
 
@@ -2070,6 +2258,17 @@ def main(argv: list[str] | None = None) -> None:
         # ("start the arm sim").
         for _c in ("robot", "diag", "system"):
             registry.disable_category(_c)
+
+    # BYO-world tools (Phase-C hook): after the kernel's general tools + skill
+    # wrappers are assembled, let the active world contribute its own domain
+    # tools into the SAME registry. No-op for dev/robot (their register_tools is
+    # a no-op); a plug-and-play world (go2w) adds its tools under its own
+    # category here — no kernel edit. Runs regardless of agent so a robot-flavour
+    # BYO world driven WITHOUT --sim still gets its tools.
+    _register_world_tools(world, registry, agent)
+    # BYO-world one-time activation: setup(agent) runs once the world is fully
+    # resolved + its tools registered. No-op for any world that omits the hook.
+    _world_setup(world, agent)
 
     # Permissions
     permissions = PermissionContext(no_permission=args.no_permission)
@@ -2781,6 +2980,10 @@ def main(argv: list[str] | None = None) -> None:
                     )
                 except Exception as _exc:
                     console.print(f"[yellow]Scene graph save failed: {_exc}[/yellow]")
+        # BYO-world lifecycle: release the active world's resources at REPL exit.
+        # A mid-session /scenario switch swaps app_state["world"], so tear down the
+        # CURRENT world (best-effort; no-op unless the world defines teardown()).
+        _world_teardown(app_state.get("world"))
 
 
 if __name__ == "__main__":
