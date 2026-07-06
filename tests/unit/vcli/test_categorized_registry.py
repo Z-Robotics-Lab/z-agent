@@ -23,7 +23,7 @@ from typing import Any
 
 
 def _make_mock_read_tool():
-    from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+    from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
     @tool(name="mock_read", description="Mock read tool", read_only=True)
     class MockReadTool:
@@ -34,7 +34,7 @@ def _make_mock_read_tool():
 
 
 def _make_mock_write_tool():
-    from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+    from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
     @tool(name="mock_write", description="Mock write tool", read_only=False)
     class MockWriteTool:
@@ -45,7 +45,7 @@ def _make_mock_write_tool():
 
 
 def _make_mock_robot_tool():
-    from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+    from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
     @tool(name="mock_robot", description="Mock robot tool", read_only=False)
     class MockRobotTool:
@@ -56,7 +56,7 @@ def _make_mock_robot_tool():
 
 
 def _make_mock_diag_tool():
-    from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+    from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
     @tool(name="mock_diag", description="Mock diag tool", read_only=True)
     class MockDiagTool:
@@ -76,7 +76,7 @@ class TestCategorizedToolRegistry:
 
     def test_register_with_category(self) -> None:
         """Registering a tool with a category stores it under that category."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -89,7 +89,7 @@ class TestCategorizedToolRegistry:
 
     def test_register_without_category(self) -> None:
         """Registering without a category places the tool in 'default' category."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool())
@@ -100,7 +100,7 @@ class TestCategorizedToolRegistry:
 
     def test_disable_category(self) -> None:
         """Disabling a category excludes its tools from to_anthropic_schemas()."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -120,7 +120,7 @@ class TestCategorizedToolRegistry:
 
     def test_enable_category(self) -> None:
         """Re-enabling a disabled category includes its tools again."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -137,7 +137,7 @@ class TestCategorizedToolRegistry:
 
     def test_to_anthropic_schemas_filters_disabled(self) -> None:
         """to_anthropic_schemas() returns only tools in enabled categories."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -155,7 +155,7 @@ class TestCategorizedToolRegistry:
 
     def test_list_categories(self) -> None:
         """list_categories() returns correct {category: [tool_names]} mapping."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -172,7 +172,7 @@ class TestCategorizedToolRegistry:
 
     def test_backward_compat_base_registry_api(self) -> None:
         """All ToolRegistry APIs work unchanged on CategorizedToolRegistry."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         read_tool = _make_mock_read_tool()
@@ -186,7 +186,7 @@ class TestCategorizedToolRegistry:
 
     def test_is_category_enabled_default(self) -> None:
         """Newly registered categories are enabled by default."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -195,7 +195,7 @@ class TestCategorizedToolRegistry:
 
     def test_is_category_enabled_after_disable(self) -> None:
         """is_category_enabled() returns False after disable_category()."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -205,7 +205,7 @@ class TestCategorizedToolRegistry:
 
     def test_is_category_enabled_after_reenable(self) -> None:
         """is_category_enabled() returns True after re-enabling a disabled category."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -216,7 +216,7 @@ class TestCategorizedToolRegistry:
 
     def test_list_categories_returns_copy(self) -> None:
         """list_categories() returns a copy — mutating it does not affect the registry."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.register(_make_mock_read_tool(), category="code")
@@ -229,14 +229,14 @@ class TestCategorizedToolRegistry:
 
     def test_disable_nonexistent_category_is_safe(self) -> None:
         """Disabling a category that has no tools raises no error."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.disable_category("phantom")  # should not raise
 
     def test_enable_never_disabled_category_is_safe(self) -> None:
         """Enabling a category that was never disabled raises no error."""
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         registry = CategorizedToolRegistry()
         registry.enable_category("phantom")  # should not raise

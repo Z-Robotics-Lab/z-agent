@@ -15,18 +15,18 @@ import pytest
 
 @pytest.fixture
 def wm():
-    from vector_os_nano.core.world_model import WorldModel
+    from zeno.core.world_model import WorldModel
     return WorldModel()
 
 
 @pytest.fixture
 def success_result():
-    from vector_os_nano.core.types import SkillResult
+    from zeno.core.types import SkillResult
     return SkillResult(success=True)
 
 
 def _make_obj(label: str, obj_id: str | None = None):
-    from vector_os_nano.core.world_model import ObjectState
+    from zeno.core.world_model import ObjectState
     return ObjectState(
         object_id=obj_id or f"obj_{label}",
         label=label,
@@ -151,9 +151,9 @@ class TestPickHoldMode:
 
 from unittest.mock import Mock
 
-from vector_os_nano.skills.detect import DetectSkill
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import Detection, TrackedObject, Pose3D
+from zeno.skills.detect import DetectSkill
+from zeno.core.skill import SkillContext
+from zeno.core.types import Detection, TrackedObject, Pose3D
 
 
 def _make_detect_context(world: "WorldModel", detections, tracked_objects=None):
@@ -183,7 +183,7 @@ class TestDetectSkillMergeLogic:
 
     def test_detect_merges_existing_objects(self):
         """Add banana_0 to world model; detect banana → ID stays banana_0, not banana_1."""
-        from vector_os_nano.core.world_model import WorldModel, ObjectState
+        from zeno.core.world_model import WorldModel, ObjectState
 
         world = WorldModel()
         world.add_object(ObjectState(
@@ -205,7 +205,7 @@ class TestDetectSkillMergeLogic:
 
     def test_detect_creates_new_for_unknown(self):
         """Empty world model → detect creates object with _0 suffix."""
-        from vector_os_nano.core.world_model import WorldModel
+        from zeno.core.world_model import WorldModel
 
         world = WorldModel()
         detections = [Detection(label="apple", bbox=(50, 50, 150, 150), confidence=0.85)]
@@ -218,7 +218,7 @@ class TestDetectSkillMergeLogic:
 
     def test_detect_updates_position_on_merge(self):
         """banana_0 at (0.1, 0.1, 0.0) → detect with pose (0.2, 0.2, 0.3) → position updated."""
-        from vector_os_nano.core.world_model import WorldModel, ObjectState
+        from zeno.core.world_model import WorldModel, ObjectState
 
         world = WorldModel()
         world.add_object(ObjectState(
@@ -255,7 +255,7 @@ class TestDetectSkillMergeLogic:
         depth has no valid points) must be recorded for EXISTENCE but marked
         has_position=False, NOT stored as a targetable object at the (0,0,0) origin (which
         made mobile_pick navigate to the origin and flail, D111 follow-on)."""
-        from vector_os_nano.core.world_model import WorldModel
+        from zeno.core.world_model import WorldModel
 
         world = WorldModel()
         detections = [Detection(label="bottle", bbox=(100, 100, 200, 200), confidence=0.9)]
@@ -270,7 +270,7 @@ class TestDetectSkillMergeLogic:
     def test_detect_2d_only_does_not_clobber_existing_position(self):
         """Re-detecting a well-localised object without a fresh 3D pose must PRESERVE its
         position (and has_position=True), not overwrite it with the (0,0,0) sentinel."""
-        from vector_os_nano.core.world_model import WorldModel, ObjectState
+        from zeno.core.world_model import WorldModel, ObjectState
 
         world = WorldModel()
         world.add_object(ObjectState(
@@ -289,8 +289,8 @@ class TestResolveTargetSkipsPositionLess:
     """pick/mobile_pick must NOT target an object with no usable 3D position."""
 
     def test_resolve_target_skips_position_less_object(self):
-        from vector_os_nano.core.world_model import WorldModel, ObjectState
-        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+        from zeno.core.world_model import WorldModel, ObjectState
+        from zeno.skills.pick_top_down import PickTopDownSkill
 
         world = WorldModel()
         world.add_object(ObjectState(
@@ -300,8 +300,8 @@ class TestResolveTargetSkipsPositionLess:
         assert target is None, "a position-less (un-targetable) object must not resolve as a target"
 
     def test_resolve_target_returns_positioned_object(self):
-        from vector_os_nano.core.world_model import WorldModel, ObjectState
-        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+        from zeno.core.world_model import WorldModel, ObjectState
+        from zeno.skills.pick_top_down import PickTopDownSkill
 
         world = WorldModel()
         world.add_object(ObjectState(

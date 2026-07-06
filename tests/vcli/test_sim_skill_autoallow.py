@@ -12,7 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ def _make_sim_hw() -> Any:
     class _SimArm:
         pass
 
-    _SimArm.__module__ = "vector_os_nano.hardware.sim.mujoco_arm"
+    _SimArm.__module__ = "zeno.hardware.sim.mujoco_arm"
     return _SimArm()
 
 
@@ -52,7 +52,7 @@ def _make_real_hw() -> Any:
     class _RealArm:
         pass
 
-    _RealArm.__module__ = "vector_os_nano.hardware.real_arm"
+    _RealArm.__module__ = "zeno.hardware.real_arm"
     return _RealArm()
 
 
@@ -88,7 +88,7 @@ class TestSimAutoAllow:
         class _SimBase:
             pass
 
-        _SimBase.__module__ = "vector_os_nano.hardware.sim.mujoco_go2"
+        _SimBase.__module__ = "zeno.hardware.sim.mujoco_go2"
         tool = _wrap(_make_skill(motor=True), _make_agent(base=_SimBase()))
         result = tool.check_permissions({}, None)
         assert result.behavior == "allow"
@@ -99,7 +99,7 @@ class TestSimAutoAllow:
         class _SimGripper:
             pass
 
-        _SimGripper.__module__ = "vector_os_nano.hardware.sim.mujoco_gripper"
+        _SimGripper.__module__ = "zeno.hardware.sim.mujoco_gripper"
         tool = _wrap(_make_skill(motor=True), _make_agent(gripper=_SimGripper()))
         result = tool.check_permissions({}, None)
         assert result.behavior == "allow"
@@ -118,7 +118,7 @@ class TestRealHardwareRequiresConfirm:
 
     def test_motor_skill_non_sim_module_asks(self) -> None:
         """A module path that merely contains 'sim' as a substring but is not under
-        vector_os_nano.hardware.sim must NOT be treated as simulated."""
+        zeno.hardware.sim must NOT be treated as simulated."""
 
         class _FakeSimArm:
             pass
@@ -196,20 +196,20 @@ class TestSimDetectionHelper:
         class _Arm:
             pass
 
-        _Arm.__module__ = "vector_os_nano.hardware.sim"  # exact prefix match
+        _Arm.__module__ = "zeno.hardware.sim"  # exact prefix match
         tool = _wrap(_make_skill(), _make_agent(arm=_Arm()))
         assert tool._robot_is_simulated() is True
 
     def test_sibling_package_with_sim_prefix_not_detected(self) -> None:
         """A sibling package whose name merely STARTS WITH 'sim' (e.g.
-        'vector_os_nano.hardware.simulated_real.arm') must NOT be treated as
+        'zeno.hardware.simulated_real.arm') must NOT be treated as
         simulated — the match is the exact package 'hardware.sim' or a '.'-delimited
         sub-module, never a raw string prefix."""
 
         class _Arm:
             pass
 
-        _Arm.__module__ = "vector_os_nano.hardware.simulated_real.arm"
+        _Arm.__module__ = "zeno.hardware.simulated_real.arm"
         tool = _wrap(_make_skill(), _make_agent(arm=_Arm()))
         assert tool._robot_is_simulated() is False
 

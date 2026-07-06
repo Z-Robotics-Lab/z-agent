@@ -17,13 +17,13 @@ mujoco = pytest.importorskip("mujoco")  # headless sim oracle; skip if unavailab
 
 
 def _agent():
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.core.skill import SkillRegistry
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-    from vector_os_nano.skills import get_default_skills
-    from vector_os_nano.skills.pick import SIM_PICK_CONFIG
+    from zeno.core.agent import Agent
+    from zeno.core.skill import SkillRegistry
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.skills import get_default_skills
+    from zeno.skills.pick import SIM_PICK_CONFIG
 
     arm = MuJoCoArm(gui=False)
     arm.connect()
@@ -41,7 +41,7 @@ def _agent():
 
 
 def test_pick_hold_then_place_releases_and_moves_object():
-    from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+    from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
 
     agent, arm = _agent()
     try:

@@ -30,15 +30,15 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
-from vector_os_nano.vcli.engine import UnifiedTurnResult, VectorEngine
-from vector_os_nano.vcli.intent_router import IntentRouter
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.session import TokenUsage, create_session
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-from vector_os_nano.vcli.tools.file_tools import FileWriteTool
-from vector_os_nano.vcli.worlds import DevWorld
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.cognitive.trace_store import evidence_passed
+from zeno.vcli.engine import UnifiedTurnResult, VectorEngine
+from zeno.vcli.intent_router import IntentRouter
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.session import TokenUsage, create_session
+from zeno.vcli.tools.base import CategorizedToolRegistry
+from zeno.vcli.tools.file_tools import FileWriteTool
+from zeno.vcli.worlds import DevWorld
 
 # Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
 ORACLES = frozenset({
@@ -139,7 +139,7 @@ def _goal_tree_json(file_path: str, content: str, verify: str) -> str:
 
 def test_chat_greeting_answer_parity(tmp_path: Path) -> None:
     """A greeting routes to the answer path: same text as ReAct, verified loop."""
-    backend = _ChatBackend("Hi! I'm Vector OS.")
+    backend = _ChatBackend("Hi! I'm Zeno.")
     engine = _dev_engine(backend, lambda _n, _p: "y", tmp_path,
                          intent_router=IntentRouter())
     session = create_session(directory=tmp_path / "_sessions")
@@ -151,8 +151,8 @@ def test_chat_greeting_answer_parity(tmp_path: Path) -> None:
 
     assert isinstance(result, UnifiedTurnResult)
     # PARITY: the answer text matches what the ReAct loop produced (+ streamed it).
-    assert result.text == "Hi! I'm Vector OS."
-    assert "".join(streamed) == "Hi! I'm Vector OS."
+    assert result.text == "Hi! I'm Zeno."
+    assert "".join(streamed) == "Hi! I'm Zeno."
     # CLOSED LOOP: an answer-only trace was produced and verifies true.
     assert result.intent.route == "tool_use"
     assert result.trace is not None
@@ -420,7 +420,7 @@ def test_multi_step_plan_parity(tmp_path: Path, monkeypatch) -> None:
 def _foreach_tree() -> Any:
     """A foreach GoalTree: a code producer emits a 2-item list; the body writes one
     file per item, binding ``${it.name}`` through the pure blackboard path."""
-    from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
+    from zeno.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
 
     produce = SubGoal(
         name="produce",

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.playground.verify.arm_predicates import make_placed_count
+from zeno.playground.verify.arm_predicates import make_placed_count
 
 
 class _FakeArm:
@@ -60,7 +60,7 @@ class _CapturingEngine:
 
 
 def test_enter_scenario_threads_resolver_and_persist_dir() -> None:
-    from vector_os_nano.vcli.cli import enter_scenario
+    from zeno.vcli.cli import enter_scenario
 
     eng = _CapturingEngine()
     sentinel_resolver = lambda n, p: True  # noqa: E731

@@ -98,7 +98,7 @@ class TestSeedWalk:
     def test_exploration_loop_has_seed_walk(self):
         """_exploration_loop should walk before creating nav flag."""
         explore_path = os.path.expanduser(
-            "~/Desktop/vector_os_nano/vector_os_nano/skills/go2/explore.py"
+            "~/Desktop/vector_os_nano/zeno/skills/go2/explore.py"
         )
         with open(explore_path) as f:
             content = f.read()
@@ -118,7 +118,7 @@ class TestSeedWalk:
     def test_seed_walk_short_distance(self):
         """Seed walk should be short (< 2m)."""
         explore_path = os.path.expanduser(
-            "~/Desktop/vector_os_nano/vector_os_nano/skills/go2/explore.py"
+            "~/Desktop/vector_os_nano/zeno/skills/go2/explore.py"
         )
         with open(explore_path) as f:
             content = f.read()
@@ -131,7 +131,7 @@ class TestSeedWalk:
     def test_nav_flag_not_created_immediately(self):
         """Nav flag should NOT be the first action in _exploration_loop."""
         explore_path = os.path.expanduser(
-            "~/Desktop/vector_os_nano/vector_os_nano/skills/go2/explore.py"
+            "~/Desktop/vector_os_nano/zeno/skills/go2/explore.py"
         )
         with open(explore_path) as f:
             content = f.read()

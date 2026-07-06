@@ -26,7 +26,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vector_os_nano.vcli.worlds import RobotWorld
+from zeno.vcli.worlds import RobotWorld
 
 # The sim oracle requires a real MuJoCo arm. Skip the whole module (rather than
 # error) if the sim stack cannot import on this host.
@@ -40,9 +40,9 @@ def sim_agent():
     connect() loads the bundled tabletop scene deterministically (no GL); the
     arm's get_object_positions is the oracle the predicates read.
     """
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.core.agent import Agent
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
 
     arm = MuJoCoArm(gui=False)
     arm.connect()
@@ -149,7 +149,7 @@ def test_engine_merges_robot_world_grounding(sim_agent) -> None:
     Proves the engine's empty perception stub (detect_objects -> []) is REPLACED
     by RobotWorld's sim-oracle binding once the world is wired in.
     """
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     engine = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     engine._world = RobotWorld()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vector OS — Foxglove Bridge 启动脚本
+# Zeno — Foxglove Bridge 启动脚本
 # 启动 foxglove_bridge，然后用浏览器连接 Foxglove Studio
 #
 # Usage: ./foxglove/launch_foxglove.sh
@@ -15,7 +15,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-echo -e "${BOLD}${TEAL}Vector OS — Foxglove Bridge${RESET}"
+echo -e "${BOLD}${TEAL}Zeno — Foxglove Bridge${RESET}"
 echo ""
 
 # Check foxglove_bridge

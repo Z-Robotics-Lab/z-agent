@@ -32,23 +32,23 @@ logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
 import mujoco as mj  # noqa: E402
 
-from vector_os_nano.core.agent import Agent  # noqa: E402
-from vector_os_nano.core.scene_graph import SceneGraph  # noqa: E402
-from vector_os_nano.core.skill import SkillContext  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
+from zeno.core.agent import Agent  # noqa: E402
+from zeno.core.scene_graph import SceneGraph  # noqa: E402
+from zeno.core.skill import SkillContext  # noqa: E402
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
+from zeno.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
+from zeno.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
     MuJoCoPiperGripper,
 )
-from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
-from vector_os_nano.perception.object_localizer import localize_objects_3d  # noqa: E402
-from vector_os_nano.perception.vlm_go2 import (  # noqa: E402
+from zeno.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
+from zeno.perception.object_localizer import localize_objects_3d  # noqa: E402
+from zeno.perception.vlm_go2 import (  # noqa: E402
     DetectedObject, RoomIdentification, SceneDescription,
 )
-from vector_os_nano.skills.go2.look import LookSkill  # noqa: E402
-from vector_os_nano.skills.navigate_to_object import NavigateToObjectSkill  # noqa: E402
-from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill  # noqa: E402
-from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object  # noqa: E402
+from zeno.skills.go2.look import LookSkill  # noqa: E402
+from zeno.skills.navigate_to_object import NavigateToObjectSkill  # noqa: E402
+from zeno.skills.perception_grasp import PerceptionGraspSkill  # noqa: E402
+from zeno.vcli.worlds.arm_sim_oracle import make_holding_object  # noqa: E402
 
 _TARGET = "green bottle"
 _GT_BODY = "pickable_bottle_green"

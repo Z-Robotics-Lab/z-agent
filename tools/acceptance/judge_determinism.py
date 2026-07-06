@@ -19,7 +19,7 @@ import collections
 import json
 import sys
 
-from vector_os_nano.acceptance import vision_judge
+from zeno.acceptance import vision_judge
 
 LOCAL_URL = "http://localhost:11434/v1"
 # Local 7B/9B VLMs are SLOW (cold load 77-93s; a full-res image inference 20-60s) — the frozen

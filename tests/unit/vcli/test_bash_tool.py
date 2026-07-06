@@ -26,7 +26,7 @@ import pytest
 
 def _make_context(**kwargs: Any):
     """Return a minimal ToolContext for testing."""
-    from vector_os_nano.vcli.tools.base import ToolContext
+    from zeno.vcli.tools.base import ToolContext
 
     defaults: dict[str, Any] = {
         "agent": None,
@@ -41,7 +41,7 @@ def _make_context(**kwargs: Any):
 
 def _get_tool():
     """Return a fresh BashTool instance."""
-    from vector_os_nano.vcli.tools.bash_tool import BashTool
+    from zeno.vcli.tools.bash_tool import BashTool
 
     return BashTool()
 
@@ -167,7 +167,7 @@ class TestBashToolFlags:
 
 class TestBashToolDecorator:
     def test_bash_registered_with_decorator(self) -> None:
-        from vector_os_nano.vcli.tools.bash_tool import BashTool
+        from zeno.vcli.tools.bash_tool import BashTool
 
         assert BashTool.__tool_name__ == "bash"
 

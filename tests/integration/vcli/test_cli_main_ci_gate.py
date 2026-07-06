@@ -75,7 +75,7 @@ def test_repl_runs_one_turn_then_exits(tmp_path, monkeypatch: pytest.MonkeyPatch
     Asserts the engine's VGG layer executed the turn (a trace was produced) — i.e.
     the run_one_turn refactor did NOT regress the interactive loop.
     """
-    from vector_os_nano.vcli import cli
+    from zeno.vcli import cli
 
     # Run the REPL IN tmp_path so the dev-world file oracle (cwd-scoped) reads the
     # marker the actor writes. Isolate HOME so the persistent dev template tier
@@ -121,7 +121,7 @@ def test_repl_runs_one_turn_then_exits(tmp_path, monkeypatch: pytest.MonkeyPatch
     # for the background completion deterministically.
     import threading
 
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     executed: dict[str, object] = {}
     done = threading.Event()

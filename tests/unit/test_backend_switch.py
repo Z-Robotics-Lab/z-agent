@@ -19,7 +19,7 @@ import pytest
 
 
 def _import_sim_start_tool() -> type:
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+    from zeno.vcli.tools.sim_tool import SimStartTool
     return SimStartTool
 
 
@@ -57,8 +57,8 @@ def _make_mock_agent(has_arm: bool = False) -> MagicMock:
 
 def _execute(tool: Any, params: dict, ctx: MagicMock) -> Any:
     """Execute SimStartTool with local skill/prompt imports mocked."""
-    with patch("vector_os_nano.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
-         patch("vector_os_nano.vcli.prompt.build_system_prompt", return_value=""):
+    with patch("zeno.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
+         patch("zeno.vcli.prompt.build_system_prompt", return_value=""):
         return tool.execute(params, ctx)
 
 
@@ -279,7 +279,7 @@ class TestStartIsaacGo2:
 
     def test_start_isaac_go2_raises_on_connection_failure(self) -> None:
         cls = _import_sim_start_tool()
-        with patch("vector_os_nano.hardware.sim.isaac_sim_proxy.IsaacSimProxy.connect",
+        with patch("zeno.hardware.sim.isaac_sim_proxy.IsaacSimProxy.connect",
                    side_effect=ConnectionError("not running")):
             with pytest.raises((ConnectionError, Exception)):
                 cls._start_isaac_go2()

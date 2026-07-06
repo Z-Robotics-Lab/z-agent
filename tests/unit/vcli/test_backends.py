@@ -22,8 +22,8 @@ from unittest.mock import MagicMock, patch
 import openai
 import pytest
 
-from vector_os_nano.vcli.backends import LLMBackend, create_backend
-from vector_os_nano.vcli.backends.openai_compat import (
+from zeno.vcli.backends import LLMBackend, create_backend
+from zeno.vcli.backends.openai_compat import (
     OpenAICompatBackend,
     affordable_max_tokens,
     convert_messages,
@@ -31,8 +31,8 @@ from vector_os_nano.vcli.backends.openai_compat import (
     convert_tools,
     parse_usage,
 )
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.session import TokenUsage
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.session import TokenUsage
 
 
 # ---------------------------------------------------------------------------
@@ -493,7 +493,7 @@ class TestLLMResponse:
 
 class TestCreateBackend:
     def test_openrouter_returns_openai_compat_backend(self) -> None:
-        from vector_os_nano.vcli.backends.openai_compat import OpenAICompatBackend
+        from zeno.vcli.backends.openai_compat import OpenAICompatBackend
 
         with patch("openai.OpenAI"):
             backend = create_backend(
@@ -504,7 +504,7 @@ class TestCreateBackend:
         assert isinstance(backend, OpenAICompatBackend)
 
     def test_anthropic_returns_anthropic_backend(self) -> None:
-        from vector_os_nano.vcli.backends.anthropic import AnthropicBackend
+        from zeno.vcli.backends.anthropic import AnthropicBackend
 
         with patch("anthropic.Anthropic"):
             backend = create_backend(
@@ -515,7 +515,7 @@ class TestCreateBackend:
         assert isinstance(backend, AnthropicBackend)
 
     def test_openai_compat_provider_returns_openai_compat_backend(self) -> None:
-        from vector_os_nano.vcli.backends.openai_compat import OpenAICompatBackend
+        from zeno.vcli.backends.openai_compat import OpenAICompatBackend
 
         with patch("openai.OpenAI"):
             backend = create_backend(
@@ -562,8 +562,8 @@ class TestBackendTextLLM:
 
     def _make_adapter(self, response_text: str) -> "tuple[Any, Any]":
         """Return (adapter, mock_backend) with response_text canned."""
-        from vector_os_nano.vcli.backends.text_llm_adapter import BackendTextLLM
-        from vector_os_nano.vcli.backends.types import LLMResponse
+        from zeno.vcli.backends.text_llm_adapter import BackendTextLLM
+        from zeno.vcli.backends.types import LLMResponse
 
         mock_backend = MagicMock()
         mock_backend.call.return_value = LLMResponse(text=response_text)
@@ -596,8 +596,8 @@ class TestBackendTextLLM:
             assert mock_backend.call.call_args.kwargs["system"] == []
 
     def test_complete_text_none_response_returns_empty_string(self) -> None:
-        from vector_os_nano.vcli.backends.text_llm_adapter import BackendTextLLM
-        from vector_os_nano.vcli.backends.types import LLMResponse
+        from zeno.vcli.backends.text_llm_adapter import BackendTextLLM
+        from zeno.vcli.backends.types import LLMResponse
 
         mock_backend = MagicMock()
         mock_backend.call.return_value = LLMResponse(text=None)  # type: ignore[arg-type]
@@ -607,8 +607,8 @@ class TestBackendTextLLM:
 
     def test_adapter_does_not_read_private_attributes_from_backend(self) -> None:
         """BackendTextLLM must never read dunder/private attrs from the backend."""
-        from vector_os_nano.vcli.backends.text_llm_adapter import BackendTextLLM
-        from vector_os_nano.vcli.backends.types import LLMResponse
+        from zeno.vcli.backends.text_llm_adapter import BackendTextLLM
+        from zeno.vcli.backends.types import LLMResponse
 
         accessed_private: list[str] = []
 
@@ -684,7 +684,7 @@ class TestOpenAICompatReasoningStream:
     answer; the reasoning trace never lands in the response text."""
 
     def _backend(self) -> Any:
-        from vector_os_nano.vcli.backends.openai_compat import OpenAICompatBackend
+        from zeno.vcli.backends.openai_compat import OpenAICompatBackend
 
         with patch("openai.OpenAI"):
             return OpenAICompatBackend(api_key="k", model="deepseek-v4-flash")
@@ -881,7 +881,7 @@ class TestModelUnavailableError:
         """The prompt itself is unaffordable ('Prompt tokens limit exceeded:
         1114 > 428') — a downshift of max_tokens cannot help, so it must become a
         clear ModelUnavailableError, not a raw 402 (or a silent no-action)."""
-        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+        from zeno.vcli.backends.openai_compat import ModelUnavailableError
 
         backend = self._backend()
         exc = _make_status_error(402, "Error code: 402 - Prompt tokens limit exceeded: 1114 > 428.")
@@ -896,7 +896,7 @@ class TestModelUnavailableError:
     def test_404_no_endpoints_is_model_unavailable(self) -> None:
         """A bad / unknown model id (404 'No endpoints found for X') is
         user-actionable — surface it as ModelUnavailableError naming the model."""
-        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+        from zeno.vcli.backends.openai_compat import ModelUnavailableError
 
         backend = self._backend()
         exc = _make_status_error(404, "Error code: 404 - No endpoints found for google/gemini-3.5-flash.")
@@ -909,7 +909,7 @@ class TestModelUnavailableError:
     def test_400_invalid_model_id_is_model_unavailable(self) -> None:
         """The most common BYO typo: a bad VECTOR_MODEL. OpenRouter rejects it with
         400 'X is not a valid model ID' (not 404) — still user-actionable."""
-        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+        from zeno.vcli.backends.openai_compat import ModelUnavailableError
 
         backend = self._backend()
         exc = _make_status_error(400, "Error code: 400 - vector/does-not-exist-xyz is not a valid model ID")
@@ -920,7 +920,7 @@ class TestModelUnavailableError:
 
     def test_400_generic_still_raises_raw(self) -> None:
         """A non-model 400 (e.g. a malformed request) is NOT model-unavailability."""
-        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+        from zeno.vcli.backends.openai_compat import ModelUnavailableError
 
         backend = self._backend()
         exc = _make_status_error(400, "Error code: 400 - messages: field required")
@@ -932,7 +932,7 @@ class TestModelUnavailableError:
     def test_recoverable_402_still_downshifts_not_unavailable(self) -> None:
         """Regression: the recoverable 'can only afford N' 402 must STILL retry at
         the affordable cap — it is NOT a ModelUnavailableError on the first hit."""
-        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+        from zeno.vcli.backends.openai_compat import ModelUnavailableError
 
         backend = self._backend()
         ok = LLMResponse(text="ok", stop_reason="end_turn")
@@ -954,7 +954,7 @@ class TestModelUnavailableError:
         """A 'can only afford N' 402 that persists AFTER the one allowed downshift is
         genuine credit exhaustion — it must escalate to ModelUnavailableError, not a
         raw 402 traceback."""
-        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+        from zeno.vcli.backends.openai_compat import ModelUnavailableError
 
         backend = self._backend()
         calls = self._raise_once(backend, _make_402(300))
@@ -965,7 +965,7 @@ class TestModelUnavailableError:
     def test_other_status_error_still_raises_raw(self) -> None:
         """A non-402/404 status error (e.g. 403 auth) is NOT model-unavailability —
         it must re-raise the raw APIStatusError, unchanged."""
-        from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
+        from zeno.vcli.backends.openai_compat import ModelUnavailableError
 
         backend = self._backend()
         exc = _make_status_error(403, "Error code: 403 - Forbidden: bad api key")

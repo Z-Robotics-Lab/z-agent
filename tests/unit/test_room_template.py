@@ -23,7 +23,7 @@ from __future__ import annotations
 import mujoco
 import pytest
 
-from vector_os_nano.hardware.sim.mujoco_go2 import (
+from zeno.hardware.sim.mujoco_go2 import (
     MuJoCoGo2,
     _ROOM_TEMPLATES,
     _ROOM_XML,

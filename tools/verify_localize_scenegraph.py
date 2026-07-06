@@ -49,14 +49,14 @@ import cv2  # noqa: E402
 import mujoco as mj  # noqa: E402
 import numpy as np  # noqa: E402
 
-from vector_os_nano.core.scene_graph import SceneGraph  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
+from zeno.core.scene_graph import SceneGraph  # noqa: E402
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
+from zeno.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
+from zeno.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
     MuJoCoPiperGripper,
 )
-from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
-from vector_os_nano.perception.object_localizer import localize_objects_3d  # noqa: E402
+from zeno.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
+from zeno.perception.object_localizer import localize_objects_3d  # noqa: E402
 
 # tolerance (m) on the XY distance from a localized point to the nearest GT object.
 # The grasp lands at ~7 cm (R3) and nav vicinity is 1.5 m, so for a scene-graph
@@ -202,9 +202,9 @@ def main() -> int:
     #   3b) stub VLM: the network-blocked object *naming* is stubbed, but the
     #       localization (the actual #1 fix) stays fully REAL — grounding-dino +
     #       depth + GT comparison. Proves the full look->scene-graph path.
-    from vector_os_nano.core.skill import SkillContext
-    from vector_os_nano.skills.go2.look import LookSkill
-    from vector_os_nano.perception.vlm_go2 import (
+    from zeno.core.skill import SkillContext
+    from zeno.skills.go2.look import LookSkill
+    from zeno.perception.vlm_go2 import (
         DetectedObject, RoomIdentification, SceneDescription,
     )
 
@@ -276,7 +276,7 @@ def main() -> int:
 
     # 3a — real VLM (best effort)
     try:
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         real_vlm = Go2VLMPerception(config={"api_key": api_key}) if api_key else None
         out["part3a_real_vlm"] = (

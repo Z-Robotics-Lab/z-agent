@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Unit tests for vector_os_nano.core.world_model — TDD RED phase."""
+"""Unit tests for zeno.core.world_model — TDD RED phase."""
 from __future__ import annotations
 
 import json
@@ -14,13 +14,13 @@ import pytest
 
 @pytest.fixture
 def wm():
-    from vector_os_nano.core.world_model import WorldModel
+    from zeno.core.world_model import WorldModel
     return WorldModel()
 
 
 @pytest.fixture
 def cup_obj():
-    from vector_os_nano.core.world_model import ObjectState
+    from zeno.core.world_model import ObjectState
     return ObjectState(
         object_id="obj_001",
         label="cup",
@@ -35,7 +35,7 @@ def cup_obj():
 
 @pytest.fixture
 def bottle_obj():
-    from vector_os_nano.core.world_model import ObjectState
+    from zeno.core.world_model import ObjectState
     return ObjectState(
         object_id="obj_002",
         label="bottle",
@@ -60,7 +60,7 @@ class TestAddGetObject:
         assert wm.get_object("nonexistent") is None
 
     def test_add_overwrites_existing(self, wm, cup_obj):
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
         wm.add_object(cup_obj)
         updated = ObjectState(
             object_id="obj_001",
@@ -115,7 +115,7 @@ class TestGetObjects:
         assert result == []
 
     def test_get_objects_by_label_multiple(self, wm):
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
         for i in range(3):
             obj = ObjectState(
                 object_id=f"cup_{i}", label="cup",
@@ -189,7 +189,7 @@ class TestPredicates:
         assert wm.check_predicate("object_visible(obj_001)") is True
 
     def test_object_visible_false_low_confidence(self, wm):
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
         obj = ObjectState(
             object_id="faint", label="ghost",
             x=0.2, y=0.0, z=0.0,
@@ -208,7 +208,7 @@ class TestPredicates:
         assert wm.check_predicate("object_reachable(obj_001)") is True
 
     def test_object_reachable_far(self, wm):
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
         far_obj = ObjectState(
             object_id="far", label="box",
             x=1.0, y=1.0, z=0.0,
@@ -225,7 +225,7 @@ class TestPredicates:
 class TestSpatialRelations:
     def test_left_right_by_y_position(self, wm):
         """In robot frame, positive Y = left, negative Y = right."""
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
         left_obj = ObjectState(
             object_id="left", label="cup",
             x=0.2, y=0.1, z=0.03,
@@ -297,7 +297,7 @@ class TestSerialization:
 
 class TestSaveLoad:
     def test_save_and_load(self, wm, cup_obj, bottle_obj):
-        from vector_os_nano.core.world_model import WorldModel
+        from zeno.core.world_model import WorldModel
         wm.add_object(cup_obj)
         wm.add_object(bottle_obj)
         wm.update_robot_state(gripper_state="closed", held_object="obj_001")
@@ -334,7 +334,7 @@ class TestSaveLoad:
 
 class TestSkillEffects:
     def test_apply_pick_effects(self, wm, cup_obj):
-        from vector_os_nano.core.types import SkillResult
+        from zeno.core.types import SkillResult
         wm.add_object(cup_obj)
         result = SkillResult(success=True)
         wm.apply_skill_effects("pick", {"object_id": "obj_001"}, result)
@@ -345,7 +345,7 @@ class TestSkillEffects:
         assert len(wm.get_objects()) == 0
 
     def test_apply_place_effects(self, wm, cup_obj):
-        from vector_os_nano.core.types import SkillResult
+        from zeno.core.types import SkillResult
         wm.add_object(cup_obj)
         wm.update_robot_state(held_object="obj_001", gripper_state="holding")
         result = SkillResult(success=True)
@@ -356,14 +356,14 @@ class TestSkillEffects:
         assert obj.state == "placed"
 
     def test_apply_home_effects(self, wm):
-        from vector_os_nano.core.types import SkillResult
+        from zeno.core.types import SkillResult
         wm.update_robot_state(gripper_state="closed")
         result = SkillResult(success=True)
         wm.apply_skill_effects("home", {}, result)
         assert wm.get_robot().gripper_state == "open"
 
     def test_apply_failed_skill_no_effect(self, wm, cup_obj):
-        from vector_os_nano.core.types import SkillResult
+        from zeno.core.types import SkillResult
         wm.add_object(cup_obj)
         result = SkillResult(success=False, error_message="IK failed")
         wm.apply_skill_effects("pick", {"object_id": "obj_001"}, result)
@@ -373,7 +373,7 @@ class TestSkillEffects:
 
 class TestConfidenceDecay:
     def test_decay_reduces_confidence(self, wm):
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
         obj = ObjectState(
             object_id="d1", label="cup",
             x=0.2, y=0.0, z=0.0,
@@ -386,7 +386,7 @@ class TestConfidenceDecay:
         assert updated.confidence < 1.0
 
     def test_decay_does_not_go_below_zero(self, wm):
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
         obj = ObjectState(
             object_id="d2", label="cup",
             x=0.2, y=0.0, z=0.0,

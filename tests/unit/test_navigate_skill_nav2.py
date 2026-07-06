@@ -13,10 +13,10 @@ import math
 import pytest
 from unittest.mock import MagicMock, PropertyMock, patch
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.navigate import (
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import WorldModel
+from zeno.core.types import SkillResult
+from zeno.skills.navigate import (
     NavigateSkill,
     _ROOM_ALIASES,
     _resolve_room,
@@ -55,7 +55,7 @@ _ROOM_DOORS: dict[str, tuple[float, float]] = {
 
 def make_test_scenegraph():
     """Create SceneGraph pre-populated with go2_room.xml layout."""
-    from vector_os_nano.core.scene_graph import SceneGraph
+    from zeno.core.scene_graph import SceneGraph
     sg = SceneGraph()
     for name, (x, y) in _ROOM_CENTERS.items():
         for _ in range(5):

@@ -42,14 +42,14 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.playground.catalog import GO2_ROOM
-from vector_os_nano.playground.world import PlaygroundWorld
-from vector_os_nano.vcli.cognitive.blackboard import Blackboard
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.observation import render_run_snapshot, run_snapshot
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
+from zeno.playground.catalog import GO2_ROOM
+from zeno.playground.world import PlaygroundWorld
+from zeno.vcli.cognitive.blackboard import Blackboard
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.observation import render_run_snapshot, run_snapshot
+from zeno.vcli.cognitive.strategy_selector import StrategyResult
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +410,7 @@ def test_explore_room_live_llm_smoke() -> None:  # pragma: no cover - opt-in
     stays hermetic and free. The provider/model default to OpenRouter +
     gemini-2.5-flash; the key comes from VECTOR_LLM_API_KEY (never hardcoded).
     """
-    from vector_os_nano.vcli.backends import create_backend
+    from zeno.vcli.backends import create_backend
 
     api_key = os.environ.get("VECTOR_LLM_API_KEY")
     if not api_key:

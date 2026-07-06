@@ -22,7 +22,7 @@ import pytest
 
 def _make_proxy() -> Any:
     """Create GazeboGo2Proxy with all external dependencies mocked."""
-    from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+    from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
     return GazeboGo2Proxy()
 
 
@@ -35,8 +35,8 @@ class TestGazeboGo2ProxyIdentity:
     """GazeboGo2Proxy must inherit from Go2ROS2Proxy and expose correct identity."""
 
     def test_inherits_go2ros2proxy(self) -> None:
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
         assert issubclass(GazeboGo2Proxy, Go2ROS2Proxy)
 
     def test_name_returns_gazebo_go2(self) -> None:
@@ -48,7 +48,7 @@ class TestGazeboGo2ProxyIdentity:
         assert proxy.supports_lidar is True
 
     def test_node_name_is_gazebo_go2_proxy(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
         assert GazeboGo2Proxy._NODE_NAME == "gazebo_go2_proxy"
 
     def test_name_overrides_parent_name(self) -> None:
@@ -57,7 +57,7 @@ class TestGazeboGo2ProxyIdentity:
         assert proxy.name == "gazebo_go2"
 
     def test_supports_lidar_overrides_parent_false(self) -> None:
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         parent = Go2ROS2Proxy()
         proxy = _make_proxy()
         assert parent.supports_lidar is False
@@ -73,7 +73,7 @@ class TestIsGazeboRunning:
     """is_gazebo_running() detects /clock topic without external deps."""
 
     def test_is_gazebo_running_false_no_process(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
         mock_result = MagicMock()
         mock_result.stdout = ""
@@ -82,7 +82,7 @@ class TestIsGazeboRunning:
             assert GazeboGo2Proxy.is_gazebo_running() is False
 
     def test_is_gazebo_running_true_clock_topic(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
         mock_result = MagicMock()
         mock_result.stdout = "/clock\n/cmd_vel\n"
@@ -91,13 +91,13 @@ class TestIsGazeboRunning:
             assert GazeboGo2Proxy.is_gazebo_running() is True
 
     def test_is_gazebo_running_handles_timeout(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("ros2", 5)):
             assert GazeboGo2Proxy.is_gazebo_running() is False
 
     def test_is_gazebo_running_false_when_clock_absent(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
         mock_result = MagicMock()
         mock_result.stdout = "/parameter_events\n/rosout\n"
@@ -106,13 +106,13 @@ class TestIsGazeboRunning:
             assert GazeboGo2Proxy.is_gazebo_running() is False
 
     def test_is_gazebo_running_handles_file_not_found(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
         with patch("subprocess.run", side_effect=FileNotFoundError("ros2 not found")):
             assert GazeboGo2Proxy.is_gazebo_running() is False
 
     def test_is_gazebo_running_uses_topic_list_command(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
         mock_result = MagicMock()
         mock_result.stdout = ""
@@ -125,7 +125,7 @@ class TestIsGazeboRunning:
             assert "list" in call_args
 
     def test_is_gazebo_running_uses_timeout(self) -> None:
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
         mock_result = MagicMock()
         mock_result.stdout = ""
@@ -208,18 +208,18 @@ class TestGazeboGo2ProxyLifecycle:
 
 
 class TestInitPyExportsGazeboProxy:
-    """GazeboGo2Proxy is lazily importable from vector_os_nano.hardware.sim."""
+    """GazeboGo2Proxy is lazily importable from zeno.hardware.sim."""
 
     def test_init_py_exports_gazebo_proxy(self) -> None:
         # The import should succeed (module exists on path)
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
         assert GazeboGo2Proxy is not None
 
     def test_gazebo_proxy_accessible_via_sim_package(self) -> None:
         # After the lazy import block in __init__.py is added, GazeboGo2Proxy
         # should appear in the sim package namespace.
-        import vector_os_nano.hardware.sim as sim_pkg
+        import zeno.hardware.sim as sim_pkg
         assert hasattr(sim_pkg, "GazeboGo2Proxy"), (
-            "GazeboGo2Proxy not exported from vector_os_nano.hardware.sim — "
+            "GazeboGo2Proxy not exported from zeno.hardware.sim — "
             "add lazy import to __init__.py"
         )

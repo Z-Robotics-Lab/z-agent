@@ -28,37 +28,37 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Bootstrap: stub vector_os_nano packages to avoid httpx cascade
+# Bootstrap: stub zeno packages to avoid httpx cascade
 # ---------------------------------------------------------------------------
 
 _repo = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_repo))
 
-pkg = types.ModuleType("vector_os_nano")
-pkg.__path__ = [str(_repo / "vector_os_nano")]
-pkg.__package__ = "vector_os_nano"
-sys.modules.setdefault("vector_os_nano", pkg)
+pkg = types.ModuleType("zeno")
+pkg.__path__ = [str(_repo / "zeno")]
+pkg.__package__ = "zeno"
+sys.modules.setdefault("zeno", pkg)
 
-core = types.ModuleType("vector_os_nano.core")
-core.__path__ = [str(_repo / "vector_os_nano" / "core")]
-core.__package__ = "vector_os_nano.core"
-sys.modules.setdefault("vector_os_nano.core", core)
+core = types.ModuleType("zeno.core")
+core.__path__ = [str(_repo / "zeno" / "core")]
+core.__package__ = "zeno.core"
+sys.modules.setdefault("zeno.core", core)
 
-hw = types.ModuleType("vector_os_nano.hardware")
-hw.__path__ = [str(_repo / "vector_os_nano" / "hardware")]
-sys.modules.setdefault("vector_os_nano.hardware", hw)
+hw = types.ModuleType("zeno.hardware")
+hw.__path__ = [str(_repo / "zeno" / "hardware")]
+sys.modules.setdefault("zeno.hardware", hw)
 
-sim_mod = types.ModuleType("vector_os_nano.hardware.sim")
-sim_mod.__path__ = [str(_repo / "vector_os_nano" / "hardware" / "sim")]
-sys.modules.setdefault("vector_os_nano.hardware.sim", sim_mod)
+sim_mod = types.ModuleType("zeno.hardware.sim")
+sim_mod.__path__ = [str(_repo / "zeno" / "hardware" / "sim")]
+sys.modules.setdefault("zeno.hardware.sim", sim_mod)
 
 # Load core.types properly (needed by mujoco_go2)
 import importlib.util
 
-_types_path = _repo / "vector_os_nano" / "core" / "types.py"
-_ts = importlib.util.spec_from_file_location("vector_os_nano.core.types", str(_types_path))
+_types_path = _repo / "zeno" / "core" / "types.py"
+_ts = importlib.util.spec_from_file_location("zeno.core.types", str(_types_path))
 _tm = importlib.util.module_from_spec(_ts)
-sys.modules.setdefault("vector_os_nano.core.types", _tm)
+sys.modules.setdefault("zeno.core.types", _tm)
 _ts.loader.exec_module(_tm)
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ import struct
 # MuJoCoGo2 import
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 
 class Go2NavBridge(Node):

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.core.agent import Agent
-from vector_os_nano.skills.manipulation_setup import register_manipulation_skills
+from zeno.core.agent import Agent
+from zeno.skills.manipulation_setup import register_manipulation_skills
 
 
 class _StubBase:
@@ -40,7 +40,7 @@ def test_registers_perception_grasp_and_manip_skills() -> None:
 def test_sets_grasp_perception() -> None:
     agent = _agent()
     register_manipulation_skills(agent, _StubBase())
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
+    from zeno.perception.go2_grasp_perception import Go2GraspPerception
     assert isinstance(agent._perception, Go2GraspPerception)
 
 

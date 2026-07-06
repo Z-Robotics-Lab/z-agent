@@ -18,9 +18,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from vector_os_nano.core.skill import SkillContext
-import vector_os_nano.skills.go2.explore as _explore_mod
-from vector_os_nano.skills.go2.explore import (
+from zeno.core.skill import SkillContext
+import zeno.skills.go2.explore as _explore_mod
+from zeno.skills.go2.explore import (
     ExploreSkill,
     _exploration_loop,
     _explore_cancel,
@@ -76,7 +76,7 @@ class TestSeedBehavior:
         t = threading.Thread(target=cancel_later, daemon=True)
         t.start()
 
-        with patch("vector_os_nano.skills.go2.explore._start_tare", return_value=True):
+        with patch("zeno.skills.go2.explore._start_tare", return_value=True):
             with patch("time.sleep", return_value=None):
                 _exploration_loop(base, has_bridge=True)
 
@@ -99,7 +99,7 @@ class TestSeedBehavior:
         t = threading.Thread(target=cancel_later, daemon=True)
         t.start()
 
-        with patch("vector_os_nano.skills.go2.explore._start_tare", return_value=False):
+        with patch("zeno.skills.go2.explore._start_tare", return_value=False):
             _exploration_loop(base, has_bridge=False)
 
         t.join(timeout=5)
@@ -175,7 +175,7 @@ class TestAutoLookOnExplore:
         )
 
         skill = ExploreSkill()
-        with patch("vector_os_nano.skills.go2.explore._start_bridge_on_go2", return_value=False):
+        with patch("zeno.skills.go2.explore._start_bridge_on_go2", return_value=False):
             result = skill.execute({}, context)
 
         assert result.success

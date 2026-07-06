@@ -22,7 +22,7 @@ import math
 
 import pytest
 
-from vector_os_nano.vcli.primitives import PrimitiveContext, locomotion
+from zeno.vcli.primitives import PrimitiveContext, locomotion
 
 
 # --------------------------------------------------------------------------- #

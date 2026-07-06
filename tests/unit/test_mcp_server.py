@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from vector_os_nano.mcp.server import VectorMCPServer, create_sim_stack
+from zeno.mcp.server import VectorMCPServer, create_sim_stack
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ class TestVectorMCPServer:
     def test_server_name(self) -> None:
         """Underlying MCP server has the correct name."""
         server, agent, engine, session = _make_server()
-        assert server._server.name == "vector-os-nano"
+        assert server._server.name == "zeno"
 
     def test_list_tools_includes_natural_language(self) -> None:
         """list_tools returns the natural_language meta-tool."""
@@ -432,12 +432,12 @@ def _patch_mujoco():
     @contextlib.contextmanager
     def _ctx():
         with (
-            patch("vector_os_nano.hardware.sim.mujoco_arm.MuJoCoArm", mock_arm_cls),
-            patch("vector_os_nano.hardware.sim.mujoco_gripper.MuJoCoGripper", mock_gripper_cls),
-            patch("vector_os_nano.hardware.sim.mujoco_perception.MuJoCoPerception", mock_perception_cls),
-            patch("vector_os_nano.mcp.server.MuJoCoArm", mock_arm_cls, create=True),
-            patch("vector_os_nano.mcp.server.MuJoCoGripper", mock_gripper_cls, create=True),
-            patch("vector_os_nano.mcp.server.MuJoCoPerception", mock_perception_cls, create=True),
+            patch("zeno.hardware.sim.mujoco_arm.MuJoCoArm", mock_arm_cls),
+            patch("zeno.hardware.sim.mujoco_gripper.MuJoCoGripper", mock_gripper_cls),
+            patch("zeno.hardware.sim.mujoco_perception.MuJoCoPerception", mock_perception_cls),
+            patch("zeno.mcp.server.MuJoCoArm", mock_arm_cls, create=True),
+            patch("zeno.mcp.server.MuJoCoGripper", mock_gripper_cls, create=True),
+            patch("zeno.mcp.server.MuJoCoPerception", mock_perception_cls, create=True),
         ):
             yield mock_arm_cls
 
@@ -464,12 +464,12 @@ def _patch_mujoco_full():
     @contextlib.contextmanager
     def _ctx():
         with (
-            patch("vector_os_nano.hardware.sim.mujoco_arm.MuJoCoArm", mock_arm_cls),
-            patch("vector_os_nano.hardware.sim.mujoco_gripper.MuJoCoGripper", mock_gripper_cls),
-            patch("vector_os_nano.hardware.sim.mujoco_perception.MuJoCoPerception", mock_perception_cls),
-            patch("vector_os_nano.mcp.server.MuJoCoArm", mock_arm_cls, create=True),
-            patch("vector_os_nano.mcp.server.MuJoCoGripper", mock_gripper_cls, create=True),
-            patch("vector_os_nano.mcp.server.MuJoCoPerception", mock_perception_cls, create=True),
+            patch("zeno.hardware.sim.mujoco_arm.MuJoCoArm", mock_arm_cls),
+            patch("zeno.hardware.sim.mujoco_gripper.MuJoCoGripper", mock_gripper_cls),
+            patch("zeno.hardware.sim.mujoco_perception.MuJoCoPerception", mock_perception_cls),
+            patch("zeno.mcp.server.MuJoCoArm", mock_arm_cls, create=True),
+            patch("zeno.mcp.server.MuJoCoGripper", mock_gripper_cls, create=True),
+            patch("zeno.mcp.server.MuJoCoPerception", mock_perception_cls, create=True),
         ):
             yield mock_arm_cls, mock_gripper_cls, mock_perception_cls
 
@@ -477,4 +477,4 @@ def _patch_mujoco_full():
 
 
 # Import Agent for isinstance check in TestCreateSimAgent
-from vector_os_nano.core.agent import Agent  # noqa: E402
+from zeno.core.agent import Agent  # noqa: E402

@@ -26,11 +26,11 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.engine import TurnResult, VectorEngine
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.session import Session, TokenUsage
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.engine import TurnResult, VectorEngine
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.session import Session, TokenUsage
+from zeno.vcli.tools.base import (
     PermissionResult,
     ToolContext,
     ToolRegistry,
@@ -519,7 +519,7 @@ class TestAlwaysAllowPermission:
 class TestTurnResultFrozen:
     def test_turn_result_is_frozen(self) -> None:
         """TurnResult is a frozen dataclass — mutations raise."""
-        from vector_os_nano.vcli.engine import ToolCall
+        from zeno.vcli.engine import ToolCall
 
         tc = ToolCall(
             tool_name="t",
@@ -539,7 +539,7 @@ class TestTurnResultFrozen:
 
     def test_tool_call_is_frozen(self) -> None:
         """ToolCall is frozen."""
-        from vector_os_nano.vcli.engine import ToolCall
+        from zeno.vcli.engine import ToolCall
 
         tc = ToolCall(
             tool_name="t",

@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from vector_os_nano.vcli import cli
+from zeno.vcli import cli
 
 _DOC = Path(__file__).resolve().parents[3] / "docs" / "reference.md"
 

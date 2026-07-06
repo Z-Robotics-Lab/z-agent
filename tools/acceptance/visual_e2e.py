@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
-"""visual_e2e — the visual-acceptance harness (ADR-002): drive a REAL bare ``vector-cli`` turn,
+"""visual_e2e — the visual-acceptance harness (ADR-002): drive a REAL bare ``zeno`` turn,
 capture a SAME-PROCESS frame, grade it with the frozen GT oracle (the ``VECTOR_VERDICT``) AND the
 visual second witness (VisionJudge), and combine them through the DOWNGRADE-ONLY AcceptanceGate.
 
@@ -26,10 +26,10 @@ _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO))
 
 from tests.harness.pty_cli import run_cli_turn  # noqa: E402
-from vector_os_nano.acceptance import capture  # noqa: E402
-from vector_os_nano.acceptance import gate  # noqa: E402
-from vector_os_nano.acceptance import motion_check  # noqa: E402
-from vector_os_nano.acceptance import vision_judge as vj  # noqa: E402
+from zeno.acceptance import capture  # noqa: E402
+from zeno.acceptance import gate  # noqa: E402
+from zeno.acceptance import motion_check  # noqa: E402
+from zeno.acceptance import vision_judge as vj  # noqa: E402
 
 
 def run_once(
@@ -150,16 +150,16 @@ def _cleanup() -> None:
     # as `claude -p "<goal>"` whose cmdline literally contains "mujoco" (the goal's rc=137 guardrail
     # text), so `pkill -9 -f mujoco` SIGKILLs the ROUND ITSELF (rc=137 self-destruct → every round
     # dies at the sim REAL-VERIFY step, committing un-eyes-verified code). The in-process sim lives
-    # inside the `python -m vector_os_nano.vcli.cli` child, so match that exact module path (absent
+    # inside the `python -m zeno.vcli.cli` child, so match that exact module path (absent
     # from the round's cmdline) — same fix as tools/verify_fetch_cli.py._nuke.
     _teardown = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                              "scripts", "sim-teardown")
-    os.system(f"'{_teardown}' >/dev/null 2>&1; pkill -9 -f 'vector_os_nano.vcli.cli' 2>/dev/null")
+    os.system(f"'{_teardown}' >/dev/null 2>&1; pkill -9 -f 'zeno.vcli.cli' 2>/dev/null")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="visual-acceptance E2E harness (ADR-002)")
-    ap.add_argument("--command", required=True, help="the natural-language turn for bare vector-cli")
+    ap.add_argument("--command", required=True, help="the natural-language turn for bare zeno")
     ap.add_argument("--n", type=int, default=1, help="trials (sim runs are serialized)")
     ap.add_argument("--snapshot-dir", default="/tmp/vector_visual_e2e")
     ap.add_argument("--live", action="store_true", help="use the REAL LLM/VLM (no fake seam)")

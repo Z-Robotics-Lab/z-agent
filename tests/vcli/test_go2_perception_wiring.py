@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.vcli.tools.sim_tool import _build_go2_perception
+from zeno.vcli.tools.sim_tool import _build_go2_perception
 
 
 class _FullCameraBase:
@@ -54,7 +54,7 @@ class _MissingDepthBase:
 
 def test_build_perception_with_full_camera_base():
     """A base with the full RGB-D frame source yields a Go2GraspPerception."""
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
+    from zeno.perception.go2_grasp_perception import Go2GraspPerception
 
     base = _FullCameraBase()
     perception = _build_go2_perception(base)
@@ -81,7 +81,7 @@ def test_build_perception_none_when_missing_depth():
 def test_built_perception_is_localizer_usable():
     """The wired perception satisfies localize_objects_3d's usability guard
     (exposes every required method), so depth-localization can run end to end."""
-    from vector_os_nano.perception.object_localizer import _perception_is_usable
+    from zeno.perception.object_localizer import _perception_is_usable
 
     perception = _build_go2_perception(_FullCameraBase())
     assert perception is not None
@@ -106,7 +106,7 @@ def test_built_perception_is_localizer_usable():
 
 def test_head_cam_resolution_is_single_sourced_and_authoritative():
     """The one head-cam resolution constant is the authoritative 320x240."""
-    from vector_os_nano.perception.go2_grasp_perception import (
+    from zeno.perception.go2_grasp_perception import (
         GO2_HEAD_CAM_HEIGHT,
         GO2_HEAD_CAM_WIDTH,
     )
@@ -116,7 +116,7 @@ def test_head_cam_resolution_is_single_sourced_and_authoritative():
 
 def test_class_default_matches_the_single_source():
     """Go2GraspPerception defaults to the shared constant, not a stale 640x480."""
-    from vector_os_nano.perception.go2_grasp_perception import (
+    from zeno.perception.go2_grasp_perception import (
         GO2_HEAD_CAM_HEIGHT,
         GO2_HEAD_CAM_WIDTH,
         Go2GraspPerception,
@@ -129,7 +129,7 @@ def test_class_default_matches_the_single_source():
 def test_look_path_perception_matches_grasp_path_resolution():
     """_build_go2_perception (look/explore) and manipulation_setup (grasp) build
     perception at the SAME resolution — no look-vs-grasp divergence."""
-    from vector_os_nano.perception.go2_grasp_perception import (
+    from zeno.perception.go2_grasp_perception import (
         GO2_HEAD_CAM_HEIGHT,
         GO2_HEAD_CAM_WIDTH,
     )
@@ -144,8 +144,8 @@ def test_constant_matches_real_bridge_frame_source_default():
     "must match the bridge" comment so the two can never silently drift apart."""
     import inspect
 
-    from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
-    from vector_os_nano.perception.go2_grasp_perception import (
+    from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+    from zeno.perception.go2_grasp_perception import (
         GO2_HEAD_CAM_HEIGHT,
         GO2_HEAD_CAM_WIDTH,
     )
@@ -158,7 +158,7 @@ def test_constant_matches_real_bridge_frame_source_default():
 def test_intrinsics_internally_consistent_at_single_source():
     """Intrinsics derived at the constant resolution stay principal-point-centred
     (cx=w/2, cy=h/2) — the render and intrinsics agree within the instance."""
-    from vector_os_nano.perception.go2_grasp_perception import (
+    from zeno.perception.go2_grasp_perception import (
         GO2_HEAD_CAM_HEIGHT,
         GO2_HEAD_CAM_WIDTH,
         Go2GraspPerception,
@@ -193,7 +193,7 @@ class _FakeDescribeVLM:
         self.calls = 0
 
     def describe_scene(self, frame: Any) -> Any:
-        from vector_os_nano.perception.vlm_go2 import (
+        from zeno.perception.vlm_go2 import (
             DetectedObject,
             SceneDescription,
         )
@@ -208,7 +208,7 @@ class _FakeDescribeVLM:
 
 
 def _grasp_perception_with_describe_vlm():
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
+    from zeno.perception.go2_grasp_perception import Go2GraspPerception
 
     vlm = _FakeDescribeVLM()
     p = Go2GraspPerception(_FrameBase(), describe_vlm=vlm)

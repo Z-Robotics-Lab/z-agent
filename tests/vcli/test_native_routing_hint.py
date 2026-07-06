@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli import native_loop
-from vector_os_nano.vcli.intent_router import IntentRouter
+from zeno.vcli import native_loop
+from zeno.vcli.intent_router import IntentRouter
 
 
 # Commands the keyword router routes to VGG (actionable) — the SET that must NOT be missed.
@@ -109,11 +109,11 @@ def test_real_derivation_against_build_motor_tools():
     (empty toolset) -> never attempt (nothing to route to). Proves the registry derivation
     works against the live toolset, not just a monkeypatched one.
     """
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.skills import get_default_skills
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+    from zeno.core.agent import Agent
+    from zeno.skills import get_default_skills
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.tools.base import CategorizedToolRegistry
 
     from tests.harness.fake_backend import FakeToolScriptBackend
 

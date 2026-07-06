@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Thin alias: equivalent to `zeno --sim`.
+#
+# `zeno --sim` now auto-detects macOS and re-execs under mjpython so
+# a viewer window opens by default. This script is kept for backward
+# compatibility and convenience.
+#
+# Use --headless to suppress the viewer window:
+#   zeno --sim --headless
+#
+# Pass any extra zeno flags after `--sim`:
+#   zeno-sim --model anthropic/claude-haiku-4-5
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# uv-managed .venv preferred; legacy .venv-nano fallback
+venv_python="$here/.venv/bin/python"
+[[ -x "$venv_python" ]] || venv_python="$here/.venv-nano/bin/python"
+
+if [[ ! -x "$venv_python" ]]; then
+  echo "error: venv not found at $here/.venv — run 'uv venv && uv pip install -e .' first." >&2
+  exit 1
+fi
+
+exec "$venv_python" -m zeno.vcli.cli --sim "$@"

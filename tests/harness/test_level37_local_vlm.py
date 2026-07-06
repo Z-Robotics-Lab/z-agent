@@ -51,7 +51,7 @@ class TestVLMBackendSelection:
     def test_local_vlm_env_vars_read(self):
         """_USE_LOCAL_VLM should be True when VECTOR_VLM_URL is set."""
         source = inspect.getsource(
-            __import__("vector_os_nano.perception.vlm_go2", fromlist=["_USE_LOCAL_VLM"])
+            __import__("zeno.perception.vlm_go2", fromlist=["_USE_LOCAL_VLM"])
         )
         assert "_LOCAL_VLM_URL" in source
         assert "_LOCAL_VLM_MODEL" in source
@@ -60,20 +60,20 @@ class TestVLMBackendSelection:
     def test_local_backend_no_auth_header(self):
         """When local, Authorization header should not be sent."""
         source = inspect.getsource(
-            __import__("vector_os_nano.perception.vlm_go2", fromlist=["Go2VLMPerception"])
+            __import__("zeno.perception.vlm_go2", fromlist=["Go2VLMPerception"])
         )
         assert "not self._local" in source, "Auth header should be conditional on self._local"
 
     def test_base_url_uses_instance_var(self):
         """_call_vlm should use self._base_url, not module-level constant."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         source = inspect.getsource(Go2VLMPerception._call_vlm)
         assert "self._base_url" in source, "_call_vlm should use self._base_url"
         assert "_OPENROUTER_BASE_URL" not in source, "Should not hardcode OpenRouter URL"
 
     def test_model_uses_instance_var(self):
         """Payload should use self._model, not module-level _MODEL."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         source = inspect.getsource(Go2VLMPerception._call_vlm)
         assert '"model": self._model' in source or "'model': self._model" in source
 
@@ -85,7 +85,7 @@ class TestVLMBackendSelection:
         The invariant is: local timeout > remote default (25s) AND > 30s
         to cover at least one full model-load cycle.
         """
-        from vector_os_nano.perception import vlm_go2
+        from zeno.perception import vlm_go2
         # Simulate local backend
         orig_use = vlm_go2._USE_LOCAL_VLM
         orig_url = vlm_go2._LOCAL_VLM_URL
@@ -107,7 +107,7 @@ class TestVLMBackendSelection:
 
     def test_remote_backend_default(self):
         """Without env vars, should use OpenRouter."""
-        from vector_os_nano.perception import vlm_go2
+        from zeno.perception import vlm_go2
         orig_use = vlm_go2._USE_LOCAL_VLM
         try:
             vlm_go2._USE_LOCAL_VLM = False
@@ -129,7 +129,7 @@ class TestLocalVLMInference:
     @pytest.fixture(autouse=True)
     def _setup_local_env(self, monkeypatch):
         """Force local VLM backend for all tests in this class."""
-        from vector_os_nano.perception import vlm_go2
+        from zeno.perception import vlm_go2
         monkeypatch.setattr(vlm_go2, "_USE_LOCAL_VLM", True)
         monkeypatch.setattr(vlm_go2, "_LOCAL_VLM_URL", "http://localhost:11434/v1")
         monkeypatch.setattr(vlm_go2, "_LOCAL_VLM_MODEL", "gemma4:e4b")
@@ -140,7 +140,7 @@ class TestLocalVLMInference:
 
     def test_identify_room_returns_valid_structure(self):
         """identify_room should return RoomIdentification with required fields."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception, RoomIdentification
+        from zeno.perception.vlm_go2 import Go2VLMPerception, RoomIdentification
         vlm = Go2VLMPerception()
         result = vlm.identify_room(self._make_frame())
         assert isinstance(result, RoomIdentification)
@@ -150,7 +150,7 @@ class TestLocalVLMInference:
 
     def test_describe_scene_returns_valid_structure(self):
         """describe_scene should return SceneDescription with required fields."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception, SceneDescription
+        from zeno.perception.vlm_go2 import Go2VLMPerception, SceneDescription
         vlm = Go2VLMPerception()
         result = vlm.describe_scene(self._make_frame())
         assert isinstance(result, SceneDescription)
@@ -159,14 +159,14 @@ class TestLocalVLMInference:
 
     def test_find_objects_returns_list(self):
         """find_objects should return a list."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         vlm = Go2VLMPerception()
         result = vlm.find_objects(self._make_frame())
         assert isinstance(result, list)
 
     def test_local_vlm_no_cost(self):
         """Local VLM should report zero or near-zero cost."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         vlm = Go2VLMPerception()
         vlm.identify_room(self._make_frame())
         # Ollama may or may not return usage tokens — cost should be minimal
@@ -175,7 +175,7 @@ class TestLocalVLMInference:
     def test_consecutive_calls_fast(self):
         """Second call should be much faster (model already loaded)."""
         import time
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         vlm = Go2VLMPerception()
         # Warmup
         vlm.identify_room(self._make_frame())

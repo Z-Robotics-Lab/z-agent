@@ -85,23 +85,23 @@ def test_native_arm_pick_routes_and_grounds_holding(sim_cleanup) -> None:
     """
     from pathlib import Path as _Path
 
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-    from vector_os_nano.skills import get_default_skills
-    from vector_os_nano.skills.pick import SIM_PICK_CONFIG
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import (
+    from zeno.core.agent import Agent
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.skills import get_default_skills
+    from zeno.skills.pick import SIM_PICK_CONFIG
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import (
         classify_step_evidence,
         verify_oracle_names,
     )
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.session import Session
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.verdict import VerdictReport
-    from vector_os_nano.vcli.worlds.robot import RobotWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.session import Session
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.verdict import VerdictReport
+    from zeno.vcli.worlds.robot import RobotWorld
 
     from tests.harness.fake_backend import FakeToolScriptBackend, tool_turn
 
@@ -123,7 +123,7 @@ def test_native_arm_pick_routes_and_grounds_holding(sim_cleanup) -> None:
 
         # The arm must START not holding anything — that is what makes a successful
         # grasp a genuine, actor-CAUSED 0->1 weld transition (never a NO-OP).
-        from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+        from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
         assert make_holding_object(agent)() is False, (
             "arm must boot NOT holding so the pick is genuinely caused"
         )

@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from vector_os_nano.vcli.cognitive.strategy_stats import _DEFAULT_PATH, StrategyStats
+from zeno.vcli.cognitive.strategy_stats import _DEFAULT_PATH, StrategyStats
 
 
 def test_default_path_under_dot_vector() -> None:
@@ -75,14 +75,14 @@ def test_in_memory_mode_writes_nothing(tmp_path: Path) -> None:
 
 
 def _engine_with_mock_backend():
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     backend = MagicMock()
     return VectorEngine(backend=backend, intent_router=MagicMock())
 
 
 def test_engine_persist_dir_enables_experience_tier(tmp_path: Path) -> None:
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.worlds import DevWorld
 
     eng = _engine_with_mock_backend()
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld(), persist_dir=tmp_path)
@@ -92,7 +92,7 @@ def test_engine_persist_dir_enables_experience_tier(tmp_path: Path) -> None:
 
 
 def test_engine_without_persist_dir_stays_in_memory() -> None:
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.worlds import DevWorld
 
     eng = _engine_with_mock_backend()
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld())

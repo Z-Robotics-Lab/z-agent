@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from vector_os_nano.perception.front_object import (
+from zeno.perception.front_object import (
     front_object_mask,
     mask_gate_breakdown,
     parse_color,

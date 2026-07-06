@@ -40,12 +40,12 @@ def build_context():
     # that triggers the closure.
     import importlib
 
-    eng_mod = importlib.import_module("vector_os_nano.vcli.engine")
+    eng_mod = importlib.import_module("zeno.vcli.engine")
     # The simpler path: rebuild the closure by cutting the function body.
     # Avoid touching import-time side effects by crafting it inline.
 
     def make_builder(agent):
-        from vector_os_nano.core.skill import SkillContext
+        from zeno.core.skill import SkillContext
 
         def _build_context():
             _base = getattr(agent, "_base", None)
@@ -146,7 +146,7 @@ def test_real_engine_builder_matches_test_helper():
     import re
     from pathlib import Path
 
-    src = Path(__file__).resolve().parents[2] / "vector_os_nano" / "vcli" / "engine.py"
+    src = Path(__file__).resolve().parents[2] / "zeno" / "vcli" / "engine.py"
     text = src.read_text()
     # Tight match: arms= and grippers= must be passed to SkillContext(...)
     assert re.search(r"arms=\{.*_arm.*\}", text), \

@@ -40,13 +40,13 @@ import pytest
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 # Generic embodiment layer ONLY — no per-robot driver import (that is the point).
-from vector_os_nano.embodiments.config import (
+from zeno.embodiments.config import (
     CapabilityProfile,
     EmbodimentConfig,
     EmbodimentConfigError,
     parse_embodiment_config,
 )
-from vector_os_nano.embodiments.dof_layout import DofLayout
+from zeno.embodiments.dof_layout import DofLayout
 
 # The synthetic robot's number of actuated joints — deliberately NOT 12.
 _SYN_NUM_ACTUATED = 3

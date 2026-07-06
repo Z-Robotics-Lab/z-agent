@@ -34,7 +34,7 @@ from pathlib import Path
 
 import pytest
 
-from vector_os_nano.playground.catalog import SCENARIOS
+from zeno.playground.catalog import SCENARIOS
 
 
 def _body_names(scene_xml: str) -> frozenset[str]:

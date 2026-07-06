@@ -4,15 +4,15 @@
 """Tests for unified NavigateSkill -- hardware-agnostic navigation."""
 import pytest
 from unittest.mock import MagicMock
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import WorldModel
+from zeno.core.types import SkillResult
 
 
 def _make_scene_graph():
     """Create a SceneGraph loaded with room_layout.yaml for navigate tests."""
     import os
-    from vector_os_nano.core.scene_graph import SceneGraph
+    from zeno.core.scene_graph import SceneGraph
     sg = SceneGraph()
     layout = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -54,18 +54,18 @@ def _make_context(with_nav=False):
 
 class TestNavigateSkillMetadata:
     def test_skill_name(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         skill = NavigateSkill()
         assert skill.name == "navigate"
 
     def test_aliases(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         skill = NavigateSkill()
         assert "去" in skill.__class__.__skill_aliases__
         assert "navigate" in skill.__class__.__skill_aliases__
 
     def test_has_required_metadata(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         skill = NavigateSkill()
         assert hasattr(skill, "description")
         assert hasattr(skill, "parameters")
@@ -79,7 +79,7 @@ class TestNavigateSkillMetadata:
 class TestNavigateWithNavStack:
     def test_proxy_navigate_to_used_when_available(self):
         """Mode 0: base.navigate_to() takes priority when present (Go2ROS2Proxy)."""
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=True)
         skill = NavigateSkill()
         result = skill.execute({"room": "kitchen"}, ctx)
@@ -88,7 +88,7 @@ class TestNavigateWithNavStack:
         ctx.base.navigate_to.assert_called_once()
 
     def test_proxy_receives_kitchen_coordinates(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=True)
         skill = NavigateSkill()
         result = skill.execute({"room": "kitchen"}, ctx)
@@ -98,7 +98,7 @@ class TestNavigateWithNavStack:
         assert 1 < args[0][1] < 4
 
     def test_proxy_failure_falls_back_to_dead_reckoning(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=True)
         ctx.base.navigate_to.return_value = False
         skill = NavigateSkill()
@@ -108,7 +108,7 @@ class TestNavigateWithNavStack:
 
     def test_nav_unavailable_falls_back_to_dead_reckoning(self):
         """nav service present but is_available=False -> falls back to dead-reckoning."""
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         nav = MagicMock()
         nav.is_available = False
         nav.navigate_to.return_value = True
@@ -131,7 +131,7 @@ class TestNavigateWithNavStack:
 
     def test_nav_unknown_room_not_sent_to_nav_client(self):
         """Unknown room should fail before reaching nav client."""
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=True)
         skill = NavigateSkill()
         result = skill.execute({"room": "mars_base"}, ctx)
@@ -142,14 +142,14 @@ class TestNavigateWithNavStack:
 
 class TestNavigateDeadReckoning:
     def test_fallback_without_nav_stack(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=False)
         skill = NavigateSkill()
         result = skill.execute({"room": "kitchen"}, ctx)
         assert result.success
 
     def test_unknown_room(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=False)
         skill = NavigateSkill()
         result = skill.execute({"room": "nonexistent_room"}, ctx)
@@ -157,14 +157,14 @@ class TestNavigateDeadReckoning:
         assert "unknown_room" in result.diagnosis_code
 
     def test_chinese_room_name(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=False)
         skill = NavigateSkill()
         result = skill.execute({"room": "厨房"}, ctx)
         assert result.success
 
     def test_no_base(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = SkillContext(world_model=WorldModel())
         skill = NavigateSkill()
         result = skill.execute({"room": "kitchen"}, ctx)
@@ -173,7 +173,7 @@ class TestNavigateDeadReckoning:
 
     def test_already_at_destination(self):
         """Robot already near target room center -- should succeed immediately."""
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         # Position (3.0, 2.5) is the living_room center
         base = MagicMock()
         base.walk.return_value = True
@@ -189,7 +189,7 @@ class TestNavigateDeadReckoning:
 
     def test_dead_reckoning_result_data(self):
         """Dead-reckoning success should include room and position in result_data."""
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=False)
         skill = NavigateSkill()
         result = skill.execute({"room": "kitchen"}, ctx)
@@ -199,7 +199,7 @@ class TestNavigateDeadReckoning:
         assert result.result_data["room"] == "kitchen"
 
     def test_alias_english_shorthand(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=False)
         skill = NavigateSkill()
         # "bedroom" is an alias for master_bedroom
@@ -208,7 +208,7 @@ class TestNavigateDeadReckoning:
         assert result.result_data["room"] == "master_bedroom"
 
     def test_empty_room_param(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=False)
         skill = NavigateSkill()
         result = skill.execute({"room": ""}, ctx)
@@ -216,7 +216,7 @@ class TestNavigateDeadReckoning:
         assert "unknown_room" in result.diagnosis_code
 
     def test_missing_room_param(self):
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         ctx = _make_context(with_nav=False)
         skill = NavigateSkill()
         result = skill.execute({}, ctx)
@@ -226,15 +226,15 @@ class TestNavigateDeadReckoning:
 
 class TestNavigateFromGo2Package:
     def test_go2_skills_includes_navigate(self):
-        from vector_os_nano.skills.go2 import get_go2_skills
+        from zeno.skills.go2 import get_go2_skills
         skills = get_go2_skills()
         names = {s.name for s in skills}
         assert "navigate" in names
 
     def test_go2_navigate_is_unified(self):
         """The NavigateSkill from go2 package should be the unified one."""
-        from vector_os_nano.skills.go2 import NavigateSkill as Go2Nav
-        from vector_os_nano.skills.navigate import NavigateSkill as UnifiedNav
+        from zeno.skills.go2 import NavigateSkill as Go2Nav
+        from zeno.skills.navigate import NavigateSkill as UnifiedNav
         assert Go2Nav is UnifiedNav
 
     def test_go2_navigate_module_removed(self):
@@ -242,4 +242,4 @@ class TestNavigateFromGo2Package:
         import importlib
         import pytest
         with pytest.raises(ModuleNotFoundError):
-            importlib.import_module("vector_os_nano.skills.go2.navigate")
+            importlib.import_module("zeno.skills.go2.navigate")

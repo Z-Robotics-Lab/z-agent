@@ -87,7 +87,7 @@ class MockBase:
         return None
 
     def get_odometry(self) -> Any:
-        from vector_os_nano.core.types import Odometry
+        from zeno.core.types import Odometry
         return Odometry(
             timestamp=time.time(),
             x=self._pos[0],
@@ -207,9 +207,9 @@ def _make_llm_response(text: str) -> Any:
 
 def _make_agent_with_skills(base: MockBase) -> Any:
     """Create a minimal Agent-like object with real Go2 skills registered."""
-    from vector_os_nano.core.skill import SkillRegistry
-    from vector_os_nano.skills.go2 import get_go2_skills
-    from vector_os_nano.core.scene_graph import SceneGraph
+    from zeno.core.skill import SkillRegistry
+    from zeno.skills.go2 import get_go2_skills
+    from zeno.core.scene_graph import SceneGraph
 
     class _FakeAgent:
         pass
@@ -241,8 +241,8 @@ def _make_agent_with_skills(base: MockBase) -> Any:
 
 def _make_engine_with_vgg(base: MockBase) -> tuple[Any, Any]:
     """Create a VectorEngine with VGG fully initialised. Returns (engine, agent)."""
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.intent_router import IntentRouter
 
     agent = _make_agent_with_skills(base)
     backend = MockLLMBackend()
@@ -253,8 +253,8 @@ def _make_engine_with_vgg(base: MockBase) -> tuple[Any, Any]:
 
 def _make_executor(base: MockBase, agent: Any) -> Any:
     """Create a standalone GoalExecutor with real components."""
-    from vector_os_nano.vcli.cognitive import GoalVerifier, StrategySelector, GoalExecutor
-    from vector_os_nano.core.skill import SkillContext
+    from zeno.vcli.cognitive import GoalVerifier, StrategySelector, GoalExecutor
+    from zeno.core.skill import SkillContext
 
     sg = agent._spatial_memory
 
@@ -299,8 +299,8 @@ class TestPreSimNoVgg:
 
     def _engine_no_agent(self) -> Any:
         """Engine with VGG enabled but no _vgg_agent — simulates pre-sim state."""
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         backend = MockLLMBackend()
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
@@ -343,8 +343,8 @@ class TestPreSimNoVgg:
 
     def test_vgg_disabled_returns_none(self) -> None:
         """When _vgg_enabled is False, vgg_decompose always returns None."""
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         backend = MockLLMBackend()
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
@@ -488,7 +488,7 @@ class TestComplexCommandsLLMDecomposition:
 
     def test_complex_task_is_complex_flagged(self) -> None:
         """'去厨房看看有没有杯子' must be detected as complex by IntentRouter."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         assert router.is_complex("去厨房看看有没有杯子") is True, (
@@ -497,7 +497,7 @@ class TestComplexCommandsLLMDecomposition:
 
     def test_multi_action_is_complex_flagged(self) -> None:
         """'结束探索，开始巡逻' has multiple action verbs -> complex."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         assert router.is_complex("结束探索，开始巡逻") is True, (
@@ -525,7 +525,7 @@ class TestGoalExecutorRunsSkills:
 
     def test_executor_runs_navigate_skill(self) -> None:
         """GoalExecutor with navigate strategy calls real NavigateSkill."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -555,7 +555,7 @@ class TestGoalExecutorRunsSkills:
 
     def test_executor_runs_stand_skill(self) -> None:
         """GoalExecutor with stand strategy calls real StandSkill."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -583,7 +583,7 @@ class TestGoalExecutorRunsSkills:
 
     def test_executor_runs_explore_skill(self) -> None:
         """GoalExecutor with explore strategy calls real ExploreSkill."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -612,7 +612,7 @@ class TestGoalExecutorRunsSkills:
 
     def test_executor_returns_execution_trace(self) -> None:
         """GoalExecutor.execute() returns an ExecutionTrace, never None."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -633,14 +633,14 @@ class TestGoalExecutorRunsSkills:
 
         trace = executor.execute(tree)
         assert trace is not None, "execute must never return None"
-        from vector_os_nano.vcli.cognitive.types import ExecutionTrace
+        from zeno.vcli.cognitive.types import ExecutionTrace
         assert isinstance(trace, ExecutionTrace), (
             f"execute must return ExecutionTrace, got {type(trace)}"
         )
 
     def test_executor_step_records_sub_goal_name(self) -> None:
         """StepRecord.sub_goal_name matches the SubGoal name executed."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -783,7 +783,7 @@ class TestEdgeCases:
 
     def test_english_go_to_kitchen(self) -> None:
         """'go to kitchen' -> VGG 1-step (motor pattern match)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         base = MockBase()
@@ -793,7 +793,7 @@ class TestEdgeCases:
 
     def test_chinese_navigate(self) -> None:
         """'导航去书房' -> VGG 1-step."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         base = MockBase()
@@ -803,7 +803,7 @@ class TestEdgeCases:
 
     def test_conversation_no_vgg(self) -> None:
         """'你好' -> no VGG (pure greeting)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("你好", skill_registry=None)
@@ -811,7 +811,7 @@ class TestEdgeCases:
 
     def test_question_no_vgg(self) -> None:
         """'你在哪里' -> no VGG (no action verb, only question)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         base = MockBase()
@@ -822,7 +822,7 @@ class TestEdgeCases:
 
     def test_go2sim_no_false_positive(self) -> None:
         """'go2sim' must NOT trigger VGG (word boundary prevents 'go' match)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("go2sim", skill_registry=None)
@@ -832,7 +832,7 @@ class TestEdgeCases:
 
     def test_google_no_false_positive(self) -> None:
         """'google it' must NOT trigger VGG (word boundary check)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("google it", skill_registry=None)
@@ -842,7 +842,7 @@ class TestEdgeCases:
 
     def test_empty_message_no_vgg(self) -> None:
         """Empty message -> no VGG."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         assert router.should_use_vgg("", skill_registry=None) is False
@@ -850,7 +850,7 @@ class TestEdgeCases:
 
     def test_very_short_message_no_vgg(self) -> None:
         """Single character -> no VGG (too short)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         assert router.should_use_vgg("x", skill_registry=None) is False
@@ -863,7 +863,7 @@ class TestEdgeCases:
         matcher can still match 'go' as an alias — that is correct behaviour
         (walk skill alias 'go' would match). This test checks the router-only path.
         """
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         # Without registry: word-boundary check blocks 'go' in 'go2sim'
@@ -892,7 +892,7 @@ class TestVerifyExpressions:
 
     def _make_verifier_for_room(self, base: MockBase, sg: Any) -> Any:
         """Build GoalVerifier with nearest_room bound to current base position."""
-        from vector_os_nano.vcli.cognitive import GoalVerifier
+        from zeno.vcli.cognitive import GoalVerifier
 
         ns = {
             "nearest_room": lambda: sg.nearest_room(base._pos[0], base._pos[1]),
@@ -980,7 +980,7 @@ class TestVerifyExpressions:
 
     def test_full_executor_navigate_verify_passes(self) -> None:
         """Execute navigate step with verify; verify passes after teleport."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -996,8 +996,8 @@ class TestVerifyExpressions:
             "detect_objects": lambda query="": [],
             "world_stats": lambda: sg.stats(),
         }
-        from vector_os_nano.vcli.cognitive import GoalVerifier, StrategySelector, GoalExecutor
-        from vector_os_nano.core.skill import SkillContext
+        from zeno.vcli.cognitive import GoalVerifier, StrategySelector, GoalExecutor
+        from zeno.core.skill import SkillContext
 
         verifier = GoalVerifier(ns)
         selector = StrategySelector(skill_registry=agent._skill_registry)
@@ -1048,7 +1048,7 @@ class TestShouldUseVggRouting:
 
     def test_explore_triggers_vgg(self) -> None:
         """'explore' matches ExploreSkill -> VGG."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         base = MockBase()
@@ -1057,7 +1057,7 @@ class TestShouldUseVggRouting:
 
     def test_stand_triggers_vgg(self) -> None:
         """'站起来' matches StandSkill -> VGG."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         base = MockBase()
@@ -1066,7 +1066,7 @@ class TestShouldUseVggRouting:
 
     def test_patrol_triggers_vgg(self) -> None:
         """'巡逻所有房间' -> VGG (scope keyword + action verb)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         base = MockBase()
@@ -1075,21 +1075,21 @@ class TestShouldUseVggRouting:
 
     def test_complex_multi_step_triggers_vgg(self) -> None:
         """'然后去厨房' (sequential keyword) -> VGG."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         assert router.should_use_vgg("然后去厨房", skill_registry=None) is True
 
     def test_pure_question_no_vgg(self) -> None:
         """'什么时候' -> no VGG (pure question, no action)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         assert router.should_use_vgg("什么时候", skill_registry=None) is False
 
     def test_greeting_no_vgg(self) -> None:
         """'hello there' -> no VGG (greeting, no robot action)."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         assert router.should_use_vgg("hello there", skill_registry=None) is False

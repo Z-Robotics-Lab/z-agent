@@ -24,9 +24,9 @@ import pytest
 
 mujoco = pytest.importorskip("mujoco")
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
 
 
 # ---------------------------------------------------------------------------

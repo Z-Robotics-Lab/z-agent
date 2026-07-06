@@ -21,7 +21,7 @@ import yaml
 # Paths
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).parent.parent.parent  # vector_os_nano/
+_REPO_ROOT = Path(__file__).parent.parent.parent  # zeno/
 _ISAAC_DOCKER_DIR = _REPO_ROOT / "docker" / "isaac-sim"
 _DOCKERFILE = _ISAAC_DOCKER_DIR / "Dockerfile"
 _COMPOSE_FILE = _ISAAC_DOCKER_DIR / "docker-compose.yaml"

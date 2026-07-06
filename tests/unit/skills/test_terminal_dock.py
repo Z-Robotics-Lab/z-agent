@@ -33,7 +33,7 @@ import math
 
 import pytest
 
-from vector_os_nano.skills.utils.terminal_dock import (
+from zeno.skills.utils.terminal_dock import (
     _DOCK_POS_DEADBAND_M,
     _GATE_HEADING_TOL_RAD,
     _GATE_LATERAL_TOL_M,
@@ -231,7 +231,7 @@ def test_dock_lateral_offset_closed_by_fine_position():
 # ---------------------------------------------------------------------------
 
 def test_grasp_resolves_dock_pose_param():
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
 
     assert PerceptionGraspSkill._resolve_dock_pose(
         {"dock_pose": [10.0, 3.0, 0.0]}) == (10.0, 3.0, 0.0)
@@ -246,7 +246,7 @@ def test_grasp_execute_docks_and_gates_before_perceiving():
     if not converged, and only THEN _perceive_with_scan."""
     import inspect
 
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
 
     src = inspect.getsource(PerceptionGraspSkill.execute)
     assert "terminal_dock(" in src, "the dock is not called from execute()"
@@ -316,8 +316,8 @@ def test_grasp_aborts_RAN_when_dock_does_not_converge():
     """The pose-verification GATE: a dock that RAN but did NOT converge must abort the
     grasp with diagnosis 'dock_not_converged' and WITHOUT perceiving — converting a bad
     dock into an honest RAN, never a false/garbage grasp (the R39 t3 class)."""
-    from vector_os_nano.core.skill import SkillContext
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.core.skill import SkillContext
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
 
     # A base that can NEVER converge (drift overwhelms each correction).
     base = _KinematicBase(pose=(9.74, 3.30), heading=math.radians(86), drift=-0.6)
@@ -339,8 +339,8 @@ def test_grasp_aborts_RAN_when_dock_does_not_converge():
 def test_grasp_proceeds_to_perceive_when_dock_converges():
     """A converged dock must NOT abort — execution proceeds to the perceive (which then
     fails on the stub backend, but with a PERCEPTION diagnosis, not dock_not_converged)."""
-    from vector_os_nano.core.skill import SkillContext
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.core.skill import SkillContext
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
 
     base = _KinematicBase(pose=(9.74, 3.30), heading=math.radians(86))  # converges
     spy = _PerceiveSpy()

@@ -9,8 +9,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from vector_os_nano.acceptance import capture
-from vector_os_nano.acceptance import vision_judge as vj
+from zeno.acceptance import capture
+from zeno.acceptance import vision_judge as vj
 
 
 def test_attended_snapshot_bad_display_is_none(tmp_path):

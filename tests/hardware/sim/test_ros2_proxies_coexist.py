@@ -36,7 +36,7 @@ def _isolate_runtime():
     We call rclpy.init() here so the test body can construct Nodes freely;
     Ros2Runtime.add_node() will see rclpy.ok()==True and skip its own init.
     """
-    from vector_os_nano.hardware.ros2 import runtime as rt_mod
+    from zeno.hardware.ros2 import runtime as rt_mod
 
     rt_mod._runtime = None
 
@@ -71,7 +71,7 @@ def test_three_stub_nodes_spin_concurrently_no_already_spinning():
     Failure mode = rclpy raising 'Executor is already spinning' (live-REPL
     Bug 1 symptom) or one/more subscribers never firing within the deadline.
     """
-    from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+    from zeno.hardware.ros2.runtime import get_ros2_runtime
 
     runtime = get_ros2_runtime()
 
@@ -136,7 +136,7 @@ def test_runtime_shutdown_tears_down_cleanly():
     not own the rclpy context).  We verify is_running instead, which is the
     primary contract.
     """
-    from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+    from zeno.hardware.ros2.runtime import get_ros2_runtime
 
     runtime = get_ros2_runtime()
 
@@ -171,8 +171,8 @@ def test_add_node_after_shutdown_raises_or_reinits():
     This guards against any regression where the second runtime fails to pick
     up the existing rclpy context and crashes on add_node().
     """
-    from vector_os_nano.hardware.ros2 import runtime as rt_mod
-    from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+    from zeno.hardware.ros2 import runtime as rt_mod
+    from zeno.hardware.ros2.runtime import get_ros2_runtime
 
     # First lifecycle: add_node then shutdown (does not kill rclpy context).
     runtime = get_ros2_runtime()

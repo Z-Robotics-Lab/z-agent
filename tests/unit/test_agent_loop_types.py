@@ -3,7 +3,7 @@
 
 """Tests for ActionRecord and GoalResult types in core/types.py."""
 import pytest
-from vector_os_nano.core.types import ActionRecord, GoalResult
+from zeno.core.types import ActionRecord, GoalResult
 
 
 class TestActionRecord:

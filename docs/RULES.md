@@ -14,9 +14,9 @@ Serialize & tear down (hard rules):
 - BEFORE launch: `pgrep -f "mujoco|vcli"` + `free -g`; sim live or RAM tight → WAIT.
 - AFTER every run: `./scripts/sim-teardown` (uses `rosm nuke --yes` when installed — rosm is
   a sibling-repo sim process manager, optional on a fresh clone; else repo-scoped
-  `pkill -u $USER -f 'vector_os_nano\.vcli|launch_explore'`). NEVER `pkill mujoco` — bare
+  `pkill -u $USER -f 'zeno\.vcli|launch_explore'`). NEVER `pkill mujoco` — bare
   pkill corrupts sim state and races other sessions.
-- Inline sim `bash -c` must NOT pre-`pkill 'vector_os_nano.vcli.cli'` — it self-kills the shell.
+- Inline sim `bash -c` must NOT pre-`pkill 'zeno.vcli.cli'` — it self-kills the shell.
 - rc=137 == kernel OOM-kill → a sim leaked or two ran; tear down, re-check `free -g`.
 
 NEVER-KILL-INFRA (hard rule): never kill the loop supervisor, its timeout wrapper, a sibling
@@ -37,7 +37,7 @@ Interface & assertions:
   `mj.Renderer` cam) · real `Go2ROS2Proxy` (ROS2 `/cmd_vel`, odometry, Livox MID360, D435).
 - Physics bounds: standing z∈[0.20,0.45]; sitting z<0.35; not-fallen z>0.15.
 
-Acceptance: bare `vector-cli` REPL + NL, eyes on the sim (docs/VERIFY.md is the contract).
+Acceptance: bare `zeno` REPL + NL, eyes on the sim (docs/VERIFY.md is the contract).
 Commit a WIP floor BEFORE a long verify; evidence → var/evidence/, never /tmp.
 
 ## Red-team (before recording any headline claim)
@@ -198,7 +198,7 @@ Terse craft rules for THIS repo; the constitution (AGENTS.md) carries the invari
   back into replan. Validate ALL external input (params/msgs/sensor); reject NaN/inf/
   out-of-range sensor values before acting; rate-limit actuators.
 - Testing: TDD RED-first; unit + integration + END-TO-END; a green unit suite is NEVER
-  acceptance. e2e drives the whole pipeline through bare `vector-cli` + NL. ~80% coverage;
+  acceptance. e2e drives the whole pipeline through bare `zeno` + NL. ~80% coverage;
   mock hardware.
 - ROS2 & safety-critical: lifecycle nodes for hardware; QoS RELIABLE(cmd)/BEST_EFFORT
   (sensor); no alloc/blocking in RT paths; watchdogs on every hardware interface; E-stop

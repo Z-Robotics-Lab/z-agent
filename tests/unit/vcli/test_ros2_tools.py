@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_os_nano.vcli.tools.base import ToolContext
+from zeno.vcli.tools.base import ToolContext
 
 
 # ---------------------------------------------------------------------------
@@ -43,19 +43,19 @@ def _make_completed(stdout: str, returncode: int = 0) -> MagicMock:
 
 @pytest.fixture()
 def topics_tool():
-    from vector_os_nano.vcli.tools.ros2_tools import Ros2TopicsTool
+    from zeno.vcli.tools.ros2_tools import Ros2TopicsTool
     return Ros2TopicsTool()
 
 
 @pytest.fixture()
 def nodes_tool():
-    from vector_os_nano.vcli.tools.ros2_tools import Ros2NodesTool
+    from zeno.vcli.tools.ros2_tools import Ros2NodesTool
     return Ros2NodesTool()
 
 
 @pytest.fixture()
 def log_tool():
-    from vector_os_nano.vcli.tools.ros2_tools import Ros2LogTool
+    from zeno.vcli.tools.ros2_tools import Ros2LogTool
     return Ros2LogTool()
 
 

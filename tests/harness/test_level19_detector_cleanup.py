@@ -12,7 +12,7 @@ class TestDetectorRemovedFromCli:
     def test_no_detector_ref_in_cli(self):
         """cli.py should have NO _detector references."""
         cli_path = os.path.expanduser(
-            "~/Desktop/vector_os_nano/vector_os_nano/vcli/cli.py"
+            "~/Desktop/vector_os_nano/zeno/vcli/cli.py"
         )
         with open(cli_path) as f:
             content = f.read()
@@ -27,7 +27,7 @@ class TestDetectorRemovedFromSimTool:
     def test_no_detector_ref_in_sim_tool(self):
         """sim_tool.py should have NO _detector references."""
         path = os.path.expanduser(
-            "~/Desktop/vector_os_nano/vector_os_nano/vcli/tools/sim_tool.py"
+            "~/Desktop/vector_os_nano/zeno/vcli/tools/sim_tool.py"
         )
         with open(path) as f:
             content = f.read()
@@ -41,7 +41,7 @@ class TestDetectorRemovedFromAgent:
     def test_no_detector_service_injection(self):
         """agent.py should NOT inject detector into services."""
         path = os.path.expanduser(
-            "~/Desktop/vector_os_nano/vector_os_nano/core/agent.py"
+            "~/Desktop/vector_os_nano/zeno/core/agent.py"
         )
         with open(path) as f:
             content = f.read()
@@ -54,7 +54,7 @@ class TestDetectorModuleDeleted:
     def test_object_detector_file_gone(self):
         """object_detector.py should NOT exist."""
         path = os.path.expanduser(
-            "~/Desktop/vector_os_nano/vector_os_nano/perception/object_detector.py"
+            "~/Desktop/vector_os_nano/zeno/perception/object_detector.py"
         )
         assert not os.path.isfile(path), "object_detector.py should be deleted"
 
@@ -70,7 +70,7 @@ class TestNoDetectorInActiveSkills:
     """Verify no Go2 skill uses detector."""
 
     SKILL_DIR = os.path.expanduser(
-        "~/Desktop/vector_os_nano/vector_os_nano/skills/go2/"
+        "~/Desktop/vector_os_nano/zeno/skills/go2/"
     )
 
     def test_no_detector_in_skills(self):

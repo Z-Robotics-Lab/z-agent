@@ -19,7 +19,7 @@ def _has_convex_mpc() -> bool:
 
 class TestMuJoCoGo2Lifecycle:
     def test_connect_disconnect(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         assert go2._connected
@@ -30,7 +30,7 @@ class TestMuJoCoGo2Lifecycle:
         assert not go2._connected
 
     def test_get_heading(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         heading = go2.get_heading()
@@ -38,7 +38,7 @@ class TestMuJoCoGo2Lifecycle:
         go2.disconnect()
 
     def test_get_joint_positions(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         joints = go2.get_joint_positions()
@@ -59,7 +59,7 @@ class TestMuJoCoGo2ConvexMPC:
 
 class TestMuJoCoGo2Posture:
     def test_stand(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         go2.stand()
@@ -70,7 +70,7 @@ class TestMuJoCoGo2Posture:
         go2.disconnect()
 
     def test_sit(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         go2.stand()
@@ -81,7 +81,7 @@ class TestMuJoCoGo2Posture:
         go2.disconnect()
 
     def test_pd_controller(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         import numpy as np
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
@@ -95,7 +95,7 @@ class TestMuJoCoGo2Posture:
 
 class TestMuJoCoGo2Walk:
     def test_walk_forward(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         go2.stand()
@@ -108,7 +108,7 @@ class TestMuJoCoGo2Walk:
         go2.disconnect()
 
     def test_walk_turn(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         go2.stand()
@@ -120,7 +120,7 @@ class TestMuJoCoGo2Walk:
         go2.disconnect()
 
     def test_walk_stability(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         go2.stand()
@@ -134,28 +134,28 @@ class TestMuJoCoGo2HAL:
     """Tests for the new HAL interface (set_velocity, odometry, lidar)."""
 
     def test_name_property(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         assert go2.name == "mujoco_go2"
         go2.disconnect()
 
     def test_supports_holonomic(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         assert go2.supports_holonomic is True
         go2.disconnect()
 
     def test_supports_lidar(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         assert go2.supports_lidar is True
         go2.disconnect()
 
     def test_set_velocity_changes_position(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         import time
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
@@ -172,8 +172,8 @@ class TestMuJoCoGo2HAL:
         go2.disconnect()
 
     def test_get_odometry(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-        from vector_os_nano.core.types import Odometry
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.core.types import Odometry
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         go2.stand()
@@ -185,8 +185,8 @@ class TestMuJoCoGo2HAL:
         go2.disconnect()
 
     def test_get_lidar_scan(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-        from vector_os_nano.core.types import LaserScan
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.core.types import LaserScan
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
         go2.stand()
@@ -200,8 +200,8 @@ class TestMuJoCoGo2HAL:
         go2.disconnect()
 
     def test_satisfies_base_protocol(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-        from vector_os_nano.hardware.base import BaseProtocol
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.base import BaseProtocol
         go2 = MuJoCoGo2(gui=False)
         # Check protocol satisfaction (structural typing)
         assert isinstance(go2, BaseProtocol)
@@ -212,7 +212,7 @@ class TestMuJoCoGo2HAL:
 # ---------------------------------------------------------------------------
 
 import time
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 
 class TestMuJoCoGo2SpeedCommand:

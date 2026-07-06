@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
 
 # A representative live oracle namespace (predicate + state oracles).
 _ORACLES = frozenset(
@@ -80,9 +80,9 @@ def test_spine_gate_flips_shortcircuit_to_ran_even_when_caused() -> None:
     from grading GROUNDED is the honest classifier. classify_step_evidence is the
     single gate the verdict reads; it must report RAN.
     """
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
-    from vector_os_nano.vcli.cognitive.types import StepRecord, SubGoal
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import classify_step_evidence
+    from zeno.vcli.cognitive.types import StepRecord, SubGoal
 
     sub = SubGoal(name="s0", description="walk then fake-verify", verify="at_position(99, 99) or True", strategy="walk")
     step = StepRecord(
@@ -136,9 +136,9 @@ def test_membership_against_oracle_container_stays_grounded(expr: str) -> None:
 
 def test_spine_gate_flips_membership_shortcircuit_to_ran_even_when_caused() -> None:
     """End-to-end at the spine: a CAUSED walk + a membership short-circuit -> RAN."""
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
-    from vector_os_nano.vcli.cognitive.types import StepRecord, SubGoal
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import classify_step_evidence
+    from zeno.vcli.cognitive.types import StepRecord, SubGoal
 
     sub = SubGoal(name="s0", description="walk then fake-verify",
                   verify="True in (at_position(99, 99), True)", strategy="walk")

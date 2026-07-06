@@ -20,16 +20,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.code_executor import CodeExecutor
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult, StrategySelector
-from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
-from vector_os_nano.vcli.cognitive.types import SubGoal
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-from vector_os_nano.vcli.tools.bash_tool import BashTool
-from vector_os_nano.vcli.tools.file_tools import FileWriteTool
-from vector_os_nano.vcli.worlds.dev import DEV_TOOL_ALLOWLIST, DEV_VOCAB
+from zeno.vcli.cognitive.code_executor import CodeExecutor
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.strategy_selector import StrategyResult, StrategySelector
+from zeno.vcli.cognitive.tool_dispatcher import ToolDispatcher
+from zeno.vcli.cognitive.types import SubGoal
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.tools.base import CategorizedToolRegistry
+from zeno.vcli.tools.bash_tool import BashTool
+from zeno.vcli.tools.file_tools import FileWriteTool
+from zeno.vcli.worlds.dev import DEV_TOOL_ALLOWLIST, DEV_VOCAB
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ def test_dev_vocab_exposes_tool_call_strategy() -> None:
 
 def test_decomposer_keeps_tool_call_strategy() -> None:
     """tool_call must survive the decomposer's KNOWN_STRATEGIES gate."""
-    from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
+    from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
 
     gd = GoalDecomposer(backend=None, **DEV_VOCAB.as_kwargs())
     assert "tool_call" in gd.KNOWN_STRATEGIES

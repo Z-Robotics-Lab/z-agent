@@ -32,12 +32,12 @@ if str(_REPO_ROOT) not in sys.path:
 
 mujoco = pytest.importorskip("mujoco", reason="mujoco not installed")
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-from vector_os_nano.core.skill import SkillRegistry
-from vector_os_nano.skills.go2 import get_go2_skills
-from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal
-from vector_os_nano.vcli.engine import VectorEngine
-from vector_os_nano.vcli.intent_router import IntentRouter
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.core.skill import SkillRegistry
+from zeno.skills.go2 import get_go2_skills
+from zeno.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal
+from zeno.vcli.engine import VectorEngine
+from zeno.vcli.intent_router import IntentRouter
 
 
 # ---------------------------------------------------------------------------
@@ -74,9 +74,9 @@ class _MockLLMBackend:
             '"timeout_sec":10,"depends_on":[],"strategy_params":{},'
             '"fail_action":""}]}'
         )
-        from vector_os_nano.vcli.backends.types import LLMResponse, TokenUsage  # type: ignore[attr-defined]
+        from zeno.vcli.backends.types import LLMResponse, TokenUsage  # type: ignore[attr-defined]
         try:
-            from vector_os_nano.vcli.session import TokenUsage as TU
+            from zeno.vcli.session import TokenUsage as TU
             usage = TU(input_tokens=0, output_tokens=0)
         except Exception:
             usage = type("U", (), {"input_tokens": 0, "output_tokens": 0})()

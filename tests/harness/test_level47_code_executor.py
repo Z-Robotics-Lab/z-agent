@@ -30,7 +30,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.code_executor import CodeExecutor, CodeResult
+from zeno.vcli.cognitive.code_executor import CodeExecutor, CodeResult
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ def test_ac3_set_velocity_clamped_positive(
 
 def test_ac4_infinite_loop_timeout() -> None:
     # Use very short timeout to keep test fast
-    from vector_os_nano.vcli.cognitive.code_executor import CodeExecutor
+    from zeno.vcli.cognitive.code_executor import CodeExecutor
 
     primitives: dict = {}
     short_executor = CodeExecutor(primitives, timeout_sec=0.5)

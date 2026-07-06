@@ -21,7 +21,7 @@ import math
 import numpy as np
 import pytest
 
-from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
 
 
 def _make_proxy(heading: float) -> Go2ROS2Proxy:

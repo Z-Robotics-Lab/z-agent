@@ -21,14 +21,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.strategy_stats import StrategyStats
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
-from vector_os_nano.vcli.cognitive.experience_compiler import GoalTemplate, SubGoalTemplate
-from vector_os_nano.vcli.cognitive.types import SubGoal, GoalTree, StepRecord, ExecutionTrace
+from zeno.vcli.cognitive.strategy_stats import StrategyStats
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.template_library import TemplateLibrary
+from zeno.vcli.cognitive.experience_compiler import GoalTemplate, SubGoalTemplate
+from zeno.vcli.cognitive.types import SubGoal, GoalTree, StepRecord, ExecutionTrace
 
 
 # ---------------------------------------------------------------------------

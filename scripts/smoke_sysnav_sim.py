@@ -103,7 +103,7 @@ def smoke_no_sysnav(timeout_s: float) -> int:
     """
     import mujoco
 
-    from vector_os_nano.hardware.sim.sensors import (
+    from zeno.hardware.sim.sensors import (
         GroundTruthOdomPublisher,
         MuJoCoLivox360,
         MuJoCoPano360,
@@ -164,8 +164,8 @@ def smoke_full(timeout_s: float) -> int:
         )
         return 1
 
-    from vector_os_nano.core.world_model import WorldModel
-    from vector_os_nano.integrations.sysnav_bridge import LiveSysnavBridge
+    from zeno.core.world_model import WorldModel
+    from zeno.integrations.sysnav_bridge import LiveSysnavBridge
 
     world = WorldModel()
     bridge = LiveSysnavBridge(world, on_disconnect_after_s=timeout_s)

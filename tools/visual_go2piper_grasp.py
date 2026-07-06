@@ -11,15 +11,15 @@ import cv2  # noqa: E402
 import mujoco as mj  # noqa: E402
 import numpy as np  # noqa: E402
 
-from vector_os_nano.core.agent import Agent  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper  # noqa: E402
-from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
-from vector_os_nano.skills.go2 import get_go2_skills  # noqa: E402
-from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill  # noqa: E402
-from vector_os_nano.skills.pick_top_down import PickTopDownSkill  # noqa: E402
-from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object  # noqa: E402
+from zeno.core.agent import Agent  # noqa: E402
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
+from zeno.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
+from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper  # noqa: E402
+from zeno.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
+from zeno.skills.go2 import get_go2_skills  # noqa: E402
+from zeno.skills.perception_grasp import PerceptionGraspSkill  # noqa: E402
+from zeno.skills.pick_top_down import PickTopDownSkill  # noqa: E402
+from zeno.vcli.worlds.arm_sim_oracle import make_holding_object  # noqa: E402
 
 go2 = MuJoCoGo2(gui=False, room=True, backend="mpc")
 go2.connect()

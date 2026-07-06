@@ -32,8 +32,8 @@ import inspect
 
 import pytest
 
-from vector_os_nano.vcli.cognitive import actor_causation as ac_mod
-from vector_os_nano.vcli.cognitive.actor_causation import ActorBaseline
+from zeno.vcli.cognitive import actor_causation as ac_mod
+from zeno.vcli.cognitive.actor_causation import ActorBaseline
 
 
 def _module_dataclasses() -> list[type]:

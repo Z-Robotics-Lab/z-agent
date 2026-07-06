@@ -18,13 +18,13 @@ import sys
 from types import SimpleNamespace
 from typing import Any
 
-from vector_os_nano.vcli.worlds import (
+from zeno.vcli.worlds import (
     DevWorld,
     RobotWorld,
     resolve_world,
     dev_verify_namespace,
 )
-from vector_os_nano.vcli.worlds.dev import DEV_VOCAB
+from zeno.vcli.worlds.dev import DEV_VOCAB
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ class TestWorldResolution:
 
 class TestDecomposerInjection:
     def _decomposer(self, **kw):
-        from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
+        from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
 
         return GoalDecomposer(MockBackend("{}"), **kw)
 
@@ -150,9 +150,9 @@ class TestDecomposerInjection:
 
 
 def _make_engine(mock_response: str):
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.intent_router import IntentRouter
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.intent_router import IntentRouter
+    from zeno.vcli.tools.base import CategorizedToolRegistry
 
     backend = MockBackend(mock_response)
     eng = VectorEngine(
@@ -213,7 +213,7 @@ class TestVggDevDecompose:
         """The decomposed dev predicates actually evaluate via GoalVerifier."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "greet.py").write_text("def greet():\n    pass\n")
-        from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+        from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
         eng = _make_engine(_DEV_TREE)
         ns = eng._build_verifier_namespace(None)
@@ -318,7 +318,7 @@ class TestWorldOwnsVerifyNamespace:
 
     def test_world_predicate_evaluates_via_goal_verifier(self) -> None:
         """The merged world predicate is usable from a real GoalVerifier."""
-        from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+        from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
         eng = _make_engine("{}")
         eng._world = _FakeVerifyWorld()
@@ -349,8 +349,8 @@ class TestWorldOwnsVerifyNamespace:
 
 class TestToolGating:
     def _registry(self):
-        from vector_os_nano.vcli.tools import discover_categorized_tools
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools.base import CategorizedToolRegistry
 
         reg = CategorizedToolRegistry()
         tools, cats = discover_categorized_tools()

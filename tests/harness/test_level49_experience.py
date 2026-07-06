@@ -11,18 +11,18 @@ import tempfile
 import os
 import pytest
 
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.cognitive.experience_compiler import (
+from zeno.vcli.cognitive.experience_compiler import (
     ExperienceCompiler,
     GoalTemplate,
     SubGoalTemplate,
 )
-from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
+from zeno.vcli.cognitive.template_library import TemplateLibrary
 
 
 # ---------------------------------------------------------------------------

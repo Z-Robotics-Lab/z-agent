@@ -18,10 +18,10 @@ import math
 import numpy as np
 import pytest
 
-from vector_os_nano.core.types import Pose3D
-from vector_os_nano.perception._centroid import select_nearest_cluster
-from vector_os_nano.perception.depth_projection import camera_to_world, mujoco_intrinsics
-from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
+from zeno.core.types import Pose3D
+from zeno.perception._centroid import select_nearest_cluster
+from zeno.perception.depth_projection import camera_to_world, mujoco_intrinsics
+from zeno.perception.grasp_point import grasp_point_from_rgbd
 
 _W, _H = 64, 48
 _INTR = mujoco_intrinsics(_W, _H, vfov_deg=42.0)

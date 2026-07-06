@@ -35,7 +35,7 @@ def _make_tool(
     check_permissions_reason: str = "",
 ) -> Any:
     """Return a minimal tool-like object (not decorated, plain duck-typing)."""
-    from vector_os_nano.vcli.tools.base import PermissionResult
+    from zeno.vcli.tools.base import PermissionResult
 
     class _Tool:
         def is_read_only(self, params: dict[str, Any]) -> bool:
@@ -73,7 +73,7 @@ def _make_bare_tool(name: str) -> Any:
 class TestPermissionContext:
     def test_deny_rule_blocks_tool(self) -> None:
         """Tool in deny set returns PermissionResult('deny')."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext(deny_tools={"bad_tool"})
         tool = _make_bare_tool("bad_tool")
@@ -82,7 +82,7 @@ class TestPermissionContext:
 
     def test_ask_rule_for_motor_tool(self) -> None:
         """Motor tool with check_permissions returning 'ask' propagates ask."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext()
         tool = _make_tool("motor_move", check_permissions_result="ask")
@@ -91,7 +91,7 @@ class TestPermissionContext:
 
     def test_allow_rule_for_read_only(self) -> None:
         """Read-only tool auto-allows without prompting."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext()
         tool = _make_tool(
@@ -104,7 +104,7 @@ class TestPermissionContext:
 
     def test_always_allow_persists_in_session(self) -> None:
         """After add_always_allow('bash'), subsequent check returns allow."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext()
         ctx.add_always_allow("bash")
@@ -114,7 +114,7 @@ class TestPermissionContext:
 
     def test_deny_overrides_allow(self) -> None:
         """Tool in both deny and session_allow — deny wins."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext(deny_tools={"bash"}, session_allow={"bash"})
         tool = _make_tool("bash", check_permissions_result="allow")
@@ -123,7 +123,7 @@ class TestPermissionContext:
 
     def test_tool_specific_safety_check(self) -> None:
         """Tool.check_permissions returning 'deny' is respected even if allow rule exists."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext(session_allow={"dangerous_tool"})
         tool = _make_tool(
@@ -137,7 +137,7 @@ class TestPermissionContext:
 
     def test_default_is_ask(self) -> None:
         """Unknown tool with no rules and non-read-only returns ask."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext()
         # Bare tool has no check_permissions or is_read_only
@@ -147,7 +147,7 @@ class TestPermissionContext:
 
     def test_dangerous_path_safety(self) -> None:
         """Bash tool invoked with a dangerous path is denied regardless of allow rules."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext(session_allow={"bash"})
 
@@ -160,7 +160,7 @@ class TestPermissionContext:
             def check_permissions(
                 self, params: dict[str, Any], context: Any
             ) -> "PermissionResult":
-                from vector_os_nano.vcli.tools.base import PermissionResult
+                from zeno.vcli.tools.base import PermissionResult
 
                 command = params.get("command", "")
                 danger_paths = ("rm -rf /", "rm -rf /*", "> /etc/passwd", "/dev/sda")
@@ -175,7 +175,7 @@ class TestPermissionContext:
 
     def test_check_flow_order(self) -> None:
         """Check flow: deny -> tool-specific deny -> session-allow -> read-only -> ask."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         # 1. Deny fires first
         ctx1 = PermissionContext(deny_tools={"x"}, session_allow={"x"})
@@ -206,7 +206,7 @@ class TestPermissionContext:
 
     def test_no_permission_mode(self) -> None:
         """no_permission=True allows everything, including tools in deny set."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext(deny_tools={"rm_rf"}, no_permission=True)
         tool = _make_bare_tool("rm_rf")
@@ -215,7 +215,7 @@ class TestPermissionContext:
 
     def test_add_deny(self) -> None:
         """add_deny() adds tool to deny set and subsequent check denies it."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext()
         ctx.add_deny("write_file")
@@ -225,7 +225,7 @@ class TestPermissionContext:
 
     def test_permission_result_reason_in_deny(self) -> None:
         """Deny result includes a human-readable reason."""
-        from vector_os_nano.vcli.permissions import PermissionContext
+        from zeno.vcli.permissions import PermissionContext
 
         ctx = PermissionContext(deny_tools={"bad"})
         tool = _make_bare_tool("bad")
@@ -242,8 +242,8 @@ class TestPermissionContext:
         """
         from unittest.mock import MagicMock
 
-        from vector_os_nano.vcli.permissions import PermissionContext
-        from vector_os_nano.vcli.tools.base import PermissionResult
+        from zeno.vcli.permissions import PermissionContext
+        from zeno.vcli.tools.base import PermissionResult
 
         ctx = PermissionContext()
 

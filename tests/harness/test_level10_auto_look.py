@@ -19,11 +19,11 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from vector_os_nano.core.scene_graph import SceneGraph
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import SkillResult
-import vector_os_nano.skills.go2.explore as _explore_mod
-from vector_os_nano.skills.go2.explore import (
+from zeno.core.scene_graph import SceneGraph
+from zeno.core.skill import SkillContext
+from zeno.core.types import SkillResult
+import zeno.skills.go2.explore as _explore_mod
+from zeno.skills.go2.explore import (
     ExploreSkill,
     _exploration_loop,
     _explore_cancel,
@@ -291,7 +291,7 @@ class TestExploreSkillAutoLookWiring:
         import time; time.sleep(0.1)
 
         with patch(
-            "vector_os_nano.skills.go2.explore._start_bridge_on_go2",
+            "zeno.skills.go2.explore._start_bridge_on_go2",
             return_value=False,
         ):
             result = skill.execute({}, context)
@@ -307,7 +307,7 @@ class TestExploreSkillAutoLookWiring:
         skill = ExploreSkill()
 
         with patch(
-            "vector_os_nano.skills.go2.explore._start_bridge_on_go2",
+            "zeno.skills.go2.explore._start_bridge_on_go2",
             return_value=False,
         ):
             result = skill.execute({}, context)
@@ -361,7 +361,7 @@ class TestAutoLookSceneGraphIntegration:
         with patch("subprocess.run", return_value=MagicMock(returncode=0)):
             with patch("time.sleep", return_value=None):
                 with patch(
-                    "vector_os_nano.skills.go2.explore._start_bridge_on_go2",
+                    "zeno.skills.go2.explore._start_bridge_on_go2",
                     return_value=False,
                 ):
                     result = skill.execute({}, context)

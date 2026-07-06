@@ -2,7 +2,7 @@
 # Copyright (c) 2024-2026 Vector Robotics
 """D17 — goal-authenticity for OBJECT (grasp/pick) goals.
 
-The fakeable-grasp false-green: a bare ``vector-cli`` + NL "抓前面的东西" let the model
+The fakeable-grasp false-green: a bare ``zeno`` + NL "抓前面的东西" let the model
 satisfy a PHYSICAL grasp by ``file_write('grabbed.txt')`` then verifying
 ``file_exists('grabbed.txt')``. ``file_exists`` is a PREDICATE oracle (classifies
 GROUNDED) AND a non-robot predicate (never actor-causation-graded), so every prior gate
@@ -18,13 +18,13 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-from vector_os_nano.vcli.cognitive.object_goal import (
+from zeno.vcli.cognitive.actor_causation import ActorCaused
+from zeno.vcli.cognitive.object_goal import (
     goal_has_object_intent,
     has_necessary_manip_oracle,
 )
-from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.trace_store import evidence_passed
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,

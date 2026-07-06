@@ -14,7 +14,7 @@ import math
 
 import pytest
 
-from vector_os_nano.skills import perception_grasp as pg
+from zeno.skills import perception_grasp as pg
 
 
 class _FakeBase:
@@ -51,7 +51,7 @@ class _NoNavBase:  # missing navigate_to -> not steerable
 
 
 def _patch_localize(monkeypatch, pts):
-    import vector_os_nano.perception.object_localizer as ol
+    import zeno.perception.object_localizer as ol
     monkeypatch.setattr(ol, "localize_objects_3d", lambda perception, queries: pts)
 
 
@@ -156,5 +156,5 @@ def test_nav_failure_propagates_false(monkeypatch):
 
 def test_standoff_single_sourced_with_navigate_to_object():
     """The recovery standoff must not drift from navigate_to_object's (Rule 11)."""
-    from vector_os_nano.skills.navigate_to_object import _VICINITY_CLEARANCE_M
+    from zeno.skills.navigate_to_object import _VICINITY_CLEARANCE_M
     assert pg._FAR_STANDOFF_M == _VICINITY_CLEARANCE_M

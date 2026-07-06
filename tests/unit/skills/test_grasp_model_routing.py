@@ -14,15 +14,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import Detection
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.perception.depth_projection import mujoco_intrinsics
-from vector_os_nano.skills.perception_grasp import (
+from zeno.core.skill import SkillContext
+from zeno.core.types import Detection
+from zeno.core.world_model import WorldModel
+from zeno.perception.depth_projection import mujoco_intrinsics
+from zeno.skills.perception_grasp import (
     PerceptionGraspSkill,
     _names_object,
 )
-from vector_os_nano.perception.front_object import parse_color
+from zeno.perception.front_object import parse_color
 
 _W, _H = 64, 48
 _INTR = mujoco_intrinsics(_W, _H, vfov_deg=42.0)

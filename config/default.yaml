@@ -1,4 +1,4 @@
-# Vector OS Nano — Default Configuration
+# Zeno — Default Configuration
 # This file is shipped with the SDK. Users override via load_config(user_config=...).
 # Do NOT commit API keys here. Use environment variables or a separate user config file.
 

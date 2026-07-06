@@ -1,4 +1,4 @@
-# Vector OS Nano — Architecture
+# Zeno — Architecture
 
 - Status: Canonical durable design doc. High-level + durable; legacy implementation
   deep-dive removed (git history keeps it).
@@ -14,7 +14,7 @@
 
 ## 1. Vision
 
-Vector OS Nano is not another model — it is an **agent-orchestration runtime built around
+Zeno is not another model — it is an **agent-orchestration runtime built around
 models, in service of robots**. The four things models do *unreliably* on their own are
 exactly the OS's job: **plan** the task, **route** each step to the right model AND skill,
 **verify** every step against a machine-checkable predicate, and **recover** on verified
@@ -174,8 +174,8 @@ trustworthily on the industrial floor.
    The kernel NEVER imports a world; worlds register INTO the kernel.
 ```
 
-Two entry points — the `vector-cli` REPL and the `vector-os-mcp` server — share this one
-engine. Bare `vector-cli` + NL runs the **native** producer by default
+Two entry points — the `zeno` REPL and the `zeno-mcp` server — share this one
+engine. Bare `zeno` + NL runs the **native** producer by default
 (`VECTOR_REPL_NATIVE=0` = reversible legacy hatch).
 
 ---
@@ -237,7 +237,7 @@ invariants:
 ## 7. Conceptual module map
 
 One terse line per package. No line numbers (they rot — read the file). Paths relative to
-`vector_os_nano/`.
+`zeno/`.
 
 - `vcli/engine.py` + `vcli/backends/` — VectorEngine (tool-use loop, dispatch, VGG entry
   points, per-world verify-namespace binding) and the model adapters behind a common type.
@@ -282,5 +282,5 @@ One terse line per package. No line numbers (they rot — read the file). Paths 
 - `vcli/tools/` · `intent_router.py` · `dynamic_prompt.py` · `prompt.py` · `session.py` ·
   `permissions.py` — general tools, category-filtered routing, the composable system prompt,
   persona blocks, conversation/transcript state, and the 8-layer permission gate.
-- `mcp/` + `ros2/` + `integrations/` — the `vector-os-mcp` server entry point, the ROS2
+- `mcp/` + `ros2/` + `integrations/` — the `zeno-mcp` server entry point, the ROS2
   bridge (high-fidelity Linux backend), and external integrations.

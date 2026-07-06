@@ -15,7 +15,7 @@ import os
 import numpy as np
 import pytest
 
-from vector_os_nano.perception.grounding_dino import (
+from zeno.perception.grounding_dino import (
     GroundingDinoDetector,
     get_shared_detector,
     query_to_prompt,

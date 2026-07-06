@@ -3,7 +3,7 @@
 
 """Tests for BaseProtocol — mobile base abstraction."""
 from typing import runtime_checkable
-from vector_os_nano.hardware.base import BaseProtocol
+from zeno.hardware.base import BaseProtocol
 
 
 class TestBaseProtocol:
@@ -15,7 +15,7 @@ class TestBaseProtocol:
     def test_mujoco_go2_satisfies_protocol(self):
         """MuJoCoGo2 must satisfy BaseProtocol after the refactor."""
         # For now, test that we can import and the protocol has the right methods
-        from vector_os_nano.hardware.base import BaseProtocol
+        from zeno.hardware.base import BaseProtocol
         required_methods = [
             'connect', 'disconnect', 'stop',
             'walk', 'set_velocity',
@@ -32,7 +32,7 @@ class TestBaseProtocol:
     def test_protocol_method_signatures(self):
         """Verify key method signatures via Protocol inspection."""
         import inspect
-        from vector_os_nano.hardware.base import BaseProtocol
+        from zeno.hardware.base import BaseProtocol
 
         # walk should accept vx, vy, vyaw, duration
         walk_sig = inspect.signature(BaseProtocol.walk)

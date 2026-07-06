@@ -159,7 +159,7 @@ def _make_nav2_client_with_mods(mode: str = "nav2"):
 
     The action_client_instance is the mock stored as client._nav2_client.
     """
-    from vector_os_nano.core.nav_client import NavStackClient
+    from zeno.core.nav_client import NavStackClient
 
     mods, ac_instance = _make_ros2_modules()
     if mode == "nav2":
@@ -195,7 +195,7 @@ class TestModeSelection:
     def test_mode_nav2_creates_action_client(self, ros2_mods):
         """mode='nav2' should create an ActionClient for NavigateToPose."""
         mods, ac_instance = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="nav2")
@@ -206,7 +206,7 @@ class TestModeSelection:
     def test_mode_cmu_uses_topic_interface(self, ros2_mods):
         """mode='cmu' should create publishers and subscribers."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="cmu")
@@ -222,7 +222,7 @@ class TestModeSelection:
         # Make server available
         ac_instance.wait_for_server.return_value = True
 
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="auto")
@@ -235,7 +235,7 @@ class TestModeSelection:
         mods, ac_instance = ros2_mods
         ac_instance.wait_for_server.return_value = False  # default, but explicit
 
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="auto")
@@ -249,7 +249,7 @@ class TestModeSelection:
         mods, ac_instance = ros2_mods
         ac_instance.wait_for_server.return_value = False
 
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         NavStackClient(node=node, mode="auto")
@@ -259,7 +259,7 @@ class TestModeSelection:
     def test_mode_property_returns_nav2(self, ros2_mods):
         """mode property should return 'nav2' when nav2 active."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="nav2")
@@ -268,7 +268,7 @@ class TestModeSelection:
     def test_mode_property_returns_cmu(self, ros2_mods):
         """mode property should return 'cmu' when cmu active."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="cmu")
@@ -276,7 +276,7 @@ class TestModeSelection:
 
     def test_mode_property_returns_none_without_node(self):
         """mode property should return None before setup."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         client = NavStackClient(node=None)
         assert client.mode is None
@@ -296,7 +296,7 @@ class TestModeSelection:
         trimmed["rclpy.action"] = None  # type: ignore[assignment]
 
         with patch.dict(sys.modules, trimmed):
-            from vector_os_nano.core.nav_client import NavStackClient
+            from zeno.core.nav_client import NavStackClient
 
             node = _make_mock_node()
             client = NavStackClient(node=node, mode="nav2")
@@ -308,7 +308,7 @@ class TestModeSelection:
         # Make ActionClient constructor raise ImportError
         mods["rclpy.action"].ActionClient.side_effect = ImportError("no nav2")
 
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="auto")
@@ -323,7 +323,7 @@ class TestModeSelection:
 class TestNav2Navigate:
     def _make_client(self, ros2_mods):
         mods, ac_instance = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="nav2")
@@ -425,7 +425,7 @@ class TestNav2Navigate:
 
     def test_navigate_to_not_available(self):
         """navigate_to with no action client returns False."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         client = NavStackClient(node=None, mode="nav2")
         assert client.navigate_to(1.0, 1.0) is False
@@ -469,7 +469,7 @@ class TestNav2Navigate:
 class TestNav2Cancel:
     def _make_nav2_client(self, ros2_mods):
         mods, ac_instance = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         return NavStackClient(node=node, mode="nav2"), ac_instance
@@ -518,7 +518,7 @@ class TestNav2Cancel:
 class TestNav2Feedback:
     def _make_nav2_client(self, ros2_mods):
         mods, ac_instance = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         return NavStackClient(node=node, mode="nav2"), ac_instance
@@ -585,7 +585,7 @@ class TestNav2StateEstimation:
     def test_nav2_subscribes_to_odom(self, ros2_mods):
         """Nav2 mode should subscribe to /odom."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         NavStackClient(node=node, mode="nav2")
@@ -596,7 +596,7 @@ class TestNav2StateEstimation:
     def test_cmu_subscribes_to_state_estimation(self, ros2_mods):
         """CMU mode should subscribe to /state_estimation."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         NavStackClient(node=node, mode="cmu")
@@ -607,7 +607,7 @@ class TestNav2StateEstimation:
     def test_nav2_does_not_subscribe_to_state_estimation(self, ros2_mods):
         """Nav2 mode must NOT subscribe to /state_estimation."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         NavStackClient(node=node, mode="nav2")
@@ -618,8 +618,8 @@ class TestNav2StateEstimation:
     def test_get_state_estimation_returns_odometry(self, ros2_mods):
         """get_state_estimation should return the stored Odometry snapshot."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
-        from vector_os_nano.core.types import Odometry
+        from zeno.core.nav_client import NavStackClient
+        from zeno.core.types import Odometry
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="nav2")
@@ -633,7 +633,7 @@ class TestNav2StateEstimation:
     def test_on_state_estimation_populates_last_odom(self, ros2_mods):
         """_on_state_estimation callback should populate _last_odom."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="nav2")
@@ -665,14 +665,14 @@ class TestNav2StateEstimation:
 class TestBackwardCompatibility:
     def _make_cmu_client(self, ros2_mods):
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         return NavStackClient(node=node, mode="cmu")
 
     def test_default_mode_is_auto(self):
         """NavStackClient() default mode kwarg should be 'auto'."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         import inspect
         sig = inspect.signature(NavStackClient.__init__)
@@ -717,7 +717,7 @@ class TestBackwardCompatibility:
     def test_is_available_nav2_checks_action_client(self, ros2_mods):
         """is_available in Nav2 mode checks _nav2_client not None."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="nav2")
@@ -727,21 +727,21 @@ class TestBackwardCompatibility:
 
     def test_no_node_is_not_available(self):
         """NavStackClient(node=None) must not be available."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         client = NavStackClient(node=None)
         assert not client.is_available
 
     def test_no_node_navigate_returns_false(self):
         """navigate_to with no node returns False in any mode."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         client = NavStackClient(node=None)
         assert client.navigate_to(0.0, 0.0) is False
 
     def test_no_node_cancel_is_noop(self):
         """cancel() with no node should not raise."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         client = NavStackClient(node=None)
         client.cancel()  # must not raise
@@ -776,7 +776,7 @@ class TestBackwardCompatibility:
 class TestEdgeCases:
     def _make_nav2_client(self, ros2_mods):
         mods, ac_instance = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node = _make_mock_node()
         client = NavStackClient(node=node, mode="nav2")
@@ -834,7 +834,7 @@ class TestEdgeCases:
     def test_cmu_and_nav2_modes_independent(self, ros2_mods):
         """CMU and Nav2 clients created from separate NavStackClient instances don't interfere."""
         mods, _ = ros2_mods
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         node_a = _make_mock_node()
         node_b = _make_mock_node()
@@ -849,12 +849,12 @@ class TestEdgeCases:
 
     def test_module_imports_without_ros2(self):
         """nav_client module must be importable with zero ROS2 packages present."""
-        from vector_os_nano.core import nav_client  # noqa: F401
+        from zeno.core import nav_client  # noqa: F401
         assert nav_client.NavStackClient is not None
 
     def test_default_timeout_60_seconds(self):
         """Default timeout should be 60.0 seconds."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         client = NavStackClient(node=None)
         assert client._timeout == 60.0

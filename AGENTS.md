@@ -1,4 +1,4 @@
-# Z Agent — Constitution (every agent harness reads this file)
+# Zeno — Constitution (every agent harness reads this file)
 
 Single source of project instructions. Claude Code loads it via CLAUDE.md (@AGENTS.md).
 Forked from VectorRobotics/vector-os-nano (Apache-2.0) at upstream R715 (`12f3e15`);
@@ -17,7 +17,7 @@ and the same tools — sim-to-real symmetry is a product requirement, not a slog
 ## Invariants (inherited from upstream; hold these even if you read nothing else)
 1. Verify is the moat: every step grades on a deterministic predicate reading ground
    truth the actor cannot author; the verify sandbox only gets STRICTER, never looser.
-2. Acceptance face = bare `vector-cli` REPL + natural language, eyes on the sim/robot.
+2. Acceptance face = bare `zeno` REPL + natural language, eyes on the sim/robot.
    Flag/script-only ≠ done. Unit-green ≠ done.
 3. Embodiments/worlds are CONFIG + plugins, not kernel code; one generic driver.
 4. Kernel never imports a world; a world registers tools/verify/vocab/persona.

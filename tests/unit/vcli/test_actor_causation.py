@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from vector_os_nano.vcli.cognitive.actor_causation import (
+from zeno.vcli.cognitive.actor_causation import (
     ActorBaseline,
     ActorCaused,
     baseline_namespace,
@@ -28,8 +28,8 @@ from vector_os_nano.vcli.cognitive.actor_causation import (
     grade,
     is_robot_predicate,
 )
-from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
-from vector_os_nano.vcli.cognitive.types import StepRecord, SubGoal
+from zeno.vcli.cognitive.trace_store import classify_step_evidence
+from zeno.vcli.cognitive.types import StepRecord, SubGoal
 
 ROBOT_ORACLES = frozenset(
     {"at_position", "facing", "visited", "holding_object", "arm_at_home"}
@@ -272,8 +272,8 @@ def test_from_name_roundtrip_and_legacy() -> None:
 
 
 def test_trace_serialization_roundtrips_actor_caused(tmp_path) -> None:
-    from vector_os_nano.vcli.cognitive.trace_store import load_trace, save_trace
-    from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree
+    from zeno.vcli.cognitive.trace_store import load_trace, save_trace
+    from zeno.vcli.cognitive.types import ExecutionTrace, GoalTree
 
     sg = SubGoal(name="walk", description="d", verify="at_position(11.0, 3.0)", strategy="walk_forward")
     step = StepRecord(
@@ -293,7 +293,7 @@ def test_legacy_trace_without_field_loads_as_not_graded(tmp_path) -> None:
     # An older on-disk trace (no actor_caused key) must load NOT_GRADED -> legacy.
     import json
 
-    from vector_os_nano.vcli.cognitive.trace_store import load_trace
+    from zeno.vcli.cognitive.trace_store import load_trace
 
     payload = {
         "schema_version": 3,
@@ -323,7 +323,7 @@ class _VerifierOverFrozenAgent:
     """
 
     def __init__(self, agent) -> None:
-        from vector_os_nano.vcli.worlds.go2_sim_oracle import make_at_position
+        from zeno.vcli.worlds.go2_sim_oracle import make_at_position
 
         self._namespace = {"at_position": make_at_position(agent)}
 
@@ -350,8 +350,8 @@ class _MovingPrimitives(dict):
 
 
 def _executor_for(agent, primitives) -> "object":
-    from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-    from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
+    from zeno.vcli.cognitive.goal_executor import GoalExecutor
+    from zeno.vcli.cognitive.strategy_selector import StrategySelector
 
     return GoalExecutor(
         strategy_selector=StrategySelector(),
@@ -362,7 +362,7 @@ def _executor_for(agent, primitives) -> "object":
 
 
 def test_executor_threads_caused_on_honest_walk() -> None:
-    from vector_os_nano.vcli.cognitive.types import GoalTree
+    from zeno.vcli.cognitive.types import GoalTree
 
     base = _FakeBase(10.0, 3.0, cmd_motion=0.0)
     agent = _agent(base=base)
@@ -376,7 +376,7 @@ def test_executor_threads_caused_on_honest_walk() -> None:
 
 
 def test_executor_threads_uncaused_on_noop() -> None:
-    from vector_os_nano.vcli.cognitive.types import GoalTree
+    from zeno.vcli.cognitive.types import GoalTree
 
     # Base already AT (10,3); verify targets (10,3) -> true@baseline, no command.
     base = _FakeBase(10.0, 3.0, cmd_motion=0.0)
@@ -392,9 +392,9 @@ def test_executor_threads_uncaused_on_noop() -> None:
 
 
 def test_executor_no_agent_stays_not_graded() -> None:
-    from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-    from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-    from vector_os_nano.vcli.cognitive.types import GoalTree
+    from zeno.vcli.cognitive.goal_executor import GoalExecutor
+    from zeno.vcli.cognitive.strategy_selector import StrategySelector
+    from zeno.vcli.cognitive.types import GoalTree
 
     base = _FakeBase(10.0, 3.0, cmd_motion=0.0)
     agent = _agent(base=base)

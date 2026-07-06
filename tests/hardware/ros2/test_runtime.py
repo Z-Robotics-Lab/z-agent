@@ -63,7 +63,7 @@ def reset_singleton(monkeypatch):
     # Import (or reload) the runtime module so it picks up the mock
     import importlib
 
-    import vector_os_nano.hardware.ros2.runtime as rt_mod
+    import zeno.hardware.ros2.runtime as rt_mod
 
     importlib.reload(rt_mod)
 

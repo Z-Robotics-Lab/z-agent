@@ -16,6 +16,6 @@ if command -v rosm >/dev/null 2>&1; then
   exec rosm nuke --yes
 fi
 
-echo "sim-teardown: rosm not found — falling back to repo-scoped pkill (vector_os_nano.vcli|launch_explore only)" >&2
-pkill -u "$USER" -f 'vector_os_nano\.vcli|launch_explore' 2>/dev/null
+echo "sim-teardown: rosm not found — falling back to repo-scoped pkill (zeno.vcli|launch_explore only)" >&2
+pkill -u "$USER" -f 'zeno\.vcli|launch_explore' 2>/dev/null
 exit 0

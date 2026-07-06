@@ -11,8 +11,8 @@ and whose verify allowlist is exactly the verify-signature keys. A mobile robot
 
 from __future__ import annotations
 
-from vector_os_nano.vcli.cognitive.vocab_from_registry import build_decompose_vocab
-from vector_os_nano.vcli.worlds.base import DecomposeVocab
+from zeno.vcli.cognitive.vocab_from_registry import build_decompose_vocab
+from zeno.vcli.worlds.base import DecomposeVocab
 
 # Arm-like skill registry (pick/place/scan/detect/home/wave), mirroring the
 # shape of skill_registry.to_schemas().

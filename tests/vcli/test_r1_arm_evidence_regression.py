@@ -26,18 +26,18 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
-from vector_os_nano.vcli.cognitive.trace_store import (
+from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
+from zeno.vcli.cognitive.trace_store import (
     classify_step_evidence,
     step_evidence_ok,
     verify_oracle_names,
 )
-from vector_os_nano.vcli.cognitive.types import StepRecord, SubGoal
-from vector_os_nano.vcli.engine import VectorEngine
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-from vector_os_nano.vcli.worlds.arm_sim_oracle import _HOME_JOINTS, make_arm_at_home
-from vector_os_nano.vcli.worlds.robot import RobotWorld
+from zeno.vcli.cognitive.types import StepRecord, SubGoal
+from zeno.vcli.engine import VectorEngine
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.tools.base import CategorizedToolRegistry
+from zeno.vcli.worlds.arm_sim_oracle import _HOME_JOINTS, make_arm_at_home
+from zeno.vcli.worlds.robot import RobotWorld
 
 # Robot verify-namespace oracle names (the sim arm/base subset). Mirrors what
 # verify_oracle_names(agent, engine) single-sources from the live namespace.
@@ -219,7 +219,7 @@ def test_robot_base_step_reaches_grounded() -> None:
 def test_robot_base_at_position_predicate_is_grounded_against_live_oracle() -> None:
     # End-to-end on the live base oracle: a base AT (2.0, 0.0) makes at_position
     # True, OFF it makes it False — the predicate is real, not a tautology.
-    from vector_os_nano.vcli.worlds.go2_sim_oracle import make_at_position
+    from zeno.vcli.worlds.go2_sim_oracle import make_at_position
 
     at_target = SimpleNamespace(_base=_FakeBase(2.0, 0.0), _arm=None, _gripper=None)
     off_target = SimpleNamespace(_base=_FakeBase(0.0, 0.0), _arm=None, _gripper=None)

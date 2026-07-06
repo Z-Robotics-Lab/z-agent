@@ -5,7 +5,7 @@
 
 All tests are pure Python — no MuJoCo, no real API calls, no hardware.
 A temporary directory is used as the persist_path so the real
-~/.vector_os_nano/scene_graph.yaml is never touched.
+~/.zeno/scene_graph.yaml is never touched.
 
 Test classes
 ------------
@@ -38,7 +38,7 @@ if str(_REPO_ROOT) not in sys.path:
 # Imports under test
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.core.scene_graph import (  # noqa: E402
+from zeno.core.scene_graph import (  # noqa: E402
     ObjectNode,
     RoomNode,
     SceneGraph,

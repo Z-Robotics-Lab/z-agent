@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import math
 
-from vector_os_nano.hardware.sim import g1_vgraph as vg
+from zeno.hardware.sim import g1_vgraph as vg
 
 
 def test_no_mujoco_import():
-    import vector_os_nano.hardware.sim.g1_vgraph as m
+    import zeno.hardware.sim.g1_vgraph as m
     # the module must never import mujoco (pure geometry, offline-testable)
     assert "mujoco" not in dir(m)
     src = (__import__("pathlib").Path(m.__file__)).read_text()

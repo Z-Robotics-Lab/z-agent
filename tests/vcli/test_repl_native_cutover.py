@@ -3,9 +3,9 @@
 
 """REPL CUTOVER (2026-06-19) — native-attempt-then-fallback as the REPL's DEFAULT path.
 
-The interactive ``vector-cli`` REPL now ATTEMPTS the native tool-use producer first
+The interactive ``zeno`` REPL now ATTEMPTS the native tool-use producer first
 for an action-shaped turn, then FALLS BACK to the legacy planner when native took no
-action — so bare ``vector-cli`` + natural language exercises the redesign (CLAUDE.md
+action — so bare ``zeno`` + natural language exercises the redesign (CLAUDE.md
 North Star "Acceptance interface"). These are DETERMINISTIC unit proofs of the three
 REPL helpers (no sim, no LLM); the real acceptance is driving the actual REPL by NL.
 
@@ -23,9 +23,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from vector_os_nano.vcli import cli
-from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli import cli
+from zeno.vcli.cognitive.actor_causation import ActorCaused
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
@@ -131,7 +131,7 @@ class _FakeEngine:
 
 def _stub_oracle(monkeypatch) -> None:
     monkeypatch.setattr(
-        "vector_os_nano.vcli.cognitive.trace_store.verify_oracle_names",
+        "zeno.vcli.cognitive.trace_store.verify_oracle_names",
         lambda agent, engine: frozenset({"at_position"}),
     )
 

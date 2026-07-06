@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.vcli.turn_status import TurnStatus
+from zeno.vcli.turn_status import TurnStatus
 
 
 class StubLive:

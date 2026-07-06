@@ -23,24 +23,24 @@ import json
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.cognitive.trace_store import (
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.cognitive.trace_store import (
     evidence_passed,
     load_trace,
     replay,
     save_trace,
 )
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
-from vector_os_nano.vcli.worlds.dev import DEV_VOCAB
+from zeno.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
+from zeno.vcli.worlds.dev import DEV_VOCAB
 
 # Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
 ORACLES = frozenset({
@@ -80,7 +80,7 @@ def _make_executor(verifier: GoalVerifier) -> GoalExecutor:
 
 
 def test_answer_plan_builder_shape() -> None:
-    tree = GoalDecomposer.answer_plan("who are you?", "I am Vector OS.")
+    tree = GoalDecomposer.answer_plan("who are you?", "I am Zeno.")
     assert isinstance(tree, GoalTree)
     assert len(tree.sub_goals) == 1
     sg = tree.sub_goals[0]
@@ -88,7 +88,7 @@ def test_answer_plan_builder_shape() -> None:
     assert sg.strategy == "answer"
     assert sg.verify == "True"
     assert sg.foreach is None
-    assert sg.strategy_params["answer"] == "I am Vector OS."
+    assert sg.strategy_params["answer"] == "I am Zeno."
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +387,7 @@ def test_decomposer_keeps_answer_only_on_answer_strategy() -> None:
                 "strategy": "answer",
                 "timeout_sec": 30,
                 "depends_on": [],
-                "strategy_params": {"answer": "I am Vector OS."},
+                "strategy_params": {"answer": "I am Zeno."},
                 "answer_only": True,
             }
         ],

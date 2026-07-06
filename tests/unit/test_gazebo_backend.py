@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+from zeno.vcli.tools.sim_tool import SimStartTool
 
 
 # ---------------------------------------------------------------------------

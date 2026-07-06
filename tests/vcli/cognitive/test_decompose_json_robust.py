@@ -25,8 +25,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.types import GoalTree
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.types import GoalTree
 
 
 # ---------------------------------------------------------------------------

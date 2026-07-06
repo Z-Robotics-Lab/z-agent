@@ -2,10 +2,10 @@
 Merged from docs/cli-tool-system.md + docs/skill-protocol.md (git history keeps the long forms).
 
 ## VectorEngine 概述
-<!-- pull: 想知道 vector-cli / MCP 的执行引擎是什么 -->
+<!-- pull: 想知道 zeno / MCP 的执行引擎是什么 -->
 
 VectorEngine 是唯一执行引擎，CLI 和 MCP 共用:
-`vector-cli / vector-os-mcp → VectorEngine → native tool-use producer (legacy VGG = 回退) → skill.execute()`。
+`zeno / zeno-mcp → VectorEngine → native tool-use producer (legacy VGG = 回退) → skill.execute()`。
 用户说自然语言，agent 通过工具系统控制机器人、编辑代码、诊断问题 —— 一个 session 完成所有事。
 
 ## 当前 producer 架构（2026-06 cutover 后 — 权威）
@@ -197,8 +197,8 @@ sections were ruled dead (D9/D62/D72–D74) — git history keeps them.
 ## The @skill decorator (the live contract)
 
 ```python
-from vector_os_nano.core.skill import skill, SkillContext
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import skill, SkillContext
+from zeno.core.types import SkillResult
 
 @skill(aliases=["grab", "grasp", "抓", "拿", "抓起"])
 class PickSkill:
@@ -251,7 +251,7 @@ under the `robot` tool category:
 | camera_failed | 摄像头未连接，用 robot_status 检查硬件 |
 
 A skill may wrap an external VLA/VLM or a classical grasp/nav stack — the runtime routes to it by NL and
-grades it like any other step. Register via `agent.register_skill(MySkill())` or drop the file in `vector_os_nano/skills/`.
+grades it like any other step. Register via `agent.register_skill(MySkill())` or drop the file in `zeno/skills/`.
 
 ## Binding a skill's goal class to a verify oracle (D69 — read this before shipping)
 <!-- pull: 新技能上线前必读 — 物理动作的 GT oracle -->

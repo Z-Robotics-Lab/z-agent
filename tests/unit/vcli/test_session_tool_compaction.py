@@ -12,8 +12,8 @@ the assistant ``tool_calls``/``tool_use`` that produced it makes the chat APIs
 """
 from __future__ import annotations
 
-from vector_os_nano.vcli.backends.openai_compat import convert_messages
-from vector_os_nano.vcli.session import create_session
+from zeno.vcli.backends.openai_compat import convert_messages
+from zeno.vcli.session import create_session
 
 
 def _tool_use(tid: str, name: str = "walk") -> list[dict]:

@@ -36,11 +36,11 @@ from typing import Any
 
 import numpy as np
 
-from vector_os_nano.core.skill import SkillRegistry
-from vector_os_nano.embodiments.capability_profile import resolve_capability_profile
-from vector_os_nano.embodiments.config import load_embodiment_config
-from vector_os_nano.skills import get_default_skills
-from vector_os_nano.vcli.native_loop import _build_motor_tools
+from zeno.core.skill import SkillRegistry
+from zeno.embodiments.capability_profile import resolve_capability_profile
+from zeno.embodiments.config import load_embodiment_config
+from zeno.skills import get_default_skills
+from zeno.vcli.native_loop import _build_motor_tools
 
 # The manipulation skills the D175 gate withholds from an armless body.
 _MANIP = {"pick", "place", "home", "wave", "scan", "handover",

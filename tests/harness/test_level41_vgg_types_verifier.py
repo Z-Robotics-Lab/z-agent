@@ -32,13 +32,13 @@ MOCK_PRIMITIVES: dict = {
 # Import under test — will FAIL until implementation exists
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.vcli.cognitive.types import (  # noqa: E402
+from zeno.vcli.cognitive.types import (  # noqa: E402
     SubGoal,
     GoalTree,
     StepRecord,
     ExecutionTrace,
 )
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier  # noqa: E402
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier  # noqa: E402
 
 
 # ===========================================================================

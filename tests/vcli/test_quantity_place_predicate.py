@@ -24,7 +24,7 @@ future round cannot silently re-adopt ``placed_count>=2`` and record a structura
 verdict. Verified against the live go2_room.xml heights (pickable z=0.320, place_bin top
 ~0.31).
 """
-from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+from zeno.vcli.worlds.arm_sim_oracle import (
     make_placed_count,
     make_resting_on_receptacle,
 )

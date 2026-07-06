@@ -3,7 +3,7 @@
 
 """Tests for Odometry and LaserScan types."""
 import math
-from vector_os_nano.core.types import Odometry, LaserScan
+from zeno.core.types import Odometry, LaserScan
 
 
 class TestOdometry:

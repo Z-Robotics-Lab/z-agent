@@ -9,13 +9,13 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 import cv2  # noqa: E402
 import mujoco as mj  # noqa: E402
 
-from vector_os_nano.core.agent import Agent  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # noqa: E402
-from vector_os_nano.skills import get_default_skills  # noqa: E402
-from vector_os_nano.skills.pick import SIM_PICK_CONFIG  # noqa: E402
-from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object  # noqa: E402
+from zeno.core.agent import Agent  # noqa: E402
+from zeno.hardware.sim.mujoco_arm import MuJoCoArm  # noqa: E402
+from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper  # noqa: E402
+from zeno.hardware.sim.mujoco_perception import MuJoCoPerception  # noqa: E402
+from zeno.skills import get_default_skills  # noqa: E402
+from zeno.skills.pick import SIM_PICK_CONFIG  # noqa: E402
+from zeno.vcli.worlds.arm_sim_oracle import make_holding_object  # noqa: E402
 
 arm = MuJoCoArm(gui=False)
 arm.connect()

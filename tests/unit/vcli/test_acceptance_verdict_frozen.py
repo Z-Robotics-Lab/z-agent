@@ -30,12 +30,12 @@ import inspect
 
 import pytest
 
-from vector_os_nano.acceptance import gate as gate_mod
-from vector_os_nano.acceptance import motion_check as motion_mod
-from vector_os_nano.acceptance import vision_judge as vision_mod
-from vector_os_nano.acceptance.gate import AcceptanceDecision
-from vector_os_nano.acceptance.motion_check import MotionVerdict
-from vector_os_nano.acceptance.vision_judge import VisionVerdict
+from zeno.acceptance import gate as gate_mod
+from zeno.acceptance import motion_check as motion_mod
+from zeno.acceptance import vision_judge as vision_mod
+from zeno.acceptance.gate import AcceptanceDecision
+from zeno.acceptance.motion_check import MotionVerdict
+from zeno.acceptance.vision_judge import VisionVerdict
 
 # The modules whose graded verdict/decision dataclasses form the acceptance-face contract.
 _VERDICT_MODULES = (gate_mod, motion_mod, vision_mod)

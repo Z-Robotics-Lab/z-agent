@@ -75,7 +75,7 @@ def sim_cleanup():
     try:
         subprocess.run(
             ["git", "checkout",
-             "vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml"],
+             "zeno/hardware/sim/mjcf/go2/scene_room_piper.xml"],
             timeout=20, capture_output=True,
         )
     except Exception:  # noqa: BLE001
@@ -93,20 +93,20 @@ def test_native_multiskill_walk_then_turn_routes_and_grounds(sim_cleanup) -> Non
     """
     from pathlib import Path as _Path
 
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-    from vector_os_nano.skills.go2 import get_go2_skills
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import (
+    from zeno.core.agent import Agent
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.skills.go2 import get_go2_skills
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import (
         classify_step_evidence,
         verify_oracle_names,
     )
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.session import Session
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.verdict import VerdictReport
-    from vector_os_nano.vcli.worlds.robot import RobotWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.session import Session
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.verdict import VerdictReport
+    from zeno.vcli.worlds.robot import RobotWorld
 
     from tests.harness.fake_backend import FakeToolScriptBackend, tool_turn
 

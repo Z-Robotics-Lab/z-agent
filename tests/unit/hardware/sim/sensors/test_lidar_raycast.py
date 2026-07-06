@@ -17,7 +17,7 @@ import math
 
 import numpy as np
 
-from vector_os_nano.hardware.sim.sensors.lidar_raycast import raycast_lidar
+from zeno.hardware.sim.sensors.lidar_raycast import raycast_lidar
 
 
 # ----------------------------------------------------------------------------

@@ -12,7 +12,7 @@ Covers:
 - the world registry wiring (resolve_world_named -> PlaygroundWorld),
 - a kernel-integration test: PlaygroundWorld wired into VectorEngine, the merged
   verifier namespace evaluated THROUGH the real GoalVerifier (the "test with
-  vector-os-nano" gate).
+  zeno" gate).
 
 No MuJoCo / network — the arm is a deterministic fake.
 """
@@ -24,9 +24,9 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.playground import PlaygroundWorld, register_scenarios
-from vector_os_nano.playground.catalog import TABLETOP
-from vector_os_nano.playground.verify.arm_predicates import _HOME_JOINTS
+from zeno.playground import PlaygroundWorld, register_scenarios
+from zeno.playground.catalog import TABLETOP
+from zeno.playground.verify.arm_predicates import _HOME_JOINTS
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ _HOME = list(_HOME_JOINTS)
 
 def test_home_pose_matches_home_skill_default() -> None:
     """The verify home pose must agree with the home SKILL's motion default."""
-    from vector_os_nano.skills.home import _DEFAULT_HOME_JOINTS
+    from zeno.skills.home import _DEFAULT_HOME_JOINTS
 
     assert list(_HOME_JOINTS) == list(_DEFAULT_HOME_JOINTS)
 
@@ -304,7 +304,7 @@ class TestFailSafe:
 
 class TestRegistryWiring:
     def test_tabletop_resolvable_by_name(self) -> None:
-        from vector_os_nano.vcli.worlds.registry import resolve_world_named
+        from zeno.vcli.worlds.registry import resolve_world_named
 
         register_scenarios()  # idempotent
         world = resolve_world_named("tabletop")
@@ -314,7 +314,7 @@ class TestRegistryWiring:
         assert world.scenario.object_names == TABLETOP.object_names
 
     def test_register_scenarios_idempotent(self) -> None:
-        from vector_os_nano.vcli.worlds.registry import get_world_registry
+        from zeno.vcli.worlds.registry import get_world_registry
 
         register_scenarios()
         register_scenarios()  # must not raise on the second pass
@@ -332,9 +332,9 @@ class TestRegistryWiring:
 
 
 def _make_engine():
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.intent_router import IntentRouter
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.intent_router import IntentRouter
+    from zeno.vcli.tools.base import CategorizedToolRegistry
 
     class _MockBackend:
         def call(self, messages, tools, system, max_tokens, on_text=None):
@@ -355,7 +355,7 @@ class TestKernelIntegration:
     def test_playground_predicates_via_goal_verifier(self) -> None:
         """PlaygroundWorld wired into the engine; predicates evaluate through the
         real GoalVerifier off the merged verifier namespace."""
-        from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+        from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
         arm = FakeArm(
             objects={"mug": [0.22, 0.05, 0.06], "banana": [0.12, 0.12, 0.06]},
@@ -378,7 +378,7 @@ class TestKernelIntegration:
     def test_engine_resolves_playground_when_wired(self) -> None:
         """With no explicit _world, the engine still merges a world; wiring the
         playground makes its detect_objects override the empty stub."""
-        from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+        from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
         arm = FakeArm(
             objects={"mug": [0.22, 0.05, 0.06]}, joints=_HOME, ee=[0.2, 0.0, 0.2]

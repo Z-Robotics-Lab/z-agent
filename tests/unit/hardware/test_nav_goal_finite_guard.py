@@ -36,9 +36,9 @@ from pathlib import Path
 
 import pytest
 
-from vector_os_nano.hardware.base import ensure_finite_nav_goal
+from zeno.hardware.base import ensure_finite_nav_goal
 
-_PKG = Path(__file__).resolve().parents[3] / "vector_os_nano"
+_PKG = Path(__file__).resolve().parents[3] / "zeno"
 
 
 class TestEnsureFiniteNavGoal:
@@ -111,7 +111,7 @@ class TestPublishGoalRejectsBeforeDispatch:
     any client — proving the guard is not merely present but actually gates."""
 
     def test_nan_goal_never_reaches_nav_client(self) -> None:
-        from vector_os_nano.vcli.primitives import PrimitiveContext, navigation
+        from zeno.vcli.primitives import PrimitiveContext, navigation
 
         class _TripwireClient:
             def navigate_to(self, x: float, y: float) -> bool:  # pragma: no cover

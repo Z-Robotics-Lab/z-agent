@@ -1,6 +1,6 @@
 """D180 bare-REPL acceptance: a BYO model that CANNOT run must be surfaced clearly.
 
-Drives the ACTUAL bare `vector-cli` REPL under a PTY (NO -p, NO flag) with an
+Drives the ACTUAL bare `zeno` REPL under a PTY (NO -p, NO flag) with an
 ACTIONABLE NL command, using VECTOR_PROVIDER=openrouter + a model that fails
 NON-recoverably. Expects the REPL to print `model unavailable: ...` (D180) instead
 of silently degrading to legacy. Both cases are rejected PRE-generation => FREE (no
@@ -43,15 +43,15 @@ env.update(
 LOG = f"/tmp/model_unavail_{CASE}.log"
 os.system(f"rm -f {LOG}")
 
-print(f"[driver] case={CASE} model={MODEL!r} — spawning BARE vector-cli REPL (no flag)", flush=True)
+print(f"[driver] case={CASE} model={MODEL!r} — spawning BARE zeno REPL (no flag)", flush=True)
 child = pexpect.spawn(
-    f"{ROOT}/.venv/bin/python", ["-m", "vector_os_nano.vcli.cli"],
+    f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli"],
     cwd=ROOT, env=env, encoding="utf-8", timeout=120, dimensions=(40, 160),
 )
 child.logfile = open(LOG, "w", encoding="utf-8")
 
 try:
-    child.expect(r"vector>", timeout=60)
+    child.expect(r"zeno>", timeout=60)
     child.sendline(NL)
     # Wait for the turn to settle (quiet gap), then inspect the cleaned log.
     waited = 0.0

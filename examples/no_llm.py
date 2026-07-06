@@ -4,13 +4,13 @@ When no llm_api_key is provided, Agent.execute() runs in direct mode.
 Skill names are matched verbatim -- no planning call is made.
 
 Requirements:
-    pip install vector-os-nano
+    pip install zeno
 
 Usage:
     python examples/no_llm.py
 """
 
-from vector_os_nano import Agent, SO101
+from zeno import Agent, SO101
 
 arm = SO101(port="/dev/ttyACM0")
 

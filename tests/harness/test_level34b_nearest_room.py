@@ -14,7 +14,7 @@ import math
 
 import pytest
 
-from vector_os_nano.core.scene_graph import RoomNode, SceneGraph
+from zeno.core.scene_graph import RoomNode, SceneGraph
 
 
 # ---------------------------------------------------------------------------

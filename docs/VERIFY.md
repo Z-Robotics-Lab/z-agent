@@ -1,12 +1,12 @@
 # REAL-VERIFY runbook — the verdict contract + canonical acceptance commands
 
-The ONLY acceptance face is the bare `vector-cli` REPL driven by natural language, eyes on
+The ONLY acceptance face is the bare `zeno` REPL driven by natural language, eyes on
 the sim (Invariant 2). Everything below instruments that face; none of it replaces it. The
 ledger (loop/ledger/) RECORDS verdicts from this face; it never IS the verdict.
 
 ## The machine verdict — `-p / --json / VECTOR_VERDICT`
 ```bash
-python -m vector_os_nano.vcli.cli -p "<prompt>" --json    # one turn, then exit
+python -m zeno.vcli.cli -p "<prompt>" --json    # one turn, then exit
 ```
 - `--json` prints exactly ONE stdout line: `VECTOR_VERDICT {<json>}` (fixed sentinel);
   all Rich/banner output goes to stderr.

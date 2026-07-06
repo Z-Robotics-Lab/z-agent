@@ -14,19 +14,19 @@ from pathlib import Path
 
 import numpy as np
 
-from vector_os_nano.perception.front_object import (
+from zeno.perception.front_object import (
     _COLOR_HUE,
     front_object_mask,
     parse_color,
 )
-from vector_os_nano.skills.perception_grasp import _COLOR_TO_SCENE
+from zeno.skills.perception_grasp import _COLOR_TO_SCENE
 
 _ROOT = Path(__file__).resolve().parents[3]
 # The SOURCE room template (attached + compiled at connect); scene_room_piper.xml is
 # the GENERATED output, overwritten each build — never the source of truth.
-_ROOM_TEMPLATE = _ROOT / "vector_os_nano/hardware/sim/go2_room.xml"
+_ROOM_TEMPLATE = _ROOT / "zeno/hardware/sim/go2_room.xml"
 # The grasp weld is added programmatically from this driver tuple, not the XML.
-_GO2_DRIVER = _ROOT / "vector_os_nano/hardware/sim/mujoco_go2.py"
+_GO2_DRIVER = _ROOT / "zeno/hardware/sim/mujoco_go2.py"
 _YELLOW_NAME = "pickable_bottle_yellow"
 
 

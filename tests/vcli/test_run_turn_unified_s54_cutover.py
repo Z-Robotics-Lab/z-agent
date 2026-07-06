@@ -27,8 +27,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.cognitive.trace_store import evidence_passed
 
 # Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
 ORACLES = frozenset({
@@ -37,13 +37,13 @@ ORACLES = frozenset({
     "describe_scene", "detect_objects", "placed_count", "nearest_room",
     "objects_in_room", "find_object", "room_coverage",
 })
-from vector_os_nano.vcli.engine import UnifiedTurnResult, VectorEngine
-from vector_os_nano.vcli.intent_router import IntentRouter
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.session import TokenUsage, create_session
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-from vector_os_nano.vcli.tools.file_tools import FileWriteTool
-from vector_os_nano.vcli.worlds import DevWorld
+from zeno.vcli.engine import UnifiedTurnResult, VectorEngine
+from zeno.vcli.intent_router import IntentRouter
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.session import TokenUsage, create_session
+from zeno.vcli.tools.base import CategorizedToolRegistry
+from zeno.vcli.tools.file_tools import FileWriteTool
+from zeno.vcli.worlds import DevWorld
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ def _dev_engine(backend: Any, resolver: Any, persist_dir: Path,
 
 def test_greeting_answers_directly_no_action_plan(tmp_path: Path) -> None:
     """"hello" -> answer-only path. Backend called once; no decomposition."""
-    backend = _SpyChatBackend("Hi, I'm Vector OS.")
+    backend = _SpyChatBackend("Hi, I'm Zeno.")
     engine = _dev_engine(backend, lambda _n, _p: "y", tmp_path,
                          intent_router=IntentRouter())
     session = create_session(directory=tmp_path / "_sessions")
@@ -123,7 +123,7 @@ def test_greeting_answers_directly_no_action_plan(tmp_path: Path) -> None:
     assert isinstance(result, UnifiedTurnResult)
     # Routed to the cheap answer path via the conversational guard — NOT a plan.
     assert result.intent.route == "tool_use"
-    assert result.text == "Hi, I'm Vector OS."
+    assert result.text == "Hi, I'm Zeno."
     # The ONLY trace is the trivially-verified answer-only step (no action plan).
     assert result.trace is not None
     assert len(result.trace.steps) == 1

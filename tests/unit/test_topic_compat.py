@@ -62,18 +62,18 @@ CAMERA_WIDTH = 320
 
 
 def _get_go2_ros2_proxy_source() -> str:
-    from vector_os_nano.hardware.sim import go2_ros2_proxy
+    from zeno.hardware.sim import go2_ros2_proxy
     return inspect.getsource(go2_ros2_proxy)
 
 
 def _get_isaac_sim_proxy_source() -> str:
-    from vector_os_nano.hardware.sim import isaac_sim_proxy
+    from zeno.hardware.sim import isaac_sim_proxy
     return inspect.getsource(isaac_sim_proxy)
 
 
 def _make_connected_proxy() -> Any:
     """Return a Go2ROS2Proxy with mocked internal state."""
-    from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+    from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
     proxy = Go2ROS2Proxy()
     proxy._node = MagicMock()
     proxy._cmd_pub = MagicMock()
@@ -85,7 +85,7 @@ def _make_connected_proxy() -> Any:
 
 def _make_connected_isaac_proxy() -> Any:
     """Return an IsaacSimProxy with mocked internal state."""
-    from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+    from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
     proxy = IsaacSimProxy()
     proxy._node = MagicMock()
     proxy._cmd_pub = MagicMock()
@@ -246,8 +246,8 @@ class TestIsaacProxyTopicCompatibility:
     """IsaacSimProxy must inherit the same topic contract as Go2ROS2Proxy."""
 
     def test_isaac_proxy_inherits_go2_ros2_proxy(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         assert issubclass(IsaacSimProxy, Go2ROS2Proxy), \
             "IsaacSimProxy must inherit Go2ROS2Proxy to share topic contract"
 
@@ -264,8 +264,8 @@ class TestIsaacProxyTopicCompatibility:
             "IsaacSimProxy should not redefine /cmd_vel_nav (inherited)"
 
     def test_isaac_proxy_node_name_differs_from_parent(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         assert IsaacSimProxy._NODE_NAME != Go2ROS2Proxy._NODE_NAME, \
             "IsaacSimProxy must use a distinct node name to avoid DDS conflicts"
 
@@ -353,7 +353,7 @@ class TestCameraEncoding:
     def test_camera_frame_shape_matches_expected(self) -> None:
         """get_camera_frame() default shape must match bridge output."""
         import numpy as np
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         proxy = Go2ROS2Proxy()
         frame = proxy.get_camera_frame(width=CAMERA_WIDTH, height=CAMERA_HEIGHT)
         assert frame.shape == (CAMERA_HEIGHT, CAMERA_WIDTH, 3)
@@ -362,7 +362,7 @@ class TestCameraEncoding:
     def test_depth_frame_shape_matches_expected(self) -> None:
         """get_depth_frame() default shape must match bridge output."""
         import numpy as np
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         proxy = Go2ROS2Proxy()
         frame = proxy.get_depth_frame(width=CAMERA_WIDTH, height=CAMERA_HEIGHT)
         assert frame.shape == (CAMERA_HEIGHT, CAMERA_WIDTH)
@@ -375,7 +375,7 @@ class TestCameraEncoding:
         assert CAMERA_HEIGHT == 240
 
     def test_rgbd_frame_returns_rgb_depth_tuple(self) -> None:
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         proxy = Go2ROS2Proxy()
         rgb, depth = proxy.get_rgbd_frame()
         assert rgb.ndim == 3

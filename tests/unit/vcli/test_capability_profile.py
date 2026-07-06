@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.embodiments.capability_profile import resolve_capability_profile
-from vector_os_nano.embodiments.config import load_embodiment_config
+from zeno.embodiments.capability_profile import resolve_capability_profile
+from zeno.embodiments.config import load_embodiment_config
 
 
 # --- duck-typed fakes (no sim) mirroring the real driver member surface ---------

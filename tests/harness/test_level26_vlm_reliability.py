@@ -27,7 +27,7 @@ import pytest
 
 VLM_MODULE_PATH = (
     Path(__file__).parents[2]
-    / "vector_os_nano"
+    / "zeno"
     / "perception"
     / "vlm_go2.py"
 )
@@ -51,7 +51,7 @@ class TestJsonStripMarkdownBackticks:
         import sys
 
         # Ensure fresh import each time
-        mod_name = "vector_os_nano.perception.vlm_go2"
+        mod_name = "zeno.perception.vlm_go2"
         if mod_name in sys.modules:
             mod = sys.modules[mod_name]
         else:
@@ -147,7 +147,7 @@ class TestVlmRetryOnEmpty:
 
     def _make_vlm(self) -> object:
         import importlib
-        mod = importlib.import_module("vector_os_nano.perception.vlm_go2")
+        mod = importlib.import_module("zeno.perception.vlm_go2")
         return mod.Go2VLMPerception(config={"api_key": "test-key-abc123"})
 
     def _dummy_frame(self) -> np.ndarray:
@@ -258,7 +258,7 @@ class TestVlmRoomIdentificationFormat:
 
     def _make_vlm(self) -> object:
         import importlib
-        mod = importlib.import_module("vector_os_nano.perception.vlm_go2")
+        mod = importlib.import_module("zeno.perception.vlm_go2")
         return mod.Go2VLMPerception(config={"api_key": "test-key-xyz"})
 
     def _dummy_frame(self) -> np.ndarray:
@@ -266,7 +266,7 @@ class TestVlmRoomIdentificationFormat:
 
     def test_identify_room_returns_correct_type(self):
         import importlib
-        mod = importlib.import_module("vector_os_nano.perception.vlm_go2")
+        mod = importlib.import_module("zeno.perception.vlm_go2")
         vlm = self._make_vlm()
         frame = self._dummy_frame()
 
@@ -298,7 +298,7 @@ class TestVlmRoomIdentificationFormat:
 
     def test_identify_room_handles_markdown_wrapped_response(self):
         import importlib
-        mod = importlib.import_module("vector_os_nano.perception.vlm_go2")
+        mod = importlib.import_module("zeno.perception.vlm_go2")
         vlm = self._make_vlm()
         frame = self._dummy_frame()
 
@@ -332,7 +332,7 @@ class TestVlmRoomIdentificationFormat:
 
     def test_identify_room_unknown_on_parse_failure(self):
         import importlib
-        mod = importlib.import_module("vector_os_nano.perception.vlm_go2")
+        mod = importlib.import_module("zeno.perception.vlm_go2")
         vlm = self._make_vlm()
         frame = self._dummy_frame()
 

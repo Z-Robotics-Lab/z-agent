@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import warnings
 
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
 
 def test_verify_with_bad_escape_emits_no_syntaxwarning():

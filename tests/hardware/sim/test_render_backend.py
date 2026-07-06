@@ -15,7 +15,7 @@ import sys
 
 import pytest
 
-from vector_os_nano.hardware.sim.go2_inprocess import reconcile_render_backend
+from zeno.hardware.sim.go2_inprocess import reconcile_render_backend
 
 
 def _clear_mujoco(monkeypatch: pytest.MonkeyPatch) -> None:

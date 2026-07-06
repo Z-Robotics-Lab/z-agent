@@ -32,12 +32,12 @@ _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 
 def _proxy_source() -> str:
-    mod = importlib.import_module("vector_os_nano.hardware.sim.go2_ros2_proxy")
+    mod = importlib.import_module("zeno.hardware.sim.go2_ros2_proxy")
     return inspect.getsource(mod)
 
 
 def _navigate_source() -> str:
-    mod = importlib.import_module("vector_os_nano.skills.navigate")
+    mod = importlib.import_module("zeno.skills.navigate")
     return inspect.getsource(mod)
 
 
@@ -183,7 +183,7 @@ class TestSceneGraphDriftProtection:
 
     def test_get_room_center_returns_none_for_unvisited(self):
         """_get_room_center_from_memory returns None for rooms with 0 visits."""
-        mod = importlib.import_module("vector_os_nano.skills.navigate")
+        mod = importlib.import_module("zeno.skills.navigate")
 
         class FakeRoom:
             center_x = 17.0
@@ -268,7 +268,7 @@ class TestDriftProtectionBehavior:
 
     def test_well_visited_position_accepted(self):
         """SceneGraph position with visit_count >= 3 is accepted."""
-        mod = importlib.import_module("vector_os_nano.skills.navigate")
+        mod = importlib.import_module("zeno.skills.navigate")
 
         class FakeRoom:
             center_x = 17.5
@@ -287,7 +287,7 @@ class TestDriftProtectionBehavior:
 
     def test_low_visit_count_rejected(self):
         """SceneGraph position with < _MIN_VISIT_COUNT visits is rejected."""
-        mod = importlib.import_module("vector_os_nano.skills.navigate")
+        mod = importlib.import_module("zeno.skills.navigate")
 
         class FakeRoom:
             center_x = 17.0
@@ -306,7 +306,7 @@ class TestDriftProtectionBehavior:
 
     def test_zero_visit_count_rejected(self):
         """SceneGraph position with 0 visits is rejected."""
-        mod = importlib.import_module("vector_os_nano.skills.navigate")
+        mod = importlib.import_module("zeno.skills.navigate")
 
         class FakeRoom:
             center_x = 17.0
@@ -324,7 +324,7 @@ class TestDriftProtectionBehavior:
 
     def test_unknown_room_returns_none(self):
         """Unknown room key returns None."""
-        mod = importlib.import_module("vector_os_nano.skills.navigate")
+        mod = importlib.import_module("zeno.skills.navigate")
 
         class FakeMemory:
             def get_room(self, key):

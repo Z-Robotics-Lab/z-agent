@@ -13,7 +13,7 @@ coordinate that happens to be zero must round-trip through a merge.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.scene_graph import SceneGraph
+from zeno.core.scene_graph import SceneGraph
 
 
 def _fresh_graph() -> SceneGraph:

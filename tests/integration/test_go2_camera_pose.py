@@ -25,8 +25,8 @@ import math
 
 import pytest
 
-from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
-from vector_os_nano.perception.depth_projection import (
+from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+from zeno.perception.depth_projection import (
     mujoco_intrinsics,
     pixel_to_camera,
 )

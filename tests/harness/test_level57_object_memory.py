@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.object_memory import ObjectMemory, TrackedObject
+from zeno.vcli.cognitive.object_memory import ObjectMemory, TrackedObject
 
 
 # ---------------------------------------------------------------------------

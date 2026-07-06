@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Tests for vector_os_nano.skills.calibration — FIX 3.
+"""Tests for zeno.skills.calibration — FIX 3.
 
 Verifies that load_calibration() with no env var and no explicit file:
   - returns np.eye(4)  (identity — correct for sim)
@@ -27,7 +27,7 @@ class TestLoadCalibrationNoConfig:
     def test_returns_identity_when_no_env_no_arg(self, monkeypatch):
         """With VECTOR_CALIB_FILE unset and no explicit arg, get np.eye(4)."""
         monkeypatch.delenv("VECTOR_CALIB_FILE", raising=False)
-        from vector_os_nano.skills.calibration import load_calibration
+        from zeno.skills.calibration import load_calibration
         T = load_calibration()
         assert T.shape == (4, 4)
         assert np.allclose(T, np.eye(4))
@@ -35,8 +35,8 @@ class TestLoadCalibrationNoConfig:
     def test_no_warning_emitted_when_no_config(self, monkeypatch, caplog):
         """Absence of a calib file must NOT produce a WARNING (it's normal in sim)."""
         monkeypatch.delenv("VECTOR_CALIB_FILE", raising=False)
-        from vector_os_nano.skills.calibration import load_calibration
-        with caplog.at_level(logging.WARNING, logger="vector_os_nano.skills.calibration"):
+        from zeno.skills.calibration import load_calibration
+        with caplog.at_level(logging.WARNING, logger="zeno.skills.calibration"):
             load_calibration()
         assert caplog.records == [], (
             "Expected no WARNING-level logs when no calib file is configured; "
@@ -47,7 +47,7 @@ class TestLoadCalibrationNoConfig:
         """If VECTOR_CALIB_FILE is set but the file doesn't exist, get identity."""
         missing = str(tmp_path / "does_not_exist.yaml")
         monkeypatch.setenv("VECTOR_CALIB_FILE", missing)
-        from vector_os_nano.skills.calibration import load_calibration
+        from zeno.skills.calibration import load_calibration
         T = load_calibration()
         assert np.allclose(T, np.eye(4))
 
@@ -70,7 +70,7 @@ class TestLoadCalibrationExplicitFile:
         calib_yaml = tmp_path / "workspace_calibration.yaml"
         calib_yaml.write_text(yaml.dump(data))
 
-        from vector_os_nano.skills.calibration import load_calibration
+        from zeno.skills.calibration import load_calibration
         T = load_calibration(calib_file=str(calib_yaml))
         assert T.shape == (4, 4)
         assert np.allclose(T, T_expected, atol=1e-9)
@@ -84,7 +84,7 @@ class TestLoadCalibrationExplicitFile:
         calib_yaml.write_text(yaml.dump(data))
         monkeypatch.setenv("VECTOR_CALIB_FILE", str(calib_yaml))
 
-        from vector_os_nano.skills.calibration import load_calibration
+        from zeno.skills.calibration import load_calibration
         T = load_calibration()
         assert np.allclose(T, T_expected, atol=1e-9)
 
@@ -102,6 +102,6 @@ class TestLoadCalibrationExplicitFile:
         explicit_yaml = tmp_path / "explicit.yaml"
         explicit_yaml.write_text(yaml.dump(explicit_data))
 
-        from vector_os_nano.skills.calibration import load_calibration
+        from zeno.skills.calibration import load_calibration
         T = load_calibration(calib_file=str(explicit_yaml))
         assert np.allclose(T, T_explicit, atol=1e-9)

@@ -20,17 +20,17 @@ from __future__ import annotations
 
 import json
 
-from vector_os_nano.vcli.cognitive.trace_store import (
+from zeno.vcli.cognitive.trace_store import (
     classify_step_evidence,
     evidence_passed,
 )
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.verdict import (
+from zeno.vcli.verdict import (
     EVIDENCE_FAILED,
     EVIDENCE_GROUNDED,
     EVIDENCE_NO_TRACE,

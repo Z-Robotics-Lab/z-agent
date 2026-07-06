@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import sys
 
-from vector_os_nano.vcli.cognitive.capabilities import CapabilityRegistry
-from vector_os_nano.vcli.worlds.robot import RobotWorld
+from zeno.vcli.cognitive.capabilities import CapabilityRegistry
+from zeno.vcli.worlds.robot import RobotWorld
 
 
 class _Perc:

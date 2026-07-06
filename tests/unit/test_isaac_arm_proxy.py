@@ -42,7 +42,7 @@ def _import_arm_proxy():
     written before implementation).
     """
     try:
-        from vector_os_nano.hardware.sim.isaac_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_arm_proxy import IsaacSimArmProxy
         return IsaacSimArmProxy
     except ImportError:
         pytest.skip("IsaacSimArmProxy not implemented yet — TDD stub")
@@ -78,7 +78,7 @@ class TestIsaacArmProxyProtocolCompliance:
     """IsaacSimArmProxy must satisfy ArmProtocol."""
 
     def test_isinstance_arm_protocol(self) -> None:
-        from vector_os_nano.hardware.arm import ArmProtocol
+        from zeno.hardware.arm import ArmProtocol
         arm = _make_arm_proxy()
         assert isinstance(arm, ArmProtocol)
 

@@ -24,31 +24,31 @@ import pytest
 
 class TestAbortModule:
     def test_initial_state_not_aborted(self):
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, is_abort_requested
+        from zeno.vcli.cognitive.abort import clear_abort, is_abort_requested
         clear_abort()
         assert not is_abort_requested()
 
     def test_request_abort_sets_flag(self):
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, request_abort, is_abort_requested
+        from zeno.vcli.cognitive.abort import clear_abort, request_abort, is_abort_requested
         clear_abort()
         request_abort()
         assert is_abort_requested()
 
     def test_clear_abort_resets_flag(self):
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, request_abort, is_abort_requested
+        from zeno.vcli.cognitive.abort import clear_abort, request_abort, is_abort_requested
         request_abort()
         clear_abort()
         assert not is_abort_requested()
 
     def test_wait_or_abort_returns_true_when_aborted(self):
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, request_abort, wait_or_abort
+        from zeno.vcli.cognitive.abort import clear_abort, request_abort, wait_or_abort
         clear_abort()
         request_abort()
         result = wait_or_abort(5.0)
         assert result is True  # True = abort requested
 
     def test_wait_or_abort_returns_false_on_timeout(self):
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, wait_or_abort
+        from zeno.vcli.cognitive.abort import clear_abort, wait_or_abort
         clear_abort()
         start = time.monotonic()
         result = wait_or_abort(0.05)
@@ -57,7 +57,7 @@ class TestAbortModule:
         assert elapsed < 0.5
 
     def test_wait_or_abort_wakes_early_on_abort(self):
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, request_abort, wait_or_abort
+        from zeno.vcli.cognitive.abort import clear_abort, request_abort, wait_or_abort
         clear_abort()
 
         def _abort_later():
@@ -74,7 +74,7 @@ class TestAbortModule:
         assert elapsed < 1.0  # woke up well before 5s
 
     def test_thread_safety(self):
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, request_abort, is_abort_requested
+        from zeno.vcli.cognitive.abort import clear_abort, request_abort, is_abort_requested
         clear_abort()
         errors = []
 
@@ -104,7 +104,7 @@ class TestAbortModule:
 class TestP0StopBypass:
     def test_stop_returns_immediately(self):
         from unittest.mock import MagicMock
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = MagicMock()
         engine = VectorEngine(backend=backend)
@@ -122,7 +122,7 @@ class TestP0StopBypass:
 
     def test_chinese_stop_bypasses(self):
         from unittest.mock import MagicMock
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = MagicMock()
         engine = VectorEngine(backend=backend)
@@ -137,8 +137,8 @@ class TestP0StopBypass:
 
     def test_non_stop_goes_to_llm(self):
         from unittest.mock import MagicMock
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.session import Session
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.session import Session
 
         backend = MagicMock()
         response = MagicMock()
@@ -171,9 +171,9 @@ class TestP0StopBypass:
 class TestGoalExecutorAbort:
     def test_aborted_before_first_step(self):
         from unittest.mock import MagicMock
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, request_abort
-        from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.abort import clear_abort, request_abort
+        from zeno.vcli.cognitive.goal_executor import GoalExecutor
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         clear_abort()
         request_abort()
@@ -197,9 +197,9 @@ class TestGoalExecutorAbort:
 
     def test_not_aborted_runs_normally(self):
         from unittest.mock import MagicMock
-        from vector_os_nano.vcli.cognitive.abort import clear_abort
-        from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.abort import clear_abort
+        from zeno.vcli.cognitive.goal_executor import GoalExecutor
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         clear_abort()
 
@@ -249,9 +249,9 @@ class TestGoalExecutorAbort:
 class TestVGGHarnessAbort:
     def test_abort_skips_execution(self):
         from unittest.mock import MagicMock
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, request_abort
-        from vector_os_nano.vcli.cognitive.vgg_harness import VGGHarness
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.abort import clear_abort, request_abort
+        from zeno.vcli.cognitive.vgg_harness import VGGHarness
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         clear_abort()
         request_abort()
@@ -276,9 +276,9 @@ class TestVGGHarnessAbort:
 class TestStopSkillAbort:
     def test_stop_skill_calls_request_abort(self):
         from unittest.mock import MagicMock, patch
-        from vector_os_nano.vcli.cognitive.abort import clear_abort, is_abort_requested
-        from vector_os_nano.skills.go2.stop import StopSkill
-        from vector_os_nano.core.skill import SkillContext
+        from zeno.vcli.cognitive.abort import clear_abort, is_abort_requested
+        from zeno.skills.go2.stop import StopSkill
+        from zeno.core.skill import SkillContext
 
         clear_abort()
         base = MagicMock()

@@ -25,8 +25,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
 
 
 # ---------------------------------------------------------------------------
@@ -313,10 +313,10 @@ def test_foreach_without_depends_on_iterates_n_not_zero() -> None:
     depends_on, the injected edge forces the producer to run first, so the loop
     iterates the real N. Without the fix the loop would precede detect and run 0x.
     """
-    from vector_os_nano.vcli.cognitive.blackboard import Blackboard
-    from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-    from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-    from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
+    from zeno.vcli.cognitive.blackboard import Blackboard
+    from zeno.vcli.cognitive.goal_executor import GoalExecutor
+    from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+    from zeno.vcli.cognitive.strategy_selector import StrategyResult
 
     plan = _foreach_plan()
     plan["sub_goals"][1]["depends_on"] = []  # omit ordering edge

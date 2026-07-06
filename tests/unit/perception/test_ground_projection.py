@@ -14,7 +14,7 @@ import math
 import numpy as np
 import pytest
 
-from vector_os_nano.perception.ground_projection import project_pixel_to_ground
+from zeno.perception.ground_projection import project_pixel_to_ground
 
 # A downward-looking camera at height 1 m: cam_xmat = identity so the optical axis
 # (-Z_cam) points straight down (0,0,-1). Focal f = 0.5*H/tan(fovy/2).

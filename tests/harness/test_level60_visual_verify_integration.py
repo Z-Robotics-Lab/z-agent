@@ -7,9 +7,9 @@ import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 import numpy as np
 
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.types import SubGoal, GoalTree, StepRecord
-from vector_os_nano.vcli.cognitive.visual_verifier import VisualVerifyResult
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.types import SubGoal, GoalTree, StepRecord
+from zeno.vcli.cognitive.visual_verifier import VisualVerifyResult
 
 
 class TestVisualVerifyIntegration:

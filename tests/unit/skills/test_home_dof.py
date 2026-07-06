@@ -7,13 +7,13 @@ must NOT crash ('expected 6 positions, got 5') — home adapts to the arm's DoF 
 falling back to the URDF-zero neutral pose (`[0.0]*dof`, what MuJoCoPiper.home()
 itself uses). SO-101 (5-DoF) behavior is byte-identical.
 
-This is backlog #2: the bug blocked the bare-`vector-cli` + NL fetch path because
+This is backlog #2: the bug blocked the bare-`zeno` + NL fetch path because
 the planner/executor calls `home` on the go2+Piper arm, which raised.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.skills.home import HomeSkill, _DEFAULT_HOME_JOINTS
+from zeno.core.skill import SkillContext
+from zeno.skills.home import HomeSkill, _DEFAULT_HOME_JOINTS
 
 
 class _ArmWithDof:  # Piper-like: 6-DoF, exposes .dof + rejects a wrong-length move

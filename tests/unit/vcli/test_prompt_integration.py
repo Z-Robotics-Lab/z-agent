@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.vcli.robot_context import RobotContextProvider
+from zeno.vcli.robot_context import RobotContextProvider
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class MockSG:
 
 
 def _build(**kwargs: Any) -> list[dict]:
-    from vector_os_nano.vcli.prompt import build_system_prompt
+    from zeno.vcli.prompt import build_system_prompt
 
     return build_system_prompt(**kwargs)
 
@@ -237,7 +237,7 @@ class TestBackwardCompat:
 
     def test_robot_context_kwarg_is_optional(self) -> None:
         """robot_context is a keyword-only optional param — signature is backward-compat."""
-        from vector_os_nano.vcli.prompt import build_system_prompt
+        from zeno.vcli.prompt import build_system_prompt
         import inspect
 
         sig = inspect.signature(build_system_prompt)

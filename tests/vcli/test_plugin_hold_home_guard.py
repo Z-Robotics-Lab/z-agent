@@ -38,8 +38,8 @@ import inspect
 import pkgutil
 from typing import Any
 
-import vector_os_nano.skills
-from vector_os_nano.core.agent import Agent, _skill_ends_holding
+import zeno.skills
+from zeno.core.agent import Agent, _skill_ends_holding
 
 
 def _all_shipped_skill_classes() -> dict[str, type]:
@@ -48,7 +48,7 @@ def _all_shipped_skill_classes() -> dict[str, type]:
     embodiment-registered via ``register_manipulation_skills``)."""
     seen: dict[str, type] = {}
     for mod in pkgutil.walk_packages(
-        vector_os_nano.skills.__path__, "vector_os_nano.skills."
+        zeno.skills.__path__, "zeno.skills."
     ):
         try:
             module = importlib.import_module(mod.name)
@@ -166,7 +166,7 @@ class _CapturingExecutor:
         self.captured: Any = None
 
     def execute(self, plan: Any, *args: Any, **kwargs: Any) -> Any:
-        from vector_os_nano.core.types import ExecutionResult
+        from zeno.core.types import ExecutionResult
         self.captured = plan
         return ExecutionResult(success=True, status="completed")
 

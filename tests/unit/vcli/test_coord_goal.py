@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.coord_goal import (
+from zeno.vcli.cognitive.coord_goal import (
     at_position_const,
     coord_goal_mismatch,
     parse_goal_coord,
@@ -87,8 +87,8 @@ def test_coord_goal_mismatch() -> None:
 
 
 def _caused_step(verify: str):
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.types import StepRecord, SubGoal
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.types import StepRecord, SubGoal
 
     sg = SubGoal(name="s0", description="walk", verify=verify, strategy="walk")
     step = StepRecord(
@@ -99,7 +99,7 @@ def _caused_step(verify: str):
 
 
 def test_spine_wrong_place_caused_walk_downgrades_to_ran() -> None:
-    from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
+    from zeno.vcli.cognitive.trace_store import classify_step_evidence
 
     step, sg = _caused_step("at_position(8.0, 3.0)")  # verified its OWN landing
     # No goal threaded -> unchanged GROUNDED (the pre-STEP-13 residual).
@@ -109,7 +109,7 @@ def test_spine_wrong_place_caused_walk_downgrades_to_ran() -> None:
 
 
 def test_spine_honest_coordinate_stays_grounded() -> None:
-    from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
+    from zeno.vcli.cognitive.trace_store import classify_step_evidence
 
     step, sg = _caused_step("at_position(11.0, 3.0)")
     assert classify_step_evidence(step, sg, _ORACLES, "走到坐标 (11.0,3.0)") == "GROUNDED"
@@ -125,7 +125,7 @@ def test_spine_honest_coordinate_stays_grounded() -> None:
     ],
 )
 def test_spine_non_coordinate_fails_open_stays_grounded(verify, goal) -> None:
-    from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
+    from zeno.vcli.cognitive.trace_store import classify_step_evidence
 
     step, sg = _caused_step(verify)
     assert classify_step_evidence(step, sg, _ORACLES, goal) == "GROUNDED"
@@ -168,7 +168,7 @@ def test_spine_non_coordinate_fails_open_stays_grounded(verify, goal) -> None:
     ],
 )
 def test_at_position_const_matches(expr, goal_xy, expected) -> None:
-    from vector_os_nano.vcli.cognitive.coord_goal import at_position_const_matches
+    from zeno.vcli.cognitive.coord_goal import at_position_const_matches
 
     assert at_position_const_matches(expr, goal_xy) is expected
 
@@ -189,7 +189,7 @@ def test_at_position_const_matches(expr, goal_xy, expected) -> None:
     ],
 )
 def test_goal_has_coordinate_intent(goal, expected) -> None:
-    from vector_os_nano.vcli.cognitive.coord_goal import goal_has_coordinate_intent
+    from zeno.vcli.cognitive.coord_goal import goal_has_coordinate_intent
 
     assert goal_has_coordinate_intent(goal) is expected
 
@@ -208,7 +208,7 @@ _ARM = frozenset({"holding_object", "arm_at_home"})
 
 def _trace(goal: str, steps):
     """steps = list of (verify, strategy, verify_result, ActorCaused)."""
-    from vector_os_nano.vcli.cognitive.types import (
+    from zeno.vcli.cognitive.types import (
         ExecutionTrace,
         GoalTree,
         StepRecord,
@@ -233,7 +233,7 @@ def _trace(goal: str, steps):
 
 
 def _CA():
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
 
     return ActorCaused.CAUSED
 
@@ -241,7 +241,7 @@ def _CA():
 def test_turn_gate_blocks_wrong_predicate_type() -> None:
     """A COORDINATE goal verified ENTIRELY with a non-at_position predicate (the
     confirmed STEP-14 hole) must NOT verify, even though every step is GROUNDED."""
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     # HOLE A: facing under a coordinate goal (CAUSED -> per-step GROUNDED).
     assert evidence_passed(_trace("走到坐标 (11,3)", [("facing(0.5,0.5)", "turn", True, _CA())]), _GO2) is False
@@ -257,7 +257,7 @@ def test_turn_gate_blocks_wrong_predicate_type() -> None:
 
 
 def test_turn_gate_keeps_honest_coordinate_turns() -> None:
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     # Single honest at_position matching the goal.
     assert evidence_passed(_trace("走到坐标 (11,3)", [("at_position(11,3)", "walk", True, _CA())]), _GO2) is True
@@ -277,7 +277,7 @@ def test_turn_gate_keeps_honest_coordinate_turns() -> None:
 
 
 def test_turn_gate_non_coordinate_go2_turns_fail_open() -> None:
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     # A coordinate-less go2 turn (turn / explore) is untouched.
     assert evidence_passed(_trace("转向看桌子", [("facing(0.5,0.5)", "turn", True, _CA())]), _GO2) is True
@@ -287,7 +287,7 @@ def test_turn_gate_non_coordinate_go2_turns_fail_open() -> None:
 def test_turn_gate_world_blind_non_go2_worlds_untouched() -> None:
     """dev / arm / answer worlds carry no ``at_position`` oracle, so an incidental (x,y)
     in the goal text must NEVER trigger the coordinate requirement (world-blind fix)."""
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     assert evidence_passed(_trace("write (3,4) to file out.txt", [
         ("path_contains('out.txt','x')", "tool", True, _CA()),
@@ -301,8 +301,8 @@ def test_turn_gate_dummy_at_position_must_be_grounded() -> None:
     """The gate cannot be gamed by a dummy at_position step the robot didn't reach: an
     UNCAUSED (teleport / no-op) at_position is downgraded to RAN per-step, so it fails
     the all-GROUNDED rule before the coordinate clause is even reached."""
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     assert evidence_passed(
         _trace("走到坐标 (11,3)", [("at_position(11,3)", "walk", True, ActorCaused.UNCAUSED)]), _GO2
@@ -338,7 +338,7 @@ _NECESSITY_FALSE_GREENS = [
 def test_turn_gate_blocks_boolean_necessity_decoys(verify) -> None:
     """Every boolean-necessity decoy (a CAUSED walk + a verify whose goal-matching
     at_position is not NECESSARY) must grade the turn NOT verified (RAN)."""
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     assert evidence_passed(_trace("走到坐标 (11,3)", [(verify, "walk", True, _CA())]), _GO2) is False
 
@@ -346,7 +346,7 @@ def test_turn_gate_blocks_boolean_necessity_decoys(verify) -> None:
 def test_turn_gate_keeps_honest_necessary_conjunctions() -> None:
     """A matching at_position under a (possibly nested) conjunction is NECESSARY -> the
     turn stays verified. The fix only rejects disjunction/negation/arithmetic burial."""
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     for verify in (
         "at_position(11,3)",

@@ -1,4 +1,4 @@
-<h1 align="center">Z Agent</h1>
+<h1 align="center">Zeno</h1>
 
 <p align="center">
   <b>Z-Robotics-Lab's agent runtime for physical AI: natural language in, verified robot behavior out.</b>
@@ -36,7 +36,7 @@ an Isaac Sim digital twin driven through the CMU autonomy stack
 the real robot.
 
 Status: under active development (fork bootstrap in progress — see [progress.md](progress.md)).
-The quickstart below will change as the runtime is slimmed and renamed (`vector-cli` → `za`).
+The quickstart below reflects the ground-up rename to Zeno (`vector-cli` → `zeno`).
 
 ## Quick Start (inherited; being reworked)
 
@@ -46,23 +46,23 @@ cd z-agent
 uv venv .venv && source .venv/bin/activate
 uv pip install -e .
 cp .env.example .env    # fill in ONE provider block
-vector-cli              # interactive agent REPL
+zeno                    # interactive agent REPL
 ```
 
 Go2W world (requires the [go2W_Sim](https://github.com/Z-Robotics-Lab/go2W_Sim) digital twin
 on the same host — the agent will bring the sim + nav stack + RViz up itself):
 
 ```
-vector> 去 (2, 0)          # navigate: agent brings up the chain, drives, verifies arrival
-vector> explore            # TARE autonomous exploration, verified by explored-volume growth
+zeno> 去 (2, 0)            # navigate: agent brings up the chain, drives, verifies arrival
+zeno> explore              # TARE autonomous exploration, verified by explored-volume growth
 ```
 
 ## Architecture (the parts that matter)
 
-- **Honest-verify spine** (`vector_os_nano/vcli/cognitive/`): evidence classifier +
+- **Honest-verify spine** (`zeno/vcli/cognitive/`): evidence classifier +
   actor-causation grading + goal verifier. A step counts only if its predicate reads
   world ground truth AND the robot actually caused the change.
-- **World Protocol** (`vector_os_nano/vcli/worlds/`): a robot is a plugin + manifest —
+- **World Protocol** (`zeno/vcli/worlds/`): a robot is a plugin + manifest —
   tools, verify predicates, persona, vocab. No kernel edits to bring a robot.
 - **Robot backend contract**: a small HTTP bridge (pose / waypoint / ground-truth / health)
   is the seam between the runtime and any backend — Isaac Sim today, the real Go2W next,
@@ -73,4 +73,4 @@ vector> explore            # TARE autonomous exploration, verified by explored-v
 Apache License 2.0. Copyright 2024-2026 Vector Robotics (upstream) and Z-Robotics-Lab
 (fork changes). See [LICENSE](LICENSE) and [NOTICE](NOTICE); upstream attribution preserved.
 "Vector Robotics" and "Vector OS Nano" are trademarks of Vector Robotics — this fork is
-renamed to Z Agent accordingly.
+renamed to Zeno accordingly.

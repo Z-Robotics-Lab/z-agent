@@ -19,16 +19,16 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from vector_os_nano.vcli.cognitive.experience_compiler import ExperienceCompiler
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.experience_compiler import ExperienceCompiler
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.template_library import TemplateLibrary
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.worlds.dev import DEV_VOCAB
+from zeno.vcli.worlds.dev import DEV_VOCAB
 
 
 _TOOL_PARAMS = {"tool": "file_write", "args": {"file_path": "config.txt", "content": "ready\n"}}
@@ -175,8 +175,8 @@ def test_decomposer_no_template_falls_through_to_backend(tmp_path: Path) -> None
 
 
 def test_engine_compiles_successful_trace(tmp_path: Path) -> None:
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import DevWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld(), persist_dir=tmp_path)
@@ -222,8 +222,8 @@ def _visual_override_trace(goal: str = "create config.txt with ready") -> Execut
 
 
 def test_visual_override_success_does_not_compile(tmp_path: Path) -> None:
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import DevWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld(), persist_dir=tmp_path)
@@ -259,8 +259,8 @@ def test_init_vgg_robot_world_wires_live_namespace_into_executor() -> None:
     # namespace the engine's GoalVerifier uses (no second hand-authored copy, no
     # is_robot flag). With agent=None the RobotWorld adds no embodiment oracles, so
     # the meaningful invariant is the single-source identity, asserted here.
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import RobotWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import RobotWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=RobotWorld())
@@ -272,8 +272,8 @@ def test_init_vgg_robot_world_wires_live_namespace_into_executor() -> None:
 
 
 def test_init_vgg_dev_world_wires_live_namespace_into_executor() -> None:
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import DevWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld())
@@ -286,7 +286,7 @@ def test_init_vgg_dev_world_wires_live_namespace_into_executor() -> None:
 def test_init_vgg_no_world_still_single_sources_namespace() -> None:
     # The legacy no-world path still builds the executor over the live namespace
     # (dev predicates), never over an empty/hand-authored allowlist.
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None)
@@ -299,7 +299,7 @@ def test_mcp_server_builds_engine_with_robot_world() -> None:
     """mcp/server.py:_build_engine must pass world=resolve_world(agent) so a robot
     agent's verify namespace (the sim oracles) is wired into the executor reward
     gate. Mirrors the live entry point end-to-end with the network/backend stubbed."""
-    import vector_os_nano.mcp.server as srv
+    import zeno.mcp.server as srv
 
     captured: dict[str, object] = {}
 
@@ -314,14 +314,14 @@ def test_mcp_server_builds_engine_with_robot_world() -> None:
         _skill_registry = object()
 
     # _build_engine imports everything locally, so monkeypatch via the imported modules.
-    import vector_os_nano.vcli.config as cfg
-    import vector_os_nano.vcli.backends as backends
-    import vector_os_nano.vcli.tools as vtools
-    import vector_os_nano.vcli.tools.skill_wrapper as skw
-    import vector_os_nano.vcli.prompt as prompt
-    import vector_os_nano.vcli.engine as engine_mod
-    import vector_os_nano.vcli.session as session_mod
-    import vector_os_nano.vcli.worlds as worlds_mod
+    import zeno.vcli.config as cfg
+    import zeno.vcli.backends as backends
+    import zeno.vcli.tools as vtools
+    import zeno.vcli.tools.skill_wrapper as skw
+    import zeno.vcli.prompt as prompt
+    import zeno.vcli.engine as engine_mod
+    import zeno.vcli.session as session_mod
+    import zeno.vcli.worlds as worlds_mod
 
     import pytest as _pytest
 

@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "vector-os-nano": {
+    "zeno": {
       "command": "/home/yusen/Desktop/vector_os_nano/.venv/bin/python",
       "args": [
         "-m",
-        "vector_os_nano.mcp",
+        "zeno.mcp",
         "--hardware",
         "--stdio"
       ],

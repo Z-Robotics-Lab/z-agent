@@ -3,7 +3,7 @@
 # Run AFTER 'launch go2 sim' starts the nav stack.
 #
 # Usage:
-#   # Terminal 1: source .venv-nano/bin/activate && vector-cli → launch go2 sim
+#   # Terminal 1: source .venv-nano/bin/activate && zeno → launch go2 sim
 #   # Terminal 2: ./scripts/test_tare_dataflow.sh
 #
 # This script:

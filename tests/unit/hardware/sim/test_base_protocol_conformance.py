@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.hardware.base import BaseProtocol
-from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.base import BaseProtocol
+from zeno.hardware.sim.mujoco_g1 import MuJoCoG1
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 # The full BaseProtocol surface (kept explicit so the test fails loud if a
 # member is renamed/removed in base.py without updating conformance here).

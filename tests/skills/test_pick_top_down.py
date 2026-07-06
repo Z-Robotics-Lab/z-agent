@@ -14,9 +14,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import ObjectState, WorldModel
-from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import ObjectState, WorldModel
+from zeno.skills.pick_top_down import PickTopDownSkill
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ def test_skill_aliases_registered_for_chinese_and_english():
 # _normalise_color_keyword — Chinese color token normaliser (T3)
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.skills.pick_top_down import _normalise_color_keyword  # noqa: E402
+from zeno.skills.pick_top_down import _normalise_color_keyword  # noqa: E402
 
 
 def test_normalise_color_keyword_chinese_suffix():
@@ -376,7 +376,7 @@ def test_resolve_target_prefers_explicit_label_match_over_color_normalise(caplog
                     x=5.0, y=1.0, z=0.3),
     )
     skill = PickTopDownSkill()
-    with caplog.at_level(logging.INFO, logger="vector_os_nano.skills.pick_top_down"):
+    with caplog.at_level(logging.INFO, logger="zeno.skills.pick_top_down"):
         result = skill._resolve_target({"object_label": "green bottle"}, wm)
     assert result is not None
     assert result[0] == "pickable_bottle_green"
@@ -439,12 +439,12 @@ def test_pick_top_down_auto_detect_on_miss_then_hit():
             object_id="pickable_bottle_blue", label="blue bottle",
             x=11.0, y=3.0, z=0.25, confidence=0.9,
         ))
-        from vector_os_nano.core.types import SkillResult as _SR
+        from zeno.core.types import SkillResult as _SR
         return _SR(success=True, result_data={"count": 1, "diagnosis": "ok"})
 
     skill = PickTopDownSkill()
     with patch(
-        "vector_os_nano.skills.detect.DetectSkill",
+        "zeno.skills.detect.DetectSkill",
         return_value=MagicMock(execute=fake_detect_execute),
     ):
         result = skill.execute({"object_label": "blue bottle"}, ctx)
@@ -489,7 +489,7 @@ def test_pick_top_down_no_retry_when_calibration_none():
 def test_pick_top_down_vlm_returns_empty_then_object_not_found():
     """DetectSkill returns count=0 → _resolve_target still None → not_found."""
     from unittest.mock import MagicMock, patch
-    from vector_os_nano.core.types import SkillResult as _SR
+    from zeno.core.types import SkillResult as _SR
 
     arm = _MockArm()
     gripper = _MockGripper()
@@ -506,7 +506,7 @@ def test_pick_top_down_vlm_returns_empty_then_object_not_found():
     ))
     skill = PickTopDownSkill()
     with patch(
-        "vector_os_nano.skills.detect.DetectSkill",
+        "zeno.skills.detect.DetectSkill",
         return_value=empty_detect,
     ):
         result = skill.execute({"object_label": "blue bottle"}, ctx)
@@ -534,7 +534,7 @@ def test_pick_top_down_detect_crash_does_not_crash_skill():
 
     skill = PickTopDownSkill()
     with patch(
-        "vector_os_nano.skills.detect.DetectSkill",
+        "zeno.skills.detect.DetectSkill",
         return_value=MagicMock(execute=boom),
     ):
         result = skill.execute({"object_label": "blue bottle"}, ctx)

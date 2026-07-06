@@ -51,7 +51,7 @@ class MockSceneGraph:
 
 
 def _make_provider(base=None, sg=None):
-    from vector_os_nano.vcli.robot_context import RobotContextProvider
+    from zeno.vcli.robot_context import RobotContextProvider
 
     return RobotContextProvider(base=base, scene_graph=sg)
 

@@ -4,8 +4,8 @@
 """Tests for redesigned SkillContext with dict registries."""
 import pytest
 from unittest.mock import MagicMock
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import WorldModel
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import WorldModel
 
 
 class TestSkillContextRegistries:

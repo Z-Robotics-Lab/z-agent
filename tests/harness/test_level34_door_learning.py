@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
-# Ensure repo root is on sys.path so vector_os_nano is importable
+# Ensure repo root is on sys.path so zeno is importable
 _REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO))
 
-from vector_os_nano.core.scene_graph import RoomNode, SceneGraph
+from zeno.core.scene_graph import RoomNode, SceneGraph
 
 
 # ---------------------------------------------------------------------------

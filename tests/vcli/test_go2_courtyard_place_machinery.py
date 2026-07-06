@@ -34,16 +34,16 @@ def test_go2_courtyard_place_leaves_object_resting_no_midwalk_drop():
     os.environ["VECTOR_SIM_WITH_ARM"] = "1"
     os.environ["VECTOR_ROOM_TEMPLATE"] = "courtyard"
 
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.core.scene_graph import SceneGraph
-    from vector_os_nano.core.skill import SkillContext
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-    from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-    from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
-    from vector_os_nano.skills.mobile_place import MobilePlaceSkill, _scene_place_geom
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-    from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+    from zeno.core.agent import Agent
+    from zeno.core.scene_graph import SceneGraph
+    from zeno.core.skill import SkillContext
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+    from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
+    from zeno.perception.go2_grasp_perception import Go2GraspPerception
+    from zeno.skills.mobile_place import MobilePlaceSkill, _scene_place_geom
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.vcli.worlds.arm_sim_oracle import (
         make_holding_object, make_resting_on_receptacle,
     )
 

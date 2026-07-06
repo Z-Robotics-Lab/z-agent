@@ -19,10 +19,10 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
-from vector_os_nano.vcli.engine import IntentDecision, VectorEngine
-from vector_os_nano.vcli.intent_router import IntentRouter
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.tools.base import ToolRegistry
+from zeno.vcli.engine import IntentDecision, VectorEngine
+from zeno.vcli.intent_router import IntentRouter
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.tools.base import ToolRegistry
 
 
 def _make_engine(**kw: Any) -> VectorEngine:

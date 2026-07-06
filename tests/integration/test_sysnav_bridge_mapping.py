@@ -8,12 +8,12 @@ sourced SysNav workspace or the ``tare_planner.msg`` ROS2 package.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.world_model import ObjectState
-from vector_os_nano.integrations.sysnav_bridge import (
+from zeno.core.world_model import ObjectState
+from zeno.integrations.sysnav_bridge import (
     ObjectNodeShadow,
     object_node_to_state,
 )
-from vector_os_nano.integrations.sysnav_bridge.topic_interfaces import (
+from zeno.integrations.sysnav_bridge.topic_interfaces import (
     _Header,
     _Point,
 )

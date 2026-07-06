@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""End-to-end integration tests for the Vector CLI tool_use agent loop.
+"""End-to-end integration tests for the Zeno tool_use agent loop.
 
 These tests exercise the full path from user message → VectorEngine →
 tool execution → session persistence, using mocked Anthropic API calls.
@@ -25,17 +25,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vector_os_nano.vcli.engine import TurnResult, VectorEngine
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.session import TokenUsage
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.session import Session, create_session, load_session
-from vector_os_nano.vcli.tools.base import ToolRegistry
-from vector_os_nano.vcli.tools.bash_tool import BashTool
-from vector_os_nano.vcli.tools.file_tools import FileReadTool
-from vector_os_nano.vcli.tools.search_tools import GlobTool, GrepTool
-from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
-from vector_os_nano.vcli.prompt import build_system_prompt
+from zeno.vcli.engine import TurnResult, VectorEngine
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.session import TokenUsage
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.session import Session, create_session, load_session
+from zeno.vcli.tools.base import ToolRegistry
+from zeno.vcli.tools.bash_tool import BashTool
+from zeno.vcli.tools.file_tools import FileReadTool
+from zeno.vcli.tools.search_tools import GlobTool, GrepTool
+from zeno.vcli.tools.skill_wrapper import wrap_skills
+from zeno.vcli.prompt import build_system_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +435,7 @@ class TestSystemPromptIncluded:
 
     def test_system_prompt_contains_role_text(self) -> None:
         """build_system_prompt(agent=None) carries the dev persona role text."""
-        from vector_os_nano.vcli.prompt import DEV_ROLE_PROMPT
+        from zeno.vcli.prompt import DEV_ROLE_PROMPT
 
         blocks = build_system_prompt(agent=None)
         all_text = " ".join(b.get("text", "") for b in blocks)
@@ -452,7 +452,7 @@ class TestSystemPromptIncluded:
 class TestCliHelpExitsZero:
     def test_cli_help_exits_zero(self) -> None:
         """main(['--help']) prints usage and exits with code 0."""
-        from vector_os_nano.vcli.cli import main
+        from zeno.vcli.cli import main
 
         with pytest.raises(SystemExit) as exc_info:
             main(["--help"])

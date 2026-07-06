@@ -4,7 +4,7 @@
 """Unit tests for place_region.region_around — TDD RED phase.
 
 Written BEFORE the implementation. All tests should fail with ImportError
-until region_around is added to vector_os_nano/skills/utils/place_region.py.
+until region_around is added to zeno/skills/utils/place_region.py.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import math
 
 import pytest
 
-from vector_os_nano.skills.utils.place_region import region_around
+from zeno.skills.utils.place_region import region_around
 
 
 # ---------------------------------------------------------------------------

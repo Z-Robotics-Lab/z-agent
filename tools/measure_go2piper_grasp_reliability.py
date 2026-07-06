@@ -30,7 +30,7 @@ def _nuke() -> None:
     # Target the in-process sim WORKER, not 'mujoco': an autonomous round's `claude -p "<goal>"`
     # cmdline contains "mujoco", so pkill-mujoco would SIGKILL the round itself (rc=137). Same fix
     # as visual_e2e._cleanup / verify_fetch_cli._nuke.
-    subprocess.run("pkill -9 -f 'vector_os_nano.vcli.cli' 2>/dev/null || true", shell=True)
+    subprocess.run("pkill -9 -f 'zeno.vcli.cli' 2>/dev/null || true", shell=True)
 
 
 def main() -> int:

@@ -62,7 +62,7 @@ _REPO = Path(__file__).resolve().parents[2]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-_SIM_DIR = _REPO / "vector_os_nano" / "hardware" / "sim"
+_SIM_DIR = _REPO / "zeno" / "hardware" / "sim"
 
 
 # ---------------------------------------------------------------------------

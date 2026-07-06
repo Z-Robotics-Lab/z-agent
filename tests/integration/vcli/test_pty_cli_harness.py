@@ -4,7 +4,7 @@
 """R2a PART C — acceptance through the REAL cli.main, driven by a stdlib PTY.
 
 These are the project's FIRST honest capability tests: each spawns the actual
-``python -m vector_os_nano.vcli.cli -p <prompt> --json`` entrypoint under a PTY
+``python -m zeno.vcli.cli -p <prompt> --json`` entrypoint under a PTY
 (``tests/harness/pty_cli.run_cli_turn``), reads the machine ``VECTOR_VERDICT``
 line, and asserts the verdict + exit code. No ``~/sandbox`` bypass, no engine
 poking — the product is the system under test.

@@ -18,13 +18,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.intent_router import IntentRouter
+from zeno.vcli.intent_router import IntentRouter
 
 
 # ---------------------------------------------------------------------------
@@ -34,8 +34,8 @@ from vector_os_nano.vcli.intent_router import IntentRouter
 
 def _make_mock_backend() -> MagicMock:
     """Return a mock LLMBackend that returns a text-only response."""
-    from vector_os_nano.vcli.backends.types import LLMResponse
-    from vector_os_nano.vcli.session import TokenUsage
+    from zeno.vcli.backends.types import LLMResponse
+    from zeno.vcli.session import TokenUsage
 
     backend = MagicMock()
     backend.call.return_value = LLMResponse(
@@ -49,8 +49,8 @@ def _make_mock_backend() -> MagicMock:
 
 def _make_engine_with_vgg(vgg_enabled: bool = True) -> Any:
     """Return a VectorEngine with VGG initialised (or disabled)."""
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.intent_router import IntentRouter
 
     backend = _make_mock_backend()
     router = IntentRouter()
@@ -138,8 +138,8 @@ class TestTryVgg:
 
     # AC-35: try_vgg returns ExecutionTrace for a complex task (mocked LLM + hardware)
     def test_vgg_pipeline_produces_trace(self) -> None:
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         backend = _make_mock_backend()
         router = IntentRouter()
@@ -164,7 +164,7 @@ class TestTryVgg:
 
         # Build a mock selector
         mock_selector = MagicMock()
-        from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
+        from zeno.vcli.cognitive.strategy_selector import StrategyResult
         mock_selector.select.return_value = StrategyResult("fallback", "unmatched", {})
 
         # Build a mock executor that returns a real ExecutionTrace
@@ -202,7 +202,7 @@ class TestTryVgg:
 
     def test_try_vgg_disabled_returns_none(self) -> None:
         """When VGG is disabled, try_vgg always returns None."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)
@@ -213,8 +213,8 @@ class TestTryVgg:
 
     def test_try_vgg_conversation_returns_none(self) -> None:
         """Pure conversation (no action verb) bypasses VGG."""
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         backend = _make_mock_backend()
         router = IntentRouter()
@@ -228,7 +228,7 @@ class TestTryVgg:
 
     def test_try_vgg_no_router_returns_none(self) -> None:
         """try_vgg with no intent_router returns None (cannot determine complexity)."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)  # no intent_router
@@ -242,7 +242,7 @@ class TestTryVgg:
 
     def test_init_vgg_sets_vgg_enabled(self) -> None:
         """init_vgg() sets _vgg_enabled = True when backend is provided."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)
@@ -253,15 +253,15 @@ class TestTryVgg:
 
     def test_init_vgg_failure_leaves_engine_functional(self) -> None:
         """If init_vgg fails, _vgg_enabled stays False and engine still runs."""
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.session import Session
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.session import Session
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)
 
         # Force GoalDecomposer import to raise (simulate missing dependency)
         with patch(
-            "vector_os_nano.vcli.engine.GoalDecomposer",
+            "zeno.vcli.engine.GoalDecomposer",
             side_effect=RuntimeError("unavailable"),
         ):
             engine.init_vgg(backend=backend)
@@ -277,8 +277,8 @@ class TestTryVgg:
         """
         from pathlib import Path
 
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.session import Session
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.session import Session
 
         backend = _make_mock_backend()
         # No intent_router — keeps engine in plain tool_use path

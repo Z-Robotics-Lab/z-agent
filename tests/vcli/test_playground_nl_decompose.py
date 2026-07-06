@@ -43,15 +43,15 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.playground import PlaygroundWorld
-from vector_os_nano.playground.verify.arm_predicates import _HOME_JOINTS
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.engine import VectorEngine
-from vector_os_nano.vcli.intent_router import IntentRouter
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+from zeno.playground import PlaygroundWorld
+from zeno.playground.verify.arm_predicates import _HOME_JOINTS
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.engine import VectorEngine
+from zeno.vcli.intent_router import IntentRouter
+from zeno.vcli.tools.base import CategorizedToolRegistry
 
 # Base locomotion primitives an arm-only world must NEVER be taught.
 _BASE_PRIMITIVES = frozenset({"walk_forward", "turn", "scan_360"})
@@ -476,8 +476,8 @@ def test_live_llm_decomposes_pick_the_mug_arm_only() -> None:  # pragma: no cove
     Deselected by default — the canonical suite never calls a live LLM. Requires
     a configured backend (e.g. via ~/.vector/config.yaml) and VECTOR_LIVE_LLM=1.
     """
-    from vector_os_nano.vcli.backends import create_backend
-    from vector_os_nano.vcli.config import load_config
+    from zeno.vcli.backends import create_backend
+    from zeno.vcli.config import load_config
 
     arm, gripper = _StubArm(), _StubGripper()
     agent = _arm_agent(arm, gripper)

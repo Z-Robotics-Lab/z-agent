@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.core.agent import Agent
-from vector_os_nano.core.types import ExecutionResult, StepTrace
+from zeno.core.agent import Agent
+from zeno.core.types import ExecutionResult, StepTrace
 
 
 # ---------------------------------------------------------------------------

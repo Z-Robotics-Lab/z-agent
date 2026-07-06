@@ -13,8 +13,8 @@ import pytest
 
 mujoco = pytest.importorskip("mujoco", reason="mujoco not installed")
 
-from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
+from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
 
 
 # ---------------------------------------------------------------------------

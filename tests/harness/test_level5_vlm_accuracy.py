@@ -129,7 +129,7 @@ class TestLevel5VLMAccuracy:
 
     @pytest.fixture(scope="class")
     def go2(self):
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
         robot = MuJoCoGo2(gui=False, room=True, backend="sinusoidal")
         robot.connect()
         robot.stand()
@@ -138,7 +138,7 @@ class TestLevel5VLMAccuracy:
 
     @pytest.fixture(scope="class")
     def vlm(self):
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         return Go2VLMPerception(config={"api_key": _get_api_key()})
 
     def _navigate_to(self, go2: Any, x: float, y: float) -> bool:

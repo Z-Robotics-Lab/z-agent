@@ -18,7 +18,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import vector_os_nano.vcli.native_loop as native_loop
+import zeno.vcli.native_loop as native_loop
 
 # The bespoke planner modules the strangle must NOT depend on. Matched as the LAST
 # dotted segment of any import target, so both ``import x.goal_decomposer`` and

@@ -26,19 +26,19 @@ import math  # noqa: E402
 
 import mujoco as mj  # noqa: E402
 
-from vector_os_nano.core.scene_graph import SceneGraph  # noqa: E402
-from vector_os_nano.core.skill import SkillContext  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
+from zeno.core.scene_graph import SceneGraph  # noqa: E402
+from zeno.core.skill import SkillContext  # noqa: E402
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
+from zeno.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
+from zeno.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
     MuJoCoPiperGripper,
 )
-from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
-from vector_os_nano.perception.vlm_go2 import (  # noqa: E402
+from zeno.perception.go2_grasp_perception import Go2GraspPerception  # noqa: E402
+from zeno.perception.vlm_go2 import (  # noqa: E402
     DetectedObject, RoomIdentification, SceneDescription,
 )
-from vector_os_nano.skills.go2.look import LookSkill  # noqa: E402
-from vector_os_nano.skills.navigate_to_object import (  # noqa: E402
+from zeno.skills.go2.look import LookSkill  # noqa: E402
+from zeno.skills.navigate_to_object import (  # noqa: E402
     NavigateToObjectSkill, _VICINITY_CLEARANCE_M,
 )
 
@@ -91,7 +91,7 @@ def main() -> int:
     # Let the dog settle into a stable stance so the head camera is framed on the
     # table, and warm up the detector, before the first look.
     import time  # noqa: PLC0415
-    from vector_os_nano.perception.object_localizer import localize_objects_3d  # noqa: PLC0415, E402
+    from zeno.perception.object_localizer import localize_objects_3d  # noqa: PLC0415, E402
     time.sleep(2.5)
     diag = localize_objects_3d(perception, [_TARGET])
     print(f"diag direct localize {_TARGET!r}: {diag}")

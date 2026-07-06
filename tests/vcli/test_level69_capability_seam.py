@@ -20,15 +20,15 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from vector_os_nano.vcli.cognitive.capabilities import (
+from zeno.vcli.cognitive.capabilities import (
     CapabilityRegistry,
     CapabilityResult,
     LLMChatCapability,
     validate_input,
 )
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult, StrategySelector
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.strategy_selector import StrategyResult, StrategySelector
+from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
 
 class _Cap:
@@ -206,8 +206,8 @@ def test_chat_capability_backend_error_is_failure() -> None:
 
 
 def test_engine_wires_chat_capability_for_dev() -> None:
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import DevWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld())
@@ -218,8 +218,8 @@ def test_engine_wires_chat_capability_for_dev() -> None:
 
 
 def test_engine_robot_world_registers_no_capabilities() -> None:
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import RobotWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import RobotWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=RobotWorld())

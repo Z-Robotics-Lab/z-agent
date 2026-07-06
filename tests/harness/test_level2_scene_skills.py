@@ -28,13 +28,13 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # Import types used in mock return values
-from vector_os_nano.perception.vlm_go2 import (
+from zeno.perception.vlm_go2 import (
     DetectedObject,
     RoomIdentification,
     SceneDescription,
 )
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext
+from zeno.core.types import SkillResult
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ class TestLookSkill:
 
     def test_look_skill_success(self):
         """LookSkill succeeds and returns scene summary when base + VLM are present."""
-        from vector_os_nano.skills.go2.look import LookSkill
+        from zeno.skills.go2.look import LookSkill
 
         skill = LookSkill()
         ctx = _make_context()
@@ -119,7 +119,7 @@ class TestLookSkill:
 
     def test_look_skill_returns_room(self):
         """LookSkill result_data includes a non-empty room field."""
-        from vector_os_nano.skills.go2.look import LookSkill
+        from zeno.skills.go2.look import LookSkill
 
         skill = LookSkill()
         ctx = _make_context()
@@ -134,7 +134,7 @@ class TestLookSkill:
 
     def test_look_skill_no_base(self):
         """LookSkill fails gracefully with diagnosis_code 'no_base' when base is absent."""
-        from vector_os_nano.skills.go2.look import LookSkill
+        from zeno.skills.go2.look import LookSkill
 
         skill = LookSkill()
         ctx = _make_context(has_base=False)
@@ -147,7 +147,7 @@ class TestLookSkill:
 
     def test_look_skill_no_vlm(self):
         """LookSkill fails gracefully with diagnosis_code 'no_vlm' when VLM is absent."""
-        from vector_os_nano.skills.go2.look import LookSkill
+        from zeno.skills.go2.look import LookSkill
 
         skill = LookSkill()
         ctx = _make_context(has_vlm=False)
@@ -160,7 +160,7 @@ class TestLookSkill:
 
     def test_look_skill_camera_failure(self):
         """LookSkill fails with 'camera_failed' when get_camera_frame raises."""
-        from vector_os_nano.skills.go2.look import LookSkill
+        from zeno.skills.go2.look import LookSkill
 
         skill = LookSkill()
         ctx = _make_context()
@@ -176,7 +176,7 @@ class TestLookSkill:
 
     def test_look_skill_vlm_exception(self):
         """LookSkill fails with 'vlm_failed' when VLM raises."""
-        from vector_os_nano.skills.go2.look import LookSkill
+        from zeno.skills.go2.look import LookSkill
 
         skill = LookSkill()
         ctx = _make_context()
@@ -191,7 +191,7 @@ class TestLookSkill:
 
     def test_look_skill_room_confidence_in_range(self):
         """LookSkill result_data room_confidence is in [0.0, 1.0]."""
-        from vector_os_nano.skills.go2.look import LookSkill
+        from zeno.skills.go2.look import LookSkill
 
         skill = LookSkill()
         ctx = _make_context()
@@ -215,7 +215,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_without_query(self):
         """DescribeSceneSkill runs full description mode when no query is given."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context()
@@ -231,7 +231,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_with_query(self):
         """DescribeSceneSkill runs find_objects mode when query is provided."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context()
@@ -249,7 +249,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_query_calls_find_objects(self):
         """When query is provided, find_objects is called (not describe_scene)."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context()
@@ -262,7 +262,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_no_query_calls_describe(self):
         """When query is absent, describe_scene is called (not find_objects)."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context()
@@ -275,7 +275,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_no_base(self):
         """DescribeSceneSkill fails gracefully with 'no_base' when base is absent."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context(has_base=False)
@@ -288,7 +288,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_no_vlm(self):
         """DescribeSceneSkill fails gracefully with 'no_vlm' when VLM is absent."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context(has_vlm=False)
@@ -301,7 +301,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_camera_failure(self):
         """DescribeSceneSkill fails with 'camera_failed' when get_camera_frame raises."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context()
@@ -314,7 +314,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_vlm_exception(self):
         """DescribeSceneSkill fails with 'vlm_failed' when VLM raises."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context()
@@ -327,7 +327,7 @@ class TestDescribeSceneSkill:
 
     def test_describe_scene_result_data_types(self):
         """Full description mode returns correctly typed result_data fields."""
-        from vector_os_nano.skills.go2.look import DescribeSceneSkill
+        from zeno.skills.go2.look import DescribeSceneSkill
 
         skill = DescribeSceneSkill()
         ctx = _make_context()

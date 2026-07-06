@@ -29,13 +29,13 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-from vector_os_nano.playground import PlaygroundWorld
-from vector_os_nano.playground.verify.arm_predicates import _HOME_JOINTS
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.observation import run_snapshot, step_view
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+from zeno.playground import PlaygroundWorld
+from zeno.playground.verify.arm_predicates import _HOME_JOINTS
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.observation import run_snapshot, step_view
+from zeno.vcli.cognitive.strategy_selector import StrategyResult
+from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
 
 # ---------------------------------------------------------------------------

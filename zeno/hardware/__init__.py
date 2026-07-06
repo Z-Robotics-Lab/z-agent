@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2026 Vector Robotics
+
+"""Hardware abstraction layer.
+
+Contains ArmProtocol, GripperProtocol, and BaseProtocol definitions plus
+concrete implementations (SO-101, MuJoCo sim, etc.).
+"""
+from zeno.hardware.base import BaseProtocol
+
+__all__ = ["BaseProtocol"]

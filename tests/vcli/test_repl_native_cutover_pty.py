@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""REPL CUTOVER acceptance — drive the REAL interactive vector-cli REPL by NL on go2 sim.
+"""REPL CUTOVER acceptance — drive the REAL interactive zeno REPL by NL on go2 sim.
 
-The owner's ONLY test interface is bare ``vector-cli`` + natural language. This pins
+The owner's ONLY test interface is bare ``zeno`` + natural language. This pins
 the cutover ON THE REAL SIM through the ACTUAL interactive REPL (not ``-p``, not a
 hand-built engine script): a natural-language nav command must route to the NATIVE
 tool-use producer, drive the real go2 in MuJoCo, and render the HONEST moat verdict in
@@ -47,7 +47,7 @@ def _nuke_and_restore() -> None:
     for cmd in (
         ["rosm", "nuke", "--yes"],
         ["git", "checkout",
-         "vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml"],
+         "zeno/hardware/sim/mjcf/go2/scene_room_piper.xml"],
     ):
         try:
             subprocess.run(cmd, timeout=30, capture_output=True)
@@ -65,7 +65,7 @@ def sim_cleanup():
 @pytest.mark.cli_main
 @pytest.mark.capability
 def test_repl_native_walk_routes_to_native_on_go2_sim(sim_cleanup) -> None:
-    """`vector-cli` + "走到坐标 (11,3)" routes to native on the real go2 sim, verifies honestly."""
+    """`zeno` + "走到坐标 (11,3)" routes to native on the real go2 sim, verifies honestly."""
     pytest.importorskip("mujoco")
     from tests.harness.pty_cli import run_repl_session
 

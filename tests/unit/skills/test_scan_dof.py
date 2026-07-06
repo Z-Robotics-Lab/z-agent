@@ -8,8 +8,8 @@ holding the current pose. SO-101 (5-DoF) behavior is byte-identical.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.skills.scan import ScanSkill, _DEFAULT_SCAN_JOINTS
+from zeno.core.skill import SkillContext
+from zeno.skills.scan import ScanSkill, _DEFAULT_SCAN_JOINTS
 
 
 class _ArmWithDof:  # Piper-like: 6-DoF, exposes .dof + rejects a wrong-length move

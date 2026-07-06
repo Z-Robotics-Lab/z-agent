@@ -23,15 +23,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.observation import (
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.observation import (
     SNAPSHOT_VERSION,
     goal_tree_view,
     run_snapshot,
     step_view,
 )
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.strategy_selector import StrategyResult
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
@@ -248,7 +248,7 @@ def test_run_snapshot_includes_validation_notes_on_replan() -> None:
 
 
 def test_engine_emits_step_view_and_run_snapshot() -> None:
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     eng = VectorEngine.__new__(VectorEngine)  # skip heavy __init__
 

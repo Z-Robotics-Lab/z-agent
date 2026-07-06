@@ -16,7 +16,7 @@ import mujoco
 import numpy as np
 import pytest
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 _SPAWN = np.array([10.0, 3.0])
 _SELF_APPROACH_RADIUS_M = 1.6  # perception_grasp._SCAN_MAX_LOCAL_M

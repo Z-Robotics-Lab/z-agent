@@ -34,7 +34,7 @@ re-perceive+approach+weld the second — graded by the UNTOUCHED honest spine.
 
 The LIVE-model lever that gets the producer to EMIT this sequence (multi-object
 prompt guidance in native_loop._build_system_prompt) is verified separately
-through bare ``vector-cli`` + NL + the eyes harness; this seal pins the spine
+through bare ``zeno`` + NL + the eyes harness; this seal pins the spine
 gradability + physical feasibility deterministically.
 
 Both bottles sit in-reach + adjacent on the near pick table (blue 10.90,2.78 ·
@@ -94,31 +94,31 @@ def test_native_multi_object_fetch_grounds_both_welds(sim_cleanup) -> None:
 
     from pathlib import Path as _Path
 
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-    from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-    from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
-    from vector_os_nano.skills.go2 import get_go2_skills
-    from vector_os_nano.skills.gripper import GripperOpenSkill
-    from vector_os_nano.skills.mobile_pick import MobilePickSkill
-    from vector_os_nano.skills.mobile_place import MobilePlaceSkill
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-    from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-    from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import (
+    from zeno.core.agent import Agent
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+    from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
+    from zeno.perception.go2_grasp_perception import Go2GraspPerception
+    from zeno.skills.go2 import get_go2_skills
+    from zeno.skills.gripper import GripperOpenSkill
+    from zeno.skills.mobile_pick import MobilePickSkill
+    from zeno.skills.mobile_place import MobilePlaceSkill
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.skills.pick_top_down import PickTopDownSkill
+    from zeno.skills.place_top_down import PlaceTopDownSkill
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import (
         classify_step_evidence,
         evidence_passed,
         verify_oracle_names,
     )
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.session import Session
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.verdict import VerdictReport
-    from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
-    from vector_os_nano.vcli.worlds.robot import RobotWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.session import Session
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.verdict import VerdictReport
+    from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
+    from zeno.vcli.worlds.robot import RobotWorld
 
     from tests.harness.fake_backend import FakeToolScriptBackend, tool_turn
 

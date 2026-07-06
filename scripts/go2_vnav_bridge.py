@@ -33,29 +33,29 @@ from pathlib import Path
 _repo = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_repo))
 
-pkg = types.ModuleType("vector_os_nano")
-pkg.__path__ = [str(_repo / "vector_os_nano")]
-pkg.__package__ = "vector_os_nano"
-sys.modules.setdefault("vector_os_nano", pkg)
+pkg = types.ModuleType("zeno")
+pkg.__path__ = [str(_repo / "zeno")]
+pkg.__package__ = "zeno"
+sys.modules.setdefault("zeno", pkg)
 
-core = types.ModuleType("vector_os_nano.core")
-core.__path__ = [str(_repo / "vector_os_nano" / "core")]
-core.__package__ = "vector_os_nano.core"
-sys.modules.setdefault("vector_os_nano.core", core)
+core = types.ModuleType("zeno.core")
+core.__path__ = [str(_repo / "zeno" / "core")]
+core.__package__ = "zeno.core"
+sys.modules.setdefault("zeno.core", core)
 
-hw = types.ModuleType("vector_os_nano.hardware")
-hw.__path__ = [str(_repo / "vector_os_nano" / "hardware")]
-sys.modules.setdefault("vector_os_nano.hardware", hw)
+hw = types.ModuleType("zeno.hardware")
+hw.__path__ = [str(_repo / "zeno" / "hardware")]
+sys.modules.setdefault("zeno.hardware", hw)
 
-sim_mod = types.ModuleType("vector_os_nano.hardware.sim")
-sim_mod.__path__ = [str(_repo / "vector_os_nano" / "hardware" / "sim")]
-sys.modules.setdefault("vector_os_nano.hardware.sim", sim_mod)
+sim_mod = types.ModuleType("zeno.hardware.sim")
+sim_mod.__path__ = [str(_repo / "zeno" / "hardware" / "sim")]
+sys.modules.setdefault("zeno.hardware.sim", sim_mod)
 
 import importlib.util
-_types_path = _repo / "vector_os_nano" / "core" / "types.py"
-_ts = importlib.util.spec_from_file_location("vector_os_nano.core.types", str(_types_path))
+_types_path = _repo / "zeno" / "core" / "types.py"
+_ts = importlib.util.spec_from_file_location("zeno.core.types", str(_types_path))
 _tm = importlib.util.module_from_spec(_ts)
-sys.modules.setdefault("vector_os_nano.core.types", _tm)
+sys.modules.setdefault("zeno.core.types", _tm)
 _ts.loader.exec_module(_tm)
 
 # ---------------------------------------------------------------------------
@@ -71,8 +71,8 @@ from std_msgs.msg import Float32, Header
 from tf2_ros import TransformBroadcaster
 import numpy as np
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-from vector_os_nano.hardware.sim.sim_clock import sim_tick_dt
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.sim_clock import sim_tick_dt
 
 # Path-follower nominal tick. Single source: the _follow_path timer period AND
 # the per-tick ramp constants inside it are calibrated against this.
@@ -357,7 +357,7 @@ class Go2VNavBridge(Node):
         # Terrain persistence — accumulates pointcloud voxels during explore.
         # Auto-saved every 30s while nav is active.
         self._terrain_acc = TerrainAccumulator(voxel_size=0.1)
-        self._terrain_map_path = os.path.expanduser("~/.vector_os_nano/terrain_map.npz")
+        self._terrain_map_path = os.path.expanduser("~/.zeno/terrain_map.npz")
         self.create_timer(30.0, self._auto_save_terrain)
 
         # Reset pose check (1 Hz) — triggered by /tmp/vector_reset_pose file flag
@@ -387,7 +387,7 @@ class Go2VNavBridge(Node):
         self._terrain_replay_count: int = 0
         self._terrain_replay_max: int = 50  # 5Hz × 10s = 50 frames (longer burst)
         self._terrain_replay_start: float = time.time() + _REPLAY_DELAY
-        terrain_path = os.path.expanduser("~/.vector_os_nano/terrain_map.npz")
+        terrain_path = os.path.expanduser("~/.zeno/terrain_map.npz")
         if os.path.isfile(terrain_path):
             acc = TerrainAccumulator()
             if acc.load(terrain_path):
@@ -1618,7 +1618,7 @@ class Go2VNavBridge(Node):
         # Also skip if exploration background thread is actively running.
         if time.time() - self._last_cmd_time > 5.0:
             try:
-                from vector_os_nano.skills.go2.explore import is_exploring
+                from zeno.skills.go2.explore import is_exploring
                 if is_exploring():
                     return  # don't zero velocity during exploration startup
             except ImportError:
@@ -1753,7 +1753,7 @@ class Go2VNavBridge(Node):
         if self._marker_pub is None:
             return
         try:
-            from vector_os_nano.ros2.nodes.scene_graph_viz import (
+            from zeno.ros2.nodes.scene_graph_viz import (
                 build_scene_graph_markers,
             )
             odom = self._go2.get_odometry()

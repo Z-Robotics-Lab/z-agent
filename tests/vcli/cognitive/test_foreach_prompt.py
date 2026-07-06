@@ -28,8 +28,8 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.vocab_from_registry import build_decompose_vocab
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.vocab_from_registry import build_decompose_vocab
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ def test_prompt_teaches_foreach_live_llm_smoke() -> None:  # pragma: no cover - 
     wording. Skipped by default so the canonical suite stays hermetic and free.
     The key comes from VECTOR_LLM_API_KEY (never hardcoded).
     """
-    from vector_os_nano.vcli.backends import create_backend
+    from zeno.vcli.backends import create_backend
 
     api_key = os.environ.get("VECTOR_LLM_API_KEY")
     if not api_key:

@@ -18,9 +18,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.skills.place import PlaceSkill
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import WorldModel
+from zeno.skills.place import PlaceSkill
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ class TestPlaceSkillDiagnosticsSuccess:
 # ScanSkill diagnostics
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.skills.scan import ScanSkill
+from zeno.skills.scan import ScanSkill
 
 
 class TestScanSkillFailureModes:
@@ -275,7 +275,7 @@ class TestScanSkillDiagnosticsSuccess:
 # HomeSkill diagnostics
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.skills.home import HomeSkill
+from zeno.skills.home import HomeSkill
 
 
 class TestHomeSkillFailureModes:
@@ -331,7 +331,7 @@ class TestHomeSkillDiagnosticsSuccess:
 # GripperOpenSkill / GripperCloseSkill diagnostics
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.skills.gripper import GripperCloseSkill, GripperOpenSkill
+from zeno.skills.gripper import GripperCloseSkill, GripperOpenSkill
 
 
 class TestGripperOpenSkillFailureModes:
@@ -411,7 +411,7 @@ class TestGripperCloseSkillDiagnosticsSuccess:
 # WaveSkill diagnostics
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.skills.wave import WaveSkill
+from zeno.skills.wave import WaveSkill
 
 
 class TestWaveSkillFailureModes:
@@ -467,8 +467,8 @@ class TestWaveSkillDiagnosticsSuccess:
 # ---------------------------------------------------------------------------
 
 import numpy as np
-from vector_os_nano.skills.pick import PickSkill
-from vector_os_nano.core.world_model import WorldModel, ObjectState
+from zeno.skills.pick import PickSkill
+from zeno.core.world_model import WorldModel, ObjectState
 
 
 def _make_pick_context(
@@ -673,8 +673,8 @@ class TestPickSkillWorldModelFix:
 # DetectSkill diagnostics (T6)
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.skills.detect import DetectSkill
-from vector_os_nano.core.types import Detection, TrackedObject, Pose3D
+from zeno.skills.detect import DetectSkill
+from zeno.core.types import Detection, TrackedObject, Pose3D
 
 
 def _make_detect_ctx(perception=None, world=None) -> SkillContext:

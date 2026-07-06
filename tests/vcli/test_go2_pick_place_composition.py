@@ -55,7 +55,7 @@ class _StubVLM:
     """Names the scene objects without a network call (localization stays real)."""
 
     def describe_scene(self, frame):
-        from vector_os_nano.perception.vlm_go2 import (
+        from zeno.perception.vlm_go2 import (
             DetectedObject, SceneDescription,
         )
         objs = [DetectedObject(name="green bottle", description="", confidence=0.9)]
@@ -63,21 +63,21 @@ class _StubVLM:
                                 room_type="kitchen", details="")
 
     def identify_room(self, frame):
-        from vector_os_nano.perception.vlm_go2 import RoomIdentification
+        from zeno.perception.vlm_go2 import RoomIdentification
         return RoomIdentification(room="kitchen", confidence=0.9, reasoning="stub")
 
 
 def test_go2_perception_grasp_then_mobile_place_releases():
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.core.scene_graph import SceneGraph
-    from vector_os_nano.core.skill import SkillContext
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-    from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-    from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
-    from vector_os_nano.skills.mobile_place import MobilePlaceSkill
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-    from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+    from zeno.core.agent import Agent
+    from zeno.core.scene_graph import SceneGraph
+    from zeno.core.skill import SkillContext
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+    from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
+    from zeno.perception.go2_grasp_perception import Go2GraspPerception
+    from zeno.skills.mobile_place import MobilePlaceSkill
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
 
     os.environ["VECTOR_SIM_WITH_ARM"] = "1"  # load the go2+Piper attach scene
     go2 = MuJoCoGo2(gui=False, room=True, backend="mpc")

@@ -24,9 +24,9 @@ from pathlib import Path
 
 import pytest
 
-from vector_os_nano.hardware.arm import ensure_finite_joint_targets
+from zeno.hardware.arm import ensure_finite_joint_targets
 
-_HW = Path(__file__).resolve().parents[3] / "vector_os_nano" / "hardware"
+_HW = Path(__file__).resolve().parents[3] / "zeno" / "hardware"
 
 
 class TestEnsureFiniteJointTargets:

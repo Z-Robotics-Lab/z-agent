@@ -13,7 +13,7 @@ Each test pins a confirmed finding's fix so it cannot regress:
 - comment-only code is not a successful execution
 - template value substitution is word-boundary aware
 - the code sandbox excludes the subprocess-spawning tests_pass predicate
-- vector-eval distinguishes an empty suite from a failed case
+- zeno-eval distinguishes an empty suite from a failed case
 
 Pure kernel logic — no robot, no network, no mujoco fixtures.
 """
@@ -24,11 +24,11 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-from vector_os_nano.vcli.cognitive.code_executor import CodeExecutor
-from vector_os_nano.vcli.cognitive.experience_compiler import ExperienceCompiler
-from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
-from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
-from vector_os_nano.vcli.cognitive.trace_store import evidence_passed, load_trace, save_trace
+from zeno.vcli.cognitive.code_executor import CodeExecutor
+from zeno.vcli.cognitive.experience_compiler import ExperienceCompiler
+from zeno.vcli.cognitive.template_library import TemplateLibrary
+from zeno.vcli.cognitive.tool_dispatcher import ToolDispatcher
+from zeno.vcli.cognitive.trace_store import evidence_passed, load_trace, save_trace
 
 # Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
 ORACLES = frozenset({
@@ -37,11 +37,11 @@ ORACLES = frozenset({
     "describe_scene", "detect_objects", "placed_count", "nearest_room",
     "objects_in_room", "find_object", "room_coverage",
 })
-from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, StepRecord, SubGoal
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry, ToolContext
-from vector_os_nano.vcli.tools.bash_tool import BashTool
-from vector_os_nano.vcli.tools.file_tools import FileEditTool, FileWriteTool
+from zeno.vcli.cognitive.types import ExecutionTrace, GoalTree, StepRecord, SubGoal
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.tools.base import CategorizedToolRegistry, ToolContext
+from zeno.vcli.tools.bash_tool import BashTool
+from zeno.vcli.tools.file_tools import FileEditTool, FileWriteTool
 
 
 def _ctx(tmp: Path) -> ToolContext:
@@ -219,8 +219,8 @@ def test_parameterization_is_word_boundary_aware() -> None:
 
 def test_code_sandbox_excludes_tests_pass(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VECTOR_DEV_ALLOW_TESTS", "1")
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import DevWorld
 
     eng = VectorEngine(backend=MagicMock(), intent_router=MagicMock())
     eng.init_vgg(agent=None, skill_registry=None, world=DevWorld(), persist_dir=tmp_path)
@@ -229,11 +229,11 @@ def test_code_sandbox_excludes_tests_pass(tmp_path: Path, monkeypatch) -> None:
     assert "file_exists" in ns      # read-only predicates retained
 
 
-# --- Fix K: vector-eval empty suite ----------------------------------------
+# --- Fix K: zeno-eval empty suite ----------------------------------------
 
 
 def test_eval_main_empty_suite_distinct_code(tmp_path: Path) -> None:
-    from vector_os_nano.vcli.eval_runner import main as eval_main
+    from zeno.vcli.eval_runner import main as eval_main
 
     empty = tmp_path / "empty.json"
     empty.write_text("[]")

@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import numpy as np
 
-import vector_os_nano.vcli.worlds.g1_perception_oracle as oracle_mod
-from vector_os_nano.vcli.worlds.g1_perception_oracle import make_detection_matches_gt
+import zeno.vcli.worlds.g1_perception_oracle as oracle_mod
+from zeno.vcli.worlds.g1_perception_oracle import make_detection_matches_gt
 
 # The independent GT: the red object's segmentation centroid in the rendered frame.
 _SEG_CENTROID = (321.0, 260.0, 919)  # (u, v, px) — matches the real spawn-view stool
@@ -70,7 +70,7 @@ def _run(monkeypatch, boxes, seg=_SEG_CENTROID):
     """Wire a stub detector + stub segmentation GT + fake g1 agent."""
     stub = _StubDetector(boxes)
     monkeypatch.setattr(
-        "vector_os_nano.perception.grounding_dino.get_shared_detector",
+        "zeno.perception.grounding_dino.get_shared_detector",
         lambda: stub,
     )
     # Stub the renderer-native segmentation GT (no GL in unit tests).
@@ -134,7 +134,7 @@ def test_chinese_colour_word_resolves(monkeypatch):
 
 def test_spine_grades_match_grounded_bare_ran():
     """The frozen spine grades '== True' GROUNDED and a bare call RAN (unchanged)."""
-    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+    from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
 
     names = frozenset({"detection_matches_gt"})
     assert classify_verify_expr("detection_matches_gt('red') == True", names) == "GROUNDED"

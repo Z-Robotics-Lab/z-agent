@@ -36,14 +36,14 @@ import inspect
 import pkgutil
 from typing import Any
 
-import vector_os_nano.skills
-from vector_os_nano.vcli.native_loop import (
+import zeno.skills
+from zeno.vcli.native_loop import (
     _GRASP_SKILLS,
     _PLACE_SKILLS,
     _skill_is_grasp,
     _skill_is_place,
 )
-from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
 
 def _all_shipped_skill_classes() -> dict[str, type]:
@@ -52,7 +52,7 @@ def _all_shipped_skill_classes() -> dict[str, type]:
     name-lists are embodiment-registered)."""
     seen: dict[str, type] = {}
     for mod in pkgutil.walk_packages(
-        vector_os_nano.skills.__path__, "vector_os_nano.skills."
+        zeno.skills.__path__, "zeno.skills."
     ):
         try:
             module = importlib.import_module(mod.name)
@@ -181,7 +181,7 @@ class _ByoTool:
         self._releases_object = releases
 
     def execute(self, params: Any, context: Any) -> Any:
-        from vector_os_nano.vcli.tools.base import ToolResult
+        from zeno.vcli.tools.base import ToolResult
         return ToolResult(content=f"{self.name} ok")
 
 
@@ -191,7 +191,7 @@ def test_byo_place_then_grasp_refused_through_dispatch():
     closes the place — the North-Star plug-and-play protection the name-lists could not give."""
     from types import SimpleNamespace
 
-    from vector_os_nano.vcli.native_loop import NativeStepRunner
+    from zeno.vcli.native_loop import NativeStepRunner
 
     tnl = importlib.import_module("tests.unit.vcli.test_native_loop")
     agent, _base = tnl._make_agent(0.0, 0.0)

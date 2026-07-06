@@ -4,7 +4,7 @@
 """Level 7 — SceneGraph: three-layer spatial scene representation.
 
 Tests the SysNav-inspired hierarchical scene graph at
-``vector_os_nano.core.scene_graph``.  Every test is pure Python — no
+``zeno.core.scene_graph``.  Every test is pure Python — no
 MuJoCo, no real API calls.  The TextLLM adapter is replaced by a tiny
 in-process stub; no network I/O or httpx patching required.
 
@@ -75,7 +75,7 @@ if str(_REPO_ROOT) not in sys.path:
 # Imports under test
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.core.scene_graph import (  # noqa: E402
+from zeno.core.scene_graph import (  # noqa: E402
     ObjectNode,
     RoomNode,
     SceneGraph,

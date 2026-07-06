@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stop the Isaac Sim Docker container for Vector OS Nano.
+# Stop the Isaac Sim Docker container for Zeno.
 #
 # Usage:
 #   ./scripts/stop_isaac.sh

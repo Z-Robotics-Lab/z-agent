@@ -15,9 +15,9 @@ import math
 from unittest.mock import MagicMock, patch
 
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.mobile_pick import (
+from zeno.core.skill import SkillContext
+from zeno.core.types import SkillResult
+from zeno.skills.mobile_pick import (
     MobilePickSkill,
     _ang_diff,
     _dist_xy,
@@ -45,7 +45,7 @@ def _make_base(pos=(0.0, 0.0, 0.28), heading=0.0):
 
 def _make_world_model(obj_id=_OBJ_ID, obj_xyz=_OBJ_XYZ):
     """Build a mock world_model with one pickable object."""
-    from vector_os_nano.core.world_model import ObjectState, WorldModel
+    from zeno.core.world_model import ObjectState, WorldModel
 
     wm = WorldModel()
     obj = ObjectState(
@@ -125,8 +125,8 @@ def test_mobile_pick_already_reachable_skips_navigate():
     skill, mock_pick = _make_skill_with_mock_pick()
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=True),
         patch("time.sleep"),
     ):
         ctx = _make_context(
@@ -172,8 +172,8 @@ def test_mobile_pick_calls_navigate_then_wait_then_pick_in_order():
         return True
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", side_effect=wait_side_effect),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", side_effect=wait_side_effect),
         patch("time.sleep"),
     ):
         ctx = _make_context(
@@ -199,8 +199,8 @@ def test_mobile_pick_nav_failed_returns_nav_failed():
     skill, mock_pick = _make_skill_with_mock_pick()
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=True),
         patch("time.sleep"),
     ):
         ctx = _make_context(
@@ -226,8 +226,8 @@ def test_mobile_pick_wait_stable_timeout_returns_wait_stable_timeout():
     skill, mock_pick = _make_skill_with_mock_pick()
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=False),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=False),
         patch("time.sleep"),
     ):
         ctx = _make_context(
@@ -258,8 +258,8 @@ def test_mobile_pick_propagates_pick_ik_unreachable_failure():
     skill, mock_pick = _make_skill_with_mock_pick(pick_execute_return=pick_result)
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=True),
         patch("time.sleep"),
     ):
         ctx = _make_context(
@@ -279,7 +279,7 @@ def test_mobile_pick_propagates_pick_ik_unreachable_failure():
 
 def test_mobile_pick_object_not_found_returns_object_not_found():
     """_resolve_target returns None (empty world) → object_not_found, nav not called."""
-    from vector_os_nano.core.world_model import WorldModel
+    from zeno.core.world_model import WorldModel
 
     base = _make_base(pos=(5.0, 5.0, 0.28), heading=0.0)
     empty_wm = WorldModel()
@@ -289,7 +289,7 @@ def test_mobile_pick_object_not_found_returns_object_not_found():
     mock_pick._resolve_target.return_value = None
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
         patch("time.sleep"),
     ):
         ctx = _make_context(
@@ -334,8 +334,8 @@ def test_mobile_pick_skip_navigate_param_honoured():
     skill, mock_pick = _make_skill_with_mock_pick()
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=True),
         patch("time.sleep"),
     ):
         ctx = _make_context(
@@ -423,8 +423,8 @@ def test_wait_stable_returns_true_when_dog_still():
         return _t[0]
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.time.monotonic", side_effect=fake_monotonic),
-        patch("vector_os_nano.skills.mobile_pick.time.sleep"),
+        patch("zeno.skills.mobile_pick.time.monotonic", side_effect=fake_monotonic),
+        patch("zeno.skills.mobile_pick.time.sleep"),
     ):
         result = _wait_stable(base, max_speed=0.05, settle_duration=0.5, timeout=10.0)
 
@@ -449,8 +449,8 @@ def test_wait_stable_returns_false_on_timeout():
         return _t[0]
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.time.monotonic", side_effect=fast_clock),
-        patch("vector_os_nano.skills.mobile_pick.time.sleep"),
+        patch("zeno.skills.mobile_pick.time.monotonic", side_effect=fast_clock),
+        patch("zeno.skills.mobile_pick.time.sleep"),
     ):
         result = _wait_stable(base, max_speed=0.05, settle_duration=2.0, timeout=3.0)
 
@@ -484,7 +484,7 @@ def test_mobile_pick_auto_detect_on_miss_then_hit():
     DetectSkill.execute is patched to return count=1 and add an object to world_model.
     The second call to _resolve_target returns the target (side_effect: None then hit).
     """
-    from vector_os_nano.core.world_model import ObjectState, WorldModel
+    from zeno.core.world_model import ObjectState, WorldModel
 
     empty_wm = WorldModel()
     base = _make_base(pos=(5.0, 5.0, 0.28), heading=0.0)
@@ -530,11 +530,11 @@ def test_mobile_pick_auto_detect_on_miss_then_hit():
 
     with (
         patch(
-            "vector_os_nano.skills.detect.DetectSkill",
+            "zeno.skills.detect.DetectSkill",
             return_value=MagicMock(execute=fake_detect_execute),
         ),
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=True),
         patch("time.sleep"),
     ):
         result = skill_inst.execute({"object_label": "blue bottle"}, ctx)
@@ -549,7 +549,7 @@ def test_mobile_pick_auto_detect_on_miss_then_hit():
 
 def test_mobile_pick_no_retry_when_perception_none():
     """context.perception is None → no auto-detect retry → object_not_found."""
-    from vector_os_nano.core.world_model import WorldModel
+    from zeno.core.world_model import WorldModel
 
     empty_wm = WorldModel()
     base = _make_base(pos=(5.0, 5.0, 0.28), heading=0.0)
@@ -581,7 +581,7 @@ def test_mobile_pick_no_retry_when_perception_none():
 def test_mobile_pick_no_retry_when_calibration_none_then_delegates():
     """context.calibration is None → no auto-detect retry; the unlocalizable target then
     DELEGATES to perception_grasp (D114 routing-independent far fetch), not object_not_found."""
-    from vector_os_nano.core.world_model import WorldModel
+    from zeno.core.world_model import WorldModel
 
     empty_wm = WorldModel()
     base = _make_base(pos=(5.0, 5.0, 0.28), heading=0.0)
@@ -601,7 +601,7 @@ def test_mobile_pick_no_retry_when_calibration_none_then_delegates():
     )
 
     with (
-        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
+        patch("zeno.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
         patch("time.sleep"),
     ):
         MockPG.return_value.execute.return_value = SkillResult(
@@ -618,7 +618,7 @@ def test_mobile_pick_no_retry_when_calibration_none_then_delegates():
 def test_mobile_pick_vlm_returns_empty_then_delegates():
     """DetectSkill returns count=0 → _resolve_target still None → DELEGATE to perception_grasp
     (its independent grounding-dino path may still find the object). Autodetect still runs once."""
-    from vector_os_nano.core.world_model import WorldModel
+    from zeno.core.world_model import WorldModel
 
     empty_wm = WorldModel()
     base = _make_base(pos=(5.0, 5.0, 0.28), heading=0.0)
@@ -646,8 +646,8 @@ def test_mobile_pick_vlm_returns_empty_then_delegates():
     )
 
     with (
-        patch("vector_os_nano.skills.detect.DetectSkill", return_value=fake_det_empty),
-        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
+        patch("zeno.skills.detect.DetectSkill", return_value=fake_det_empty),
+        patch("zeno.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
         patch("time.sleep"),
     ):
         MockPG.return_value.execute.return_value = SkillResult(
@@ -662,7 +662,7 @@ def test_mobile_pick_vlm_returns_empty_then_delegates():
 
 def test_mobile_pick_detect_crash_does_not_crash_skill():
     """DetectSkill.execute raises → caught (graceful, no raise) → DELEGATE to perception_grasp."""
-    from vector_os_nano.core.world_model import WorldModel
+    from zeno.core.world_model import WorldModel
 
     empty_wm = WorldModel()
     base = _make_base(pos=(5.0, 5.0, 0.28), heading=0.0)
@@ -687,8 +687,8 @@ def test_mobile_pick_detect_crash_does_not_crash_skill():
     )
 
     with (
-        patch("vector_os_nano.skills.detect.DetectSkill", return_value=crashing_det),
-        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
+        patch("zeno.skills.detect.DetectSkill", return_value=crashing_det),
+        patch("zeno.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
         patch("time.sleep"),
     ):
         MockPG.return_value.execute.return_value = SkillResult(
@@ -723,8 +723,8 @@ def test_mobile_pick_ran_no_weld_when_pick_succeeds_without_weld():
     gripper.is_holding.return_value = False  # GT: no weld formed
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=True),
         patch("time.sleep"),
     ):
         ctx = _make_context(base=base, arm=MagicMock(), gripper=gripper, world_model=wm)
@@ -745,8 +745,8 @@ def test_mobile_pick_keeps_ok_diagnosis_when_weld_forms():
     gripper.is_holding.return_value = True
 
     with (
-        patch("vector_os_nano.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
-        patch("vector_os_nano.skills.mobile_pick._wait_stable", return_value=True),
+        patch("zeno.skills.mobile_pick.compute_approach_pose", return_value=_APPROACH_POSE),
+        patch("zeno.skills.mobile_pick._wait_stable", return_value=True),
         patch("time.sleep"),
     ):
         ctx = _make_context(base=base, arm=MagicMock(), gripper=gripper, world_model=wm)
@@ -775,8 +775,8 @@ def test_mobile_pick_delegates_to_perception_grasp_on_unlocalizable_target():
                        perception=MagicMock(), world_model=wm, config={})
     grounded = SkillResult(success=True, result_data={"diagnosis": "ok"})
     with (
-        patch("vector_os_nano.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
-        patch("vector_os_nano.skills.utils.run_autodetect_retry", return_value=0),
+        patch("zeno.skills.perception_grasp.PerceptionGraspSkill") as MockPG,
+        patch("zeno.skills.utils.run_autodetect_retry", return_value=0),
     ):
         MockPG.return_value.execute.return_value = grounded
         result = skill.execute({"object_label": "green bottle"}, ctx)
@@ -794,7 +794,7 @@ def test_mobile_pick_no_delegate_without_perception_stays_object_not_found():
     skill, _mock_pick = _make_skill_with_mock_pick(pick_resolve_return=None)
     ctx = SkillContext(base=base, arm=MagicMock(), gripper=MagicMock(),
                        perception=None, world_model=wm, config={})
-    with patch("vector_os_nano.skills.utils.run_autodetect_retry", return_value=0):
+    with patch("zeno.skills.utils.run_autodetect_retry", return_value=0):
         result = skill.execute({"object_label": "green bottle"}, ctx)
 
     assert result.success is False
