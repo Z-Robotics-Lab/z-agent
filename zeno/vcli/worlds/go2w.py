@@ -576,10 +576,22 @@ class IsaacGo2WWorld:
         return (
             "You operate a Unitree Go2W robot dog (with a PiPER arm) inside an "
             "Isaac Sim warehouse. It navigates via a SLAM + planner stack. "
+            "THE ONLY SIMULATOR IN THIS WORLD IS ISAAC SIM, and its ONLY "
+            "lifecycle tool is go2w_bringup: when the user says anything like "
+            "'启动仿真 / 拉起环境 / start the sim', call go2w_bringup(action='up') "
+            "— it launches Isaac Sim GUI + navigation stack + RViz together. "
+            "Never use bash or any other tool to launch or stop the stack; to "
+            "stop it use go2w_bringup(action='teardown'). There is exactly one "
+            "robot configuration (Go2W + PiPER arm) — never ask the user to pick "
+            "a robot model or gait mode. "
             "If the stack/bridge is not up (tools report bridge errors or 'stale'), "
             "FIRST call go2w_bringup(action='up') — it returns immediately; then "
             "poll go2w_status every ~30 seconds until green:true (a cold start "
             "takes 2-6 minutes; be patient, do NOT give up early), then do the task.",
+            "go2w_status is the ONLY source of truth for whether the stack is "
+            "up (robot_status merely reports in-process object wiring — it says "
+            "'connected' even when nothing is running; never present it as sim "
+            "state). "
             "Use go2w_navigate(x, y) to send it somewhere; use go2w_where() to "
             "check progress. Navigation takes tens of seconds of sim time — "
             "poll go2w_where between checks. Verify arrival with "
@@ -597,6 +609,12 @@ class IsaacGo2WWorld:
         registry.register(Go2WWhereTool(), category="go2w")
         registry.register(Go2WBringupTool(), category="go2w")
         registry.register(Go2WStatusTool(), category="go2w")
+        # 本世界唯一的仿真是 Isaac（go2w_bringup 管生命周期）。内核的 MuJoCo
+        # start/stop_simulation 若留在 schema 里，"启动仿真"会被路由去拉错误的
+        # 仿真器（2026-07-06 实测翻车）。世界自禁类目 = 即插即用，零内核改动。
+        disable = getattr(registry, "disable_category", None)
+        if callable(disable):
+            disable("sim")
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
         ns: dict[str, Any] = {"go2w_at": go2w_at, "explored_volume": explored_volume}

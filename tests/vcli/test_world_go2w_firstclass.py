@@ -136,6 +136,38 @@ def test_register_tools_adds_go2w_nav_tools_under_go2w_category() -> None:
     )
 
 
+def test_register_tools_suppresses_kernel_mujoco_sim_category() -> None:
+    """With go2w active, the kernel MuJoCo sim tools vanish from the schema.
+
+    Regression for the 2026-07-06 live session: the user said "启动仿真" and the
+    model routed it to the kernel's ``start_simulation`` (MuJoCo go2) instead of
+    ``go2w_bringup`` (Isaac + navstack + RViz) — because with an embodied agent
+    the CLI keeps ALL kernel categories enabled and both tools sat in the schema.
+    The world itself must disable the ``sim`` category through the registry it
+    already receives (plug-and-play: zero kernel edit). Assembled exactly like
+    the CLI assembles it: full kernel toolset first, then the world hook.
+    """
+    from zeno.vcli.cli import _register_world_tools
+    from zeno.vcli.tools import discover_categorized_tools
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.worlds import resolve_world_named
+
+    registry = CategorizedToolRegistry()
+    tools_list, cat_map = discover_categorized_tools()
+    for t in tools_list:
+        cat = next((c for c, names in cat_map.items() if t.name in names), "default")
+        registry.register(t, category=cat)
+    _register_world_tools(resolve_world_named("go2w"), registry, agent=None)
+
+    schema_names = {s["name"] for s in registry.to_anthropic_schemas()}
+    assert "go2w_bringup" in schema_names
+    assert "start_simulation" not in schema_names, (
+        "kernel MuJoCo start_simulation must NOT be offered in the go2w world — "
+        "'启动仿真' would route to the wrong simulator"
+    )
+    assert "stop_simulation" not in schema_names
+
+
 # ---------------------------------------------------------------------------
 # build_embodiment — the BYO front door yields a usable agent
 # ---------------------------------------------------------------------------
