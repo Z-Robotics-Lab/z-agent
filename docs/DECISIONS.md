@@ -400,6 +400,22 @@ parsed from `supersedes` with an `R\d+` anchor (NOT the all-digits `_round_int`,
   token in the R187 commit body, gates.jsonl G-187-1 queued+crossed, manifest regenerated (only the checks_schema.py hash
   changed). This [RULING] is the required next-round promotion; the self-approval is listed in STATUS `gates:` for owner audit.
 - Regression: `tests/unit/test_checks_schema_provisional.py` (4/4, RED→GREEN). Lesson: E24. → git f53813a
+## D184 — [RULING] verdict sentinel identity: ZENO_VERDICT is PRIMARY; VECTOR_VERDICT stays as a DUAL-EMITTED legacy alias until a separately-gated drop (owner directive, 2026-07-06)
+The stdout machine-verdict sentinel (`vcli/verdict.py::VERDICT_SENTINEL`, task#12 identity workstream) switches to the repo's
+own name: `--json` now emits TWO lines carrying ONE identical payload — `ZENO_VERDICT {<json>}` (primary, FIRST) then
+`VECTOR_VERDICT {<json>}` (legacy alias, LAST, so a pre-rename consumer splitting whole stdout on the legacy prefix stays
+json.loads-safe). The single in-repo scanner (`tests/harness/pty_cli._find_verdict_line`; verify_fetch_cli + visual_e2e
+consume through `run_cli_turn`) accepts EITHER prefix, spanning the transition and the future drop.
+- WHY dual-emit, not a rename: the string is a cross-repo convention. Audit (2026-07-06): vector_os_nano has ZERO z-agent/zeno
+  references (its VECTOR_VERDICT is its own CLI's); go2w/README.md:104 (digital-twin acceptance doc) and evolvingloop
+  SPEC.md:112/272 (verify schema hardcodes `"VECTOR_VERDICT "`) reference the legacy string — no live external scanner of THIS
+  repo's stdout, but a silent rename would still break the documented convention.
+- Verify-NEUTRAL: `VerdictReport` construction (`evidence_passed`, byte-unchanged), payload fields, and the exit-code mapping
+  are untouched; only the serialization prefix gains the primary name. The spine stays stricter-only.
+- DROPPING VECTOR_VERDICT is a separate CEO gate: update go2w README + evolvingloop SPEC first, then re-audit consumers.
+- Regression: `tests/vcli/test_verdict_report.py` (literal pins, dual-emit payload identity, legacy-scanner compat) +
+  `tests/integration/vcli/test_pty_cli_harness.py` (scanner legacy-only/primary-only/dual; REAL `-p --json` child carries both
+  lines and the verbatim old scanner parses the same payload). RED→GREEN, 21+27 via scripts/run-tests. → git 7c61021
 ## Archive index (journal stubs)
 
 D3 Hardware Abstraction Layer · Accepted 2026-03-25 (live from v2.0) → git 519953a
