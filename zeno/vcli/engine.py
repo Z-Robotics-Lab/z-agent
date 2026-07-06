@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""VectorEngine — core tool_use agent loop for Zeno.
+"""ZenoEngine — core tool_use agent loop for Zeno.
 
 Mirrors Claude Code's query.ts / toolOrchestration.ts pattern.
 Backend-agnostic: works with any LLMBackend (Anthropic, OpenRouter, local).
@@ -10,7 +10,8 @@ Public exports:
     ToolCall     — frozen record of a single tool execution
     TurnResult   — frozen result of one full user turn (may span N API calls)
     ToolBatch    — internal grouping for concurrent vs sequential execution
-    VectorEngine — the stateful agent loop
+    ZenoEngine   — the stateful agent loop
+    VectorEngine — compat alias for ZenoEngine (upstream fork name; see below)
 """
 from __future__ import annotations
 
@@ -230,15 +231,15 @@ class ToolBatch:
 
 
 # ---------------------------------------------------------------------------
-# VectorEngine
+# ZenoEngine
 # ---------------------------------------------------------------------------
 
 
-class VectorEngine:
+class ZenoEngine:
     """Core agent loop: user message -> backend call -> tool execution -> repeat.
 
     Backend-agnostic: accepts any LLMBackend implementation.
-    Thread-safety: a single VectorEngine instance should not be shared across
+    Thread-safety: a single ZenoEngine instance should not be shared across
     concurrent threads. Create one instance per agent session.
     """
 
@@ -2053,3 +2054,11 @@ class VectorEngine:
                 for tc in tool_calls
             ]
             return [f.result() for f in futures]
+
+
+# Compat alias — Zeno is a fork of the upstream "Vector" agent runtime; the
+# core loop class was renamed VectorEngine -> ZenoEngine. Callers/tests that
+# still import VectorEngine (and the test_level66 string-literal monkeypatch of
+# server.py's `from zeno.vcli.engine import VectorEngine`) keep working via this
+# module-level alias. New code should import ZenoEngine.
+VectorEngine = ZenoEngine
