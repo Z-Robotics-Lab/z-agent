@@ -105,6 +105,21 @@ class Go2WWhereTool:
             return ToolResult(content=f"bridge error: {e}", is_error=True)
 
 
+def explored_volume() -> float:
+    """独立裁判读数：已探索体积（m³），来自导航栈 visualization_tools 对真实
+    LiDAR 回波的体素化累积（/explored_volume 经桥 /explore_progress 转发）。
+
+    执行者（TARE/agent）无法伪造——它由独立节点从 /registered_scan 计算。
+    verify 惯用法：``explored_volume() > <探索前基线 + 增益阈值>``（state-oracle
+    对常数比较，可 GROUND）。fail-safe：桥不可达/无数据返回 0.0，绝不 raise
+    进 verifier 沙箱。"""
+    try:
+        v = _get("explore_progress").get("explored_volume")
+        return float(v) if v is not None else 0.0
+    except Exception:  # noqa: BLE001 — verifier 沙箱边界，fail-safe
+        return 0.0
+
+
 def go2w_at(x: float, y: float, tol: float = 0.8) -> bool:
     """GT 谓词：机器人（SIM 地面真值）是否在 (x, y) 的 tol 米内。
 
@@ -151,7 +166,7 @@ class Go2WNavigateSkill:
             x, y = self._target(context, kw)
         except ValueError as e:
             print(f"[SKILL] target parse FAIL: {e}", file=sys.stderr, flush=True)
-            return SkillResult(success=False, message=str(e))
+            return SkillResult(success=False, error_message=str(e))
         print(f"[SKILL] navigate -> ({x},{y}) ctx={str(getattr(context,'params',None))[:80]} kw={str(kw)[:80]}",
               file=sys.stderr, flush=True)
         _post("waypoint", {"x": x, "y": y})
@@ -170,11 +185,77 @@ class Go2WNavigateSkill:
                 print(f"[SKILL] held check d={d2:.2f} at ({p['x']:.2f},{p['y']:.2f})",
                       file=sys.stderr, flush=True)
                 if d2 < 0.7:
-                    return SkillResult(success=True,
-                                       message=f"arrived+held ({p['x']:.2f},{p['y']:.2f})")
+                    return SkillResult(success=True, result_data={
+                        "message": f"arrived+held ({p['x']:.2f},{p['y']:.2f})"})
         p = _get("pose")
         return SkillResult(success=False,
-                           message=f"timeout at ({p['x']:.2f},{p['y']:.2f})")
+                           error_message=f"timeout at ({p['x']:.2f},{p['y']:.2f})")
+
+
+@skill(aliases=["explore", "探索", "自主探索", "建图", "去探索"])
+class Go2WExploreSkill:
+    """阻塞式自主探索：触发 TARE，轮询独立裁判（explored_volume）直到
+    增益达标 / TARE 报完成 / 预算耗尽。
+
+    需要导航栈以 NAV_MODE=explore 拉起（TARE 在 launch 里）；waypoint 模式下
+    POST /explore 虽 200 但无人订阅 /start_exploration——增益不会来，按超时失败
+    并在 message 里给出提示。已知：TARE 无软停（源码只认 start=true），技能
+    返回后机器人会继续探索；硬停 = NAV_MODE=waypoint 重启链（bringup.sh）。
+    """
+
+    name = "explore"
+    description = (
+        "Autonomously explore and map the environment (TARE planner). Blocks "
+        "until explored volume grows by at least min_gain_m3 (default 120), "
+        "TARE reports finished, or budget_s (default 300s wall) runs out. "
+        "Returns the before/after explored_volume readings.")
+    parameters = {
+        "budget_s": {"type": "number", "default": 300,
+                     "description": "wall-clock budget seconds", "required": False},
+        "min_gain_m3": {"type": "number", "default": 120,
+                        "description": "success threshold on volume gain", "required": False},
+    }
+    preconditions: list = []          # 无 arm/gripper——armless 也可探索
+    effects = {"base_state": "exploring"}  # 'base' 关键字 -> motor 技能（正确归类）
+
+    def execute(self, params=None, context=None, **kw):
+        import sys
+        p = params if isinstance(params, dict) else {}
+        budget = float(p.get("budget_s") or kw.get("budget_s") or 300)
+        min_gain = float(p.get("min_gain_m3") or kw.get("min_gain_m3") or 120)
+        try:
+            before = explored_volume()
+            _post("explore", {})
+        except Exception as e:  # noqa: BLE001 — 409（goto 冷却）或桥错误
+            return SkillResult(success=False,
+                               error_message=f"explore start refused: {e}")
+        print(f"[SKILL] explore start volume_before={before:.0f}m3 "
+              f"budget={budget}s min_gain={min_gain}", file=sys.stderr, flush=True)
+        t0 = _time.time()
+        vol, finished = before, False
+        while _time.time() - t0 < budget:
+            _time.sleep(10)
+            try:
+                prog = _get("explore_progress")
+                vol = float(prog.get("explored_volume") or vol)
+                finished = bool(prog.get("finished"))
+            except Exception:  # noqa: BLE001 — 瞬断容忍，下一拍再读
+                continue
+            gain = vol - before
+            if finished or gain >= min_gain:
+                msg = (f"explored volume {before:.0f} -> {vol:.0f} m3 "
+                       f"(gain {gain:.0f}{', TARE finished' if finished else ''}). "
+                       f"Verify with: explored_volume() > {before + min_gain * 0.5:.0f}")
+                print(f"[SKILL] explore OK: {msg}", file=sys.stderr, flush=True)
+                return SkillResult(success=True, result_data={
+                    "message": msg, "volume_before": round(before, 1),
+                    "volume_after": round(vol, 1), "gain_m3": round(gain, 1),
+                    "finished": finished})
+        gain = vol - before
+        return SkillResult(success=False, error_message=(
+            f"explore budget exhausted: volume {before:.0f} -> {vol:.0f} m3 "
+            f"(gain {gain:.0f} < {min_gain}). If gain stayed ~0 the stack is "
+            f"likely in waypoint mode (needs NAV_MODE=explore bringup)."))
 
 
 class IsaacGo2WEmbodiment:
@@ -188,6 +269,16 @@ class IsaacGo2WEmbodiment:
         self._arm = None
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(Go2WNavigateSkill())
+        self._skill_registry.register(Go2WExploreSkill())
+
+    def _build_context(self):
+        """SkillWrapperTool 合同：技能执行上下文（本 embodiment 即 base）。"""
+        from vector_os_nano.core.skill import SkillContext
+        return SkillContext(bases={"go2w": self})
+
+    def _sync_robot_state(self) -> None:
+        """SkillWrapperTool 合同：状态全部经桥实时读取，无需同步——no-op。"""
+        return None
 
     def navigate_to(self, x: float, y: float, timeout: float = 240.0) -> bool:
         """native_loop 的 base 合同：阻塞导航，到达返回 True。
@@ -245,7 +336,11 @@ class IsaacGo2WWorld:
             "Use go2w_navigate(x, y) to send it somewhere; use go2w_where() to "
             "check progress. Navigation takes tens of seconds of sim time — "
             "poll go2w_where between checks. Verify arrival with "
-            "go2w_at(x, y) == True.",
+            "go2w_at(x, y) == True. To explore/map the environment autonomously, "
+            "call the explore skill (blocking; it reports explored_volume before/"
+            "after); verify exploration progress with "
+            "explored_volume() > <the before reading + ~60> using the numbers the "
+            "skill returned.",
         )
 
     def register_tools(self, registry: Any, agent: Any) -> None:
@@ -253,7 +348,7 @@ class IsaacGo2WWorld:
         registry.register(Go2WWhereTool(), category="go2w")
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
-        return {"go2w_at": go2w_at}
+        return {"go2w_at": go2w_at, "explored_volume": explored_volume}
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
         return None
@@ -271,9 +366,10 @@ class IsaacGo2WWorld:
         return DecomposeVocab(
             planner_intro=(
                 "Drive a Go2W robot dog in a warehouse. Navigation goals are "
-                "map-frame (x, y) positions."
+                "map-frame (x, y) positions; autonomous exploration is graded by "
+                "explored_volume() growth."
             ),
-            verify_functions=frozenset({"go2w_at"}),
+            verify_functions=frozenset({"go2w_at", "explored_volume"}),
         )
 
     def derive_vocab_from_registry(self) -> bool:
