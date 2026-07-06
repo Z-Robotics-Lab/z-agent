@@ -729,6 +729,37 @@ def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
         raise
 
 
+def _register_world_tools(world: Any, registry: Any, agent: Any) -> None:
+    """Invoke the active world's ``register_tools`` hook (Phase-C seam).
+
+    The CLI registers the kernel's general tools (code/general via
+    ``discover_categorized_tools``) and the robot skill wrappers (via
+    ``wrap_skills``) for every world. A *world* contributes its own domain tools
+    here — the same hook the World Protocol declares (worlds/base.py) and the
+    engine already honours for ``register_capabilities`` (engine.py init_vgg).
+
+    Zero behaviour change for the two kernel worlds: ``DevWorld.register_tools``
+    and ``RobotWorld.register_tools`` are no-ops (they register nothing into the
+    passed registry — the CLI already did their tool assembly), so calling this
+    for them adds nothing. A BYO world (e.g. go2w) registers its tools straight
+    into the CLI's ``CategorizedToolRegistry`` under its own category, which is
+    then visible to ``to_anthropic_schemas`` (a fresh category is never in the
+    disabled set). Mirrors the ``hasattr`` + best-effort guard the engine uses for
+    capabilities: a BYO world's registration failing must warn, never crash the
+    CLI.
+    """
+    hook = getattr(world, "register_tools", None)
+    if hook is None:
+        return
+    try:
+        hook(registry, agent)
+    except Exception as exc:  # noqa: BLE001 — a BYO world must not crash the CLI
+        logger.warning(
+            "world %r register_tools failed: %s",
+            getattr(world, "name", repr(world)), exc,
+        )
+
+
 def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
     """Switch the LIVE session into the playground ``scenario_id`` (mid-session).
 
@@ -1673,6 +1704,14 @@ def _build_turn_context(
         for _c in ("robot", "diag", "system"):
             registry.disable_category(_c)
 
+    # BYO-world tools (Phase-C hook): after the kernel's general tools + skill
+    # wrappers are assembled, let the active world contribute its own domain
+    # tools into the SAME registry. No-op for dev/robot (their register_tools is
+    # a no-op); a plug-and-play world (go2w) adds its tools under its own
+    # category here — no kernel edit. Runs regardless of agent so a robot-flavour
+    # BYO world driven WITHOUT --sim still gets its tools.
+    _register_world_tools(world, registry, agent)
+
     # Permissions
     permissions = PermissionContext(no_permission=args.no_permission)
 
@@ -2070,6 +2109,14 @@ def main(argv: list[str] | None = None) -> None:
         # ("start the arm sim").
         for _c in ("robot", "diag", "system"):
             registry.disable_category(_c)
+
+    # BYO-world tools (Phase-C hook): after the kernel's general tools + skill
+    # wrappers are assembled, let the active world contribute its own domain
+    # tools into the SAME registry. No-op for dev/robot (their register_tools is
+    # a no-op); a plug-and-play world (go2w) adds its tools under its own
+    # category here — no kernel edit. Runs regardless of agent so a robot-flavour
+    # BYO world driven WITHOUT --sim still gets its tools.
+    _register_world_tools(world, registry, agent)
 
     # Permissions
     permissions = PermissionContext(no_permission=args.no_permission)
