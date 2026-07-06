@@ -113,7 +113,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("model", "Show or switch model  (/model <name>)", True),
     ("config", "Show saved configuration", False),
     ("tools", "List all registered tools", False),
-    ("agent", "Show V's identity and capabilities", False),
+    ("agent", "Show Zeno's identity and capabilities", False),
     ("status", "Show hardware, tools, session info", False),
     ("usage", "Show token usage this session", False),
     ("copy", "Copy last response to clipboard", False),
@@ -213,8 +213,10 @@ PT_STYLE = PTStyle.from_dict({
 })
 
 
-# Braille dot-art V — embedded in panel titles
-V_LABEL = f"[bold {TEAL}] ⠣⡠⠃ [/]"
+# Zeno brand label — embedded as the title of every response Panel.
+# (Was the braille dot-art "V" glyph before the Zeno rename; the constant name
+# V_LABEL is kept so its 4 Panel-title call sites need no churn.)
+V_LABEL = f"[bold {TEAL}] Zeno [/]"
 
 
 # ---------------------------------------------------------------------------
@@ -1394,7 +1396,7 @@ def _handle_slash_command(
                 if etype == "user":
                     lines.append(f"\n**You:** {entry['content']}\n")
                 elif etype == "assistant":
-                    lines.append(f"\n**V:** {entry.get('text', '')}\n")
+                    lines.append(f"\n**Zeno:** {entry.get('text', '')}\n")
             export_path.write_text("\n".join(lines), encoding="utf-8")
             console.print(f"[dim]  Exported to {export_path}[/dim]")
         else:
@@ -2499,7 +2501,7 @@ def main(argv: list[str] | None = None) -> None:
     def _get_toolbar() -> HTML:
         agent_now = app_state.get("agent")
         current_model = app_state.get("model", "?")
-        parts: list[str] = [f"<b>V</b>"]
+        parts: list[str] = [f"<b>Zeno</b>"]
         arm_now = getattr(agent_now, "_arm", None) if agent_now else None
         base_now = getattr(agent_now, "_base", None) if agent_now else None
         if arm_now is not None:
