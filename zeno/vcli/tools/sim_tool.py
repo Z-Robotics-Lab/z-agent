@@ -482,12 +482,14 @@ class SimStartTool:
         from zeno.core.agent import Agent  # type: ignore[import]
         from zeno.core.config import load_config
 
-        # D163/D164 C(b): the bare-REPL NL acceptance face. When VECTOR_NO_ROS2=1
+        from zeno.vcli.env import read_env
+        # D163/D164 C(b): the bare-REPL NL acceptance face. When NO_ROS2=1
         # build the PROVEN fully-in-process MuJoCoGo2 agent via the ONE shared
         # helper that `zeno --sim-go2` also uses (Rule 3/11) — no external
         # ROS2 launch_explore.sh stack, no Go2ROS2Proxy. The ROS2-stack path below
         # is preserved (D164 C: (a) preserved-deferred) for explore/navigate-point.
-        if os.environ.get("VECTOR_NO_ROS2", "0") == "1":
+        # ZENO_NO_ROS2 first, legacy VECTOR_NO_ROS2 fallback (Inv.#2 doc↔runtime).
+        if read_env("NO_ROS2", "0") == "1":
             from zeno.hardware.sim.go2_inprocess import (
                 build_inprocess_go2_agent,
             )
@@ -521,10 +523,14 @@ class SimStartTool:
         gui_flag = [] if gui else ["--no-gui"]
 
         # Propagate mode to the sim subprocess via environment variable.
-        # MuJoCoGo2._build_room_scene_xml reads VECTOR_SIM_WITH_ARM to pick
+        # MuJoCoGo2._build_room_scene_xml reads SIM_WITH_ARM (ZENO_-first) to pick
         # the scene (go2_piper vs bare go2). Subprocess inherits os.environ.
+        # Write the ZENO_ primary AND mirror the legacy VECTOR_ name (additive)
+        # so an un-migrated reader in the child still sees the arm choice.
         child_env = os.environ.copy()
-        child_env["VECTOR_SIM_WITH_ARM"] = "1" if with_arm else "0"
+        _arm = "1" if with_arm else "0"
+        child_env["ZENO_SIM_WITH_ARM"] = _arm
+        child_env["VECTOR_SIM_WITH_ARM"] = _arm
 
         log_fh = open("/tmp/vector_vnav.log", "w")
         vnav_proc = subprocess.Popen(

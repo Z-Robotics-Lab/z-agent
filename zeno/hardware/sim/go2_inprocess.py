@@ -101,11 +101,15 @@ def build_inprocess_go2_agent(
     cfg = config or {}
 
     # The MuJoCoGo2 scene (bare go2 vs go2+piper) is selected by connect() via
-    # _build_room_scene_xml(), which reads VECTOR_SIM_WITH_ARM. The in-process
-    # builder is authoritative: set the env from the with_arm param BEFORE the
-    # base is built so the arm scene loads regardless of how the caller was
-    # launched (the ROS2 path sets it on the child_env instead — same contract).
-    os.environ["VECTOR_SIM_WITH_ARM"] = "1" if with_arm else "0"
+    # _build_room_scene_xml(), which reads SIM_WITH_ARM (ZENO_-first). The
+    # in-process builder is authoritative: set the env from the with_arm param
+    # BEFORE the base is built so the arm scene loads regardless of how the caller
+    # was launched (the ROS2 path sets it on the child_env instead — same contract).
+    # Write the ZENO_ primary AND mirror the legacy VECTOR_ name (additive) so any
+    # un-migrated downstream reader still sees the choice.
+    _arm = "1" if with_arm else "0"
+    os.environ["ZENO_SIM_WITH_ARM"] = _arm
+    os.environ["VECTOR_SIM_WITH_ARM"] = _arm
 
     # Reconcile the offscreen GL backend with the viewer request BEFORE mujoco is
     # imported (it binds the backend at import). Without this, gui=True under the

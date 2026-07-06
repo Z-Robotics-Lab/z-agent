@@ -437,8 +437,13 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
     """
     import os
     from zeno.hardware.sim.scene_builder import build_room_scene
+    from zeno.vcli.env import read_env
     if with_arm is None:
-        with_arm = os.environ.get("VECTOR_SIM_WITH_ARM", "0") == "1"
+        # NL (bare-REPL) acceptance face: honour ZENO_SIM_WITH_ARM first, fall
+        # back to legacy VECTOR_SIM_WITH_ARM (Inv.#2 — the --sim-go2 flag path
+        # already reads ZENO_-first; this closes the DOC↔RUNTIME gap so an
+        # `export ZENO_SIM_WITH_ARM=1` on the product face actually attaches the arm).
+        with_arm = read_env("SIM_WITH_ARM", "0") == "1"
     assets_dir = _MJCF_DIR / "assets"
     if with_arm and _GO2_PIPER_XML.exists():
         go2_xml = _GO2_PIPER_XML
