@@ -853,6 +853,30 @@ def _register_world_tools(world: Any, registry: Any, agent: Any) -> None:
         )
 
 
+def _world_essential_categories(world: Any) -> frozenset[str]:
+    """Read the active world's optional ``essential_categories()`` hook.
+
+    A BYO world declares tool categories the intent router must ALWAYS keep in
+    scope (its own domain category), so keyword routing — which only knows the
+    kernel's categories — can't filter the world's tools out of the schema on the
+    routed path (go2w-experience audit finding #1). Duck-typed like the other
+    optional hooks: a world without it yields an empty set (byte-identical
+    routing for dev/robot and any world that omits it). Best-effort — a broken
+    hook must never crash the CLI.
+    """
+    hook = getattr(world, "essential_categories", None)
+    if hook is None:
+        return frozenset()
+    try:
+        return frozenset(hook())
+    except Exception as exc:  # noqa: BLE001 — a BYO world must not crash the CLI
+        logger.warning(
+            "world %r essential_categories failed: %s",
+            getattr(world, "name", repr(world)), exc,
+        )
+        return frozenset()
+
+
 def _world_setup(world: Any, agent: Any) -> None:
     """Call the active world's optional ``setup(agent)`` lifecycle hook.
 
@@ -1931,7 +1955,11 @@ def _build_turn_context(
     hooks = None
     try:
         from zeno.vcli.intent_router import IntentRouter
-        intent_router = IntentRouter()
+        # Seed the router with the active world's essential tool categories so a
+        # BYO world's own tools stay in scope on the routed path (finding #1).
+        intent_router = IntentRouter(
+            essential_categories=_world_essential_categories(world)
+        )
     except ImportError:
         pass
     try:
@@ -2340,7 +2368,11 @@ def main(argv: list[str] | None = None) -> None:
     hooks = None
     try:
         from zeno.vcli.intent_router import IntentRouter
-        intent_router = IntentRouter()
+        # Seed the router with the active world's essential tool categories so a
+        # BYO world's own tools stay in scope on the routed path (finding #1).
+        intent_router = IntentRouter(
+            essential_categories=_world_essential_categories(world)
+        )
     except ImportError:
         pass
     try:

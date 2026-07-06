@@ -60,6 +60,53 @@ class TestIntentRouter:
             assert result == sorted(result)
 
 
+class TestEssentialCategories:
+    """A world can declare tool categories that route() ALWAYS includes.
+
+    Regression (go2w-experience audit finding #1): keyword routing maps '启动仿真'
+    to ('robot','sim','system'), '导航' to ('robot','diag'), etc. — none of which
+    contain the go2w world's own 'go2w' category. So on the routed unified path
+    the model saw ZERO go2w tools (go2w_bringup absent) and could not start the
+    sim or navigate. The fix must NOT hardcode a world name into the kernel router
+    (Invariant 4); instead the router accepts an opaque set of essential
+    categories that any BYO world can populate, and route() unions them into every
+    non-None result so those tools are always in scope.
+    """
+
+    def test_default_router_has_no_essential_categories(self):
+        """Byte-identical to before: no essential categories → route() unchanged."""
+        from zeno.vcli.intent_router import IntentRouter
+
+        r = IntentRouter()
+        assert r.route("启动仿真") == ["robot", "sim", "system"]
+        assert r.route("你好") is None  # ambiguous still returns None
+
+    def test_essential_category_always_included_on_routed_result(self):
+        from zeno.vcli.intent_router import IntentRouter
+
+        r = IntentRouter(essential_categories={"go2w"})
+        for phrase in ("启动仿真", "start the sim", "关闭仿真", "导航到厨房",
+                       "去探索一下", "抓起箱子"):
+            cats = r.route(phrase)
+            assert cats is not None, f"{phrase!r} should route to categories"
+            assert "go2w" in cats, (
+                f"essential category 'go2w' must be present for {phrase!r}, got {cats}"
+            )
+            assert cats == sorted(cats)
+
+    def test_essential_category_not_forced_on_ambiguous(self):
+        """Ambiguous input still returns None (all tools) — no essential injection.
+
+        route()==None already means 'send all tools', so the essential category is
+        naturally in scope; forcing a non-None list here would be a behaviour
+        change (it would DROP the other categories). Keep None as None.
+        """
+        from zeno.vcli.intent_router import IntentRouter
+
+        r = IntentRouter(essential_categories={"go2w"})
+        assert r.route("你好") is None
+
+
 class TestAnnotationsResolvable:
     """Regression guard (E162 class): every annotation in intent_router must
     resolve. `from __future__ import annotations` stringizes them, so an

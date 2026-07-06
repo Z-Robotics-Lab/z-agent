@@ -215,7 +215,20 @@ class IntentRouter:
 
     Returns a list of category names, or None when intent is ambiguous
     (meaning all tools should be sent).
+
+    ``essential_categories`` is an opaque set of category names that ``route()``
+    ALWAYS unions into a non-None result. It exists so a bring-your-own world can
+    keep its own tool category in scope on the routed path WITHOUT the kernel ever
+    naming that world (Invariant 4): the keyword rules below map, e.g., '启动仿真'
+    to ('robot','sim','system') — none of which is a BYO world's own category, so
+    without this the world's lifecycle/nav tools would be filtered out of the
+    schema and the model could never call them. Default empty → route() is
+    byte-identical to before for every existing caller.
     """
+
+    def __init__(self, essential_categories: frozenset[str] | set[str] | None = None) -> None:
+        # Store as a frozenset so it is immutable and cheap to union.
+        self._essential: frozenset[str] = frozenset(essential_categories or ())
 
     def is_complex(self, user_message: str) -> bool:
         """Detect whether a user message describes a multi-step / complex task.
@@ -405,6 +418,15 @@ class IntentRouter:
                 matched.update(categories)
 
         if not matched:
-            return None  # ambiguous → send all tools
+            # Ambiguous → send all tools (None). Essential categories are already
+            # in scope in the "all tools" view, and forcing a non-None list here
+            # would DROP every other category — a behaviour change. Keep None.
+            return None
+
+        # A world's essential categories are always kept in scope on the routed
+        # path (they were selected before the router existed; the keyword rules
+        # can't know a BYO world's category). Only injected when routing already
+        # narrowed the toolset, never widening the ambiguous "all tools" case.
+        matched.update(self._essential)
 
         return sorted(matched)
