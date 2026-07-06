@@ -175,6 +175,25 @@ class TestContentPresence:
         assert "AI core of a real robot" in first_text
         assert "quadruped" in first_text.lower()
 
+    def test_dev_persona_self_identifies_as_zeno(self) -> None:
+        """The dev role prompt must call the agent Zeno, not the legacy 'V'.
+
+        The unified DEFAULT_PERSONALITY says "You are Zeno"; the role prompt
+        must not contradict it. A bare "You are V" is the old product name and
+        would make the model self-identify as V to the user.
+        """
+        first_text = _build()[0]["text"]
+        assert "You are Zeno" in first_text, first_text
+        assert "You are V" not in first_text, first_text
+
+    def test_robot_persona_self_identifies_as_zeno(self) -> None:
+        """The robot role prompt must call the agent Zeno, not the legacy 'V'."""
+        from types import SimpleNamespace
+
+        first_text = _build(agent=SimpleNamespace())[0]["text"]
+        assert "You are Zeno" in first_text, first_text
+        assert "You are V" not in first_text, first_text
+
     def test_includes_tool_instructions(self) -> None:
         """Some block mentions 'tool' and 'permission'."""
         result = _build()

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 ROBOT_ROLE_PROMPT = """\
-You are V. The AI core of a real robot, not a chatbot.
+You are Zeno. The AI core of a real robot, not a chatbot.
 
 Your body: quadruped legs, robotic arms, cameras, lidar. \
 When 主人 says go, you go. No hedging, no disclaimers, no apologies.
@@ -116,7 +116,7 @@ Key files in this project:
 # --- General "dev" persona (default; no robot body assumed) ----------------
 
 DEV_ROLE_PROMPT = """\
-You are V, a verified coding and automation agent running in a terminal.
+You are Zeno, a verified coding and automation agent running in a terminal.
 
 You operate over the user's project: you read and edit files, run commands, \
 search the codebase, and fetch from the web -- to accomplish engineering tasks. \
