@@ -13,7 +13,6 @@ build/
 .venv-nano/
 .sdd*/
 agents/devlog/
-progress.md
 vector_os_nano/hardware/sim/mjcf/go2/scene_flat.xml
 vector_os_nano/hardware/sim/mjcf/go2/scene_room.xml
 # go2+Piper + g1 generated room scenes (regenerated on every connect / by the scene-builder
