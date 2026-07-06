@@ -645,11 +645,6 @@ def is_exit_command(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-_COMPACT_LOGO = f"""\
-[bold {TEAL}]╲  ╱[/] [bold]ECTOR[/]
-[bold {TEAL}] ╲╱[/]  [dim]OS Nano[/dim]"""
-
-
 def _load_logo_lines() -> list[str]:
     """Load braille logo lines, or empty list if file missing."""
     try:
