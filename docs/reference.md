@@ -158,7 +158,7 @@ params, result, duration)。钩子异常被吞掉，不中断工具执行。
   探索/导航栈状态(`explore`)。
 - 优雅降级：无 base → "No hardware connected"；无 SceneGraph → 省略房间数据。
 
-## 非交互验收契约 — `-p / --json / VECTOR_VERDICT`
+## 非交互验收契约 — `-p / --json / ZENO_VERDICT`（legacy 别名 VECTOR_VERDICT 双发，D184）
 <!-- pull: 机器验收/退出码/判定字段 -->
 
 契约全文在 **[docs/VERIFY.md](VERIFY.md)**（REAL-VERIFY 唯一 runbook）。开发者视角一句话：
@@ -172,7 +172,7 @@ vcli/
 ├── cli.py                  # 入口、REPL 循环、斜杠命令
 ├── engine.py               # VectorEngine — 多轮 tool_use agent 循环
 ├── native_loop.py          # 原生 tool-use producer（run_turn_native，默认路径）
-├── verdict.py              # VerdictReport（-p/--json 的 VECTOR_VERDICT 判决依据）
+├── verdict.py              # VerdictReport（-p/--json 的 ZENO_VERDICT/VECTOR_VERDICT 判决依据）
 ├── tool_execution.py       # 工具执行调度
 ├── turn_status.py          # 轮次状态
 ├── intent_router.py        # IntentRouter — 关键词路由（legacy，S8 退役）

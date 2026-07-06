@@ -5,8 +5,9 @@
 
 These are the project's FIRST honest capability tests: each spawns the actual
 ``python -m zeno.vcli.cli -p <prompt> --json`` entrypoint under a PTY
-(``tests/harness/pty_cli.run_cli_turn``), reads the machine ``VECTOR_VERDICT``
-line, and asserts the verdict + exit code. No ``~/sandbox`` bypass, no engine
+(``tests/harness/pty_cli.run_cli_turn``), reads the machine verdict line
+(``ZENO_VERDICT`` primary / ``VECTOR_VERDICT`` legacy alias), and asserts the
+verdict + exit code. No ``~/sandbox`` bypass, no engine
 poking — the product is the system under test.
 
 Cases (RED -> GREEN):
@@ -167,3 +168,82 @@ def test_non_oracle_verify_fails_closed(tmp_path) -> None:
     )
     assert result.verified is False
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Sentinel identity transition (D184) — the harness scanner accepts EITHER
+# prefix (ZENO_VERDICT primary / VECTOR_VERDICT legacy alias), and the REAL
+# cli child dual-emits both lines with one identical payload.
+# ---------------------------------------------------------------------------
+
+from tests.harness.pty_cli import _find_verdict_line  # noqa: E402
+
+_PAYLOAD = '{"verified": true, "evidence": "GROUNDED", "goal": "g"}'
+
+
+def test_scanner_accepts_legacy_sentinel_only() -> None:
+    # Pure function, no PTY: a pre-transition child (legacy line only) parses.
+    out = f"noise\r\nVECTOR_VERDICT {_PAYLOAD}\r\n"
+    parsed = _find_verdict_line(out)
+    assert parsed is not None and parsed["verified"] is True
+
+
+def test_scanner_accepts_primary_sentinel_only() -> None:
+    # A post-drop child (ZENO_VERDICT only) parses — the scanner already spans
+    # the future legacy removal.
+    out = f"noise\r\nZENO_VERDICT {_PAYLOAD}\r\n"
+    parsed = _find_verdict_line(out)
+    assert parsed is not None and parsed["verified"] is True
+
+
+def test_scanner_on_dual_emit_returns_one_payload() -> None:
+    out = f"ZENO_VERDICT {_PAYLOAD}\nVECTOR_VERDICT {_PAYLOAD}\n"
+    parsed = _find_verdict_line(out)
+    assert parsed is not None and parsed["goal"] == "g"
+    assert _find_verdict_line("no sentinel here\n") is None
+
+
+@pytest.mark.cli_main
+@pytest.mark.capability
+def test_real_child_dual_emits_both_sentinel_lines(tmp_path) -> None:
+    # The REAL `-p --json` child prints BOTH sentinel lines; a legacy-only
+    # scanner (re-implemented verbatim below) extracts the SAME payload the
+    # harness returned. This is the transition's end-to-end proof.
+    import json as _json
+
+    fname = _unique("dual")
+    plan = {
+        "goal": "create a marker file containing ready",
+        "sub_goals": [
+            {
+                "name": "write_marker",
+                "description": "write the marker file with the content ready",
+                "verify": f"path_contains({fname!r}, 'ready')",
+                "strategy": "tool_call",
+                "strategy_params": {
+                    "tool": "file_write",
+                    "args": {"file_path": fname, "content": "ready\n"},
+                },
+            }
+        ],
+    }
+    result = run_cli_turn(
+        "create the marker file then verify it", fake_plan=plan, cwd=tmp_path
+    )
+    assert "ZENO_VERDICT " in result.raw_output
+    assert "VECTOR_VERDICT " in result.raw_output
+    # Legacy-only scan (the pre-rename harness behavior, byte-for-byte).
+    legacy = None
+    for raw in result.raw_output.splitlines():
+        line = raw.strip("\r\n").lstrip("\r")
+        idx = line.find("VECTOR_VERDICT ")
+        if idx == -1:
+            continue
+        try:
+            legacy = _json.loads(line[idx + len("VECTOR_VERDICT ") :].strip())
+            break
+        except _json.JSONDecodeError:
+            continue
+    assert legacy is not None, "old VECTOR_VERDICT scanner no longer matches"
+    assert legacy == result.verdict
+    assert result.verified is True and result.exit_code == 0

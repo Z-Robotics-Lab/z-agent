@@ -364,16 +364,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="TEXT",
         help=(
             "Run ONE turn for TEXT non-interactively and exit (no REPL). With "
-            "--json, also emit one machine-checkable VECTOR_VERDICT line on stdout."
+            "--json, also emit the machine-checkable verdict on stdout "
+            "(ZENO_VERDICT primary + VECTOR_VERDICT legacy alias)."
         ),
     )
     parser.add_argument(
         "--json",
         action="store_true",
         help=(
-            "Emit exactly one verdict line 'VECTOR_VERDICT {<json>}' on stdout for "
-            "the -p turn (Rich/banner routed to stderr). Exit 0=verified / "
-            "2=ran-not-verified / 1=error|no-trace."
+            "Emit the machine verdict on stdout for the -p turn as two sentinel "
+            "lines with one identical payload: 'ZENO_VERDICT {<json>}' (primary) "
+            "+ 'VECTOR_VERDICT {<json>}' (legacy alias; Rich/banner routed to "
+            "stderr). Exit 0=verified / 2=ran-not-verified / 1=error|no-trace."
         ),
     )
     parser.add_argument(
@@ -2103,9 +2105,10 @@ def run_one_turn(args: Any) -> int:
     in-flight async trace would emit a verdict on incomplete evidence), then builds
     a frozen ``VerdictReport`` from the EXISTING
     ``evidence_passed(trace, verify_oracle_names(agent, engine))`` (never a second
-    opinion). Under ``--json`` it emits exactly one stdout line
-    ``VECTOR_VERDICT {<json>}`` (sentinel) with all Rich/banner output already
-    routed to stderr by ``main``.
+    opinion). Under ``--json`` it emits the verdict on stdout as
+    ``ZENO_VERDICT {<json>}`` plus the legacy ``VECTOR_VERDICT {<json>}`` alias
+    line (one identical payload — D184 identity transition) with all
+    Rich/banner output already routed to stderr by ``main``.
 
     Exit codes: 0 = verified, 2 = ran (not verified), 1 = error / no trace.
     """
@@ -2122,8 +2125,12 @@ def run_one_turn(args: Any) -> int:
         if agent is not None:
             _safe_verdict_snapshot(agent)
         if emit_json:
-            # The ONE machine line on real stdout (Rich/banner are on stderr).
-            print(report.to_sentinel_line(), flush=True)
+            # The machine verdict on real stdout (Rich/banner are on stderr):
+            # ZENO_VERDICT primary + VECTOR_VERDICT legacy alias, one identical
+            # payload (D184 — external scanners grep the legacy string until
+            # the gated drop).
+            for _line in report.to_sentinel_lines():
+                print(_line, flush=True)
         else:
             console.print(
                 f"[{TEAL}]verdict[/] {report.evidence} "
@@ -2241,7 +2248,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Non-interactive -p/--print: run ONE turn and exit with the verdict code.
     # Under --json route ALL Rich/banner output to stderr so stdout carries ONLY
-    # the single VECTOR_VERDICT sentinel line.
+    # the verdict sentinel lines (ZENO_VERDICT + legacy VECTOR_VERDICT, D184).
     if getattr(args, "print_prompt", None) is not None:
         if getattr(args, "json", False):
             global console

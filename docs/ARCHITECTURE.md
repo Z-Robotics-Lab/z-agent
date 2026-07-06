@@ -219,7 +219,7 @@ invariants:
   all count as NOT-PASS and a red-team trigger — never a tie-break that loosens the gate.
 - **Same-instance frame.** The verification frame MUST come from the SAME sim process that
   executed the bare-cli turn (the `VECTOR_SNAPSHOT_DIR` child hook, written just before the
-  `VECTOR_VERDICT` sentinel), with proof the real launcher + real VLM ran (token receipt;
+  `ZENO_VERDICT`/legacy `VECTOR_VERDICT` sentinel), with proof the real launcher + real VLM ran (token receipt;
   non-black, non-stale frame). NEVER a second freshly-built in-process sim; NEVER a stub-VLM
   on any acceptance path.
 - **No GT leak.** The frame and any Set-of-Marks annotation derive from the perception

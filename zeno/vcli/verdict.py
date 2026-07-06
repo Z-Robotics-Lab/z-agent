@@ -8,8 +8,10 @@ verdict the engine already computes for a VGG run
 (``evidence_passed(trace, verify_oracle_names(agent, engine))``) previously NEVER
 escaped cli.main as a machine signal — the REPL only ``console.print``ed Rich
 prose. ``VerdictReport`` turns that exact same computation into a frozen,
-JSON-serializable record so a non-interactive ``-p/--json`` turn can emit ONE
-stdout line a harness asserts against.
+JSON-serializable record so a non-interactive ``-p/--json`` turn can emit a
+machine verdict a harness asserts against — during the D184 identity
+transition, TWO sentinel lines (``ZENO_VERDICT`` primary + ``VECTOR_VERDICT``
+legacy alias) carrying ONE identical payload.
 
 Honesty by construction (CLAUDE.md rule 5 — verify is the moat):
 ``VerdictReport.from_trace`` re-uses the EXISTING ``classify_step_evidence`` /
@@ -35,9 +37,16 @@ from zeno.vcli.cognitive.trace_store import (
     evidence_passed,
 )
 
-# Fixed stdout sentinel a harness scans for. NEVER changed lightly — it is the
-# machine contract between cli.main and the PTY harness / CI gate.
-VERDICT_SENTINEL = "VECTOR_VERDICT"
+# Fixed stdout sentinels a harness scans for. NEVER changed lightly — this is
+# the machine contract between cli.main and the PTY harness / CI gate / any
+# external scanner. D184 [RULING] (2026-07-06): ZENO_VERDICT is the PRIMARY
+# sentinel (the repo's own identity); VECTOR_VERDICT is the legacy alias
+# DUAL-EMITTED during the transition so every pre-rename consumer that greps
+# the old string (e.g. go2w/README acceptance doc, evolvingloop SPEC verify
+# schema) still matches. Dropping the legacy line is a separate CEO gate —
+# re-audit those consumers first.
+VERDICT_SENTINEL = "ZENO_VERDICT"
+LEGACY_VERDICT_SENTINEL = "VECTOR_VERDICT"
 
 # The top-level evidence verdict for a whole turn.
 #   GROUNDED — verified: success backed by deterministic, oracle-consuming evidence.
@@ -209,8 +218,22 @@ class VerdictReport:
         return d
 
     def to_sentinel_line(self) -> str:
-        """The single stdout line a harness scans for: ``VECTOR_VERDICT {<json>}``."""
-        return f"{VERDICT_SENTINEL} {json.dumps(self.to_dict(), ensure_ascii=False)}"
+        """The PRIMARY stdout verdict line: ``ZENO_VERDICT {<json>}``."""
+        return self.to_sentinel_lines()[0]
+
+    def to_sentinel_lines(self) -> tuple[str, str]:
+        """Both transition sentinel lines — ONE identical payload (D184).
+
+        Emit order is part of the contract: primary (``ZENO_VERDICT``) FIRST,
+        legacy (``VECTOR_VERDICT``) LAST, so a pre-rename consumer that splits
+        the whole stdout on the legacy prefix sees only trailing whitespace
+        after the JSON (``json.loads``-safe), never the primary line.
+        """
+        payload = json.dumps(self.to_dict(), ensure_ascii=False)
+        return (
+            f"{VERDICT_SENTINEL} {payload}",
+            f"{LEGACY_VERDICT_SENTINEL} {payload}",
+        )
 
     def exit_code(self) -> int:
         """0 = verified, 2 = ran-not-verified, 1 = error / no trace.

@@ -10,9 +10,10 @@ harness spawns the ACTUAL entrypoint::
     python -m zeno.vcli.cli -p <prompt> --json
 
 under a stdlib ``pty`` (so the child sees a TTY, exactly like real use), waits for
-the fixed ``VECTOR_VERDICT {<json>}`` sentinel line on the child's stdout, parses
-the JSON into a ``VerdictReport``-shaped dict, captures the child's exit code, and
-asserts the machine invariant ``parsed["verified"] == (exit_code == 0)``.
+a verdict sentinel line (``ZENO_VERDICT {<json>}`` primary / ``VECTOR_VERDICT``
+legacy alias — D184 transition) on the child's stdout, parses the JSON into a
+``VerdictReport``-shaped dict, captures the child's exit code, and asserts the
+machine invariant ``parsed["verified"] == (exit_code == 0)``.
 
 Deterministic, network-free runs use the ``VECTOR_FAKE_LLM`` seam: pass a
 ``fake_plan`` dict (written to a temp file the child reads) to inject a canned
@@ -37,8 +38,12 @@ from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# The fixed sentinel the child prints on stdout (see vcli.verdict.VERDICT_SENTINEL).
-_SENTINEL = "VECTOR_VERDICT"
+# The fixed sentinels the child prints on stdout (see vcli.verdict): ZENO_VERDICT
+# (primary) + VECTOR_VERDICT (legacy alias, dual-emitted during the D184 identity
+# transition). Accept EITHER, so this scanner spans the transition AND the future
+# gated legacy drop. Deliberately hardcoded (not imported from vcli.verdict) — an
+# independent instrument catches an emitter regression instead of co-drifting.
+_SENTINELS = ("ZENO_VERDICT", "VECTOR_VERDICT")
 
 # Generous default — a sync dev-world turn (file_write + verify) is sub-second,
 # but allow headroom for cold imports.
@@ -49,7 +54,7 @@ _DEFAULT_TIMEOUT_SEC = 90.0
 class CliTurnResult:
     """The outcome of one real cli.main turn driven through the PTY."""
 
-    verdict: dict[str, Any]   # parsed VECTOR_VERDICT payload
+    verdict: dict[str, Any]   # parsed verdict payload (ZENO_/VECTOR_VERDICT line)
     exit_code: int
     raw_output: str           # full child output (for debugging)
 
@@ -115,22 +120,25 @@ def _now() -> float:
 
 
 def _find_verdict_line(output: str) -> dict[str, Any] | None:
-    """Scan child output for the fixed VECTOR_VERDICT sentinel line, parse its JSON.
+    """Scan child output for a verdict sentinel line, parse its JSON.
 
-    The sentinel is unique, so even if Rich/banner noise leaks onto the same PTY
-    (stdout+stderr share the line discipline) the verdict is unambiguous. Returns
-    the parsed payload, or None if no sentinel line is present.
+    Accepts EITHER sentinel prefix (``ZENO_VERDICT`` primary / ``VECTOR_VERDICT``
+    legacy — D184 transition; both carry one identical payload, so first match
+    wins). The sentinels are unique, so even if Rich/banner noise leaks onto the
+    same PTY (stdout+stderr share the line discipline) the verdict is unambiguous.
+    Returns the parsed payload, or None if no sentinel line is present.
     """
     for raw in output.splitlines():
         line = raw.strip("\r\n").lstrip("\r")
-        idx = line.find(_SENTINEL + " ")
-        if idx == -1:
-            continue
-        payload = line[idx + len(_SENTINEL) + 1 :].strip()
-        try:
-            return json.loads(payload)
-        except json.JSONDecodeError:
-            continue
+        for sentinel in _SENTINELS:
+            idx = line.find(sentinel + " ")
+            if idx == -1:
+                continue
+            payload = line[idx + len(sentinel) + 1 :].strip()
+            try:
+                return json.loads(payload)
+            except json.JSONDecodeError:
+                continue
     return None
 
 
@@ -167,7 +175,7 @@ def run_cli_turn(
         cwd:        working dir for the child (defaults to repo root).
 
     Asserts the machine invariant ``verified == (exit_code == 0)`` before returning.
-    Raises AssertionError if no VECTOR_VERDICT line was emitted.
+    Raises AssertionError if no verdict sentinel line was emitted.
     """
     argv = [
         sys.executable, "-m", "zeno.vcli.cli",
@@ -287,8 +295,8 @@ def run_cli_turn(
 
     verdict = _find_verdict_line(output)
     assert verdict is not None, (
-        "no VECTOR_VERDICT line emitted by cli.main "
-        f"(exit={exit_code}). Raw output:\n{output}"
+        "no verdict sentinel line (ZENO_VERDICT/VECTOR_VERDICT) emitted by "
+        f"cli.main (exit={exit_code}). Raw output:\n{output}"
     )
     # The machine invariant the whole instrument rests on.
     assert bool(verdict.get("verified", False)) == (exit_code == 0), (
@@ -305,7 +313,7 @@ def run_cli_turn(
 # The REPL CUTOVER acceptance instrument: the interactive ``zeno`` REPL is the
 # owner's ONLY test interface (bare ``zeno`` + natural language). Unlike the
 # ``-p`` path it emits a HUMAN-readable verdict line ("verdict GROUNDED verified=True
-# (1/1 grounded)"), not the ``VECTOR_VERDICT`` JSON sentinel — so this driver returns
+# (1/1 grounded)"), not the JSON verdict sentinel — so this driver returns
 # the full transcript and the caller asserts on the rendered text. Same STDLIB-only
 # pty/subprocess machinery; a background reader thread accumulates output while the
 # main thread sends NL lines at paced delays.

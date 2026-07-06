@@ -35,6 +35,7 @@ from zeno.vcli.verdict import (
     EVIDENCE_GROUNDED,
     EVIDENCE_NO_TRACE,
     EVIDENCE_RAN,
+    LEGACY_VERDICT_SENTINEL,
     VERDICT_SENTINEL,
     VerdictReport,
 )
@@ -165,6 +166,49 @@ def test_sentinel_line_roundtrips() -> None:
     assert isinstance(payload["oracle_names"], list)
     assert isinstance(payload["per_step"], list)
     assert payload["per_step"][0]["evidence"] == "GROUNDED"
+
+
+# ---------------------------------------------------------------------------
+# (4b) sentinel identity transition — D184: ZENO_VERDICT primary,
+#      VECTOR_VERDICT dual-emitted legacy alias. The contract is the LITERAL
+#      string an external scanner greps, so these pins are literals on purpose.
+# ---------------------------------------------------------------------------
+
+
+def test_sentinel_identity_transition_literals() -> None:
+    assert VERDICT_SENTINEL == "ZENO_VERDICT"
+    assert LEGACY_VERDICT_SENTINEL == "VECTOR_VERDICT"
+
+
+def test_sentinel_lines_dual_emit_identical_payload() -> None:
+    # Both transition lines carry ONE identical payload: primary FIRST, legacy
+    # LAST (a pre-rename consumer splitting the whole stdout on the legacy
+    # prefix must see only trailing whitespace after the JSON).
+    trace = _trace("at_position(2.0, 0.0)", success=True, verify_result=True)
+    report = VerdictReport.from_trace(trace, ORACLES)
+    lines = report.to_sentinel_lines()
+    assert len(lines) == 2
+    primary, legacy = lines
+    assert primary.startswith("ZENO_VERDICT ")
+    assert legacy.startswith("VECTOR_VERDICT ")
+    p_payload = json.loads(primary[len("ZENO_VERDICT ") :])
+    l_payload = json.loads(legacy[len("VECTOR_VERDICT ") :])
+    assert p_payload == l_payload == report.to_dict()
+    # to_sentinel_line() stays the PRIMARY line (single-line callers get ZENO).
+    assert report.to_sentinel_line() == primary
+
+
+def test_legacy_scanner_still_matches_dual_emit() -> None:
+    # A pre-transition scanner (grep 'VECTOR_VERDICT ' per line) applied to the
+    # dual-emitted stdout still finds exactly ONE line and parses the SAME
+    # payload — the external contract survives the rename.
+    trace = _trace("at_position(2.0, 0.0)", success=True, verify_result=True)
+    report = VerdictReport.from_trace(trace, ORACLES)
+    stdout = "\n".join(report.to_sentinel_lines()) + "\n"
+    matches = [ln for ln in stdout.splitlines() if "VECTOR_VERDICT " in ln]
+    assert len(matches) == 1
+    payload = json.loads(matches[0].split("VECTOR_VERDICT ", 1)[1])
+    assert payload == report.to_dict()
 
 
 # ---------------------------------------------------------------------------

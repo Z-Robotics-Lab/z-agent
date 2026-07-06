@@ -4,12 +4,13 @@ The ONLY acceptance face is the bare `zeno` REPL driven by natural language, eye
 the sim (Invariant 2). Everything below instruments that face; none of it replaces it. The
 ledger (loop/ledger/) RECORDS verdicts from this face; it never IS the verdict.
 
-## The machine verdict — `-p / --json / VECTOR_VERDICT`
+## The machine verdict — `-p / --json / ZENO_VERDICT`
 ```bash
 python -m zeno.vcli.cli -p "<prompt>" --json    # one turn, then exit
 ```
-- `--json` prints exactly ONE stdout line: `VECTOR_VERDICT {<json>}` (fixed sentinel);
-  all Rich/banner output goes to stderr.
+- `--json` prints the verdict as TWO stdout sentinel lines with ONE identical payload:
+  `ZENO_VERDICT {<json>}` (primary, first) + `VECTOR_VERDICT {<json>}` (legacy alias,
+  last — D184 transition; scanners accept either); Rich/banner output goes to stderr.
 - The verdict is carried by frozen `VerdictReport` (vcli/verdict.py), built ONLY from the
   spine's `classify_step_evidence` / `evidence_passed` — never re-derived
   (`VerdictReport.from_trace(trace, oracle).verified == evidence_passed(trace, oracle)`).
@@ -45,7 +46,7 @@ the single `create_backend` seam; every verify/permission layer still runs.
 
 ## Eyes (the second witness — required for any physical claim)
 1. Capture frames from the SAME sim process that executed the turn (the `VECTOR_SNAPSHOT_DIR`
-   hook, written before the `VECTOR_VERDICT` sentinel — see tricky-bugs Case 11 for the
+   hook, written before the verdict sentinel lines — see tricky-bugs Case 11 for the
    thread-safety rules).
 2. Judge them: the VLM judge (`VECTOR_JUDGE_*` in .env — a DIFFERENT model family from the
    routing brain, generator ≠ evaluator) or read them back yourself.
