@@ -246,12 +246,13 @@ def _run_text_turn(engine: Any, session: Any, instruction: str) -> str:
     """Run one free-form turn through the unified controller; return the answer text.
 
     Routes through ``run_turn_unified`` (the S5.4 cut-over) so every MCP text turn
-    is a verified closed loop. ``VECTOR_LEGACY_TURN=1`` falls back to the legacy
-    open ``run_turn`` ReAct loop for one release. Both surface ``.text``.
+    is a verified closed loop. ``ZENO_LEGACY_TURN=1`` (legacy VECTOR_LEGACY_TURN
+    fallback) falls back to the legacy open ``run_turn`` ReAct loop for one release.
+    Both surface ``.text``.
     """
-    import os
+    from zeno.vcli.env import read_env
 
-    if os.environ.get("VECTOR_LEGACY_TURN") == "1":
+    if read_env("LEGACY_TURN") == "1":
         return engine.run_turn(instruction, session).text
     return engine.run_turn_unified(instruction, session).text
 

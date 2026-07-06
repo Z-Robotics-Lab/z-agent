@@ -56,7 +56,8 @@ _PHYS_DIAG: dict[str, float] = {"last_wall": 0.0, "last_sim": 0.0}
 
 
 def _phys_diag(sim_time: float) -> None:
-    _p = os.environ.get("VECTOR_PHYS_LOG", "")
+    from zeno.vcli.env import read_env  # ZENO_-first, VECTOR_ fallback
+    _p = read_env("PHYS_LOG", "")
     if not _p:
         return
     now = time.perf_counter()
@@ -76,7 +77,8 @@ def _phys_diag(sim_time: float) -> None:
 
 def _mpc_diag(kind: str, exc: BaseException | None = None) -> None:
     _MPC_DIAG[kind] = _MPC_DIAG.get(kind, 0) + 1
-    _p = os.environ.get("VECTOR_MPC_LOG", "")
+    from zeno.vcli.env import read_env  # ZENO_-first, VECTOR_ fallback
+    _p = read_env("MPC_LOG", "")
     if _p:
         try:
             with open(_p, "a") as _f:
@@ -146,8 +148,8 @@ def _select_room_template() -> Path:
     key → its alternate template. An unknown key raises rather than silently falling
     back, so a typo can never mask which world was actually run.
     """
-    import os  # noqa: PLC0415
-    key = os.environ.get("VECTOR_ROOM_TEMPLATE", "").strip().lower()
+    from zeno.vcli.env import read_env  # ZENO_ROOM_TEMPLATE first, VECTOR_ fallback
+    key = read_env("ROOM_TEMPLATE", "").strip().lower()
     if not key:
         return _ROOM_XML
     try:
@@ -448,9 +450,10 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
     if with_arm and _GO2_PIPER_XML.exists():
         go2_xml = _GO2_PIPER_XML
         scene_name = "scene_room_piper.xml"
-        # go2_piper.xml carries ABSOLUTE mesh paths (build_go2_piper writes them
-        # absolute so it is include-safe) — do NOT rewrite, pass meshes_dir=None.
-        robot_meshes_dir = None
+        # go2_piper.xml carries mesh paths relative to go2/assets (repo-
+        # relocatable; build_go2_piper relativizes them) — absolutize on
+        # attach, same as the bare go2 branch.
+        robot_meshes_dir = assets_dir
         # Grasp welds (name, body1, body2) — only with the arm (the no-arm model
         # has no piper_link6; a weld to a missing body fails to compile).
         # body1=piper_link6 (wrist carrying piper_ee_site + fingers), body2=each
@@ -483,7 +486,7 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
     # scene variant, Inv.3 — worlds are config). Rides the extra_geoms seam like g1's
     # percept_target_red; contype/conaffinity 0, no freejoint -> visual-only, unfakeable.
     extra_geoms: tuple[dict, ...] = (
-        _GO2_CLUTTER_GEOMS if os.environ.get("VECTOR_SCENE_CLUTTER") else ()
+        _GO2_CLUTTER_GEOMS if read_env("SCENE_CLUTTER") else ()
     )
     _model, scene_path = build_room_scene(
         robot_model_path=go2_xml,
@@ -682,6 +685,7 @@ class MuJoCoGo2:
     def connect(self) -> None:
         """Load MuJoCo model and optionally open viewer."""
         mj = _get_mujoco()
+        from zeno.vcli.env import read_env  # ZENO_-first, VECTOR_ fallback (scene toggles)
 
         if self._room:
             scene_path = _build_room_scene_xml()
@@ -718,13 +722,13 @@ class MuJoCoGo2:
                 data.ctrl[12:19] = _PIPER_STOW_CTRL
 
             # Optional FAR-FETCH scenario (additive; default off keeps the in-reach
-            # near-grasp baseline). VECTOR_FETCH_FAR relocates ALL THREE pickables
+            # near-grasp baseline). ZENO_FETCH_FAR relocates ALL THREE pickables
             # +3 m onto pick_table_far so a 1-step grasp can't reach any of them and
             # the model must route look -> navigate_to_object -> perception_grasp; the
             # blue/red distractors move too, so no near distractor confounds the far
             # green fetch. The verify spine reads live GT, so moving the bodies stays
             # honest. Never break a launch over it.
-            if os.environ.get("VECTOR_FETCH_FAR"):
+            if read_env("FETCH_FAR"):
                 for _name in _FAR_FETCH_BODIES:
                     bid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, _name)
                     if bid >= 0:
@@ -732,10 +736,10 @@ class MuJoCoGo2:
                         data.qpos[qadr] += _FAR_FETCH_OFFSET_X
 
             # Optional SCENE-SWAP scenario (additive; default off keeps the frozen
-            # baseline). VECTOR_SCENE_SWAP exchanges the two bottles' (x,y) so each
+            # baseline). ZENO_SCENE_SWAP exchanges the two bottles' (x,y) so each
             # lands on the other's validated spot — geometry-safe, but the left-right
             # ordering flips (a position-invariance probe). Never break a launch over it.
-            if os.environ.get("VECTOR_SCENE_SWAP"):
+            if read_env("SCENE_SWAP"):
                 _swap_qadr: list[int] = []
                 for _name in _SCENE_SWAP_BODIES:
                     bid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, _name)
@@ -1237,7 +1241,8 @@ class MuJoCoGo2:
         # command stream — source thread + values + skill-gate state — so the
         # explore "weird gait" can be checked for bursty/duplicate/conflicting
         # set_velocity traffic from the bridge/nav stack. Remove after debugging.
-        _dbg = os.environ.get("VECTOR_CMDVEL_LOG", "")
+        from zeno.vcli.env import read_env  # ZENO_CMDVEL_LOG first, VECTOR_ fallback
+        _dbg = read_env("CMDVEL_LOG", "")
         if _dbg:
             try:
                 with open(_dbg, "a") as _f:

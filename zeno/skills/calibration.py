@@ -41,7 +41,8 @@ def load_calibration(calib_file: str | None = None) -> np.ndarray:
     Returns:
         4x4 numpy float64 array representing the homogeneous transform.
     """
-    path: str | None = calib_file or os.environ.get("VECTOR_CALIB_FILE")
+    from zeno.vcli.env import read_env  # ZENO_CALIB_FILE first, VECTOR_ fallback
+    path: str | None = calib_file or read_env("CALIB_FILE")
     if not path or not Path(path).exists():
         logger.debug(
             "No calibration file configured/found%s — using identity transform.",

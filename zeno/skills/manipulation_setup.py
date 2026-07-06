@@ -39,8 +39,11 @@ def register_manipulation_skills(agent: Any, base: Any, *, enable_env: bool = Tr
     shared 抓/grab aliases on the empty-world-model path (it needs no pre-populated
     world model; ``pick_top_down`` does).
     """
-    if enable_env and os.environ.get("VECTOR_ENABLE_MANIPULATION", "1") == "0":
-        logger.info("[manip] VECTOR_ENABLE_MANIPULATION=0 — manipulation skills skipped")
+    # ZENO_ENABLE_MANIPULATION first, legacy VECTOR_ENABLE_MANIPULATION fallback;
+    # default "1" (on) and the == "0" opt-out truth semantics unchanged.
+    from zeno.vcli.env import read_env
+    if enable_env and read_env("ENABLE_MANIPULATION", "1") == "0":
+        logger.info("[manip] ENABLE_MANIPULATION=0 — manipulation skills skipped")
         return False
 
     from zeno.skills.pick_top_down import PickTopDownSkill

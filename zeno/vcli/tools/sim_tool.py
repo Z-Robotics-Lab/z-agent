@@ -368,8 +368,9 @@ class SimStartTool:
         """
         import os as _os
         import sys as _sys
+        from zeno.vcli.env import read_env  # ZENO_REEXEC first, VECTOR_ fallback
 
-        if _os.environ.get("VECTOR_REEXEC") == "1":
+        if read_env("REEXEC") == "1":
             return  # already re-exec'd; do not loop
 
         mjpython: str | None = locate_mjpython()
@@ -382,7 +383,8 @@ class SimStartTool:
             return
 
         new_env = _os.environ.copy()
-        new_env["VECTOR_REEXEC"] = "1"
+        new_env["ZENO_REEXEC"] = "1"  # ZENO_ primary
+        new_env["VECTOR_REEXEC"] = "1"  # legacy mirror (additive; read_env falls back to it)
         _os.execve(mjpython, [mjpython, "-m", "zeno.vcli.cli", "--sim"] + _sys.argv[1:], new_env)
 
     @staticmethod
@@ -612,9 +614,11 @@ class SimStartTool:
         # reading ground truth from the MJCF. This matches the SO-101 pattern:
         # camera -> VLM/tracker -> 3D pose -> world_model.
         #
-        # Escape hatch for offline demos only: set VECTOR_SIM_DEMO_GROUND_TRUTH=1
-        # to pre-populate from MJCF body names (treats sim as cheat knowledge).
-        if with_arm and os.environ.get("VECTOR_SIM_DEMO_GROUND_TRUTH") == "1":
+        # Escape hatch for offline demos only: set ZENO_SIM_DEMO_GROUND_TRUTH=1
+        # (legacy VECTOR_SIM_DEMO_GROUND_TRUTH fallback) to pre-populate from MJCF
+        # body names (treats sim as cheat knowledge).
+        from zeno.vcli.env import read_env
+        if with_arm and read_env("SIM_DEMO_GROUND_TRUTH") == "1":
             try:
                 from zeno.hardware.sim.mujoco_go2 import _build_room_scene_xml
                 scene_xml = str(_build_room_scene_xml(with_arm=True))

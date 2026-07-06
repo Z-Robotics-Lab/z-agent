@@ -115,7 +115,10 @@ def grep_count(pattern: str, path: str = ".") -> int:
 
 
 def _tests_allowed() -> bool:
-    return os.environ.get("VECTOR_DEV_ALLOW_TESTS", "") == "1"
+    # Security gate (opt-in subprocess test runner). ZENO_DEV_ALLOW_TESTS first,
+    # legacy VECTOR_DEV_ALLOW_TESTS fallback; == "1" truth semantics unchanged.
+    from zeno.vcli.env import read_env
+    return read_env("DEV_ALLOW_TESTS", "") == "1"
 
 
 def tests_pass(cmd: str = "pytest -q") -> bool:

@@ -50,9 +50,9 @@ def main() -> None:
                 body.mass = float(body.mass) * PIPER_MASS_SCALE
                 body.inertia = [float(v) * PIPER_MASS_SCALE for v in body.inertia]
 
-    # Rewrite mesh file paths to ABSOLUTE paths. This makes the combined XML
-    # include-safe: whether loaded directly or via <include> from another scene
-    # xml, mesh resolution is independent of the including file's directory.
+    # Rewrite mesh file paths to ABSOLUTE paths for the compile step only —
+    # MjSpec.attach asset resolution is then independent of any meshdir/anchor
+    # semantics. The serialized XML is relativized below (repo-relocatable).
     go2_assets = (mjcf_root / "go2" / "assets").resolve()
     piper_assets = (mjcf_root / "piper" / "assets").resolve()
     for mesh in go2.meshes:
@@ -70,8 +70,27 @@ def main() -> None:
     go2.attach(piper, prefix="piper_", frame=mount_frame)
     go2.compile()
 
+    # Relativize the mesh paths in the serialized text so the checked-in XML
+    # survives a repo move/clone (a baked absolute prefix went stale when the
+    # repo moved from ~/Desktop/zeno to ~/Desktop/z-agent). Textual, not on
+    # the live spec: to_xml() re-resolves mesh files (and drops meshdir), so
+    # spec paths must stay absolute until after serialization. The paths are
+    # relative to meshdir="../go2/assets", which resolves to the same
+    # directory from go2_piper/ (direct from_xml_path load) and from go2/
+    # (the legacy <include> scene) — both are siblings under mjcf/.
+    # scene_builder.build_room_scene absolutizes them at load time via
+    # robot_meshes_dir (the g1 seam).
+    xml = go2.to_xml()
+    xml = xml.replace(f'file="{go2_assets}/', 'file="')
+    xml = xml.replace(f'file="{piper_assets}/', 'file="../../piper/assets/')
+    if str(go2_assets) in xml or str(piper_assets) in xml:
+        raise RuntimeError("absolute mesh path survived relativization")
+    if "<compiler " not in xml:
+        raise RuntimeError("no <compiler> element in serialized XML")
+    xml = xml.replace("<compiler ", '<compiler meshdir="../go2/assets" ', 1)
+
     out = this_dir / "go2_piper.xml"
-    out.write_text(go2.to_xml())
+    out.write_text(xml)
     print(f"Wrote: {out}")
 
     model = mujoco.MjModel.from_xml_path(str(out))

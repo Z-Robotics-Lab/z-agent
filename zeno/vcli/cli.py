@@ -1671,9 +1671,10 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
         return
 
     # Re-exec the entire process under mjpython with the same argv.
-    # VECTOR_REEXEC=1 prevents infinite loops.
+    # ZENO_REEXEC=1 (legacy VECTOR_REEXEC mirror) prevents infinite loops.
     new_env = os.environ.copy()
-    new_env["VECTOR_REEXEC"] = "1"
+    new_env["ZENO_REEXEC"] = "1"  # ZENO_ primary
+    new_env["VECTOR_REEXEC"] = "1"  # legacy mirror (additive; _env/read_env falls back to it)
     os.execve(mjpython, [mjpython, "-m", "zeno.vcli.cli"] + sys.argv[1:], new_env)
 
 

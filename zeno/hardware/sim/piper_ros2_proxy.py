@@ -217,8 +217,8 @@ class PiperROS2Proxy:
         )
 
         # Route to shared executor or legacy per-proxy spin.
-        import os as _os
-        if _os.environ.get("VECTOR_SHARED_EXECUTOR", "1") == "1":
+        from zeno.vcli.env import read_env
+        if read_env("SHARED_EXECUTOR", "1") == "1":
             from zeno.hardware.ros2.runtime import get_ros2_runtime
             get_ros2_runtime().add_node(self._node)
             self._shared_runtime_used = True
@@ -609,8 +609,8 @@ class PiperGripperROS2Proxy:
         )
 
         # Route to shared executor or legacy per-proxy spin.
-        import os as _os
-        if _os.environ.get("VECTOR_SHARED_EXECUTOR", "1") == "1":
+        from zeno.vcli.env import read_env
+        if read_env("SHARED_EXECUTOR", "1") == "1":
             from zeno.hardware.ros2.runtime import get_ros2_runtime
             get_ros2_runtime().add_node(self._node)
             self._shared_runtime_used = True

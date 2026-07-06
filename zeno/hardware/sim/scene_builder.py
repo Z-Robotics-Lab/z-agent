@@ -122,8 +122,9 @@ def build_room_scene(
         out_path: if given, the compiled scene is serialized (with the attach-
             default repair) to this path for cross-process from_xml_path consumers.
         robot_meshes_dir: if given, every non-absolute robot ``mesh.file`` is made
-            absolute against it (bare go2.xml / g1 use relative meshdir). Models
-            with already-absolute mesh paths (go2_piper.xml) are unaffected.
+            absolute against it (bare go2.xml / g1 use relative meshdir;
+            go2_piper.xml carries paths relative to go2/assets, including
+            ``../../piper/assets/...`` for the arm meshes).
         camera: optional ``{mount_body, name, pos, xyaxes}`` head camera added to
             the named robot body before attach.
         extra_geoms: optional world-frame static geoms added to the room worldbody

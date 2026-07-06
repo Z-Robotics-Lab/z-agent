@@ -308,9 +308,9 @@ def _dump_place_diag(base: object, arm: object, target: tuple, geom) -> None:
     heavy ``--verbose`` run. Reads the same fk/region the verify oracle uses; never raises into the
     place path and never affects the verdict.
     """
-    import os
+    from zeno.vcli.env import read_env  # ZENO_PLACE_DIAG first, VECTOR_ fallback
 
-    path = os.environ.get("VECTOR_PLACE_DIAG")
+    path = read_env("PLACE_DIAG")
     if not path:
         return
     try:

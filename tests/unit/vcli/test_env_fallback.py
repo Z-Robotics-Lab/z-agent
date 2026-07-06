@@ -79,3 +79,53 @@ def test_config_env_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config._env(_SUFFIX) == "v"
     monkeypatch.delenv("VECTOR_" + _SUFFIX, raising=False)
     assert config._env(_SUFFIX) == ""
+
+
+# --- Migrated read-point defaults: the behavior-sensitive ones (default-value +
+#     truth semantics must be identical to the pre-migration os.environ.get calls). ---
+
+class TestMigratedDefaults:
+    """Pin the default-value + truth semantics of the behavior-sensitive reads that
+    moved onto read_env. A regression here would silently flip a security gate or a
+    default-on capability."""
+
+    def test_dev_allow_tests_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from zeno.vcli.worlds import dev
+
+        monkeypatch.delenv("ZENO_DEV_ALLOW_TESTS", raising=False)
+        monkeypatch.delenv("VECTOR_DEV_ALLOW_TESTS", raising=False)
+        assert dev._tests_allowed() is False  # default: gate CLOSED
+        monkeypatch.setenv("VECTOR_DEV_ALLOW_TESTS", "1")  # legacy fallback still opens it
+        assert dev._tests_allowed() is True
+        monkeypatch.delenv("VECTOR_DEV_ALLOW_TESTS", raising=False)
+        monkeypatch.setenv("ZENO_DEV_ALLOW_TESTS", "1")  # product name opens it
+        assert dev._tests_allowed() is True
+
+    def test_shared_executor_default_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # read_env("SHARED_EXECUTOR", "1") == "1" — default ON, == "0" opt-out unchanged.
+        monkeypatch.delenv("ZENO_SHARED_EXECUTOR", raising=False)
+        monkeypatch.delenv("VECTOR_SHARED_EXECUTOR", raising=False)
+        assert (read_env("SHARED_EXECUTOR", "1") == "1") is True  # default on
+        monkeypatch.setenv("VECTOR_SHARED_EXECUTOR", "0")
+        assert (read_env("SHARED_EXECUTOR", "1") == "1") is False  # legacy opt-out
+        monkeypatch.setenv("ZENO_SHARED_EXECUTOR", "1")  # product name wins
+        assert (read_env("SHARED_EXECUTOR", "1") == "1") is True
+
+    def test_enable_manipulation_default_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("ZENO_ENABLE_MANIPULATION", raising=False)
+        monkeypatch.delenv("VECTOR_ENABLE_MANIPULATION", raising=False)
+        assert (read_env("ENABLE_MANIPULATION", "1") == "0") is False  # default: NOT skipped
+        monkeypatch.setenv("VECTOR_ENABLE_MANIPULATION", "0")
+        assert (read_env("ENABLE_MANIPULATION", "1") == "0") is True  # legacy opt-out
+        monkeypatch.delenv("VECTOR_ENABLE_MANIPULATION", raising=False)
+        monkeypatch.setenv("ZENO_ENABLE_MANIPULATION", "0")
+        assert (read_env("ENABLE_MANIPULATION", "1") == "0") is True
+
+    def test_max_tokens_default_and_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("ZENO_MAX_TOKENS", raising=False)
+        monkeypatch.delenv("VECTOR_MAX_TOKENS", raising=False)
+        assert int(read_env("MAX_TOKENS", "8000")) == 8000  # default preserved
+        monkeypatch.setenv("VECTOR_MAX_TOKENS", "4096")
+        assert int(read_env("MAX_TOKENS", "8000")) == 4096  # legacy fallback
+        monkeypatch.setenv("ZENO_MAX_TOKENS", "2048")
+        assert int(read_env("MAX_TOKENS", "8000")) == 2048  # product name wins

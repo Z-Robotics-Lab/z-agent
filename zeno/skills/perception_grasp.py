@@ -47,7 +47,9 @@ logger = logging.getLogger(__name__)
 # (a side-effecting /tmp write on every perceive). Set VECTOR_PGRASP_DEBUG=1 to
 # re-enable for visual debugging. The mask itself is still computed regardless;
 # only the diagnostic image writes are gated.
-_PGRASP_DEBUG: bool = os.environ.get("VECTOR_PGRASP_DEBUG", "") not in (
+from zeno.vcli.env import read_env  # ZENO_PGRASP_DEBUG first, VECTOR_ fallback  # noqa: E402
+
+_PGRASP_DEBUG: bool = read_env("PGRASP_DEBUG", "") not in (
     "", "0", "false", "off", "no",
 )
 
