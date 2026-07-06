@@ -673,7 +673,9 @@ class SimStartTool:
         # Scene graph — persistent, also attach to proxy for RViz marker publishing
         import os as _os
         from zeno.core.scene_graph import SceneGraph
-        _persist_path = _os.path.expanduser("~/.zeno/scene_graph.yaml")
+        # ~/.zeno/scene_graph.yaml write root; legacy ~/.vector migrated forward on first run.
+        from zeno.vcli import paths as _paths
+        _persist_path = str(_paths.migrate_and_resolve("scene_graph.yaml"))
         _os.makedirs(_os.path.dirname(_persist_path), exist_ok=True)
         sg = SceneGraph(persist_path=_persist_path)
         sg.load()
@@ -730,7 +732,9 @@ class SimStartTool:
         # Scene graph — persistent
         import os as _os
         from zeno.core.scene_graph import SceneGraph
-        _persist_path = _os.path.expanduser("~/.zeno/scene_graph.yaml")
+        # ~/.zeno/scene_graph.yaml write root; legacy ~/.vector migrated forward on first run.
+        from zeno.vcli import paths as _paths
+        _persist_path = str(_paths.migrate_and_resolve("scene_graph.yaml"))
         _os.makedirs(_os.path.dirname(_persist_path), exist_ok=True)
         sg = SceneGraph(persist_path=_persist_path)
         sg.load()
@@ -825,7 +829,9 @@ class SimStartTool:
 
         # Scene graph — persistent
         from zeno.core.scene_graph import SceneGraph
-        _persist_path = os.path.expanduser("~/.zeno/scene_graph.yaml")
+        # ~/.zeno/scene_graph.yaml write root; legacy ~/.vector migrated forward on first run.
+        from zeno.vcli import paths as _paths
+        _persist_path = str(_paths.migrate_and_resolve("scene_graph.yaml"))
         os.makedirs(os.path.dirname(_persist_path), exist_ok=True)
         sg = SceneGraph(persist_path=_persist_path)
         sg.load()

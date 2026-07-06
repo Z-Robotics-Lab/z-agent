@@ -39,11 +39,28 @@ def test_load_personality_default_when_no_file(tmp_path, monkeypatch):
 
 
 def test_load_personality_reads_user_file(tmp_path, monkeypatch):
+    """Legacy ~/.vector/personality.md is still read (upgrade-in-place fallback)."""
     monkeypatch.setenv("HOME", str(tmp_path))
     vdir = tmp_path / ".vector"
     vdir.mkdir()
     (vdir / "personality.md").write_text("[Personality]\nCustom Vector Vibe", encoding="utf-8")
     assert "Custom Vector Vibe" in prompt._load_personality()
+
+
+def test_load_personality_prefers_zeno_home(tmp_path, monkeypatch):
+    """~/.zeno/personality.md is the primary; it wins over the legacy ~/.vector copy."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".vector").mkdir()
+    (tmp_path / ".vector" / "personality.md").write_text(
+        "[Personality]\nOld Vector Vibe", encoding="utf-8"
+    )
+    (tmp_path / ".zeno").mkdir()
+    (tmp_path / ".zeno" / "personality.md").write_text(
+        "[Personality]\nNew Zeno Vibe", encoding="utf-8"
+    )
+    loaded = prompt._load_personality()
+    assert "New Zeno Vibe" in loaded
+    assert "Old Vector Vibe" not in loaded
 
 
 def test_personality_is_world_agnostic_default():

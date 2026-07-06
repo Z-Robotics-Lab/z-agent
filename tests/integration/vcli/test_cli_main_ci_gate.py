@@ -79,7 +79,7 @@ def test_repl_runs_one_turn_then_exits(tmp_path, monkeypatch: pytest.MonkeyPatch
 
     # Run the REPL IN tmp_path so the dev-world file oracle (cwd-scoped) reads the
     # marker the actor writes. Isolate HOME so the persistent dev template tier
-    # (~/.vector) is per-test — a compiled template from another run must not
+    # (~/.zeno) is per-test — a compiled template from another run must not
     # short-circuit this decompose with a stale plan.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))

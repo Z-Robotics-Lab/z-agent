@@ -276,7 +276,7 @@ class VectorEngine:
         self._goal_executor: Any = None
 
         # Experience-compilation tier (wired only when init_vgg is given a
-        # persist_dir; in-memory / off otherwise so tests don't touch ~/.vector).
+        # persist_dir; in-memory / off otherwise so tests don't touch ~/.zeno).
         self._template_library: Any = None
         self._experience_compiler: Any = None
         self._successful_traces: list[Any] = []
@@ -325,7 +325,7 @@ class VectorEngine:
         passes its interactive prompt.
 
         ``persist_dir`` enables the learning tier: when set, StrategyStats and the
-        TemplateLibrary persist under it (e.g. ``~/.vector``) and successful runs
+        TemplateLibrary persist under it (e.g. ``~/.zeno``) and successful runs
         are compiled into reusable templates. None keeps everything in memory
         (the default, so tests never touch the home dir).
         """

@@ -214,11 +214,11 @@ def run_cli_turn(
     if not live:
         env.setdefault("ANTHROPIC_API_KEY", "test-key-not-used")
     # Isolate HOME so the dev world's persistent template/experience tier
-    # (~/.vector/goal_templates.json) is per-run — a compiled template from a
+    # (~/.zeno/goal_templates.json) is per-run — a compiled template from a
     # prior turn must NEVER short-circuit a later decompose and reuse a stale
     # goal/plan. Also keeps the harness from polluting the developer's real
-    # ~/.vector. Caller can override via extra_env["HOME"].
-    home_dir = tempfile.mkdtemp(prefix="vector_pty_home_")
+    # ~/.zeno. Caller can override via extra_env["HOME"].
+    home_dir = tempfile.mkdtemp(prefix="zeno_pty_home_")
     env["HOME"] = home_dir
     if fake_plan is not None:
         plan_path = _write_fake_plan(fake_plan)

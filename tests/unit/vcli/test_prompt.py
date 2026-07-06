@@ -332,6 +332,49 @@ class TestVectorMd:
         combined = " ".join(b["text"] for b in result)
         assert "Project Context" in combined
 
+    def test_loads_zeno_md_from_cwd(self, tmp_path: Path) -> None:
+        """ZENO.md in cwd is recognized as the product context file (the rename)."""
+        (tmp_path / "ZENO.md").write_text("# Zeno Project\nrobotics stack")
+        result = _build(cwd=tmp_path)
+        combined = " ".join(b["text"] for b in result)
+        assert "Zeno Project" in combined
+
+    def test_zeno_md_wins_over_vector_md_in_cwd(self, tmp_path: Path) -> None:
+        """First-found-wins with ZENO.md ahead of VECTOR.md: ZENO.md content is used,
+        VECTOR.md is NOT (so a repo carrying both prefers the product name)."""
+        from zeno.vcli.prompt import _load_vector_md
+
+        (tmp_path / "ZENO.md").write_text("zeno-marker")
+        (tmp_path / "VECTOR.md").write_text("vector-marker")
+        loaded = _load_vector_md(tmp_path)
+        assert "zeno-marker" in loaded
+        assert "vector-marker" not in loaded
+
+    def test_vector_md_still_read_as_fallback(self, tmp_path: Path) -> None:
+        """A repo carrying only the legacy VECTOR.md is still recognized (fallback)."""
+        from zeno.vcli.prompt import _load_vector_md
+
+        (tmp_path / "VECTOR.md").write_text("vector-legacy-marker")
+        assert "vector-legacy-marker" in _load_vector_md(tmp_path)
+
+    def test_home_zeno_md_primary_vector_md_fallback(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Home context file: ~/.zeno/ZENO.md primary, legacy ~/.vector/VECTOR.md fallback."""
+        from zeno.vcli.prompt import _load_vector_md
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        # Only the legacy home file exists → read it.
+        (tmp_path / ".vector").mkdir()
+        (tmp_path / ".vector" / "VECTOR.md").write_text("home-vector-marker")
+        assert "home-vector-marker" in _load_vector_md(None)
+        # ~/.zeno/ZENO.md present → it wins.
+        (tmp_path / ".zeno").mkdir()
+        (tmp_path / ".zeno" / "ZENO.md").write_text("home-zeno-marker")
+        loaded = _load_vector_md(None)
+        assert "home-zeno-marker" in loaded
+        assert "home-vector-marker" not in loaded
+
 
 # ---------------------------------------------------------------------------
 # No-agent handling

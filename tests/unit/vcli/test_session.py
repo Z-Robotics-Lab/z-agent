@@ -70,9 +70,25 @@ def test_create_session_creates_file(tmp_path: Path) -> None:
 
 
 def test_session_default_directory() -> None:
-    """DEFAULT_SESSION_DIR resolves to ~/.vector/sessions/."""
-    expected = Path.home() / ".vector" / "sessions"
-    assert DEFAULT_SESSION_DIR == expected
+    """DEFAULT_SESSION_DIR is the ~/.zeno/sessions WRITE root (post-rename primary)."""
+    assert DEFAULT_SESSION_DIR == Path.home() / ".zeno" / "sessions"
+
+
+def test_session_write_dir_is_zeno_read_falls_back_to_vector(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """New sessions WRITE to ~/.zeno; a pre-existing ~/.vector/sessions is still READ
+    (upgrade-in-place fallback), but ~/.zeno wins when both exist."""
+    import zeno.vcli.session as sess
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert sess._resolve_write_dir(None) == tmp_path / ".zeno" / "sessions"
+    # Only legacy dir exists → reads fall back to it.
+    (tmp_path / ".vector" / "sessions").mkdir(parents=True)
+    assert sess._resolve_read_dir(None) == tmp_path / ".vector" / "sessions"
+    # Both exist → ~/.zeno wins.
+    (tmp_path / ".zeno" / "sessions").mkdir(parents=True)
+    assert sess._resolve_read_dir(None) == tmp_path / ".zeno" / "sessions"
 
 
 def test_session_metadata(tmp_path: Path) -> None:

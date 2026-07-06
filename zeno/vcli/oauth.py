@@ -34,8 +34,22 @@ AUTHORIZE_URL = "https://platform.claude.com/oauth/authorize"
 TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
 SCOPES = "user:inference user:profile"
 
-# Credential storage
-CREDS_PATH = Path.home() / ".vector" / "oauth_credentials.json"
+# Credential storage — ~/.zeno/oauth_credentials.json (write root); a legacy
+# ~/.vector/oauth_credentials.json is READ as a fallback (upgrade-in-place). Lazy
+# ($HOME read per call) via the paths helpers.
+from zeno.vcli import paths  # noqa: E402
+
+_CREDS_SUBPATH = "oauth_credentials.json"
+
+
+def _creds_read_path() -> Path:
+    """~/.zeno/oauth_credentials.json if present, else legacy ~/.vector, else ~/.zeno."""
+    return paths.resolve_read(_CREDS_SUBPATH)
+
+
+def _creds_write_path() -> Path:
+    """~/.zeno/oauth_credentials.json (write root; parent created)."""
+    return paths.resolve_write(_CREDS_SUBPATH)
 
 
 def _generate_pkce() -> tuple[str, str]:
@@ -102,7 +116,7 @@ def login_oauth() -> dict[str, Any] | None:
     2. Open browser to Anthropic's authorize URL
     3. Wait for callback with authorization code
     4. Exchange code for access token
-    5. Save credentials to ~/.vector/oauth_credentials.json
+    5. Save credentials to ~/.zeno/oauth_credentials.json
 
     Returns:
         Credential dict with accessToken, refreshToken, etc., or None on failure.
@@ -232,10 +246,11 @@ def refresh_oauth(refresh_token: str) -> dict[str, Any] | None:
 
 def load_credentials() -> dict[str, Any] | None:
     """Load saved OAuth credentials, refreshing if expired."""
-    if not CREDS_PATH.exists():
+    creds_path = _creds_read_path()
+    if not creds_path.exists():
         return None
     try:
-        creds = json.loads(CREDS_PATH.read_text(encoding="utf-8"))
+        creds = json.loads(creds_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -258,6 +273,6 @@ def load_credentials() -> dict[str, Any] | None:
 
 
 def _save_credentials(creds: dict[str, Any]) -> None:
-    CREDS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CREDS_PATH.write_text(json.dumps(creds, indent=2), encoding="utf-8")
-    os.chmod(str(CREDS_PATH), 0o600)
+    creds_path = _creds_write_path()  # parent (~/.zeno) created by resolve_write
+    creds_path.write_text(json.dumps(creds, indent=2), encoding="utf-8")
+    os.chmod(str(creds_path), 0o600)

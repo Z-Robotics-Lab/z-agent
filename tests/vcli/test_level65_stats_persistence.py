@@ -20,8 +20,9 @@ from unittest.mock import MagicMock
 from zeno.vcli.cognitive.strategy_stats import _DEFAULT_PATH, StrategyStats
 
 
-def test_default_path_under_dot_vector() -> None:
-    assert _DEFAULT_PATH.endswith("/.vector/strategy_stats.json")
+def test_default_path_under_dot_zeno() -> None:
+    """Post-rename: the informational default location is under ~/.zeno."""
+    assert _DEFAULT_PATH.endswith("/.zeno/strategy_stats.json")
 
 
 def test_record_save_reload_round_trip(tmp_path: Path) -> None:

@@ -43,6 +43,7 @@ from prompt_toolkit.styles import Style as PTStyle
 
 from zeno.vcli.backends import create_backend
 from zeno.vcli.env import read_env
+from zeno.vcli import paths
 from zeno.vcli.engine import VectorEngine, TurnResult
 from zeno.vcli.session import (
     Session,
@@ -68,6 +69,20 @@ def _env(name: str, default: str | None = None) -> str | None:
     ``default=None`` mirrors the old ``os.environ.get`` misses this file relied on.
     """
     return read_env(name, default)
+
+
+def _persist_dir() -> Path:
+    """Home dir the engine persists learned templates/stats + REPL history under.
+
+    ~/.zeno is the WRITE root. If ~/.zeno does not yet exist but the legacy
+    ~/.vector does (upgrade-in-place), return ~/.vector so the pre-rename learned
+    templates / REPL history keep loading; the first save then lands in whichever
+    dir this returns. Lazy ($HOME read per call) for test/sandbox isolation.
+    """
+    zeno_dir = paths.zeno_home()
+    if not zeno_dir.exists() and paths.legacy_home().exists():
+        return paths.legacy_home()
+    return zeno_dir
 
 
 TEAL = "#00b4b4"
@@ -328,7 +343,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Suppress the MuJoCo viewer window (default: window opens when --sim is active)",
     )
-    parser.add_argument("--model", default=None, help="Model to use (overrides config; default reads ~/.vector/config.yaml)")
+    parser.add_argument("--model", default=None, help="Model to use (overrides config; default reads ~/.zeno/config.yaml)")
     parser.add_argument("--resume", nargs="?", const="latest", default=None, help="Resume session")
     parser.add_argument("--api-key", default=None, help="API key (or set ANTHROPIC_API_KEY / OPENROUTER_API_KEY)")
     parser.add_argument("--base-url", default=None, help="API base URL")
@@ -914,7 +929,7 @@ def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
                 world=world,
                 tool_permission_resolver=app_state.get("tool_permission_resolver"),
                 # Mirror the launch path: learning tier (persist_dir) is dev-world only.
-                persist_dir=(Path.home() / ".vector") if not world.is_robot() else None,
+                persist_dir=_persist_dir() if not world.is_robot() else None,
             )
         except Exception as exc:  # noqa: BLE001 — display path, never crash REPL
             logger.warning("init_vgg after scenario switch failed: %s", exc)
@@ -1222,7 +1237,7 @@ def _handle_slash_command(
             console.print("[dim]  Opening browser for authentication...[/dim]\n")
             creds = login_oauth()
             if creds:
-                console.print(f"[green]  Authenticated.[/] Token saved to ~/.vector/oauth_credentials.json")
+                console.print(f"[green]  Authenticated.[/] Token saved to ~/.zeno/oauth_credentials.json")
                 console.print(f"[dim]  Restart zeno to use your subscription.[/dim]\n")
             else:
                 console.print("[red]  Authentication failed or timed out.[/]")
@@ -1254,14 +1269,14 @@ def _handle_slash_command(
                 console.print("[dim]  Cancelled.[/dim]")
 
     elif cmd == "config":
-        from zeno.vcli.config import load_config, load_claude_oauth, _CONFIG_PATH
+        from zeno.vcli.config import load_config, load_claude_oauth, _config_read_path
         config = load_config()
         oauth = load_claude_oauth()
         console.print()
         tbl = Table(show_header=False, box=None, padding=(0, 2))
         tbl.add_column(style="dim", no_wrap=True)
         tbl.add_column()
-        tbl.add_row("Config", f"[dim]{_CONFIG_PATH}[/dim]")
+        tbl.add_row("Config", f"[dim]{_config_read_path()}[/dim]")
         # Claude Code OAuth
         if oauth:
             sub = oauth.get("subscriptionType", "?")
@@ -1365,7 +1380,7 @@ def _handle_slash_command(
 
     elif cmd == "export":
         if session is not None:
-            export_dir = Path.home() / ".vector" / "exports"
+            export_dir = _persist_dir() / "exports"
             export_dir.mkdir(parents=True, exist_ok=True)
             export_path = export_dir / f"{session.session_id}.md"
             lines: list[str] = [f"# Zeno Session\n\nSession: {session.session_id}\n"]
@@ -1389,7 +1404,7 @@ def _handle_slash_command(
 
     elif cmd == "clear_memory":
         import os as _os
-        _sg_path = _os.path.expanduser("~/.zeno/scene_graph.yaml")
+        _sg_path = str(paths.zeno_home() / "scene_graph.yaml")
         cleared = False
 
         # Clear in-memory scene graph if agent is running
@@ -1406,20 +1421,16 @@ def _handle_slash_command(
                     base._scene_graph = new_sg
                 cleared = True
 
-        # Always delete the persist file (works even without agent)
-        try:
-            _os.remove(_sg_path)
-            cleared = True
-        except FileNotFoundError:
-            pass
-
-        # Delete terrain map if present
-        _terrain_path = _os.path.expanduser("~/.zeno/terrain_map.npz")
-        try:
-            _os.remove(_terrain_path)
-            cleared = True
-        except FileNotFoundError:
-            pass
+        # Delete the persisted scene graph + terrain map from BOTH the ~/.zeno write
+        # root AND the legacy ~/.vector dir, so clearing memory truly wipes it (a stale
+        # legacy copy would otherwise be migrated back in on the next sim start).
+        for _base_dir in (paths.zeno_home(), paths.legacy_home()):
+            for _fname in ("scene_graph.yaml", "terrain_map.npz"):
+                try:
+                    _os.remove(str(_base_dir / _fname))
+                    cleared = True
+                except FileNotFoundError:
+                    pass
 
         if cleared:
             console.print(f"[dim]  Scene graph cleared. All rooms/objects forgotten.[/dim]")
@@ -1978,7 +1989,7 @@ def _build_turn_context(
                 on_vgg_step_view=on_vgg_step_view,
                 world=world,
                 tool_permission_resolver=app_state["tool_permission_resolver"],
-                persist_dir=(Path.home() / ".vector") if not world.is_robot() else None,
+                persist_dir=_persist_dir() if not world.is_robot() else None,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -2451,7 +2462,7 @@ def main(argv: list[str] | None = None) -> None:
             # decompose/execute path byte-identical and avoid cross-world stats
             # contamination (a dev 'tool_call' record must not promote onto a
             # robot sub-goal that has no ToolDispatcher).
-            persist_dir=(Path.home() / ".vector") if not world.is_robot() else None,
+            persist_dir=_persist_dir() if not world.is_robot() else None,
         )
         if engine._vgg_enabled:
             console.print(f"[dim]  VGG cognitive layer: enabled[/dim]")
@@ -2477,7 +2488,7 @@ def main(argv: list[str] | None = None) -> None:
     console.print(f"[dim]Session: {session.session_id}[/dim]\n")
 
     # REPL setup
-    history_dir = Path.home() / ".vector"
+    history_dir = _persist_dir()  # ~/.zeno write root; legacy ~/.vector read fallback keeps old REPL history
     history_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_toolbar() -> HTML:

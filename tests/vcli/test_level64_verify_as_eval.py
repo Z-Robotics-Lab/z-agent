@@ -103,18 +103,15 @@ def test_save_load_round_trip(tmp_path: Path) -> None:
     assert isinstance(reloaded.goal_tree.sub_goals[0].depends_on, tuple)
 
 
-def test_save_default_path_under_dot_vector(tmp_path: Path, monkeypatch) -> None:
+def test_save_default_path_under_dot_zeno(tmp_path: Path, monkeypatch) -> None:
+    """Post-rename: default trace dir is the ~/.zeno WRITE root (traces are write-only
+    telemetry, so only the write location moves; no legacy fallback-read needed)."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    # re-evaluate the module default by writing with path=None
-    import importlib
-
     import zeno.vcli.cognitive.trace_store as ts
 
-    importlib.reload(ts)
     path = ts.save_trace(_trace())
-    assert path.parent == tmp_path / ".vector" / "traces"
+    assert path.parent == tmp_path / ".zeno" / "traces"
     assert path.exists()
-    importlib.reload(ts)  # restore default for other tests
 
 
 def test_load_tolerates_minimal_dict(tmp_path: Path) -> None:

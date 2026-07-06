@@ -93,7 +93,12 @@ class NavStateTool:
 # TerrainStatusTool
 # ---------------------------------------------------------------------------
 
-_TERRAIN_PATH: str = os.path.expanduser("~/.zeno/terrain_map.npz")
+def _terrain_path() -> str:
+    """Effective terrain-map path: ~/.zeno/terrain_map.npz if present, else legacy
+    ~/.vector/terrain_map.npz (fallback-read for a pre-rename map), else ~/.zeno.
+    Lazy ($HOME per call) so the status readout is correct under a sandbox HOME."""
+    from zeno.vcli import paths
+    return str(paths.resolve_read("terrain_map.npz"))
 
 
 @tool(
@@ -110,7 +115,7 @@ class TerrainStatusTool:
     input_schema: dict[str, Any] = {"type": "object", "properties": {}}
 
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
-        path = Path(_TERRAIN_PATH)
+        path = Path(_terrain_path())
         data: dict[str, Any] = {
             "file_exists": path.exists(),
             "file_path": str(path),

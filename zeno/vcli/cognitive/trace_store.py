@@ -6,7 +6,7 @@
 Turns a run's ``ExecutionTrace`` into a replayable, self-grading eval signal:
 
 - ``save_trace`` / ``load_trace`` round-trip a trace to JSON under
-  ``~/.vector/traces/`` (frozen dataclasses -> dicts and back; tuples survive).
+  ``~/.zeno/traces/`` (frozen dataclasses -> dicts and back; tuples survive).
 - ``replay`` re-evaluates each sub-goal's *deterministic* verify predicate with
   a fresh ``GoalVerifier``. Visual overrides are NOT reproduced — only
   deterministic evidence counts, which is the point of replay.
@@ -42,7 +42,11 @@ StepEvidence = Literal["GROUNDED", "RAN", "FAILED"]
 # fallback the decomposer/robot motor steps use).
 _NO_EVIDENCE: frozenset[str] = frozenset({"", "True"})
 
-_DEFAULT_TRACES_DIR = Path.home() / ".vector" / "traces"
+def _default_traces_dir() -> Path:
+    """Write-only trace telemetry dir ~/.zeno/traces (lazy $HOME). No fallback-read:
+    on-disk traces have no disk reader; only the write location moves to ~/.zeno."""
+    from zeno.vcli import paths
+    return paths.zeno_home() / "traces"
 
 # Bump when the on-disk shape changes; load_trace tolerates older/unknown keys.
 # v2 adds StepRecord.visual_override; v3 adds SubGoal.answer_only (S5.2);
@@ -283,15 +287,16 @@ def _dict_to_trace(data: dict[str, Any]) -> ExecutionTrace:
 def save_trace(trace: ExecutionTrace, path: str | Path | None = None) -> Path:
     """Serialise *trace* to JSON; return the written path.
 
-    With no *path*, writes a uuid-named file under ``~/.vector/traces/``.
+    With no *path*, writes a uuid-named file under ``~/.zeno/traces/``.
     Written atomically (temp file + ``os.replace``) so a concurrent reader never
     sees a half-written file.
     """
     import os
 
     if path is None:
-        _DEFAULT_TRACES_DIR.mkdir(parents=True, exist_ok=True)
-        path = _DEFAULT_TRACES_DIR / f"trace-{uuid.uuid4().hex}.json"
+        traces_dir = _default_traces_dir()
+        traces_dir.mkdir(parents=True, exist_ok=True)
+        path = traces_dir / f"trace-{uuid.uuid4().hex}.json"
     else:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -114,7 +114,7 @@ class TestTerrainStatusTool:
         np.savez(str(npz_file), ix=ix)
 
         ctx = _make_context()
-        with patch("zeno.vcli.tools.nav_tools._TERRAIN_PATH", str(npz_file)):
+        with patch("zeno.vcli.tools.nav_tools._terrain_path", return_value=str(npz_file)):
             result = terrain_tool.execute({}, ctx)
 
         assert not result.is_error
@@ -127,7 +127,7 @@ class TestTerrainStatusTool:
         """When terrain file is absent, file_exists=False with graceful output."""
         missing = tmp_path / "no_terrain_here.npz"
         ctx = _make_context()
-        with patch("zeno.vcli.tools.nav_tools._TERRAIN_PATH", str(missing)):
+        with patch("zeno.vcli.tools.nav_tools._terrain_path", return_value=str(missing)):
             result = terrain_tool.execute({}, ctx)
 
         assert not result.is_error
@@ -142,7 +142,7 @@ class TestTerrainStatusTool:
         np.savez(str(npz_file), ix=np.array([10, 20]))
 
         ctx = _make_context()
-        with patch("zeno.vcli.tools.nav_tools._TERRAIN_PATH", str(npz_file)):
+        with patch("zeno.vcli.tools.nav_tools._terrain_path", return_value=str(npz_file)):
             result = terrain_tool.execute({}, ctx)
 
         data = json.loads(result.content)

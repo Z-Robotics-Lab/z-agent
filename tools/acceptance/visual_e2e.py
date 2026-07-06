@@ -62,11 +62,12 @@ def run_once(
         "ZENO_SIM_LOCK": "1",
         "VECTOR_SIM_LOCK": "1",
         # Use the REAL HOME so the OFFLINE model caches resolve (root-caused 2026-06-30: the PTY
-        # harness sets a temp HOME to isolate ~/.vector, but that also moves ~/.cache, so with
+        # harness sets a temp HOME to isolate ~/.zeno, but that also moves ~/.cache, so with
         # HF_HUB_OFFLINE=1 the cached grounding-dino (~/.cache/huggingface) + EdgeTAM
-        # (Path.home()/.cache/vector_os/models) can't load -> the far recovery's localize returns
+        # (~/.cache/zeno/models, legacy ~/.cache/vector_os/models fallback) can't load -> the far
+        # recovery's localize returns
         # nothing -> no_detections -> GT=RAN; the eyes harness scored 0/5 far while the DIRECT probe
-        # grounded). The native-loop turn does NOT use ~/.vector's goal_templates, so the real HOME
+        # grounded). The native-loop turn does NOT use ~/.zeno's goal_templates, so the real HOME
         # is safe + makes the eyes harness match the (grounding) direct probe. extra_env overrides
         # run_cli_turn's temp HOME (it documents this override hook).
         "HOME": os.path.expanduser("~"),

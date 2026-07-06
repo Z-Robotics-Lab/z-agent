@@ -18,7 +18,9 @@ from zeno.vcli.cognitive.experience_compiler import GoalTemplate, SubGoalTemplat
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PATH = os.path.expanduser("~/.vector/goal_templates.json")
+# Informational default location (the live path is derived from the persist_dir the
+# engine passes — ~/.zeno via cli.py). ~/.zeno is the product home post-rename.
+_DEFAULT_PATH = os.path.expanduser("~/.zeno/goal_templates.json")
 
 # On-disk shape v2 carries SubGoalTemplate.strategy_params so tool_call /
 # code-as-policy payloads survive compile -> reuse. The loader is tolerant:

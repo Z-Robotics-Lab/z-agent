@@ -240,8 +240,8 @@ def build_system_prompt(
     # Zeno's identity/voice — ONE layer across every world (dev / arm / go2).
     # The world persona above supplies the domain ROLE + tools; this supplies the
     # consistent VOICE. Kernel-owned and world-agnostic (it carries no embodiment-
-    # specific content), loaded from ~/.vector/personality.md with a built-in
-    # default. Sits below the system/developer prompt and above project context,
+    # specific content), loaded from ~/.zeno/personality.md (legacy ~/.vector
+    # fallback) with a built-in default. Sits below the system/developer prompt and above project context,
     # per the layered composition. (Cache note: lives below the world persona, so a
     # world switch re-sends it; it is small. Move it above the persona blocks if a
     # cross-world-stable cache prefix ever matters more than this ordering.)
@@ -383,13 +383,16 @@ def _format_world(agent: Any) -> str:
 
 
 # Project-context filenames recognized in the working directory, in precedence
-# order. VECTOR.md is Vector's own; AGENTS.md is the cross-tool standard; CLAUDE.md
-# is honored for repos already carrying one. The FIRST one found in cwd is used.
-_PROJECT_CONTEXT_FILES: tuple[str, ...] = ("VECTOR.md", "AGENTS.md", "CLAUDE.md")
+# order. ZENO.md is the product's own name; VECTOR.md is kept next as a fallback
+# so an upstream repo carrying VECTOR.md is still recognized; AGENTS.md is the
+# cross-tool standard; CLAUDE.md is honored for repos already carrying one. The
+# FIRST one found in cwd is used (first-found-wins), so ZENO.md takes precedence.
+_PROJECT_CONTEXT_FILES: tuple[str, ...] = ("ZENO.md", "VECTOR.md", "AGENTS.md", "CLAUDE.md")
 
 
 def _load_vector_md(cwd: Path | None) -> str:
-    """Load project context from cwd (VECTOR.md / AGENTS.md / CLAUDE.md) + ~/.vector/VECTOR.md."""
+    """Load project context from cwd (ZENO.md / VECTOR.md / AGENTS.md / CLAUDE.md) +
+    the home context file (~/.zeno/ZENO.md, legacy ~/.vector/VECTOR.md fallback)."""
     parts: list[str] = []
 
     if cwd is not None:
@@ -404,7 +407,12 @@ def _load_vector_md(cwd: Path | None) -> str:
                     parts.append(text)
                     break  # first project-context file found wins
 
-    home_path = Path.home() / ".vector" / "VECTOR.md"
+    # Home context file: ~/.zeno/ZENO.md primary, legacy ~/.vector/VECTOR.md fallback.
+    home_path = Path.home() / ".zeno" / "ZENO.md"
+    if not home_path.is_file():
+        _legacy_home = Path.home() / ".vector" / "VECTOR.md"
+        if _legacy_home.is_file():
+            home_path = _legacy_home
     if home_path.is_file():
         try:
             content = home_path.read_text(encoding="utf-8").strip()
@@ -440,11 +448,13 @@ Principles:
 def _load_personality() -> str:
     """Return the unified Zeno personality block (kernel-owned, world-agnostic).
 
-    Primary source is ``~/.vector/personality.md`` (user-authored); falls back to
+    Primary source is ``~/.zeno/personality.md`` (user-authored; legacy
+    ``~/.vector/personality.md`` read as a fallback); falls back to
     ``DEFAULT_PERSONALITY``. The SAME identity is used in every world, so this must
     not carry embodiment-specific content — that is the world persona's job.
     """
-    path = Path.home() / ".vector" / "personality.md"
+    from zeno.vcli import paths  # noqa: PLC0415
+    path = paths.resolve_read("personality.md")
     if path.is_file():
         try:
             content = path.read_text(encoding="utf-8").strip()

@@ -26,7 +26,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_SESSION_DIR: Path = Path.home() / ".vector" / "sessions"
+from zeno.vcli import paths
+
+# The WRITE root for sessions (~/.zeno/sessions). Reads fall back to the legacy
+# ~/.vector/sessions via _resolve_dir → paths.resolve_read (upgrade-in-place).
+DEFAULT_SESSION_DIR: Path = Path.home() / ".zeno" / "sessions"
 
 # ---------------------------------------------------------------------------
 # Value objects (frozen)
@@ -297,8 +301,19 @@ class Session:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_dir(directory: Path | None) -> Path:
-    return directory if directory is not None else DEFAULT_SESSION_DIR
+def _resolve_read_dir(directory: Path | None) -> Path:
+    """Dir to READ sessions from: ~/.zeno/sessions if present, else legacy
+    ~/.vector/sessions (upgrade-in-place), else ~/.zeno/sessions (lazy $HOME)."""
+    if directory is not None:
+        return directory
+    return paths.resolve_read("sessions")
+
+
+def _resolve_write_dir(directory: Path | None) -> Path:
+    """Dir to WRITE new sessions to: always ~/.zeno/sessions (never the legacy dir)."""
+    if directory is not None:
+        return directory
+    return paths.zeno_home() / "sessions"
 
 
 def create_session(
@@ -306,7 +321,7 @@ def create_session(
     directory: Path | None = None,
 ) -> Session:
     """Create a new session, write initial file to disk, and return it."""
-    session_dir = _resolve_dir(directory)
+    session_dir = _resolve_write_dir(directory)
     session_dir.mkdir(parents=True, exist_ok=True)
 
     sid = str(uuid.uuid4())
@@ -330,7 +345,7 @@ def load_session(session_id: str, directory: Path | None = None) -> Session:
     Corrupt lines (invalid JSON) are skipped so a partial write on crash
     does not destroy the entire session history.
     """
-    session_dir = _resolve_dir(directory)
+    session_dir = _resolve_read_dir(directory)
     path = session_dir / f"{session_id}.jsonl"
 
     entries: list[dict[str, Any]] = []
@@ -362,7 +377,7 @@ def load_session(session_id: str, directory: Path | None = None) -> Session:
 
 def list_sessions(directory: Path | None = None) -> list[SessionSummary]:
     """Return SessionSummary list for all sessions, newest-modified first."""
-    session_dir = _resolve_dir(directory)
+    session_dir = _resolve_read_dir(directory)
     if not session_dir.exists():
         return []
 
@@ -393,4 +408,4 @@ def get_latest_session(directory: Path | None = None) -> Session | None:
     if not summaries:
         return None
     latest = summaries[0]
-    return load_session(latest.session_id, directory=_resolve_dir(directory))
+    return load_session(latest.session_id, directory=_resolve_read_dir(directory))

@@ -39,7 +39,8 @@ class EdgeTAMTracker:
 
     Loads from a PRE-CACHED local copy and is pinned OFFLINE (never reaches the
     network) — mirrors ``GroundingDinoDetector``. The weights must already live in
-    the HF/vector_os cache; if absent the load fails loud (no silent download).
+    the HF / ~/.cache/zeno cache (legacy ~/.cache/vector_os read as a fallback); if
+    absent the load fails loud (no silent download).
 
     Args:
         model_name: HuggingFace repo ID or local path to model directory.
@@ -123,17 +124,21 @@ class EdgeTAMTracker:
 
         Resolution order (no network reached):
           1. ``model_name`` is itself a local model dir (has ``config.json``) → use it.
-          2. the pre-populated cache ``~/.cache/vector_os/models/<name>`` → use it.
+          2. the pre-populated cache ``~/.cache/zeno/models/<name>`` (legacy
+             ``~/.cache/vector_os/models/<name>`` read as a fallback) → use it.
 
         Raises ``FileNotFoundError`` if neither exists. The weights must be
         pre-cached once (the tracker is pinned offline, mirroring the detector);
         callers such as ``go2_grasp_perception.segment`` catch this and fall back
         to a coarse box-rect mask rather than hard-failing the grasp.
         """
+        from zeno.vcli import paths  # noqa: PLC0415
         p = Path(model_name)
         if p.exists() and (p / "config.json").exists():
             return str(p)
-        model_dir = Path.home() / ".cache" / "vector_os" / "models" / p.name
+        # ~/.cache/zeno/models/<name> primary, legacy ~/.cache/vector_os/models/<name>
+        # fallback (avoids a re-download of a model the pre-rename product fetched).
+        model_dir = paths.resolve_cached_model(p.name)
         if (model_dir / "config.json").exists():
             return str(model_dir)
         raise FileNotFoundError(

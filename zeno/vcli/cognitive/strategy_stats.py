@@ -24,7 +24,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PATH = os.path.expanduser("~/.vector/strategy_stats.json")
+# Informational default location (the live path is derived from the persist_dir the
+# engine passes — ~/.zeno via cli.py). ~/.zeno is the product home post-rename.
+_DEFAULT_PATH = os.path.expanduser("~/.zeno/strategy_stats.json")
 
 
 @dataclass
@@ -61,7 +63,7 @@ class StrategyStats:
     Args:
         persist_path: Path to the JSON persistence file. When ``None`` (the
             default), the instance is in-memory only and performs no file I/O.
-            The module-level default location is ``~/.vector/strategy_stats.json``
+            The module-level default location is ``~/.zeno/strategy_stats.json``
             (see ``_DEFAULT_PATH``).
     """
 

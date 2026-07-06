@@ -3,10 +3,11 @@
 
 """Persistent configuration for Zeno.
 
-Stores API keys, default model, provider preferences in ~/.vector/config.yaml.
+Stores API keys, default model, provider preferences in ~/.zeno/config.yaml
+(legacy ~/.vector/config.yaml still READ as an upgrade-in-place fallback).
 Also discovers Claude Code OAuth tokens from ~/.claude/.credentials.json.
 
-Config file location: ~/.vector/config.yaml
+Config file location: ~/.zeno/config.yaml (fallback-read ~/.vector/config.yaml)
 """
 from __future__ import annotations
 
@@ -15,9 +16,26 @@ import time
 from pathlib import Path
 from typing import Any
 
-_CONFIG_DIR = Path.home() / ".vector"
-_CONFIG_PATH = _CONFIG_DIR / "config.yaml"
-_CLAUDE_CREDS_PATH = Path.home() / ".claude" / ".credentials.json"
+from zeno.vcli import paths
+
+# Paths are resolved LAZILY (Path.home() read per call) via the helpers below so a
+# monkeypatched $HOME / the pty sandbox harness see the right dir. ~/.zeno is the
+# WRITE root; ~/.vector is the READ fallback (migration).
+_CONFIG_SUBPATH = "config.yaml"
+
+
+def _config_read_path() -> Path:
+    """~/.zeno/config.yaml if present, else legacy ~/.vector/config.yaml, else ~/.zeno."""
+    return paths.resolve_read(_CONFIG_SUBPATH)
+
+
+def _config_write_path() -> Path:
+    """~/.zeno/config.yaml (write root; parent created)."""
+    return paths.resolve_write(_CONFIG_SUBPATH)
+
+
+def _claude_creds_path() -> Path:
+    return Path.home() / ".claude" / ".credentials.json"
 
 
 def _env(name: str, default: str = "") -> str:
@@ -40,34 +58,35 @@ _DEFAULTS: dict[str, Any] = {
 
 
 def load_config() -> dict[str, Any]:
-    """Load config from ~/.vector/config.yaml, merging with defaults."""
+    """Load config from ~/.zeno/config.yaml (legacy ~/.vector fallback), merging with defaults."""
     config = dict(_DEFAULTS)
-    if not _CONFIG_PATH.exists():
+    config_path = _config_read_path()
+    if not config_path.exists():
         return config
     try:
         import yaml  # noqa: PLC0415
-        raw = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8"))
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
             config.update(raw)
     except ImportError:
         # No PyYAML — fall back to simple key=value parsing
-        config.update(_load_simple(_CONFIG_PATH))
+        config.update(_load_simple(config_path))
     except Exception:
         pass
     return config
 
 
 def save_config(config: dict[str, Any]) -> None:
-    """Write config to ~/.vector/config.yaml."""
-    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    """Write config to ~/.zeno/config.yaml (write root; never the legacy dir)."""
+    config_path = _config_write_path()  # parent (~/.zeno) created by resolve_write
     try:
         import yaml  # noqa: PLC0415
-        _CONFIG_PATH.write_text(
+        config_path.write_text(
             yaml.dump(config, default_flow_style=False, allow_unicode=True),
             encoding="utf-8",
         )
     except ImportError:
-        _save_simple(_CONFIG_PATH, config)
+        _save_simple(config_path, config)
 
 
 def _load_simple(path: Path) -> dict[str, str]:
@@ -95,10 +114,11 @@ def load_claude_oauth() -> dict[str, Any] | None:
 
     Returns the OAuth data dict if valid and not expired, else None.
     """
-    if not _CLAUDE_CREDS_PATH.exists():
+    creds_path = _claude_creds_path()
+    if not creds_path.exists():
         return None
     try:
-        raw = json.loads(_CLAUDE_CREDS_PATH.read_text(encoding="utf-8"))
+        raw = json.loads(creds_path.read_text(encoding="utf-8"))
         oauth = raw.get("claudeAiOauth")
         if not isinstance(oauth, dict):
             return None

@@ -189,8 +189,10 @@ def build_inprocess_go2_agent(
 
     # Persistent scene graph (rooms -> viewpoints -> objects).
     from zeno.core.scene_graph import SceneGraph
+    from zeno.vcli import paths
 
-    sg_path = os.path.expanduser("~/.zeno/scene_graph.yaml")
+    # ~/.zeno/scene_graph.yaml write root; legacy ~/.vector migrated forward on first run.
+    sg_path = str(paths.migrate_and_resolve("scene_graph.yaml"))
     os.makedirs(os.path.dirname(sg_path), exist_ok=True)
     sg = SceneGraph(persist_path=sg_path)
     sg.load()
