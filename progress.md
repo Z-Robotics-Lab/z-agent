@@ -1,8 +1,15 @@
 # Z Agent — progress
 
-更新：2026-07-05。fork 自 VectorRobotics/vector-os-nano @ R715 (12f3e15)，分支 main。
+更新：2026-07-06。fork 自 VectorRobotics/vector-os-nano @ R715 (12f3e15)，分支 main。
 
 ## Works（已验证）
+- **F1+F2 合入 main（3ead15b）**：修剪确证死重（-895 行 -14MB，测试夹具全保）；
+  BYO 世界一等公民化——world.register_tools 接通、--world/VECTOR_WORLD(_PLUGINS)、
+  build_embodiment 正门、setup/health/teardown 生命周期钩子、go2w 内置世界
+  （vcli/worlds/go2w.py + 10 单测）。**E2E 锚（零 shim）**：`--world go2w -p 导航…`
+  → arrived+held d=0.32 → verdict GROUNDED verified=True EXIT 0。
+  集成门：vcli chunk 失败集 ≡ F0 基线（2 个表面新失败=worktree 缺 gitignored
+  场景资产，补齐后 31/31——资产清单教训再次验证）。
 - F0：完整历史已推 Z-Robotics-Lab/z-agent；loop 机器已剥；新宪法 AGENTS.md 落盘。
 - **F0 关门：全套基线 parity 达成，fork 零回归**。tests/vcli 失败集逐项一致（8 个
   环境性 PTY 失败）；tests/unit 拆 4 子块全部 parity OK（唯一 delta
@@ -26,14 +33,12 @@ gitignored 运行资产：hardware/sim/mjcf/{go2,g1}/scene_*.xml、assets/（g1 
 config/{user.yaml,boundary.ply,workspace_calibration.yaml}、.env、robot_mode.txt。
 
 ## Next
-1. F1（feat/f1-slim 分支，进行中）：修剪死重 → F2 一等公民化（--world go2w 删 shim）。
-2. F1 剥离波次：playground → mujoco 硬件/世界 → SO-101 → perception(VLM)，每波全绿；
-   末尾原子改名 vector_os_nano → z_agent（CLI: za）。
-3. F2 一等公民化：接通 world.register_tools + --world 参数 + embodiment 正门 +
-   World 生命周期钩子（setup/health/teardown）；go2w 世界从 go2W_Sim 迁入；删 3 shim；
-   E2E 回归锚（agent 导航 verified=true）必须过。
-4. P5.1 bringup/status/teardown 工具 + RViz；P5.2 TARE explore + Δexplored_volume 验证。
-5. P5.4 真机（等 CEO 三决策：verify 语义 / NUC vs Orin / unitree_sdk2 依赖）。
+1. F1b 原子改名：包 vector_os_nano → z_agent、CLI vector-cli → za（全绿前后各测）。
+2. P5.1 收尾：go2w 世界加 bringup/status 工具（调 go2W_Sim 的 bringup.sh/status.sh，
+   经 setup 钩子或工具面）；go2W_Sim 侧脚本已真跑验收。
+3. P5.2：explore 技能 + Δexplored_volume 验证谓词（go2W_Sim 桥端点已就绪）。
+4. P5.4 真机（等 CEO 三决策：verify 语义 / NUC vs Orin / unitree_sdk2 依赖）。
+5. 待 CEO RULING：docs/RULES.md loop 章节悬空指针修剪（F1 agent 依纪律停在 gate 前）。
 
 ## 关键背景
 - go2W_Sim 仓库 = 数字孪生（Isaac 资产/CMU navstack/桥）；z-agent 经 HTTP 桥
