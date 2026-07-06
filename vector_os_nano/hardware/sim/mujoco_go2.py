@@ -129,6 +129,13 @@ _ROOM_TEMPLATES: dict[str, Path] = {
     # unlike both the marble house and the grey industrial warehouse. Same token contract,
     # pick furniture byte-identical → confirmed bars stay reachable; only the shell differs.
     "courtyard": Path(__file__).parent / "go2_courtyard.xml",
+    # R711/E234: a FOURTH distinct world — a COOL enclosed polar research station (pale-blue
+    # snow-pack floor, tall ice-blue insulated walls + a roof, ice-block cairn + timber sledge +
+    # weather mast), tonally and geometrically unlike the marble house, the grey warehouse AND the
+    # warm open-air courtyard. Same token contract, pick furniture byte-identical → confirmed bars
+    # stay reachable; only the shell differs. Cool white/ice-blue palette, NO green + no forward
+    # open sky → a fair R237 pixel-hue-gate transfer test in a fresh enclosure.
+    "tundra": Path(__file__).parent / "go2_tundra.xml",
 }
 
 

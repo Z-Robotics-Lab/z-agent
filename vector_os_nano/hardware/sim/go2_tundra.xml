@@ -1,0 +1,190 @@
+<mujoco model="go2 tundra station">
+  <compiler angle="radian" meshdir="GO2_ASSETS_DIR" texturedir="GO2_ASSETS_DIR" autolimits="true"/>
+  <include file="GO2_MODEL_PATH"/>
+
+  <option cone="elliptic" impratio="100"/>
+
+  <statistic center="11.5 4 0.5" extent="9"/>
+
+  <visual>
+    <headlight diffuse="0.58 0.60 0.66" ambient="0.40 0.42 0.46" specular="0 0 0"/>
+    <rgba haze="0.78 0.84 0.92 1"/>
+    <global azimuth="-140" elevation="-20" offwidth="1280" offheight="960"/>
+    <map znear="0.05" zfar="60" shadowclip="0.5"/>
+    <quality shadowsize="1024"/>
+  </visual>
+
+  <!--
+    TUNDRA STATION LAYOUT — a FOURTH genuinely-NEW WORLD (R711/E234 breadth interleave off the
+    STALE-row re-verify cadence; R710 ambition critic). A COOL enclosed polar research station:
+    pale-blue snow-pack floor, tall ice-blue insulated walls (a ROOFED station, unlike the
+    open-air courtyard), a cool overcast palette — tonally AND geometrically distinct from the
+    20x14m marble house (go2_room.xml), the compact grey industrial warehouse (go2_warehouse.xml)
+    AND the warm sandstone open-air courtyard (go2_courtyard.xml). Signature station props (an ice-
+    block cairn, a timber supply sledge, a weather mast) that appear in NONE of the other three.
+    Same discipline as E52/E56: the tuned pick furniture (pick_table + 5 pickables + place_bin +
+    welds) is copied BYTE-FOR-BYTE at the SAME coordinates so every confirmed grasp / perception /
+    honest-verify-spine bar stays reachable — only the ROOM SHELL changed. Worlds are CONFIG not
+    code (Invariant 3): fed to the already-parameterized build_room_scene(room_template_path=) via
+    VECTOR_ROOM_TEMPLATE — ZERO kernel/driver edits.
+    HUE DISCIPLINE: the whole enclosure is a cool WHITE/ICE-BLUE palette (snow ~neutral, walls hue
+    ~215deg, props cyan/timber) with NO green anywhere and NO open sky in the forward view — the
+    dog (spawn 10,3 facing +x) sees the pale-blue EAST wall behind pick_table. A fair transfer test
+    of the R237 pixel-hue gate: the green target sits against a far-from-green, low-competition
+    background, in a fresh enclosure the gate has never seen.
+
+          5.5   8   10  12  14        17.5
+     9.0  +==============[ ice-blue insulated walls, roofed ]======+
+          |  (weather mast)                                        |
+     4.6  |                      place_bin                         |
+     3.0  |   go2 (10,3) -> pick_table 10.95      pick_table_far 13.95
+          | [ice cairn, sledge — WEST, behind the dog]             |
+    -1.0  +=======================================================+
+  -->
+
+  <asset>
+    <!-- Cool overcast polar sky (only seen through the ceiling skylight strip, high & aft) —
+         deep blue above, pale icy horizon. NOT the house marble, warehouse grey, nor courtyard
+         warm cream. -->
+    <texture type="skybox" builtin="gradient" rgb1="0.34 0.46 0.66" rgb2="0.80 0.86 0.92"
+             width="512" height="3072"/>
+
+    <!-- Packed snow floor (near-white with a faint blue cast, hue ~neutral low-saturation so the
+         pixel-hue gate cleanly isolates a green target against it). Distinct from terracotta /
+         concrete / marble. -->
+    <texture type="2d" name="snow_tex" builtin="checker"
+             rgb1="0.90 0.93 0.96" rgb2="0.84 0.88 0.93" width="300" height="300"/>
+    <material name="mat_snow" texture="snow_tex" texuniform="true"
+              texrepeat="7 6" reflectance="0.08"/>
+
+    <!-- Ice-blue insulated station walls (cool cyan-blue — the forward pick-view background). -->
+    <material name="mat_icewall" rgba="0.58 0.72 0.84 1" reflectance="0.07"/>
+    <!-- Steel wall trim / ceiling ribs (cool pale grey-blue). -->
+    <material name="mat_trim" rgba="0.66 0.72 0.78 1" reflectance="0.12"/>
+    <!-- Translucent-looking ceiling panels (pale, roofed station — no open sky forward). -->
+    <material name="mat_ceiling" rgba="0.74 0.80 0.88 1" reflectance="0.05"/>
+
+    <!-- Pale cyan ice blocks (the cairn — a signature polar prop). -->
+    <material name="mat_ice" rgba="0.70 0.84 0.90 1" reflectance="0.18"/>
+    <!-- Weathered timber sledge / mast (warm brown accent against the cool shell). -->
+    <material name="mat_timber" rgba="0.48 0.35 0.22 1" reflectance="0.04"/>
+    <!-- Dark steel mast fittings. -->
+    <material name="mat_steel" rgba="0.34 0.36 0.40 1" reflectance="0.20"/>
+
+    <!-- Oak pick furniture (rgba-only, self-contained — keeps pick_table / place_bin appearance
+         identical to the house/warehouse/courtyard so grasp perception is unchanged). -->
+    <material name="mat_oak" rgba="0.62 0.44 0.24 1" reflectance="0.12"/>
+  </asset>
+
+  <worldbody>
+    <!-- Cool overhead station lighting + a single low arctic sun (the shadow caster). -->
+    <light name="arctic_sun" pos="9 2 6" dir="0.15 0.1 -1" directional="true" diffuse="0.50 0.52 0.58"/>
+    <light name="bay_fill" pos="11.5 4 3.2" dir="0 0 -1" diffuse="0.32 0.33 0.36" cutoff="90" castshadow="false"/>
+    <light name="cool_bounce" pos="11.5 4 0.4" dir="0 0 1" diffuse="0.10 0.11 0.13" castshadow="false"/>
+
+    <!-- Snow-pack floor (12m x 10m, centre (11.5,4)). Covers spawn (10,3), pick_table (10.95,3),
+         pick_table_far (13.95,3) and place_bin (10.95,4.6). -->
+    <geom name="floor" type="plane" pos="11.5 4 0" size="6.0 5.0 0.05" material="mat_snow"/>
+    <!-- Invisible raycast ground for the lidar (group 3, no collision) — mirrors the other worlds. -->
+    <geom name="floor_raycast" type="box" pos="11.5 4 -0.02" size="6.0 5.0 0.01"
+          contype="0" conaffinity="0" group="3" rgba="0 0 0 0"/>
+
+    <!-- ==================== ICE-BLUE INSULATED WALLS (collidable — the enclosure + lidar returns).
+         Tall 2.4m walls (a ROOFED station, not an open court): the forward (+x) pick view sees the
+         cool pale-blue EAST wall, never open sky. -->
+    <geom name="iw_south" type="box" pos="11.5 -1.0 1.20" size="6.0 0.08 1.20" material="mat_icewall"/>
+    <geom name="iw_north" type="box" pos="11.5 9.0 1.20" size="6.0 0.08 1.20" material="mat_icewall"/>
+    <geom name="iw_west"  type="box" pos="5.5 4.0 1.20"  size="0.08 5.0 1.20" material="mat_icewall"/>
+    <geom name="iw_east"  type="box" pos="17.5 4.0 1.20" size="0.08 5.0 1.20" material="mat_icewall"/>
+    <!-- Steel wall trim caps (decorative silhouette, no collision). -->
+    <geom name="trim_south" type="box" pos="11.5 -1.0 2.42" size="6.05 0.12 0.05" material="mat_trim" contype="0" conaffinity="0"/>
+    <geom name="trim_north" type="box" pos="11.5 9.0 2.42" size="6.05 0.12 0.05" material="mat_trim" contype="0" conaffinity="0"/>
+    <geom name="trim_west"  type="box" pos="5.5 4.0 2.42"  size="0.12 5.05 0.05" material="mat_trim" contype="0" conaffinity="0"/>
+    <geom name="trim_east"  type="box" pos="17.5 4.0 2.42" size="0.12 5.05 0.05" material="mat_trim" contype="0" conaffinity="0"/>
+
+    <!-- ==================== CEILING (roofed station, visual only) — pale panels with a high aft
+         skylight strip (over the north edge) that lets the cool sky show ABOVE and BEHIND, never in
+         the forward pick view. This roof is what makes it a STATION, not the open courtyard. -->
+    <geom name="ceiling" type="box" pos="10.0 4.0 2.55" size="4.5 5.0 0.05" material="mat_ceiling" contype="0" conaffinity="0"/>
+    <geom name="ceil_rib_a" type="box" pos="8.0 4.0 2.48" size="0.05 5.0 0.06" material="mat_trim" contype="0" conaffinity="0"/>
+    <geom name="ceil_rib_b" type="box" pos="12.0 4.0 2.48" size="0.05 5.0 0.06" material="mat_trim" contype="0" conaffinity="0"/>
+
+    <!-- ==================== ICE-BLOCK CAIRN, WEST — BEHIND the dog (spawn 10,3 facing +x), OUT of
+         the forward pick FOV. Stacked pale-cyan blocks, a signature polar prop. -->
+    <body name="ice_cairn" pos="6.7 2.2 0">
+      <geom name="ice_a" type="box" pos="0 0 0.22" size="0.26 0.26 0.22" material="mat_ice" contype="0" conaffinity="0"/>
+      <geom name="ice_b" type="box" pos="0.1 0.05 0.58" size="0.18 0.18 0.16" material="mat_ice" contype="0" conaffinity="0"/>
+      <geom name="ice_c" type="box" pos="-0.05 -0.02 0.84" size="0.11 0.11 0.11" material="mat_ice" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== TIMBER SUPPLY SLEDGE, WEST — beside/behind the dog, off the +x pick
+         view. Runners + deck + a lashed crate. Warm timber accent against the cool shell. -->
+    <body name="sledge" pos="6.8 5.6 0">
+      <geom name="sld_run_l" type="box" pos="0 -0.28 0.06" size="0.62 0.05 0.06" material="mat_timber" contype="0" conaffinity="0"/>
+      <geom name="sld_run_r" type="box" pos="0 0.28 0.06" size="0.62 0.05 0.06" material="mat_timber" contype="0" conaffinity="0"/>
+      <geom name="sld_deck" type="box" pos="0 0 0.14" size="0.60 0.30 0.03" material="mat_timber" contype="0" conaffinity="0"/>
+      <geom name="sld_crate" type="box" pos="0.1 0 0.34" size="0.22 0.22 0.18" material="mat_timber" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== WEATHER MAST, NW — a steel pole + crossarm + anemometer cups, well
+         north of the dog's +y path to place_bin (y=4.6). A polar-station silhouette. -->
+    <body name="weather_mast" pos="7.4 8.2 0">
+      <geom name="mast_pole" type="cylinder" pos="0 0 1.05" size="0.04 1.05" material="mat_steel" contype="0" conaffinity="0"/>
+      <geom name="mast_arm" type="box" pos="0 0 2.02" size="0.42 0.03 0.03" material="mat_steel" contype="0" conaffinity="0"/>
+      <geom name="mast_cup_a" type="sphere" pos="0.40 0 2.10" size="0.06" material="mat_trim" contype="0" conaffinity="0"/>
+      <geom name="mast_cup_b" type="sphere" pos="-0.40 0 2.10" size="0.06" material="mat_trim" contype="0" conaffinity="0"/>
+      <geom name="mast_base" type="box" pos="0 0 0.06" size="0.16 0.16 0.06" material="mat_steel" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== PICK BAY (verbatim from go2_room.xml / go2_courtyard.xml — DO NOT
+         re-tune) — the tuned grasp/perception furniture is copied byte-for-byte so every confirmed
+         bar (green fetch, ordinal, quantity, place) stays reachable. Only the SHELL above changed. -->
+    <body name="pick_table" pos="10.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
+    </body>
+
+    <body name="pick_table_far" pos="13.95 3.0 0">
+      <geom type="box" pos="0 0 0.14" size="0.15 0.25 0.14" material="mat_oak"/>
+    </body>
+
+    <body name="place_bin" pos="10.95 4.60 0">
+      <geom type="box" pos="0 0 0.14" size="0.18 0.40 0.14" material="mat_oak"/>
+      <geom type="box" pos="0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="-0.192 0 0.31" size="0.012 0.41 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
+      <geom type="box" pos="0 -0.412 0.31" size="0.18 0.012 0.03" material="mat_oak"/>
+    </body>
+
+    <body name="pickable_bottle_blue" pos="10.90 2.78 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.20 0.40 0.85 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_bottle_green" pos="10.88 3.00 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.25 0.70 0.35 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_can_red" pos="10.90 3.22 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.033 0.04" rgba="0.85 0.25 0.20 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_bottle_yellow" pos="10.90 3.11 0.320">
+      <freejoint/>
+      <geom type="cylinder" size="0.028 0.04" rgba="0.95 0.85 0.05 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+    <body name="pickable_box_purple" pos="10.90 2.89 0.320">
+      <freejoint/>
+      <geom type="box" size="0.028 0.028 0.04" rgba="0.75 0.10 0.70 1"
+            mass="0.08" friction="2 0.05 0.001" priority="2"/>
+    </body>
+
+  </worldbody>
+GRASP_WELDS
+</mujoco>

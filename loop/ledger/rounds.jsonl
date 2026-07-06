@@ -524,3 +524,4 @@
 {"schema":1,"ts":1783292575,"round":"R707","kind":"build","exit":0,"post_check":"ok","commit":"9f58438","dur_s":735}
 {"schema":1,"ts":1783293383,"round":"R708","kind":"build","exit":0,"post_check":"quarantined","commit":"af39900","dur_s":688}
 {"schema":1,"ts":1783294462,"round":"R709","kind":"build","exit":0,"post_check":"ok","commit":"4eb8340","dur_s":959}
+{"schema":1,"ts":1783295807,"round":"R710","kind":"review","exit":0,"post_check":"ok","commit":"b21a388","dur_s":1225}
