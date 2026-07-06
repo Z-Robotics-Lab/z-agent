@@ -77,3 +77,4 @@ loop/.state/
 loop/local.env
 var/
 scratchpad/
+.venv/
