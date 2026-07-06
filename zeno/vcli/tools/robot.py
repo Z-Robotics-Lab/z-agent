@@ -49,7 +49,17 @@ class WorldQueryTool:
         if agent is None:
             return ToolResult(content="No agent available", is_error=True)
 
-        wm = agent._world_model
+        # Fail-safe for BYO embodiments: not every agent carries a `_world_model`
+        # (e.g. the go2w Isaac-bridge embodiment reads pose/objects live over its
+        # HTTP bridge and has no local world model). Accessing it unconditionally
+        # raised an uncaught AttributeError that crashed out of the tool boundary
+        # on the unified tool_use path. Degrade gracefully instead — a generic
+        # plug-and-play hardening, not go2w-specific.
+        wm = getattr(agent, "_world_model", None)
+        if wm is None:
+            return ToolResult(
+                content="No world model in this embodiment.", is_error=True
+            )
         lines: list[str] = []
 
         # Robot state — WorldModel exposes get_robot(); mocks may use get_robot_state().

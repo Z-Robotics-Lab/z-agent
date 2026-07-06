@@ -168,6 +168,135 @@ def test_register_tools_suppresses_kernel_mujoco_sim_category() -> None:
     assert "stop_simulation" not in schema_names
 
 
+def _assemble_go2w_registry(with_agent: bool = True):
+    """Assemble the tool registry exactly as the CLI does for the go2w world.
+
+    Full kernel toolset first, then (optionally) the wrapped skills of a real
+    go2w embodiment under the ``robot`` category, then the world's
+    ``register_tools`` hook. Returns the CategorizedToolRegistry.
+    """
+    from zeno.vcli.cli import _register_world_tools
+    from zeno.vcli.tools import discover_categorized_tools
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.tools.skill_wrapper import wrap_skills
+    from zeno.vcli.worlds import resolve_world_named
+
+    world = resolve_world_named("go2w")
+    agent = world.build_embodiment() if with_agent else None
+    registry = CategorizedToolRegistry()
+    tools_list, cat_map = discover_categorized_tools()
+    for t in tools_list:
+        cat = next((c for c, names in cat_map.items() if t.name in names), "default")
+        registry.register(t, category=cat)
+    if agent is not None:
+        for st in wrap_skills(agent):
+            registry.register(st, category="robot")
+    _register_world_tools(world, registry, agent)
+    return registry
+
+
+def test_register_tools_suppresses_stale_diag_and_system_categories() -> None:
+    """go2w disables the ``diag`` and ``system`` categories — they are all stale.
+
+    Regression (go2w-experience audit findings #3–#6): in the go2w world every
+    tool in the kernel ``diag`` category (nav_state / ros2_topics / ros2_nodes /
+    ros2_log / terrain_status) reads MuJoCo-era paths or the host default ROS
+    domain — but the go2w navstack runs inside docker under ROS_DOMAIN_ID=42, so
+    those tools return empty/misleading data that makes the model misjudge the
+    stack as dead. The ``system`` category (robot_status / open_foxglove /
+    skill_reload) is likewise stale: robot_status reports in-process object
+    wiring as "connected" (misleading liveness), open_foxglove starts a bridge in
+    the wrong ROS domain, skill_reload is a MuJoCo-era dev tool.
+
+    Neither category contains any go2w-own tool, so disabling them causes ZERO
+    friendly-fire; go2w_status is the single source of truth for stack health.
+    """
+    registry = _assemble_go2w_registry(with_agent=True)
+    schema_names = {s["name"] for s in registry.to_anthropic_schemas()}
+
+    # diag category — all stale, gone.
+    for stale in ("nav_state", "ros2_topics", "ros2_nodes", "ros2_log", "terrain_status"):
+        assert stale not in schema_names, f"stale diag tool {stale} must be hidden in go2w"
+    # system category — all stale, gone.
+    for stale in ("robot_status", "open_foxglove", "skill_reload"):
+        assert stale not in schema_names, f"stale system tool {stale} must be hidden in go2w"
+
+    # go2w's own health source-of-truth stays present.
+    assert "go2w_status" in schema_names
+
+
+def test_register_tools_keeps_robot_category_go2w_skills() -> None:
+    """Disabling diag/system must NOT collateral-kill the go2w core skills.
+
+    navigate / explore / pick wrap into the kernel ``robot`` category (cli.py),
+    so ``robot`` must stay ENABLED — the audit's explicit no-friendly-fire
+    guard for finding #2/#4. world_query (also in ``robot``) stays in the schema
+    but is now fail-safe (see test_robot_tools) rather than crashing.
+    """
+    registry = _assemble_go2w_registry(with_agent=True)
+    schema_names = {s["name"] for s in registry.to_anthropic_schemas()}
+    for skill in ("navigate", "explore", "pick"):
+        assert skill in schema_names, (
+            f"go2w core skill {skill} must stay offered — disabling robot would kill it"
+        )
+
+
+def test_world_declares_go2w_essential_category() -> None:
+    """go2w declares ``go2w`` as an essential router category (finding #1 seam).
+
+    The optional ``essential_categories()`` world hook is what the CLI feeds into
+    the IntentRouter so route() always keeps go2w tools in scope. Pin the hook so
+    a refactor can't silently drop it.
+    """
+    from zeno.vcli.worlds import resolve_world_named
+
+    world = resolve_world_named("go2w")
+    hook = getattr(world, "essential_categories", None)
+    assert callable(hook), "go2w must declare essential_categories() for routing"
+    assert "go2w" in set(hook())
+
+
+def test_go2w_tools_reach_model_on_routed_sim_and_nav_phrases() -> None:
+    """END-TO-END routing: go2w_* tools reach the model on the LIVE routed path.
+
+    This is the finding-#1 acceptance check the old unit tests missed: they only
+    asserted go2w tools were in the DEFAULT (unfiltered) schema, never through
+    ``route()`` category filtering. Here we assemble the registry AND the router
+    exactly as the CLI wires them (router seeded with the world's essential
+    categories), then drive the same route()->to_anthropic_schemas(categories=...)
+    path engine.py runs for '启动仿真' / '导航' / '探索' / '抓'.
+    """
+    from zeno.vcli.intent_router import IntentRouter
+    from zeno.vcli.worlds import resolve_world_named
+
+    world = resolve_world_named("go2w")
+    registry = _assemble_go2w_registry(with_agent=True)
+    essential = set(getattr(world, "essential_categories", lambda: set())())
+    router = IntentRouter(essential_categories=essential)
+
+    # '启动仿真'/'关闭仿真' — the go2w lifecycle tool MUST be visible.
+    for phrase in ("启动仿真", "start the sim", "关闭仿真"):
+        cats = router.route(phrase)
+        names = {s["name"] for s in registry.to_anthropic_schemas(categories=cats)}
+        assert "go2w_bringup" in names, (
+            f"go2w_bringup must reach the model for {phrase!r}; got {sorted(names)}"
+        )
+        # The wrong (MuJoCo) sim tool must still be absent (category disabled).
+        assert "start_simulation" not in names
+
+    # Navigation / exploration / pick phrases — go2w tools + skills visible.
+    for phrase, expect in (
+        ("导航到 (2, 3)", "go2w_navigate"),
+        ("去探索一下仓库", "go2w_status"),
+        ("抓起箱子", "go2w_where"),
+    ):
+        cats = router.route(phrase)
+        names = {s["name"] for s in registry.to_anthropic_schemas(categories=cats)}
+        assert expect in names, (
+            f"{expect} must reach the model for {phrase!r}; got {sorted(names)}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # build_embodiment — the BYO front door yields a usable agent
 # ---------------------------------------------------------------------------

@@ -204,6 +204,29 @@ class TestWorldQueryTool:
         result = tool.execute({}, ctx)
         assert result.is_error is True
 
+    def test_world_query_agent_without_world_model_degrades(self) -> None:
+        """A BYO embodiment that has NO ``_world_model`` must degrade gracefully.
+
+        Regression (go2w-experience audit finding #2): world_query lives in the
+        ``robot`` category (which stays enabled in the go2w world because the
+        navigate/explore/pick skills wrap into it), so on the unified tool_use
+        path the model can call it against ``IsaacGo2WEmbodiment`` — which has no
+        ``_world_model``. It previously raised an uncaught ``AttributeError`` that
+        crashed out of the tool boundary. It must instead return a clean,
+        non-crashing result. Fail-safe generalises to ANY BYO agent without a
+        world model, not just go2w.
+        """
+
+        class NoWorldModelAgent:
+            """A minimal embodiment with no ``_world_model`` attribute."""
+
+        ctx = _make_context(agent=NoWorldModelAgent())
+        tool = self._get_tool()
+        # Must not raise — the AttributeError must be caught inside the tool.
+        result = tool.execute({}, ctx)
+        assert result.is_error is True
+        assert "world model" in result.content.lower()
+
     def test_world_query_object_coordinates_in_output(self) -> None:
         """Object coordinates (x, y, z) appear in the output."""
         objects = [MockObjectState(label="marker", x=0.42, y=-0.13, z=0.07)]

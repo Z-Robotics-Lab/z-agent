@@ -615,6 +615,33 @@ class IsaacGo2WWorld:
         disable = getattr(registry, "disable_category", None)
         if callable(disable):
             disable("sim")
+            # diag/system 两个内核类目在 go2w 世界整组失真（go2w-体验审计 #3-#6）：
+            #  - diag(nav_state/ros2_*/terrain_status)：读 MuJoCo 时代路径或宿主
+            #    默认 ROS 域；go2w navstack 跑在 docker ROS_DOMAIN_ID=42 内，宿主
+            #    ros2/pgrep 看不到，返回空/误导数据 → 模型误判栈已挂。
+            #  - system(robot_status/open_foxglove/skill_reload)：robot_status 把
+            #    进程内对象接线当"connected"谎报 liveness；open_foxglove 在错误
+            #    ROS 域起桥订不到 navstack；skill_reload 是 MuJoCo 时代 dev 工具。
+            # 两类目均无 go2w 自家工具 → 禁用零误伤；栈健康唯一真值源 = go2w_status。
+            # 注意 robot 类目【不能】禁：navigate/explore/pick 技能 wrap 进 robot
+            # （cli.py），禁它会连带杀掉 go2w 三个核心技能；robot 里的 world_query
+            # 已在 tools/robot.py 做 fail-safe 加固（无 _world_model 时优雅降级）。
+            disable("diag")
+            disable("system")
+
+    def essential_categories(self) -> frozenset[str]:
+        """Tool categories the intent router must ALWAYS keep in scope (finding #1).
+
+        The kernel's keyword router maps '启动仿真'→('robot','sim','system'),
+        '导航'→('robot','diag'), etc. — none of which is this world's own 'go2w'
+        category, so on the routed unified path go2w_bringup / go2w_navigate /
+        go2w_status would be filtered OUT of the schema and the model could never
+        start the sim or drive the dog. The CLI feeds this set into IntentRouter so
+        route() always unions 'go2w' back in. Zero kernel edit, zero world-naming
+        in the kernel — the plug-and-play seam (an optional duck-typed hook, like
+        setup/health/teardown).
+        """
+        return frozenset({"go2w"})
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
         ns: dict[str, Any] = {"go2w_at": go2w_at, "explored_volume": explored_volume}
