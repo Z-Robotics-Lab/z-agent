@@ -133,7 +133,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
 # ---------------------------------------------------------------------------
 
 
-class VectorCompleter(Completer):
+class ZenoCompleter(Completer):
     """Context-aware completer for the zeno REPL.
 
     - Typing `/` shows all slash commands with descriptions
@@ -183,6 +183,11 @@ class VectorCompleter(Completer):
             for ec in EXIT_COMMANDS:
                 if ec.startswith(lower_word) and ec != lower_word:
                     yield Completion(ec, start_position=-len(word))
+
+
+# Compat alias — renamed VectorCompleter -> ZenoCompleter (fork identity).
+# No external callers, but kept per the rename-leaves-an-alias convention.
+VectorCompleter = ZenoCompleter
 
 
 # ---------------------------------------------------------------------------
@@ -2508,7 +2513,7 @@ def main(argv: list[str] | None = None) -> None:
 
     pt_session: PromptSession = PromptSession(
         history=FileHistory(str(history_dir / "history")),
-        completer=VectorCompleter(),
+        completer=ZenoCompleter(),
         complete_while_typing=True,
         style=PT_STYLE,
     )
