@@ -27,6 +27,12 @@ from zeno.vcli.tools.base import PermissionResult, ToolContext, ToolResult, tool
 _DEFAULT_MAX_CHARS: int = 10_000
 _TIMEOUT_SECONDS: float = 10.0
 
+# Outbound HTTP identity — product face (shows up in external servers' access
+# logs). Must carry the product name Zeno, not the upstream fork name.
+# No compat alias: an HTTP User-Agent is a self-describing label, not a caller
+# contract, so nothing external depends on the old value.
+_USER_AGENT: str = "Zeno/1.0 WebFetchTool"
+
 _BLOCKED_HOSTNAMES: frozenset[str] = frozenset(
     {"localhost", "localhost.localdomain"}
 )
@@ -164,7 +170,7 @@ class WebFetchTool:
         try:
             req = urllib.request.Request(
                 url,
-                headers={"User-Agent": "VectorOS/1.0 WebFetchTool"},
+                headers={"User-Agent": _USER_AGENT},
             )
             with urllib.request.urlopen(req, timeout=_TIMEOUT_SECONDS) as response:
                 raw_bytes: bytes = response.read()
