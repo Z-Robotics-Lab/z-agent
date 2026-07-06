@@ -60,6 +60,24 @@ console = Console()
 
 VERSION = "0.1.0"
 
+
+def _env(name: str, default: str | None = None) -> str | None:
+    """Read a Zeno-namespaced env var, preferring ZENO_<name> and falling back
+    to the legacy VECTOR_<name> (external scripts still set the VECTOR_ names).
+
+    ``name`` is the suffix only, e.g. ``_env("WORLD")`` reads ZENO_WORLD then
+    VECTOR_WORLD. The first var present-and-non-empty wins; a set-but-empty
+    value falls through (matching the historic ``.get(..., "").strip()`` guards).
+    Returns ``default`` when neither is set (default ``None`` to mirror the old
+    ``os.environ.get`` call sites that relied on a ``None`` miss).
+    """
+    for prefix in ("ZENO_", "VECTOR_"):
+        val = os.environ.get(prefix + name)
+        if val:
+            return val
+    return default
+
+
 TEAL = "#00b4b4"
 DIM_TEAL = "#006666"
 
@@ -303,7 +321,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--world",
-        default=os.environ.get("VECTOR_WORLD") or None,
+        default=_env("WORLD"),
         metavar="ID",
         help=(
             "Select an explicit registered world by id (e.g. 'go2w'). Highest "
@@ -378,7 +396,7 @@ def _native_loop_enabled(args: Any) -> bool:
     """
     if getattr(args, "native_loop", None):
         return True
-    return os.environ.get("VECTOR_NATIVE_LOOP", "").strip() in ("1", "true", "True")
+    return _env("NATIVE_LOOP", "").strip() in ("1", "true", "True")
 
 
 def _native_first_enabled(args: Any) -> bool:
@@ -391,7 +409,7 @@ def _native_first_enabled(args: Any) -> bool:
     """
     if getattr(args, "native_first", None):
         return True
-    return os.environ.get("VECTOR_NATIVE_FIRST", "").strip() in ("1", "true", "True")
+    return _env("NATIVE_FIRST", "").strip() in ("1", "true", "True")
 
 
 def _print_native_enabled() -> bool:
@@ -409,7 +427,7 @@ def _print_native_enabled() -> bool:
     unchanged) so its documented semantics are preserved; this is the additional
     default-ON knob, NOT a change to that flag's default.
     """
-    return os.environ.get("VECTOR_PRINT_NATIVE", "").strip().lower() not in (
+    return _env("PRINT_NATIVE", "").strip().lower() not in (
         "0",
         "false",
         "off",
@@ -441,7 +459,7 @@ def _repl_native_enabled() -> bool:
     ``VECTOR_REPL_NATIVE`` in {0, false, off, no} forces the pure-legacy REPL
     (byte-identical to the pre-cutover turn path) — a reversible escape hatch.
     """
-    return os.environ.get("VECTOR_REPL_NATIVE", "").strip().lower() not in (
+    return _env("REPL_NATIVE", "").strip().lower() not in (
         "0",
         "false",
         "off",
@@ -718,7 +736,7 @@ def _load_world_plugins() -> None:
     name, missing dep) is warned about and skipped — one broken plugin never
     crashes the CLI or blocks the others. No-op when the env var is unset/empty.
     """
-    spec = os.environ.get("VECTOR_WORLD_PLUGINS", "").strip()
+    spec = _env("WORLD_PLUGINS", "").strip()
     if not spec:
         return
     import importlib
@@ -1002,7 +1020,7 @@ def _init_agent(args: argparse.Namespace) -> Any:
         # is manipulation-capable — same capability the bare-REPL NL path
         # (sim_tool._start_go2 under VECTOR_NO_ROS2=1) provides. Both build the
         # agent through the SAME helper (Rule 3/11) so they can never drift.
-        _with_arm = os.environ.get("VECTOR_SIM_WITH_ARM", "0") == "1"
+        _with_arm = _env("SIM_WITH_ARM", "0") == "1"
         from zeno.hardware.sim.go2_inprocess import (
             build_inprocess_go2_agent,
         )
@@ -1049,7 +1067,7 @@ def _should_launch_ros2_stack() -> bool:
     (unset, or any value other than the exact string "1") launches the stack so
     interactive sessions are byte-unchanged.
     """
-    return os.environ.get("VECTOR_NO_ROS2", "0") != "1"
+    return _env("NO_ROS2", "0") != "1"
 
 
 def _launch_ros2_stack(go2: Any) -> None:
@@ -1631,7 +1649,7 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
         return
     if not _wants_window(args):
         return
-    if os.environ.get("VECTOR_REEXEC") == "1":
+    if _env("REEXEC") == "1":
         return
     # Never re-exec under pytest (pytest sets this env or injects its own sys.argv)
     if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
@@ -1745,12 +1763,12 @@ def create_backend_with_fake_seam(
     """
     # M1 native-loop seam: a SCRIPT of native tool_use turns (not a decompose plan).
     # Gated on its own env var so the legacy plan seam stays byte-identical.
-    tools_path = os.environ.get("VECTOR_FAKE_LLM_TOOLS")
+    tools_path = _env("FAKE_LLM_TOOLS")
     if tools_path:
         from tests.harness.fake_backend import FakeToolScriptBackend
 
         return FakeToolScriptBackend.from_json_file(tools_path)
-    fake_path = os.environ.get("VECTOR_FAKE_LLM")
+    fake_path = _env("FAKE_LLM")
     if fake_path:
         # TEST-ONLY import (lazy, gated on the env var) — production never reaches
         # this branch, so it never imports the test harness. The repo root is on
@@ -2014,7 +2032,7 @@ def _sim_lock_enabled(args: Any) -> bool:
     unaffected; the EvolvingLoop and the acceptance harnesses opt in via the env so EVERY automated
     sim serializes through this one owner (no double-lock: only the sim-running cli process holds it).
     """
-    if os.environ.get("VECTOR_SIM_LOCK", "0").strip().lower() not in ("1", "true", "on", "yes"):
+    if _env("SIM_LOCK", "0").strip().lower() not in ("1", "true", "on", "yes"):
         return False
     return bool(getattr(args, "sim_go2", False) or getattr(args, "sim", False))
 
@@ -2029,7 +2047,7 @@ def _hold_sim_lock_until_exit() -> None:
 
     from zeno.acceptance import sim_lock
 
-    timeout = float(os.environ.get("VECTOR_SIM_LOCK_TIMEOUT", "600"))
+    timeout = float(_env("SIM_LOCK_TIMEOUT", "600"))
     cm = sim_lock.sim_lock(nuke_after=True, wait_timeout=timeout)
     cm.__enter__()  # acquire flock + clear-host preflight; raises SimBusy on failure
     atexit.register(lambda: _release_sim_lock(cm))
@@ -2765,7 +2783,7 @@ def main(argv: list[str] | None = None) -> None:
                 #     answer-only trace (chat is verified too; the moat is intact).
                 # VECTOR_LEGACY_TURN=1 restores the exact pre-cutover fork
                 # (vgg_decompose-then-run_turn) for one release as a fallback.
-                _legacy_turn = os.environ.get("VECTOR_LEGACY_TURN") == "1"
+                _legacy_turn = _env("LEGACY_TURN") == "1"
                 if _legacy_turn:
                     goal_tree = engine.vgg_decompose(user_input)
                 else:

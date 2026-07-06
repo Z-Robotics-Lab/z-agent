@@ -19,6 +19,23 @@ _CONFIG_DIR = Path.home() / ".vector"
 _CONFIG_PATH = _CONFIG_DIR / "config.yaml"
 _CLAUDE_CREDS_PATH = Path.home() / ".claude" / ".credentials.json"
 
+
+def _env(name: str, default: str = "") -> str:
+    """Read a Zeno-namespaced env var, preferring ZENO_<name> and falling back
+    to the legacy VECTOR_<name> (kept for external scripts that still set it).
+
+    ``name`` is the suffix only, e.g. ``_env("PROVIDER")`` reads ZENO_PROVIDER
+    then VECTOR_PROVIDER. A set-but-empty ZENO_ value does NOT mask a non-empty
+    VECTOR_ value; the first var actually present-and-non-empty wins, else
+    ``default``.
+    """
+    import os  # noqa: PLC0415
+    for prefix in ("ZENO_", "VECTOR_"):
+        val = os.environ.get(prefix + name)
+        if val:
+            return val
+    return default
+
 # Defaults when no config file exists
 _DEFAULTS: dict[str, Any] = {
     "provider": "openrouter",
@@ -134,7 +151,7 @@ def resolve_credentials(
     api_key = cli_api_key or ""
     provider = "anthropic"
     base_url = cli_base_url
-    _forced_provider = os.environ.get("VECTOR_PROVIDER", "").lower()
+    _forced_provider = _env("PROVIDER").lower()
 
     # Qwen / DashScope (阿里百炼) branch: OpenAI-compatible. Activated by VECTOR_PROVIDER=qwen
     # (or config provider: qwen). Routing brain runs on Qwen text models via DashScope with the
@@ -163,7 +180,7 @@ def resolve_credentials(
     # Opt-out: if VECTOR_PROVIDER is explicitly set to 'openrouter' or 'anthropic',
     # skip this branch so the user can force the fallback even when a DS key exists.
     ds_key = os.environ.get("DEEPSEEK_API_KEY", "") or config.get("deepseek_api_key", "")
-    _forced_provider = os.environ.get("VECTOR_PROVIDER", "").lower()
+    _forced_provider = _env("PROVIDER").lower()
     deepseek_selected = (
         _forced_provider == "deepseek"
         or bool(os.environ.get("DEEPSEEK_API_KEY", ""))
@@ -203,7 +220,7 @@ def resolve_credentials(
             # tool-caller — a sane BYO-MODEL default; override via VECTOR_MODEL.
             or_model = (
                 cli_model
-                or os.environ.get("VECTOR_MODEL")
+                or (_env("MODEL") or None)
                 or config.get("openrouter_model")
                 or "openai/gpt-4o-mini"
             )
@@ -245,8 +262,8 @@ def resolve_credentials(
             if not base_url:
                 base_url = config.get("base_url", "") or "https://openrouter.ai/api/v1"
 
-    # Model resolution: CLI flag > VECTOR_MODEL env > config > default
-    model = cli_model or os.environ.get("VECTOR_MODEL") or config.get("model", "claude-sonnet-4-6")
+    # Model resolution: CLI flag > ZENO_MODEL/VECTOR_MODEL env > config > default
+    model = cli_model or _env("MODEL") or config.get("model", "claude-sonnet-4-6")
 
     # Auto-prefix for OpenRouter, strip prefix for Anthropic direct
     if provider == "openrouter" and "/" not in model:
