@@ -127,6 +127,8 @@ def test_register_tools_adds_go2w_nav_tools_under_go2w_category() -> None:
     assert set(registry.list_categories().get("go2w", [])) == {
         "go2w_navigate",
         "go2w_where",
+        "go2w_bringup",
+        "go2w_status",
     }
     schema_names = {s["name"] for s in registry.to_anthropic_schemas()}
     assert {"go2w_navigate", "go2w_where"} <= schema_names, (
