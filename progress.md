@@ -3,6 +3,10 @@
 更新：2026-07-06。fork 自 VectorRobotics/vector-os-nano @ R715 (12f3e15)，分支 main。
 
 ## Works（已验证）
+- **go2_piper.xml 网格路径修复**：仓库 zeno→z-agent 改名后烘焙的绝对 mesh 路径失效
+  （test_scene_builder 2 红）；build_go2_piper 改为序列化后文本相对化（相对 go2/assets
+  + meshdir="../go2/assets"，直载/include 双锚等价），加载端经 robot_meshes_dir 吸收
+  （g1 同款缝）；test_scene_builder 6/6 + embodiments/sim_tool_env 31/31 绿。
 - **F1+F2 合入 main（3ead15b）**：修剪确证死重（-895 行 -14MB，测试夹具全保）；
   BYO 世界一等公民化——world.register_tools 接通、--world/VECTOR_WORLD(_PLUGINS)、
   build_embodiment 正门、setup/health/teardown 生命周期钩子、go2w 内置世界
