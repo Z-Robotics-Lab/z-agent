@@ -105,6 +105,97 @@ class Go2WWhereTool:
             return ToolResult(content=f"bridge error: {e}", is_error=True)
 
 
+# go2W_Sim 数字孪生仓库位置（bringup/status 脚本在那边；真机换 manifest 即换脚本）
+def _sim_repo() -> str:
+    return os.path.expanduser(os.environ.get("GO2W_SIM_DIR", "~/Desktop/go2w"))
+
+
+@tool(
+    name="go2w_bringup",
+    description=(
+        "Bring up (or tear down) the whole Go2W stack: Isaac Sim GUI + navigation "
+        "stack + RViz + bridge. Idempotent — if already green it returns "
+        "'already-up' immediately. A cold bringup takes 2-6 MINUTES and runs in "
+        "the background: after starting it, poll go2w_status every ~30s until "
+        "green. mode 'explore' enables the TARE exploration planner. "
+        "启动/拆除整个仿真环境（Isaac+导航栈+RViz）。"
+    ),
+    read_only=False,
+    permission="allow",
+)
+class Go2WBringupTool:
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["up", "teardown"], "default": "up"},
+            "mode": {"type": "string", "enum": ["waypoint", "explore"],
+                     "default": "waypoint",
+                     "description": "waypoint=goto tasks; explore=TARE autonomous exploration"},
+        },
+    }
+
+    def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
+        import subprocess
+        repo = _sim_repo()
+        script = os.path.join(repo, "scripts", "nav", "bringup.sh")
+        if not os.path.isfile(script):
+            return ToolResult(content=(
+                f"bringup script not found at {script} — set GO2W_SIM_DIR to the "
+                f"go2W_Sim checkout"), is_error=True)
+        action = (params or {}).get("action", "up")
+        if action == "teardown":
+            r = subprocess.run(["bash", script, "teardown"], capture_output=True,
+                               text=True, timeout=180)
+            return ToolResult(content=(r.stdout + r.stderr)[-800:])
+        # up：幂等短路探测走 status.sh（快）；未 green 则后台拉起（2-6 分钟），
+        # 立即返回让模型轮询 go2w_status——工具不阻塞回合。
+        st = subprocess.run(["bash", os.path.join(repo, "scripts", "nav", "status.sh")],
+                            capture_output=True, text=True, timeout=60)
+        if st.returncode == 0:
+            return ToolResult(content=f"already-up: {st.stdout.strip()}")
+        mode = (params or {}).get("mode", "waypoint")
+        log = os.path.join(repo, "logs", "bringup_tool.log")
+        os.makedirs(os.path.dirname(log), exist_ok=True)
+        env = dict(os.environ, NAV_MODE=mode)
+        with open(log, "ab") as fh:
+            subprocess.Popen(["bash", script], env=env, stdout=fh, stderr=fh,
+                             start_new_session=True, cwd=repo)
+        return ToolResult(content=(
+            f"bringup started in background (mode={mode}); a cold start takes 2-6 "
+            f"minutes. Poll go2w_status every ~30s until green:true, then proceed. "
+            f"Log: {log}"))
+
+
+@tool(
+    name="go2w_status",
+    description=(
+        "Layered health of the Go2W stack (L0 containers .. L4 SLAM, L5 RViz) plus "
+        "the current bringup phase. Use while waiting for go2w_bringup to finish. "
+        "查询仿真环境分层健康状态。"
+    ),
+    read_only=True,
+    permission="allow",
+)
+class Go2WStatusTool:
+    input_schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+    def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
+        import subprocess
+        repo = _sim_repo()
+        try:
+            st = subprocess.run(["bash", os.path.join(repo, "scripts", "nav", "status.sh")],
+                                capture_output=True, text=True, timeout=60)
+            out = {"status": st.stdout.strip()}
+        except Exception as e:  # noqa: BLE001
+            out = {"status_error": str(e)}
+        try:
+            with open(os.path.join(repo, "logs", ".bringup.phase")) as fh:
+                out["bringup_phase"] = fh.read().strip()
+        except OSError:
+            out["bringup_phase"] = None
+        return ToolResult(content=json.dumps(out, ensure_ascii=False))
+
+
 def explored_volume() -> float:
     """独立裁判读数：已探索体积（m³），来自导航栈 visualization_tools 对真实
     LiDAR 回波的体素化累积（/explored_volume 经桥 /explore_progress 转发）。
@@ -484,7 +575,11 @@ class IsaacGo2WWorld:
     def persona_blocks(self) -> tuple[str, str]:
         return (
             "You operate a Unitree Go2W robot dog (with a PiPER arm) inside an "
-            "Isaac Sim warehouse. It navigates via a SLAM + planner stack.",
+            "Isaac Sim warehouse. It navigates via a SLAM + planner stack. "
+            "If the stack/bridge is not up (tools report bridge errors or 'stale'), "
+            "FIRST call go2w_bringup(action='up') — it returns immediately; then "
+            "poll go2w_status every ~30 seconds until green:true (a cold start "
+            "takes 2-6 minutes; be patient, do NOT give up early), then do the task.",
             "Use go2w_navigate(x, y) to send it somewhere; use go2w_where() to "
             "check progress. Navigation takes tens of seconds of sim time — "
             "poll go2w_where between checks. Verify arrival with "
@@ -500,6 +595,8 @@ class IsaacGo2WWorld:
     def register_tools(self, registry: Any, agent: Any) -> None:
         registry.register(Go2WNavigateTool(), category="go2w")
         registry.register(Go2WWhereTool(), category="go2w")
+        registry.register(Go2WBringupTool(), category="go2w")
+        registry.register(Go2WStatusTool(), category="go2w")
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
         ns: dict[str, Any] = {"go2w_at": go2w_at, "explored_volume": explored_volume}
