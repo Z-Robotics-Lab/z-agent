@@ -21,20 +21,13 @@ _CLAUDE_CREDS_PATH = Path.home() / ".claude" / ".credentials.json"
 
 
 def _env(name: str, default: str = "") -> str:
-    """Read a Zeno-namespaced env var, preferring ZENO_<name> and falling back
-    to the legacy VECTOR_<name> (kept for external scripts that still set it).
-
-    ``name`` is the suffix only, e.g. ``_env("PROVIDER")`` reads ZENO_PROVIDER
-    then VECTOR_PROVIDER. A set-but-empty ZENO_ value does NOT mask a non-empty
-    VECTOR_ value; the first var actually present-and-non-empty wins, else
-    ``default``.
+    """Thin delegate over :func:`zeno.vcli.env.read_env` (ZENO_-first, VECTOR_
+    fallback). Kept as a module-local name for this file's call sites; the
+    ``default=""`` preserves the ``str`` return type the config loader relies on.
     """
-    import os  # noqa: PLC0415
-    for prefix in ("ZENO_", "VECTOR_"):
-        val = os.environ.get(prefix + name)
-        if val:
-            return val
-    return default
+    from zeno.vcli.env import read_env  # noqa: PLC0415
+    val = read_env(name, default)
+    return val if val is not None else default
 
 # Defaults when no config file exists
 _DEFAULTS: dict[str, Any] = {

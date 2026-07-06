@@ -42,6 +42,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 
 from zeno.vcli.backends import create_backend
+from zeno.vcli.env import read_env
 from zeno.vcli.engine import VectorEngine, TurnResult
 from zeno.vcli.session import (
     Session,
@@ -62,20 +63,11 @@ VERSION = "0.1.0"
 
 
 def _env(name: str, default: str | None = None) -> str | None:
-    """Read a Zeno-namespaced env var, preferring ZENO_<name> and falling back
-    to the legacy VECTOR_<name> (external scripts still set the VECTOR_ names).
-
-    ``name`` is the suffix only, e.g. ``_env("WORLD")`` reads ZENO_WORLD then
-    VECTOR_WORLD. The first var present-and-non-empty wins; a set-but-empty
-    value falls through (matching the historic ``.get(..., "").strip()`` guards).
-    Returns ``default`` when neither is set (default ``None`` to mirror the old
-    ``os.environ.get`` call sites that relied on a ``None`` miss).
+    """Thin delegate over :func:`zeno.vcli.env.read_env` (ZENO_-first, VECTOR_
+    fallback). Kept as a module-local name for the many call sites here; the
+    ``default=None`` mirrors the old ``os.environ.get`` misses this file relied on.
     """
-    for prefix in ("ZENO_", "VECTOR_"):
-        val = os.environ.get(prefix + name)
-        if val:
-            return val
-    return default
+    return read_env(name, default)
 
 
 TEAL = "#00b4b4"
