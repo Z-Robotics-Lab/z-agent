@@ -1323,7 +1323,7 @@ def _handle_slash_command(
         console.print(
             Panel(
                 "V -- the AI core of Zeno.\n"
-                "Built by Vector Robotics at CMU Robotics Institute.\n\n"
+                "Built by Z-Robotics-Lab. Forked from Vector Robotics (CMU RI).\n\n"
                 "Capabilities:\n"
                 "  Robot control    start sims, walk, explore, pick, place, navigate\n"
                 "  Codebase work    read/write/edit files, run bash, search code\n"
