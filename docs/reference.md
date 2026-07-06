@@ -56,7 +56,27 @@ class CategorizedToolRegistry(ToolRegistry):
     def list_categories(self) -> dict[str, list[str]]
 ```
 
-native producer 直接下发本世界工具集（关键词按-意图路由属 Legacy paths）。
+native producer 直接下发本世界工具集（关键词按-意图路由属 Legacy paths）。但当 native
+producer 对某类回合"取不到动作"（如"启动仿真"、embodiment 切换、纯聊天）时会 FALL
+THROUGH 回退到 legacy 的 tool_use/`run_turn` 路径——那里 `IntentRouter.route()` 仍**活跃**，
+按关键词把类目缩窄后经 `to_anthropic_schemas(categories=...)` 下发。此路径退役前，
+BYO 世界须两条即插即用缝确保工具面正确（均零内核编辑，只经 `register_tools` 收到的
+registry / world 钩子）：
+
+- **`world.register_tools(registry, agent)` 里 `disable_category(...)`**：本世界不适用的
+  内核类目自禁，从 schema 抹掉。go2w 禁 `sim`（唯一仿真是 Isaac，`go2w_bringup` 管生命
+  周期，留着内核 MuJoCo `start_simulation` 会把"启动仿真"路由去错误仿真器）、`diag`
+  （nav_state/ros2_* 读 MuJoCo 时代路径或宿主默认 ROS 域，看不到 docker 域42内的
+  navstack）、`system`（robot_status 谎报进程内对象接线为 connected；open_foxglove 起
+  错误域桥；skill_reload 是 MuJoCo dev 工具）。前提：被禁类目里【无】本世界自家工具
+  （否则误伤）——go2w 的 navigate/explore/pick wrap 进 `robot` 类目，故 `robot`【不禁】。
+- **可选钩子 `world.essential_categories() -> frozenset[str]`**：声明"关键词路由永不能过滤
+  掉"的类目。`route()` 只按内核类目关键词匹配，不认 BYO 世界自己的类目（go2w 的 `go2w`
+  类目），"启动仿真"→('robot','sim','system') 会把 `go2w_bringup` 挤出 schema。CLI 经
+  `_world_essential_categories(world)` 读该钩子注入 `IntentRouter(essential_categories=...)`，
+  `route()` 在返回非 None 结果时永远 union 进这些类目；缺钩子=空集=行为逐字节不变。
+  go2w 返回 `frozenset({"go2w"})`。`world_query`（`robot` 类目，随核心技能一起留在 schema）
+  对无 `_world_model` 的 BYO embodiment 已做 fail-safe（优雅降级，不再 AttributeError 崩溃）。
 
 ## Tool Protocol — 工具协议
 <!-- pull: 实现一个新工具的接口 -->
