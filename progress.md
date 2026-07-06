@@ -32,8 +32,14 @@ venv: uv pip install -r constraints.txt + clip@git(577b3cfa…d93eb3be) +
 gitignored 运行资产：hardware/sim/mjcf/{go2,g1}/scene_*.xml、assets/（g1 步态）、
 config/{user.yaml,boundary.ply,workspace_calibration.yaml}、.env、robot_mode.txt。
 
+## CEO 方针（2026-07-06 裁定）
+轻量化点到为止：**保留原有 MuJoCo sim 与全部核心代码**（它们是脊柱回归测试的
+夹具与必要基座），在此基础上叠加新能力；深度剥离与包改名（vector_os_nano →
+z_agent / za）**推迟到后期架构重构时一并做**。F1 已做的仅是零引用死重
+（-895 行 -14MB，全部经依赖审计），无需回退。
+
 ## Next
-1. F1b 原子改名：包 vector_os_nano → z_agent、CLI vector-cli → za（全绿前后各测）。
+1. （改名推迟，见上方 CEO 方针）
 2. P5.1 收尾：go2w 世界加 bringup/status 工具（调 go2W_Sim 的 bringup.sh/status.sh，
    经 setup 钩子或工具面）；go2W_Sim 侧脚本已真跑验收。
 3. P5.2：explore 技能 + Δexplored_volume 验证谓词（go2W_Sim 桥端点已就绪）。
