@@ -10,12 +10,12 @@ agent. Pure stubs (no MuJoCo) so the moat primitive is pinned deterministically.
 """
 import math
 
-from vector_os_nano.vcli.worlds.go2_sim_oracle import (
+from zeno.vcli.worlds.go2_sim_oracle import (
     make_at_position,
     make_facing,
     make_visited,
 )
-from vector_os_nano.vcli.worlds.robot import RobotWorld
+from zeno.vcli.worlds.robot import RobotWorld
 
 
 class _FakeBase:

@@ -16,9 +16,9 @@ import threading
 
 import pytest
 
-from vector_os_nano.core.world_model import ObjectState, WorldModel
-from vector_os_nano.integrations.sysnav_bridge import LiveSysnavBridge
-from vector_os_nano.integrations.sysnav_bridge.topic_interfaces import (
+from zeno.core.world_model import ObjectState, WorldModel
+from zeno.integrations.sysnav_bridge import LiveSysnavBridge
+from zeno.integrations.sysnav_bridge.topic_interfaces import (
     ObjectNodeShadow,
     _Header,
     _Point,

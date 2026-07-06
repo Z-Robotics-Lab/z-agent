@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-from vector_os_nano.core.types import SkillResult
+from zeno.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
 

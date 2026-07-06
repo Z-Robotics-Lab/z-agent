@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import MagicMock, patch
-from vector_os_nano.vcli.cognitive.object_memory import ObjectMemory
+from zeno.vcli.cognitive.object_memory import ObjectMemory
 
 
 # ---------------------------------------------------------------------------
@@ -43,24 +43,24 @@ class TestPrimitiveContextObjectMemoryField:
     """PrimitiveContext must have object_memory field defaulting to None."""
 
     def test_object_memory_field_defaults_to_none(self):
-        from vector_os_nano.vcli.primitives import PrimitiveContext
+        from zeno.vcli.primitives import PrimitiveContext
         ctx = PrimitiveContext()
         assert ctx.object_memory is None
 
     def test_object_memory_field_accepts_instance(self):
-        from vector_os_nano.vcli.primitives import PrimitiveContext
+        from zeno.vcli.primitives import PrimitiveContext
         om = ObjectMemory()
         ctx = PrimitiveContext(object_memory=om)
         assert ctx.object_memory is om
 
     def test_object_memory_field_accepts_none_explicitly(self):
-        from vector_os_nano.vcli.primitives import PrimitiveContext
+        from zeno.vcli.primitives import PrimitiveContext
         ctx = PrimitiveContext(object_memory=None)
         assert ctx.object_memory is None
 
     def test_existing_fields_unaffected(self):
         """Adding object_memory must not break existing field defaults."""
-        from vector_os_nano.vcli.primitives import PrimitiveContext
+        from zeno.vcli.primitives import PrimitiveContext
         ctx = PrimitiveContext()
         assert ctx.base is None
         assert ctx.scene_graph is None
@@ -80,7 +80,7 @@ class TestPrimitivesWorld:
     @pytest.fixture
     def setup_primitives(self):
         """Set up primitives with mock context holding ObjectMemory + SceneGraph."""
-        from vector_os_nano.vcli.primitives import world, PrimitiveContext
+        from zeno.vcli.primitives import world, PrimitiveContext
         om = _make_populated_om()
         mock_sg = MagicMock()
         mock_sg.get_room_coverage.return_value = 0.65
@@ -95,13 +95,13 @@ class TestPrimitivesWorld:
     # ------------------------------------------------------------------
 
     def test_last_seen_found(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import last_seen
+        from zeno.vcli.primitives.world import last_seen
         result = last_seen("cup")
         assert result is not None
         assert result["room"] == "kitchen"
 
     def test_last_seen_returns_dict_keys(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import last_seen
+        from zeno.vcli.primitives.world import last_seen
         result = last_seen("cup")
         assert "room" in result
         assert "position" in result
@@ -109,26 +109,26 @@ class TestPrimitivesWorld:
         assert "confidence" in result
 
     def test_last_seen_not_found(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import last_seen
+        from zeno.vcli.primitives.world import last_seen
         assert last_seen("laptop") is None
 
     def test_last_seen_no_context(self):
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         old = world._ctx
         world._ctx = None
         try:
-            from vector_os_nano.vcli.primitives.world import last_seen
+            from zeno.vcli.primitives.world import last_seen
             assert last_seen("cup") is None
         finally:
             world._ctx = old
 
     def test_last_seen_no_object_memory(self):
-        from vector_os_nano.vcli.primitives import world, PrimitiveContext
+        from zeno.vcli.primitives import world, PrimitiveContext
         old = world._ctx
         mock_sg = MagicMock()
         world._ctx = PrimitiveContext(scene_graph=mock_sg, object_memory=None)
         try:
-            from vector_os_nano.vcli.primitives.world import last_seen
+            from zeno.vcli.primitives.world import last_seen
             assert last_seen("cup") is None
         finally:
             world._ctx = old
@@ -138,36 +138,36 @@ class TestPrimitivesWorld:
     # ------------------------------------------------------------------
 
     def test_certainty_cup_in_kitchen(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import certainty
+        from zeno.vcli.primitives.world import certainty
         val = certainty("cup在kitchen")
         assert val > 0.5
 
     def test_certainty_english_format(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import certainty
+        from zeno.vcli.primitives.world import certainty
         val = certainty("cup in kitchen")
         assert val > 0.5
 
     def test_certainty_missing_object(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import certainty
+        from zeno.vcli.primitives.world import certainty
         assert certainty("laptop在kitchen") == 0.0
 
     def test_certainty_no_context(self):
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         old = world._ctx
         world._ctx = None
         try:
-            from vector_os_nano.vcli.primitives.world import certainty
+            from zeno.vcli.primitives.world import certainty
             assert certainty("cup在kitchen") == 0.0
         finally:
             world._ctx = old
 
     def test_certainty_no_object_memory(self):
-        from vector_os_nano.vcli.primitives import world, PrimitiveContext
+        from zeno.vcli.primitives import world, PrimitiveContext
         old = world._ctx
         mock_sg = MagicMock()
         world._ctx = PrimitiveContext(scene_graph=mock_sg, object_memory=None)
         try:
-            from vector_os_nano.vcli.primitives.world import certainty
+            from zeno.vcli.primitives.world import certainty
             assert certainty("cup在kitchen") == 0.0
         finally:
             world._ctx = old
@@ -177,39 +177,39 @@ class TestPrimitivesWorld:
     # ------------------------------------------------------------------
 
     def test_find_object_found(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import find_object
+        from zeno.vcli.primitives.world import find_object
         results = find_object("cup")
         assert len(results) == 1
         assert results[0]["category"] == "cup"
 
     def test_find_object_not_found(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import find_object
+        from zeno.vcli.primitives.world import find_object
         results = find_object("laptop")
         assert results == []
 
     def test_find_object_no_context(self):
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         old = world._ctx
         world._ctx = None
         try:
-            from vector_os_nano.vcli.primitives.world import find_object
+            from zeno.vcli.primitives.world import find_object
             assert find_object("cup") == []
         finally:
             world._ctx = old
 
     def test_find_object_no_object_memory(self):
-        from vector_os_nano.vcli.primitives import world, PrimitiveContext
+        from zeno.vcli.primitives import world, PrimitiveContext
         old = world._ctx
         mock_sg = MagicMock()
         world._ctx = PrimitiveContext(scene_graph=mock_sg, object_memory=None)
         try:
-            from vector_os_nano.vcli.primitives.world import find_object
+            from zeno.vcli.primitives.world import find_object
             assert find_object("cup") == []
         finally:
             world._ctx = old
 
     def test_find_object_result_has_required_keys(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import find_object
+        from zeno.vcli.primitives.world import find_object
         results = find_object("cup")
         assert len(results) == 1
         r = results[0]
@@ -221,39 +221,39 @@ class TestPrimitivesWorld:
     # ------------------------------------------------------------------
 
     def test_objects_in_room_kitchen(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import objects_in_room
+        from zeno.vcli.primitives.world import objects_in_room
         results = objects_in_room("kitchen")
         assert len(results) == 1
         assert results[0]["category"] == "cup"
 
     def test_objects_in_room_bedroom(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import objects_in_room
+        from zeno.vcli.primitives.world import objects_in_room
         results = objects_in_room("bedroom")
         assert len(results) == 1
         assert results[0]["category"] == "book"
 
     def test_objects_in_room_empty_room(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import objects_in_room
+        from zeno.vcli.primitives.world import objects_in_room
         results = objects_in_room("garage")
         assert results == []
 
     def test_objects_in_room_no_context(self):
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         old = world._ctx
         world._ctx = None
         try:
-            from vector_os_nano.vcli.primitives.world import objects_in_room
+            from zeno.vcli.primitives.world import objects_in_room
             assert objects_in_room("kitchen") == []
         finally:
             world._ctx = old
 
     def test_objects_in_room_no_object_memory(self):
-        from vector_os_nano.vcli.primitives import world, PrimitiveContext
+        from zeno.vcli.primitives import world, PrimitiveContext
         old = world._ctx
         mock_sg = MagicMock()
         world._ctx = PrimitiveContext(scene_graph=mock_sg, object_memory=None)
         try:
-            from vector_os_nano.vcli.primitives.world import objects_in_room
+            from zeno.vcli.primitives.world import objects_in_room
             assert objects_in_room("kitchen") == []
         finally:
             world._ctx = old
@@ -263,17 +263,17 @@ class TestPrimitivesWorld:
     # ------------------------------------------------------------------
 
     def test_room_coverage_delegates_to_scene_graph(self, setup_primitives):
-        from vector_os_nano.vcli.primitives.world import room_coverage
+        from zeno.vcli.primitives.world import room_coverage
         val = room_coverage("kitchen")
         assert val == pytest.approx(0.65)
 
     def test_room_coverage_no_context_raises_or_returns_zero(self):
         """When no SceneGraph, room_coverage raises RuntimeError (no context)."""
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         old = world._ctx
         world._ctx = None
         try:
-            from vector_os_nano.vcli.primitives.world import room_coverage
+            from zeno.vcli.primitives.world import room_coverage
             # _require_scene_graph() raises RuntimeError when _ctx is None
             with pytest.raises(RuntimeError):
                 room_coverage("kitchen")
@@ -282,7 +282,7 @@ class TestPrimitivesWorld:
 
     def test_room_coverage_scene_graph_raises_returns_zero(self, setup_primitives):
         """If get_room_coverage() raises, returns 0.0."""
-        from vector_os_nano.vcli.primitives.world import room_coverage
+        from zeno.vcli.primitives.world import room_coverage
         om, mock_sg = setup_primitives
         mock_sg.get_room_coverage.side_effect = ValueError("unknown room")
         val = room_coverage("nonexistent")
@@ -351,7 +351,7 @@ class TestAutoObserveConcept:
         swallowed so explore stored NOTHING.  A MagicMock never caught this;
         this test drives a real SceneGraph so the tuple contract is enforced.
         """
-        from vector_os_nano.core.scene_graph import SceneGraph
+        from zeno.core.scene_graph import SceneGraph
 
         sg = SceneGraph()
         # The (cat, x, y) tuple shape the fixed hook now produces.
@@ -380,7 +380,7 @@ class TestAutoObserveConcept:
         cannot unpack to three values.  The hook used to swallow this, storing
         nothing — this asserts the contract so a regression to dicts is caught.
         """
-        from vector_os_nano.core.scene_graph import SceneGraph
+        from zeno.core.scene_graph import SceneGraph
 
         sg = SceneGraph()
         with pytest.raises(ValueError):
@@ -452,8 +452,8 @@ class TestInitPrimitivesWithObjectMemory:
     """init_primitives() propagates object_memory to world._ctx."""
 
     def test_init_primitives_sets_object_memory_on_world(self):
-        from vector_os_nano.vcli.primitives import init_primitives, PrimitiveContext
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import init_primitives, PrimitiveContext
+        from zeno.vcli.primitives import world
         om = ObjectMemory()
         mock_sg = MagicMock()
         ctx = PrimitiveContext(scene_graph=mock_sg, object_memory=om)
@@ -462,8 +462,8 @@ class TestInitPrimitivesWithObjectMemory:
         assert world._ctx.object_memory is om
 
     def test_world_functions_work_after_init_primitives(self):
-        from vector_os_nano.vcli.primitives import init_primitives, PrimitiveContext
-        from vector_os_nano.vcli.primitives.world import last_seen, find_object
+        from zeno.vcli.primitives import init_primitives, PrimitiveContext
+        from zeno.vcli.primitives.world import last_seen, find_object
         om = ObjectMemory()
         om.update("x1", "lamp", "hallway", 0.0, 0.0, 0.9)
         mock_sg = MagicMock()

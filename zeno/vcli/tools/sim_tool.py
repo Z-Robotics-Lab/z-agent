@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     PermissionResult,
     ToolContext,
     ToolResult,
@@ -93,7 +93,7 @@ def _build_go2_perception(base: Any) -> Any:
             )
             return None
     try:
-        from vector_os_nano.perception.go2_grasp_perception import (
+        from zeno.perception.go2_grasp_perception import (
             Go2GraspPerception,
         )
         return Go2GraspPerception(base)
@@ -230,7 +230,7 @@ class SimStartTool:
         # Register skill tools under the 'robot' category (matches the --sim path)
         registry = app.get("registry")
         if registry is not None:
-            from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+            from zeno.vcli.tools.skill_wrapper import wrap_skills
             for skill_tool in wrap_skills(agent):
                 registry.register(skill_tool, category="robot")
             # The bare dev-world startup disabled robot/diag; re-enable now that a
@@ -244,10 +244,10 @@ class SimStartTool:
         # (a bare list would freeze state and drop the [Robot State] block).
         engine = app.get("engine")
         if engine is not None:
-            from vector_os_nano.vcli.prompt import build_system_prompt
-            from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
-            from vector_os_nano.vcli.robot_context import RobotContextProvider
-            from vector_os_nano.vcli.worlds import resolve_world
+            from zeno.vcli.prompt import build_system_prompt
+            from zeno.vcli.dynamic_prompt import DynamicSystemPrompt
+            from zeno.vcli.robot_context import RobotContextProvider
+            from zeno.vcli.worlds import resolve_world
             provider = RobotContextProvider(
                 base=getattr(agent, "_base", None),
                 scene_graph=getattr(agent, "_spatial_memory", None),
@@ -383,15 +383,15 @@ class SimStartTool:
 
         new_env = _os.environ.copy()
         new_env["VECTOR_REEXEC"] = "1"
-        _os.execve(mjpython, [mjpython, "-m", "vector_os_nano.vcli.cli", "--sim"] + _sys.argv[1:], new_env)
+        _os.execve(mjpython, [mjpython, "-m", "zeno.vcli.cli", "--sim"] + _sys.argv[1:], new_env)
 
     @staticmethod
     def _start_arm(gui: bool = True) -> Any:
-        from vector_os_nano.core.agent import Agent  # type: ignore[import]
-        from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
-        from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
-        from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
-        from vector_os_nano.skills.pick import SIM_PICK_CONFIG
+        from zeno.core.agent import Agent  # type: ignore[import]
+        from zeno.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
+        from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
+        from zeno.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
+        from zeno.skills.pick import SIM_PICK_CONFIG
         arm = MuJoCoArm(gui=gui)
         arm.connect()
         gripper = MuJoCoGripper(arm)
@@ -411,8 +411,8 @@ class SimStartTool:
         In-process (no ROS2 bridge) — R1 floor only.  NL-switch + bridge are R2.
         Wraps MuJoCoG1 in a core.agent.Agent (base=g1_sim, arm=None).
         """
-        from vector_os_nano.core.agent import Agent  # type: ignore[import]
-        from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1  # type: ignore[import]
+        from zeno.core.agent import Agent  # type: ignore[import]
+        from zeno.hardware.sim.mujoco_g1 import MuJoCoG1  # type: ignore[import]
 
         g1_sim = MuJoCoG1(gui=gui, room=True)
         g1_sim.connect()
@@ -423,7 +423,7 @@ class SimStartTool:
         # sensor. Mirrors how _start_go2 binds Go2GraspPerception — same frame-source
         # contract (get_color_frame), embodiment-agnostic detector. g1 has a camera but
         # NO arm: this is read-only perception, NOT manipulation (no depth/IK adapter).
-        from vector_os_nano.perception.g1_head_perception import G1HeadPerception
+        from zeno.perception.g1_head_perception import G1HeadPerception
         agent._perception = G1HeadPerception(g1_sim, width=640, height=480)
         return agent
 
@@ -442,7 +442,7 @@ class SimStartTool:
         grasp targeting since the skill has its own grasp-z offset.
         """
         import mujoco  # local import to avoid hard dep at module load
-        from vector_os_nano.core.world_model import ObjectState
+        from zeno.core.world_model import ObjectState
 
         model = mujoco.MjModel.from_xml_path(scene_xml_path)
         data = mujoco.MjData(model)
@@ -479,8 +479,8 @@ class SimStartTool:
         import subprocess
         import atexit
         import time as _time
-        from vector_os_nano.core.agent import Agent  # type: ignore[import]
-        from vector_os_nano.core.config import load_config
+        from zeno.core.agent import Agent  # type: ignore[import]
+        from zeno.core.config import load_config
 
         # D163/D164 C(b): the bare-REPL NL acceptance face. When VECTOR_NO_ROS2=1
         # build the PROVEN fully-in-process MuJoCoGo2 agent via the ONE shared
@@ -488,7 +488,7 @@ class SimStartTool:
         # ROS2 launch_explore.sh stack, no Go2ROS2Proxy. The ROS2-stack path below
         # is preserved (D164 C: (a) preserved-deferred) for explore/navigate-point.
         if os.environ.get("VECTOR_NO_ROS2", "0") == "1":
-            from vector_os_nano.hardware.sim.go2_inprocess import (
+            from zeno.hardware.sim.go2_inprocess import (
                 build_inprocess_go2_agent,
             )
             repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
@@ -551,7 +551,7 @@ class SimStartTool:
         _time.sleep(20)
 
         # Connect via ROS2 proxy (same as run.py --explore)
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         base = Go2ROS2Proxy()
         base.connect()
         # Stash subprocess handles on the base so SimStopTool can clean up
@@ -576,10 +576,10 @@ class SimStartTool:
         piper_gripper = None
         if with_arm:
             try:
-                from vector_os_nano.hardware.sim.mujoco_go2 import _build_room_scene_xml
+                from zeno.hardware.sim.mujoco_go2 import _build_room_scene_xml
                 scene_xml = str(_build_room_scene_xml(with_arm=True))
 
-                from vector_os_nano.hardware.sim.piper_ros2_proxy import (
+                from zeno.hardware.sim.piper_ros2_proxy import (
                     PiperROS2Proxy, PiperGripperROS2Proxy,
                 )
                 piper_arm = PiperROS2Proxy(base_proxy=base, scene_xml_path=scene_xml)
@@ -610,7 +610,7 @@ class SimStartTool:
         # to pre-populate from MJCF body names (treats sim as cheat knowledge).
         if with_arm and os.environ.get("VECTOR_SIM_DEMO_GROUND_TRUTH") == "1":
             try:
-                from vector_os_nano.hardware.sim.mujoco_go2 import _build_room_scene_xml
+                from zeno.hardware.sim.mujoco_go2 import _build_room_scene_xml
                 scene_xml = str(_build_room_scene_xml(with_arm=True))
                 n = SimStartTool._populate_pickables_from_mjcf(agent._world_model, scene_xml)
                 logger.warning(
@@ -634,7 +634,7 @@ class SimStartTool:
         agent._calibration = None
 
         # Go2 skills
-        from vector_os_nano.skills.go2 import get_go2_skills  # type: ignore[import]
+        from zeno.skills.go2 import get_go2_skills  # type: ignore[import]
         for skill in get_go2_skills():
             agent._skill_registry.register(skill)
         # Local manipulation (Piper pick/place + perception-grasp) is wired
@@ -647,7 +647,7 @@ class SimStartTool:
         # world xpos + per-weld active over /piper/object_state. Escape hatch:
         # VECTOR_ENABLE_MANIPULATION=0 (default ON for with_arm).
         if piper_arm is not None:
-            from vector_os_nano.skills.manipulation_setup import (
+            from zeno.skills.manipulation_setup import (
                 register_manipulation_skills,
             )
             register_manipulation_skills(agent, base)
@@ -655,15 +655,15 @@ class SimStartTool:
         # VLM perception (GPT-4o via OpenRouter)
         if api_key:
             try:
-                from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+                from zeno.perception.vlm_go2 import Go2VLMPerception
                 agent._vlm = Go2VLMPerception(config={"api_key": api_key})
             except Exception:
                 agent._vlm = None
 
         # Scene graph — persistent, also attach to proxy for RViz marker publishing
         import os as _os
-        from vector_os_nano.core.scene_graph import SceneGraph
-        _persist_path = _os.path.expanduser("~/.vector_os_nano/scene_graph.yaml")
+        from zeno.core.scene_graph import SceneGraph
+        _persist_path = _os.path.expanduser("~/.zeno/scene_graph.yaml")
         _os.makedirs(_os.path.dirname(_persist_path), exist_ok=True)
         sg = SceneGraph(persist_path=_persist_path)
         sg.load()
@@ -688,9 +688,9 @@ class SimStartTool:
         launch or sleep(20) needed.
         """
         import os
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy  # type: ignore[import]
-        from vector_os_nano.core.agent import Agent  # type: ignore[import]
-        from vector_os_nano.core.config import load_config
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy  # type: ignore[import]
+        from zeno.core.agent import Agent  # type: ignore[import]
+        from zeno.core.config import load_config
 
         proxy = IsaacSimProxy()
         proxy.connect()
@@ -705,22 +705,22 @@ class SimStartTool:
         agent = Agent(base=proxy, llm_api_key=api_key, config=cfg)
 
         # Go2 skills
-        from vector_os_nano.skills.go2 import get_go2_skills  # type: ignore[import]
+        from zeno.skills.go2 import get_go2_skills  # type: ignore[import]
         for skill in get_go2_skills():
             agent._skill_registry.register(skill)
 
         # VLM perception (GPT-4o via OpenRouter)
         if api_key:
             try:
-                from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+                from zeno.perception.vlm_go2 import Go2VLMPerception
                 agent._vlm = Go2VLMPerception(config={"api_key": api_key})
             except Exception:
                 agent._vlm = None
 
         # Scene graph — persistent
         import os as _os
-        from vector_os_nano.core.scene_graph import SceneGraph
-        _persist_path = _os.path.expanduser("~/.vector_os_nano/scene_graph.yaml")
+        from zeno.core.scene_graph import SceneGraph
+        _persist_path = _os.path.expanduser("~/.zeno/scene_graph.yaml")
         _os.makedirs(_os.path.dirname(_persist_path), exist_ok=True)
         sg = SceneGraph(persist_path=_persist_path)
         sg.load()
@@ -743,9 +743,9 @@ class SimStartTool:
         import subprocess
         import atexit
         import time as _time
-        from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy  # type: ignore[import]
-        from vector_os_nano.core.agent import Agent  # type: ignore[import]
-        from vector_os_nano.core.config import load_config
+        from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy  # type: ignore[import]
+        from zeno.core.agent import Agent  # type: ignore[import]
+        from zeno.core.config import load_config
 
         repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__)
@@ -801,21 +801,21 @@ class SimStartTool:
         agent = Agent(base=proxy, llm_api_key=api_key, config=cfg)
 
         # Go2 skills
-        from vector_os_nano.skills.go2 import get_go2_skills  # type: ignore[import]
+        from zeno.skills.go2 import get_go2_skills  # type: ignore[import]
         for skill in get_go2_skills():
             agent._skill_registry.register(skill)
 
         # VLM perception
         if api_key:
             try:
-                from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+                from zeno.perception.vlm_go2 import Go2VLMPerception
                 agent._vlm = Go2VLMPerception(config={"api_key": api_key})
             except Exception:
                 agent._vlm = None
 
         # Scene graph — persistent
-        from vector_os_nano.core.scene_graph import SceneGraph
-        _persist_path = os.path.expanduser("~/.vector_os_nano/scene_graph.yaml")
+        from zeno.core.scene_graph import SceneGraph
+        _persist_path = os.path.expanduser("~/.zeno/scene_graph.yaml")
         os.makedirs(os.path.dirname(_persist_path), exist_ok=True)
         sg = SceneGraph(persist_path=_persist_path)
         sg.load()
@@ -831,8 +831,8 @@ class SimStartTool:
         Uses IsaacSimArmProxy over ROS2 topics. Isaac Sim must be running
         before calling this method.
         """
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy  # type: ignore[import]
-        from vector_os_nano.core.agent import Agent  # type: ignore[import]
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy  # type: ignore[import]
+        from zeno.core.agent import Agent  # type: ignore[import]
 
         arm = IsaacSimArmProxy()
         arm.connect()
@@ -902,9 +902,9 @@ class SimStopTool:
         engine = app.get("engine")
         if engine is not None:
             try:
-                from vector_os_nano.vcli.prompt import build_system_prompt
-                from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
-                from vector_os_nano.vcli.robot_context import RobotContextProvider
+                from zeno.vcli.prompt import build_system_prompt
+                from zeno.vcli.dynamic_prompt import DynamicSystemPrompt
+                from zeno.vcli.robot_context import RobotContextProvider
                 provider = RobotContextProvider()
                 app["robot_ctx_provider"] = provider
                 static_blocks = build_system_prompt(

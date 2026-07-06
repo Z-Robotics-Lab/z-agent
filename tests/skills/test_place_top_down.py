@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import ObjectState, WorldModel
-from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import ObjectState, WorldModel
+from zeno.skills.place_top_down import PlaceTopDownSkill
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +317,7 @@ def test_place_top_down_has_verify_hint_with_placed_count() -> None:
 def test_place_top_down_schema_surfaces_verify_hint() -> None:
     """When PlaceTopDownSkill is registered, to_schemas() carries the
     verify_hint == the class attribute value (not the fallback 'True')."""
-    from vector_os_nano.core.skill import SkillRegistry
+    from zeno.core.skill import SkillRegistry
 
     reg = SkillRegistry()
     reg.register(PlaceTopDownSkill())

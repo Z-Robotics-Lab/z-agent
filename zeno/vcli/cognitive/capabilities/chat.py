@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.capabilities.types import CapabilityResult
+from zeno.vcli.cognitive.capabilities.types import CapabilityResult
 
 
 class LLMChatCapability:

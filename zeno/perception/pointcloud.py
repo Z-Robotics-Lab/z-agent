@@ -16,7 +16,7 @@ from typing import Optional
 
 import numpy as np
 
-from vector_os_nano.core.types import BBox3D, CameraIntrinsics, Pose3D
+from zeno.core.types import BBox3D, CameraIntrinsics, Pose3D
 
 
 # ---------------------------------------------------------------------------

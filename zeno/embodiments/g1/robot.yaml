@@ -3,7 +3,7 @@
 #
 # Unitree G1 humanoid (12-DoF) — embodiment manifest (Stage 1 data only).
 # Faithfully captures the constants CURRENTLY hardcoded in
-# vector_os_nano/hardware/sim/mujoco_g1.py. Not yet wired into the driver
+# zeno/hardware/sim/mujoco_g1.py. Not yet wired into the driver
 # (that is Stage 2). Values must stay ACCURATE to today's driver.
 
 id: g1

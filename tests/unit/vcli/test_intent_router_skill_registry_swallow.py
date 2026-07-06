@@ -23,7 +23,7 @@ import logging
 
 import pytest
 
-from vector_os_nano.vcli.intent_router import IntentRouter
+from zeno.vcli.intent_router import IntentRouter
 
 
 class _RaisingRegistry:
@@ -40,7 +40,7 @@ def router() -> IntentRouter:
 
 def test_raising_registry_logs_a_warning(router, caplog):
     """A swallowed skill_registry.match failure MUST leave an observable WARNING."""
-    with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.intent_router"):
+    with caplog.at_level(logging.WARNING, logger="zeno.vcli.intent_router"):
         router.should_use_vgg("请给我拿一下东西", skill_registry=_RaisingRegistry())
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert warnings, "a raising skill_registry.match must log a WARNING, not pass silently"
@@ -70,6 +70,6 @@ def test_healthy_registry_does_not_warn(router, caplog):
         def match(self, user_input: str):  # noqa: ANN001, ANN201
             return None
 
-    with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.intent_router"):
+    with caplog.at_level(logging.WARNING, logger="zeno.vcli.intent_router"):
         router.should_use_vgg("hello", skill_registry=_NoMatch())
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

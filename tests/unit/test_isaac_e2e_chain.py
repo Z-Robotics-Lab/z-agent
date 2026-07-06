@@ -61,7 +61,7 @@ def _make_image_msg(height: int = 240, width: int = 320,
 
 def _make_connected_proxy() -> Any:
     """Return IsaacSimProxy with mocked ROS2 internals."""
-    from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+    from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
     proxy = IsaacSimProxy()
     proxy._node = _make_mock_node()
     proxy._cmd_pub = MagicMock()
@@ -80,7 +80,7 @@ class TestDockerProxyChain:
     """IsaacSimProxy.connect() must check Docker before creating rclpy node."""
 
     def test_connect_checks_docker_first(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
 
         check_order = []
@@ -94,7 +94,7 @@ class TestDockerProxyChain:
 
         with patch.object(IsaacSimProxy, "is_isaac_sim_running", side_effect=mock_docker_check), \
              patch(
-                 "vector_os_nano.hardware.sim.go2_ros2_proxy.Go2ROS2Proxy.connect",
+                 "zeno.hardware.sim.go2_ros2_proxy.Go2ROS2Proxy.connect",
                  mock_parent_connect,
              ):
             proxy.connect()
@@ -105,7 +105,7 @@ class TestDockerProxyChain:
             "rclpy connect must be called after Docker check passes"
 
     def test_connect_when_docker_down_raises_connection_error(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
 
         with patch.object(IsaacSimProxy, "is_isaac_sim_running", return_value=False):
@@ -118,7 +118,7 @@ class TestDockerProxyChain:
 
     def test_connect_error_is_not_silent_failure(self) -> None:
         """Docker down must raise, not silently return None."""
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
 
         raised = False
@@ -381,19 +381,19 @@ class TestSupportsLidar:
     """IsaacSimProxy must advertise lidar support."""
 
     def test_supports_lidar_is_true(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         assert proxy.supports_lidar is True
 
     def test_mujoco_proxy_lidar_flag_is_false(self) -> None:
         """Go2ROS2Proxy must NOT advertise lidar (no RTX sensor)."""
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         proxy = Go2ROS2Proxy()
         assert proxy.supports_lidar is False
 
     def test_isaac_proxy_lidar_differs_from_mujoco_proxy(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         isaac = IsaacSimProxy()
         mujoco = Go2ROS2Proxy()
         assert isaac.supports_lidar != mujoco.supports_lidar
@@ -516,7 +516,7 @@ class TestSensorMountConfig:
     def test_proxy_camera_mount_fwd_matches_constant(self) -> None:
         """Go2ROS2Proxy.get_camera_pose uses 0.3m forward, 0.05m up."""
         import inspect
-        from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+        from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
         source = inspect.getsource(Go2ROS2Proxy.get_camera_pose)
         assert "0.3" in source and "0.05" in source, \
             "get_camera_pose mount offsets must match (0.3 fwd, 0.05 up)"
@@ -531,7 +531,7 @@ class TestCLIProxyChain:
     """SimStartTool with backend=isaac must wire up IsaacSimProxy correctly."""
 
     def test_start_tool_isaac_backend_creates_isaac_proxy(self) -> None:
-        from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+        from zeno.vcli.tools.sim_tool import SimStartTool
         mock_proxy = MagicMock()
         mock_proxy.name = "isaac_go2"
         mock_agent = MagicMock()
@@ -551,8 +551,8 @@ class TestCLIProxyChain:
             ctx.cwd = "/tmp"
 
             # wrap_skills and build_system_prompt are imported locally inside execute()
-            with patch("vector_os_nano.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
-                 patch("vector_os_nano.vcli.prompt.build_system_prompt", return_value=""):
+            with patch("zeno.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
+                 patch("zeno.vcli.prompt.build_system_prompt", return_value=""):
                 result = tool.execute(
                     {"sim_type": "go2", "backend": "isaac"},
                     ctx,
@@ -561,7 +561,7 @@ class TestCLIProxyChain:
         assert not result.is_error, f"Expected success, got error: {result.content}"
 
     def test_start_tool_result_mentions_sim_type(self) -> None:
-        from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+        from zeno.vcli.tools.sim_tool import SimStartTool
         mock_agent = MagicMock()
         mock_agent._arm = None
         mock_agent._base = MagicMock()
@@ -578,8 +578,8 @@ class TestCLIProxyChain:
             }
             ctx.cwd = "/tmp"
 
-            with patch("vector_os_nano.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
-                 patch("vector_os_nano.vcli.prompt.build_system_prompt", return_value=""):
+            with patch("zeno.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
+                 patch("zeno.vcli.prompt.build_system_prompt", return_value=""):
                 result = tool.execute(
                     {"sim_type": "go2", "backend": "isaac"},
                     ctx,
@@ -589,7 +589,7 @@ class TestCLIProxyChain:
             or "started" in result.content.lower()
 
     def test_tool_result_not_error_for_mujoco_go2(self) -> None:
-        from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+        from zeno.vcli.tools.sim_tool import SimStartTool
         mock_agent = MagicMock()
         mock_agent._arm = None
         mock_agent._base = MagicMock()
@@ -606,8 +606,8 @@ class TestCLIProxyChain:
             }
             ctx.cwd = "/tmp"
 
-            with patch("vector_os_nano.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
-                 patch("vector_os_nano.vcli.prompt.build_system_prompt", return_value=""):
+            with patch("zeno.vcli.tools.skill_wrapper.wrap_skills", return_value=[]), \
+                 patch("zeno.vcli.prompt.build_system_prompt", return_value=""):
                 result = tool.execute(
                     {"sim_type": "go2", "backend": "mujoco"},
                     ctx,
@@ -636,43 +636,43 @@ class TestIsaacProxyInterface:
     ]
 
     def test_all_required_methods_present(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         missing = [m for m in self.REQUIRED_METHODS if not hasattr(proxy, m)]
         assert not missing, f"IsaacSimProxy missing methods: {missing}"
 
     def test_name_property_returns_isaac_go2(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         assert proxy.name == "isaac_go2"
 
     def test_get_rgbd_frame_available(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         assert hasattr(proxy, "get_rgbd_frame"), \
             "IsaacSimProxy must support get_rgbd_frame (camera interface)"
 
     def test_navigate_to_available(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         assert hasattr(proxy, "navigate_to"), \
             "IsaacSimProxy must support navigate_to (nav interface)"
 
     def test_cancel_navigation_available(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         assert hasattr(proxy, "cancel_navigation"), \
             "IsaacSimProxy must support cancel_navigation"
 
     def test_get_camera_frame_available(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         assert hasattr(proxy, "get_camera_frame"), \
             "IsaacSimProxy must support get_camera_frame"
 
     def test_supports_lidar_flag_is_true(self) -> None:
         """supports_lidar=True advertises that lidar data is available from Isaac RTX sensor."""
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         proxy = IsaacSimProxy()
         assert proxy.supports_lidar is True, \
             "IsaacSimProxy must advertise supports_lidar=True (RTX LiDAR available)"
@@ -687,54 +687,54 @@ class TestIsaacArmProxyChain:
     """IsaacSimArmProxy must implement ArmProtocol."""
 
     def test_arm_proxy_has_connect(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         assert hasattr(proxy, "connect")
 
     def test_arm_proxy_has_disconnect(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         assert hasattr(proxy, "disconnect")
 
     def test_arm_proxy_has_move_joints(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         assert hasattr(proxy, "move_joints")
 
     def test_arm_proxy_has_get_joint_positions(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         assert hasattr(proxy, "get_joint_positions")
 
     def test_arm_proxy_name_is_isaac_sim_arm(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         assert proxy.name == "isaac_sim_arm"
 
     def test_arm_proxy_dof_is_six(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         assert proxy.dof == 6
 
     def test_arm_proxy_joint_names_length_matches_dof(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         assert len(proxy.joint_names) == proxy.dof
 
     def test_arm_proxy_disconnect_not_connected_idempotent(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         proxy.disconnect()  # Not connected — must not raise
 
     def test_arm_proxy_connect_docker_down_raises(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         with patch.object(IsaacSimArmProxy, "is_isaac_sim_running", return_value=False):
             with pytest.raises(ConnectionError):
                 proxy.connect()
 
     def test_arm_proxy_fk_returns_position_and_rotation(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+        from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
         proxy = IsaacSimArmProxy()
         joints = [0.0] * 6
         pos, rot = proxy.fk(joints)

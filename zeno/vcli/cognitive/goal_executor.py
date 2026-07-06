@@ -19,8 +19,8 @@ import time
 from collections import deque
 from typing import Any, Callable
 
-from vector_os_nano.vcli.cognitive.trace_store import step_evidence_ok
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.trace_store import step_evidence_ok
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     ForEachSpec,
     GoalTree,
@@ -199,7 +199,7 @@ class GoalExecutor:
         for sub_goal in ordered:
             # --- Abort check ---
             try:
-                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                from zeno.vcli.cognitive.abort import is_abort_requested
                 if is_abort_requested():
                     abort_step = StepRecord(
                         sub_goal_name=sub_goal.name,
@@ -350,7 +350,7 @@ class GoalExecutor:
         # registered skill is never intercepted (see _world_primitive_strategy).
         _prim_key = self._world_primitive_strategy(sub_goal)
         if _prim_key is not None:
-            from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
+            from zeno.vcli.cognitive.strategy_selector import StrategyResult
             result: Any = StrategyResult(
                 "primitive", _prim_key, dict(sub_goal.strategy_params)
             )
@@ -463,7 +463,7 @@ class GoalExecutor:
         # --- Phase 3: Visual verification fallback ---
         if self._visual_verifier_agent is not None:
             try:
-                from vector_os_nano.vcli.cognitive.visual_verifier import should_verify, verify_visual
+                from zeno.vcli.cognitive.visual_verifier import should_verify, verify_visual
                 if should_verify(
                     sub_goal_name=sub_goal.name,
                     sub_goal_description=sub_goal.description,
@@ -633,7 +633,7 @@ class GoalExecutor:
         for index, item in enumerate(items):
             # --- Abort check (mirror the leaf loop) ---
             try:
-                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                from zeno.vcli.cognitive.abort import is_abort_requested
                 if is_abort_requested():
                     abort_step = StepRecord(
                         sub_goal_name=f"{sub_goal.name}[{index}]",
@@ -767,7 +767,7 @@ class GoalExecutor:
         if self._agent is None:
             return None
         try:
-            from vector_os_nano.vcli.cognitive.actor_causation import capture
+            from zeno.vcli.cognitive.actor_causation import capture
             return capture(self._agent)
         except Exception as exc:  # noqa: BLE001
             logger.debug("GoalExecutor: actor-causation capture raised: %s", exc)
@@ -789,12 +789,12 @@ class GoalExecutor:
         ``NOT_GRADED`` (legacy-equivalent — the moat never gets falsely stricter on
         a grading bug, only the R1 predicate gate applies). NEVER raises.
         """
-        from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+        from zeno.vcli.cognitive.actor_causation import ActorCaused
 
         if self._agent is None or baseline is None:
             return ActorCaused.NOT_GRADED
         try:
-            from vector_os_nano.vcli.cognitive.actor_causation import (
+            from zeno.vcli.cognitive.actor_causation import (
                 capture,
                 grade,
                 is_robot_predicate,
@@ -1092,7 +1092,7 @@ class GoalExecutor:
             ), {}
         payload = params if isinstance(params, dict) else {}
         try:
-            from vector_os_nano.vcli.cognitive.capabilities import validate_input
+            from zeno.vcli.cognitive.capabilities import validate_input
             err = validate_input(getattr(cap, "input_schema", {}) or {}, payload)
             if err is not None:
                 return False, f"capability '{name}' input invalid: {err}", {}
@@ -1153,7 +1153,7 @@ class GoalExecutor:
     def _wait_for_async_skill(self, name: str) -> tuple[bool, str]:
         """Block until an async skill (e.g. explore) completes or abort fires."""
         try:
-            from vector_os_nano.vcli.cognitive.abort import is_abort_requested, wait_or_abort
+            from zeno.vcli.cognitive.abort import is_abort_requested, wait_or_abort
         except ImportError:
             return True, ""
 
@@ -1163,7 +1163,7 @@ class GoalExecutor:
                 return False, "aborted"
             # Check if exploration finished
             try:
-                from vector_os_nano.skills.go2.explore import is_exploring
+                from zeno.skills.go2.explore import is_exploring
                 if not is_exploring():
                     return True, ""
             except ImportError:
@@ -1224,10 +1224,10 @@ class GoalExecutor:
 
         # 2. Try importing from vcli.primitives sub-modules
         _PRIMITIVE_MODULES = (
-            "vector_os_nano.vcli.primitives.locomotion",
-            "vector_os_nano.vcli.primitives.navigation",
-            "vector_os_nano.vcli.primitives.perception",
-            "vector_os_nano.vcli.primitives.world",
+            "zeno.vcli.primitives.locomotion",
+            "zeno.vcli.primitives.navigation",
+            "zeno.vcli.primitives.perception",
+            "zeno.vcli.primitives.world",
         )
         import importlib
         for module_path in _PRIMITIVE_MODULES:

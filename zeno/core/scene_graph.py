@@ -762,7 +762,7 @@ class SceneGraph:
         if room is None:
             return None
         # Return a duck-typed object with .name, .x, .y
-        from vector_os_nano.core.spatial_memory import LocationRecord
+        from zeno.core.spatial_memory import LocationRecord
         objs = self.find_objects_in_room(name)
         return LocationRecord(
             name=room.room_id,

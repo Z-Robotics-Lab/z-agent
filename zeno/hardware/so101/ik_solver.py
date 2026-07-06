@@ -20,7 +20,7 @@ from typing import Optional
 
 import numpy as np
 
-from vector_os_nano.hardware.so101.joint_config import ARM_JOINT_NAMES
+from zeno.hardware.so101.joint_config import ARM_JOINT_NAMES
 
 logger = logging.getLogger(__name__)
 

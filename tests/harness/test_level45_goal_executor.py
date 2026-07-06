@@ -15,13 +15,13 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
 
 
 # ---------------------------------------------------------------------------

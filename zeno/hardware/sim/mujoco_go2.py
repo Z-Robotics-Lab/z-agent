@@ -35,13 +35,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from vector_os_nano.embodiments.config import load_embodiment_config
-from vector_os_nano.embodiments.dof_layout import DofLayout
-from vector_os_nano.hardware.base import (
+from zeno.embodiments.config import load_embodiment_config
+from zeno.embodiments.dof_layout import DofLayout
+from zeno.hardware.base import (
     ensure_finite_base_velocity,
     ensure_finite_nav_goal,
 )
-from vector_os_nano.hardware.sim.mujoco_g1 import obstacles_from_model
+from zeno.hardware.sim.mujoco_g1 import obstacles_from_model
 
 # TEMP DIAGNOSTIC (off unless VECTOR_MPC_LOG set): count/log swallowed MPC solver
 # failures so the explore "float" can be checked for silently-failing QP solves
@@ -436,7 +436,7 @@ def _build_room_scene_xml(with_arm: bool | None = None) -> Path:
             the MuJoCo subprocess without editing launch_explore.sh.
     """
     import os
-    from vector_os_nano.hardware.sim.scene_builder import build_room_scene
+    from zeno.hardware.sim.scene_builder import build_room_scene
     if with_arm is None:
         with_arm = os.environ.get("VECTOR_SIM_WITH_ARM", "0") == "1"
     assets_dir = _MJCF_DIR / "assets"
@@ -830,7 +830,7 @@ class MuJoCoGo2:
         # on the viewer-owning (main) thread, because Apple GLFW is main-thread
         # only and a background viewer.sync() would segfault. Linux/Windows
         # window + headless -> background daemon, byte-identical to before.
-        from vector_os_nano.hardware.sim.viewer_mode import (  # noqa: PLC0415
+        from zeno.hardware.sim.viewer_mode import (  # noqa: PLC0415
             resolve_viewer_drive_mode,
             uses_background_physics,
         )
@@ -888,7 +888,7 @@ class MuJoCoGo2:
             self._physics_thread = None
 
     def _resume_physics(self) -> None:
-        from vector_os_nano.hardware.sim.viewer_mode import (  # noqa: PLC0415
+        from zeno.hardware.sim.viewer_mode import (  # noqa: PLC0415
             uses_background_physics,
         )
         # In main-thread-pump mode there is no daemon to restart — the caller
@@ -949,7 +949,7 @@ class MuJoCoGo2:
         so the gait animates and the viewer syncs on the main thread, instead of
         sleeping while a non-existent daemon would have stepped.
         """
-        from vector_os_nano.hardware.sim.viewer_mode import (  # noqa: PLC0415
+        from zeno.hardware.sim.viewer_mode import (  # noqa: PLC0415
             uses_background_physics,
         )
         if uses_background_physics(self._drive_mode):
@@ -1543,7 +1543,7 @@ class MuJoCoGo2:
     # ------------------------------------------------------------------
 
     def _update_odometry(self) -> None:
-        from vector_os_nano.core.types import Odometry  # noqa: PLC0415
+        from zeno.core.types import Odometry  # noqa: PLC0415
         q = self._mj.data.qpos
         v = self._mj.data.qvel
         rq = self._mj.layout.root_qpos_adr
@@ -1570,7 +1570,7 @@ class MuJoCoGo2:
         This means the lidar's "horizontal" plane is actually 30° below
         horizontal, so it sees the ground in front and walls ahead.
         """
-        from vector_os_nano.core.types import LaserScan  # noqa: PLC0415
+        from zeno.core.types import LaserScan  # noqa: PLC0415
 
         # Sensor mounting: on top of Go2 head — above all leg geoms.
         # 0.3m forward (head position) + 0.2m up (above trunk top).
@@ -1609,7 +1609,7 @@ class MuJoCoGo2:
         # =False), and the near-zero self-hit diagnostic is unused here.
         # mj_ray bodyexclude only filters the trunk; leg geoms (hip/thigh/calf)
         # are separate bodies, so they are filtered via _robot_geom_ids.
-        from vector_os_nano.hardware.sim.sensors.lidar_raycast import (  # noqa: PLC0415
+        from zeno.hardware.sim.sensors.lidar_raycast import (  # noqa: PLC0415
             raycast_lidar,
         )
 
@@ -1789,7 +1789,7 @@ class MuJoCoGo2:
           "unreachable" — planner found no collision-free path (goal inside an
                           inflated obstacle); does NOT fall back to open-loop.
         """
-        from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
+        from zeno.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
 
         ensure_finite_nav_goal(x, y, "MuJoCoGo2.navigate_to")
         self._require_connection()

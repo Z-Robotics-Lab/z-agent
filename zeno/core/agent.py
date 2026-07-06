@@ -15,11 +15,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from vector_os_nano.core.config import load_config
-from vector_os_nano.core.executor import TaskExecutor
-from vector_os_nano.core.skill import Skill, SkillContext, SkillRegistry
-from vector_os_nano.core.types import ExecutionResult
-from vector_os_nano.core.world_model import WorldModel
+from zeno.core.config import load_config
+from zeno.core.executor import TaskExecutor
+from zeno.core.skill import Skill, SkillContext, SkillRegistry
+from zeno.core.types import ExecutionResult
+from zeno.core.world_model import WorldModel
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class Agent:
 
     Usage::
 
-        from vector_os_nano import Agent, SO101
+        from zeno import Agent, SO101
         arm = SO101(port="/dev/ttyACM0")
         agent = Agent(arm=arm)
         agent.execute_skill("pick", {"object_label": "red cup"})
@@ -106,7 +106,7 @@ class Agent:
         # was explicitly supplied.
         if gripper is None and arm is not None and hasattr(arm, "_bus") and arm._bus is not None:
             try:
-                from vector_os_nano.hardware.so101.gripper import SO101Gripper  # lazy
+                from zeno.hardware.so101.gripper import SO101Gripper  # lazy
 
                 self._gripper = SO101Gripper(arm._bus)
             except Exception as exc:
@@ -122,10 +122,10 @@ class Agent:
             cam_type = self._config.get("camera", {}).get("type", "")
             if cam_type == "realsense":
                 try:
-                    from vector_os_nano.perception.realsense import RealSenseCamera
-                    from vector_os_nano.perception.vlm import VLMDetector
-                    from vector_os_nano.perception.tracker import EdgeTAMTracker
-                    from vector_os_nano.perception.pipeline import PerceptionPipeline
+                    from zeno.perception.realsense import RealSenseCamera
+                    from zeno.perception.vlm import VLMDetector
+                    from zeno.perception.tracker import EdgeTAMTracker
+                    from zeno.perception.pipeline import PerceptionPipeline
 
                     cam = RealSenseCamera()
                     cam.connect()
@@ -145,7 +145,7 @@ class Agent:
         self._skill_registry = SkillRegistry()
 
         # Register built-in skills
-        from vector_os_nano.skills import get_default_skills  # lazy-ish (already imported by wave 2)
+        from zeno.skills import get_default_skills  # lazy-ish (already imported by wave 2)
 
         for skill in get_default_skills():
             self._skill_registry.register(skill)
@@ -246,7 +246,7 @@ class Agent:
         If the skill has auto_steps, builds a plan with the correct params
         for each step. Otherwise executes the single skill directly.
         """
-        from vector_os_nano.core.types import TaskPlan, TaskStep
+        from zeno.core.types import TaskPlan, TaskStep
 
         params = params or {}
         skill_obj = self._skill_registry.get(skill_name)
@@ -377,7 +377,7 @@ class Agent:
         # Lazy-init IK solver
         if self._ik_solver is None and self._arm is not None:
             try:
-                from vector_os_nano.hardware.so101.ik_solver import IKSolver  # lazy
+                from zeno.hardware.so101.ik_solver import IKSolver  # lazy
 
                 self._ik_solver = IKSolver()
                 if hasattr(self._arm, "set_ik_solver"):
@@ -390,14 +390,14 @@ class Agent:
             try:
                 from pathlib import Path
 
-                from vector_os_nano.perception.calibration import Calibration  # lazy
+                from zeno.perception.calibration import Calibration  # lazy
 
                 cal_file: str = self._config.get("calibration", {}).get("file", "")
                 if cal_file:
                     # Resolve relative paths: try ~/Desktop/vector_os/<cal_file> then cwd
                     cal_path = Path(cal_file)
                     if not cal_path.is_absolute():
-                        candidate = Path.home() / "Desktop" / "vector_os_nano" / cal_path
+                        candidate = Path.home() / "Desktop" / "zeno" / cal_path
                         if not candidate.exists():
                             candidate = Path.cwd() / cal_path
                         if candidate.exists():

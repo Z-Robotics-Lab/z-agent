@@ -74,27 +74,27 @@ def _import_mujoco_go2():
 
     Mirrors the pattern in conftest.py — avoids importing httpx and other
     optional deps that may not be present in the harness environment.
-    Loads vector_os_nano.core.types first since mujoco_go2 requires it.
+    Loads zeno.core.types first since mujoco_go2 requires it.
     """
     import importlib.util
 
     module_path = (
-        _REPO_ROOT / "vector_os_nano" / "hardware" / "sim" / "mujoco_go2.py"
+        _REPO_ROOT / "zeno" / "hardware" / "sim" / "mujoco_go2.py"
     )
-    types_path = _REPO_ROOT / "vector_os_nano" / "core" / "types.py"
+    types_path = _REPO_ROOT / "zeno" / "core" / "types.py"
 
     types_spec = importlib.util.spec_from_file_location(
-        "vector_os_nano.core.types", str(types_path)
+        "zeno.core.types", str(types_path)
     )
     types_mod = importlib.util.module_from_spec(types_spec)  # type: ignore[arg-type]
-    sys.modules.setdefault("vector_os_nano.core.types", types_mod)
+    sys.modules.setdefault("zeno.core.types", types_mod)
     types_spec.loader.exec_module(types_mod)  # type: ignore[union-attr]
 
     spec = importlib.util.spec_from_file_location(
-        "vector_os_nano.hardware.sim.mujoco_go2", str(module_path)
+        "zeno.hardware.sim.mujoco_go2", str(module_path)
     )
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    sys.modules["vector_os_nano.hardware.sim.mujoco_go2"] = mod
+    sys.modules["zeno.hardware.sim.mujoco_go2"] = mod
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod.MuJoCoGo2
 
@@ -127,7 +127,7 @@ class TestLevel1CameraVLM:
     @pytest.fixture
     def vlm(self):
         """Create Go2VLMPerception with the loaded API key."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
         key = _get_api_key()
         return Go2VLMPerception(config={"api_key": key})
 
@@ -165,7 +165,7 @@ class TestLevel1CameraVLM:
 
     def test_describe_scene_from_mujoco(self, go2, vlm):
         """VLM can describe a MuJoCo-rendered scene and returns a populated SceneDescription."""
-        from vector_os_nano.perception.vlm_go2 import SceneDescription
+        from zeno.perception.vlm_go2 import SceneDescription
 
         frame = go2.get_camera_frame()
         scene = vlm.describe_scene(frame)
@@ -181,7 +181,7 @@ class TestLevel1CameraVLM:
 
     def test_identify_room_from_mujoco(self, go2, vlm):
         """VLM identifies a room from a MuJoCo-rendered frame."""
-        from vector_os_nano.perception.vlm_go2 import RoomIdentification
+        from zeno.perception.vlm_go2 import RoomIdentification
 
         frame = go2.get_camera_frame()
         room = vlm.identify_room(frame)
@@ -197,7 +197,7 @@ class TestLevel1CameraVLM:
 
     def test_find_objects_from_mujoco(self, go2, vlm):
         """VLM find_objects() returns a list from a MuJoCo scene."""
-        from vector_os_nano.perception.vlm_go2 import DetectedObject
+        from zeno.perception.vlm_go2 import DetectedObject
 
         frame = go2.get_camera_frame()
         objects = vlm.find_objects(frame)

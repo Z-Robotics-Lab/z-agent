@@ -8,7 +8,7 @@ Requires init_primitives() to be called before use.
 """
 from __future__ import annotations
 
-from vector_os_nano.vcli.primitives import PrimitiveContext
+from zeno.vcli.primitives import PrimitiveContext
 
 _ctx: PrimitiveContext | None = None
 

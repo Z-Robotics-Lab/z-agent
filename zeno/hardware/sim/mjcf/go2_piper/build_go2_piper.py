@@ -7,7 +7,7 @@ Regenerate when mount pose (xyz / orientation) needs tuning, or when
 upstream Go2 / Piper assets update.
 
 Usage:
-    cd vector_os_nano/hardware/sim/mjcf
+    cd zeno/hardware/sim/mjcf
     python3 go2_piper/build_go2_piper.py
 """
 from __future__ import annotations

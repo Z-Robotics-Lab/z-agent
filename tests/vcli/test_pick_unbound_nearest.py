@@ -23,13 +23,13 @@ import pytest
 # Guard: skip when mujoco is not installed (hardware or CI without sim deps).
 pytest.importorskip("mujoco", reason="mujoco not installed")
 
-from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-from vector_os_nano.core.agent import Agent
-from vector_os_nano.skills import get_default_skills
-from vector_os_nano.skills.pick import SIM_PICK_CONFIG
-from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+from zeno.core.agent import Agent
+from zeno.skills import get_default_skills
+from zeno.skills.pick import SIM_PICK_CONFIG
+from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
 
 
 # ---------------------------------------------------------------------------

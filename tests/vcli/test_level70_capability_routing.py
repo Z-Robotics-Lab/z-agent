@@ -18,9 +18,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.cognitive.strategy_stats import StrategyStats
-from vector_os_nano.vcli.cognitive.types import SubGoal
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.cognitive.strategy_stats import StrategyStats
+from zeno.vcli.cognitive.types import SubGoal
 
 
 def _sg(name: str, desc: str) -> SubGoal:

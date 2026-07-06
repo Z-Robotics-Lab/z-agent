@@ -34,9 +34,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from vector_os_nano.vcli import cli
-from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli import cli
+from zeno.vcli.cognitive.actor_causation import ActorCaused
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
@@ -196,7 +196,7 @@ def _wire_stub_engine(monkeypatch, engine: _SpyEngine) -> None:
     ctx = SimpleNamespace(engine=engine, session=None)
     monkeypatch.setattr(cli, "_build_turn_context", lambda args: ctx)
     monkeypatch.setattr(
-        "vector_os_nano.vcli.cognitive.trace_store.verify_oracle_names",
+        "zeno.vcli.cognitive.trace_store.verify_oracle_names",
         lambda agent, engine: frozenset({"at_position"}),
     )
 
@@ -339,7 +339,7 @@ def sim_cleanup():
     try:
         subprocess.run(
             ["git", "checkout",
-             "vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml"],
+             "zeno/hardware/sim/mjcf/go2/scene_room_piper.xml"],
             timeout=20, capture_output=True,
         )
     except Exception:  # noqa: BLE001

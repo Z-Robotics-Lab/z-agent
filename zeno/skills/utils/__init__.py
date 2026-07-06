@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from vector_os_nano.skills.pick_top_down import _normalise_color_keyword
+from zeno.skills.pick_top_down import _normalise_color_keyword
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ def run_autodetect_retry(
     logger.info("[%s] world_model miss; auto-detect query=%r", log_tag, en_query)
     try:
         # Lazy import avoids circular dependency at module load
-        from vector_os_nano.skills.detect import DetectSkill
+        from zeno.skills.detect import DetectSkill
         det_result = DetectSkill().execute({"query": en_query}, context)
     except Exception as exc:
         logger.warning("[%s] auto-detect crashed: %s", log_tag, exc)

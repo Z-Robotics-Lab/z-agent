@@ -23,10 +23,10 @@ Public surface:
 """
 from __future__ import annotations
 
-from vector_os_nano.integrations.sysnav_bridge.live_bridge import (
+from zeno.integrations.sysnav_bridge.live_bridge import (
     LiveSysnavBridge,
 )
-from vector_os_nano.integrations.sysnav_bridge.topic_interfaces import (
+from zeno.integrations.sysnav_bridge.topic_interfaces import (
     ObjectNodeShadow,
     ObjectNodeListShadow,
     RoomNodeShadow,

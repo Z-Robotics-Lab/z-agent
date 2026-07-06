@@ -25,7 +25,7 @@ from __future__ import annotations
 import mujoco
 import pytest
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2, _GO2_CLUTTER_GEOMS
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2, _GO2_CLUTTER_GEOMS
 
 
 def _geom_id(go2: MuJoCoGo2, name: str) -> int:

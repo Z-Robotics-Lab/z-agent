@@ -131,19 +131,19 @@ def test_native_devworld_grounds_when_dev_action_skill_is_wrapped() -> None:
     a PREDICATE oracle, so a True read grades GROUNDED; the step is NOT_GRADED for
     actor-causation (a dev predicate, not a robot predicate) -> no downgrade.
     """
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.core.types import SkillResult
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import (
+    from zeno.core.agent import Agent
+    from zeno.core.types import SkillResult
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import (
         classify_step_evidence,
         verify_oracle_names,
     )
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.session import Session
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.verdict import VerdictReport
-    from vector_os_nano.vcli.worlds.dev import DevWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.session import Session
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.verdict import VerdictReport
+    from zeno.vcli.worlds.dev import DevWorld
 
     from tests.harness.fake_backend import FakeToolScriptBackend, tool_turn
 

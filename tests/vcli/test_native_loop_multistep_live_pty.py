@@ -67,7 +67,7 @@ _ENV_PATH = _REPO_ROOT / ".env"
 # when its coordinate args are within this tol of the target. A safe literal fallback
 # keeps the gate parse-only (it never imports the sim) if the const ever moves.
 try:
-    from vector_os_nano.vcli.worlds.go2_sim_oracle import _AT_POSITION_TOL_M as _TOL_M
+    from zeno.vcli.worlds.go2_sim_oracle import _AT_POSITION_TOL_M as _TOL_M
 except Exception:  # noqa: BLE001
     _TOL_M = 0.5
 _NEAR_TOL: float = float(_TOL_M)
@@ -123,7 +123,7 @@ def sim_cleanup():
     try:
         subprocess.run(
             ["git", "checkout",
-             "vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml"],
+             "zeno/hardware/sim/mjcf/go2/scene_room_piper.xml"],
             timeout=20, capture_output=True,
         )
     except Exception:  # noqa: BLE001

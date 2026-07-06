@@ -8,7 +8,7 @@ primitive: a grasp of the wrong (e.g. nearest) object must NOT verify True
 against a different named target, while holding_object() (no target) keeps its
 "holding anything" meaning so every existing caller is unaffected.
 """
-from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
 
 
 class _FakeArm:

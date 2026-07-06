@@ -42,7 +42,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from vector_os_nano.vcli.tools.base import PermissionResult, ToolResult
+from zeno.vcli.tools.base import PermissionResult, ToolResult
 
 logger = logging.getLogger(__name__)
 

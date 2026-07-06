@@ -31,10 +31,10 @@ def test_manipulation_skills_importable_and_instantiable() -> None:
     instantiable with no arguments. A failure means the register(...) calls
     added to _start_go2 will crash at runtime.
     """
-    from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-    from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
-    from vector_os_nano.skills.mobile_pick import MobilePickSkill
-    from vector_os_nano.skills.mobile_place import MobilePlaceSkill
+    from zeno.skills.pick_top_down import PickTopDownSkill
+    from zeno.skills.place_top_down import PlaceTopDownSkill
+    from zeno.skills.mobile_pick import MobilePickSkill
+    from zeno.skills.mobile_place import MobilePlaceSkill
 
     PickTopDownSkill()
     PlaceTopDownSkill()
@@ -49,7 +49,7 @@ def test_sim_tool_registers_manipulation_via_single_source() -> None:
     in sim_tool — they live behind that helper — so this guards the current
     contract (a missing call means with_arm gets no pick/place/grasp).
     """
-    from vector_os_nano.vcli.tools import sim_tool
+    from zeno.vcli.tools import sim_tool
 
     src = inspect.getsource(sim_tool)
 
@@ -64,7 +64,7 @@ def test_sim_tool_registers_manipulation_via_single_source() -> None:
 
     # And the helper itself actually wires the 4 skills — verified where they
     # now live (single source), so the guard still catches a broken registrar.
-    from vector_os_nano.skills import manipulation_setup
+    from zeno.skills import manipulation_setup
 
     helper_src = inspect.getsource(manipulation_setup)
     for cls in ("PickTopDownSkill", "PlaceTopDownSkill",

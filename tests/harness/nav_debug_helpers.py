@@ -25,7 +25,7 @@ def read_bridge_source() -> str:
 
 
 def navigate_module():
-    return importlib.import_module("vector_os_nano.skills.navigate")
+    return importlib.import_module("zeno.skills.navigate")
 
 
 def navigate_source() -> str:
@@ -34,12 +34,12 @@ def navigate_source() -> str:
 
 
 def proxy_source() -> str:
-    mod = importlib.import_module("vector_os_nano.hardware.sim.go2_ros2_proxy")
+    mod = importlib.import_module("zeno.hardware.sim.go2_ros2_proxy")
     return inspect.getsource(mod)
 
 
 def explore_source() -> str:
-    mod = importlib.import_module("vector_os_nano.skills.go2.explore")
+    mod = importlib.import_module("zeno.skills.go2.explore")
     return inspect.getsource(mod)
 
 

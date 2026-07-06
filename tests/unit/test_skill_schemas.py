@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.core.skill import Skill
-from vector_os_nano.skills import (
+from zeno.core.skill import Skill
+from zeno.skills import (
     DetectSkill,
     HomeSkill,
     PickSkill,
@@ -283,8 +283,8 @@ class TestPickPerceptionSampling:
     """Tests for PickSkill._sample_from_perception() with mock perception."""
 
     def _make_context(self, perception, world_model=None):
-        from vector_os_nano.core.skill import SkillContext
-        from vector_os_nano.core.world_model import WorldModel
+        from zeno.core.skill import SkillContext
+        from zeno.core.world_model import WorldModel
         from unittest.mock import MagicMock
         import numpy as np
         arm = MagicMock()
@@ -308,8 +308,8 @@ class TestPickPerceptionSampling:
         """_sample_from_perception() calls detect() then track() to get 3D pose."""
         from unittest.mock import MagicMock
         import numpy as np
-        from vector_os_nano.core.types import Detection, Pose3D, TrackedObject
-        from vector_os_nano.skills.pick import PickSkill
+        from zeno.core.types import Detection, Pose3D, TrackedObject
+        from zeno.skills.pick import PickSkill
 
         det = Detection(label="cup", bbox=(10.0, 10.0, 50.0, 50.0), confidence=0.9)
         pose = Pose3D(x=0.25, y=0.0, z=0.22)
@@ -344,7 +344,7 @@ class TestPickPerceptionSampling:
     def test_sample_returns_none_on_no_detections(self):
         """_sample_from_perception() returns None when detect() finds nothing."""
         from unittest.mock import MagicMock
-        from vector_os_nano.skills.pick import PickSkill
+        from zeno.skills.pick import PickSkill
 
         mock_perception = MagicMock()
         mock_perception.detect.return_value = []
@@ -357,7 +357,7 @@ class TestPickPerceptionSampling:
     def test_sample_returns_none_on_detect_exception(self):
         """_sample_from_perception() returns None when detect() raises."""
         from unittest.mock import MagicMock
-        from vector_os_nano.skills.pick import PickSkill
+        from zeno.skills.pick import PickSkill
 
         mock_perception = MagicMock()
         mock_perception.detect.side_effect = RuntimeError("No VLM")
@@ -370,8 +370,8 @@ class TestPickPerceptionSampling:
     def test_sample_returns_none_when_no_3d_pose(self):
         """_sample_from_perception() returns None if tracked objects have no 3D pose."""
         from unittest.mock import MagicMock
-        from vector_os_nano.core.types import Detection, TrackedObject
-        from vector_os_nano.skills.pick import PickSkill
+        from zeno.core.types import Detection, TrackedObject
+        from zeno.skills.pick import PickSkill
 
         det = Detection(label="cup", bbox=(10, 10, 50, 50))
         # TrackedObject with pose=None (no depth data)

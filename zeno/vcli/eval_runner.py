@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+from zeno.vcli.cognitive.trace_store import evidence_passed
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,7 @@ class EvalRunner:
         ns = getattr(self._verifier, "_namespace", None)
         if isinstance(ns, dict) and ns:
             return frozenset(ns.keys())
-        from vector_os_nano.vcli.worlds.dev import dev_verify_namespace
+        from zeno.vcli.worlds.dev import dev_verify_namespace
 
         return frozenset(dev_verify_namespace().keys())
 
@@ -143,15 +143,15 @@ def build_dev_engine(allow_ask: bool = False) -> Any:
     ``ask``-level tools resolve to deny (default) or always-allow (``allow_ask``).
     Raises SystemExit with a clear message when no API key is configured.
     """
-    from vector_os_nano.vcli.backends import create_backend
-    from vector_os_nano.vcli.config import resolve_credentials
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.tools import (
+    from zeno.vcli.backends import create_backend
+    from zeno.vcli.config import resolve_credentials
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.tools import (
         CategorizedToolRegistry,
         discover_categorized_tools,
     )
-    from vector_os_nano.vcli.worlds import DevWorld
+    from zeno.vcli.worlds import DevWorld
 
     api_key, provider, model, base_url = resolve_credentials()
     if not api_key:
@@ -176,7 +176,7 @@ def build_dev_engine(allow_ask: bool = False) -> Any:
 
     intent_router = None
     try:
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
         intent_router = IntentRouter()
     except ImportError:
         pass
@@ -233,8 +233,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2  # distinct from "a case failed" (1)
 
     engine = build_dev_engine(allow_ask=args.allow)
-    from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-    from vector_os_nano.vcli.worlds.dev import dev_verify_namespace
+    from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+    from zeno.vcli.worlds.dev import dev_verify_namespace
 
     verifier = GoalVerifier(dev_verify_namespace())
     runner = EvalRunner(run_task=_engine_run_task(engine), verifier=verifier)

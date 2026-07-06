@@ -64,7 +64,7 @@ def room_model_data():
 def test_lidar_publishes_at_least_one_thousand_points_against_room(
     room_model_data,
 ) -> None:
-    from vector_os_nano.hardware.sim.sensors import MuJoCoLivox360
+    from zeno.hardware.sim.sensors import MuJoCoLivox360
     lidar = MuJoCoLivox360(*room_model_data, h_resolution=180, v_layers=8)
     sample = lidar.step(now=0.0)
     assert sample.points.shape[0] >= 1000
@@ -73,7 +73,7 @@ def test_lidar_publishes_at_least_one_thousand_points_against_room(
 def test_lidar_hits_all_four_walls(room_model_data) -> None:
     """Trunk at origin → rays in ±X and ±Y directions hit the four walls
     at the expected near-face distances (≈ 2.9 m given the wall thickness)."""
-    from vector_os_nano.hardware.sim.sensors import MuJoCoLivox360
+    from zeno.hardware.sim.sensors import MuJoCoLivox360
     lidar = MuJoCoLivox360(
         *room_model_data,
         h_resolution=4, v_layers=1,
@@ -90,7 +90,7 @@ def test_lidar_hits_all_four_walls(room_model_data) -> None:
 
 
 def test_lidar_clamps_at_max_range_inside_room(room_model_data) -> None:
-    from vector_os_nano.hardware.sim.sensors import MuJoCoLivox360
+    from zeno.hardware.sim.sensors import MuJoCoLivox360
     lidar = MuJoCoLivox360(
         *room_model_data,
         h_resolution=8, v_layers=1,
@@ -108,7 +108,7 @@ def test_lidar_clamps_at_max_range_inside_room(room_model_data) -> None:
 
 
 def test_pano_image_shape_after_render(room_model_data) -> None:
-    from vector_os_nano.hardware.sim.sensors import MuJoCoPano360
+    from zeno.hardware.sim.sensors import MuJoCoPano360
     pano = MuJoCoPano360(
         *room_model_data,
         out_w=256, out_h=128, face_size=64, vfov_deg=120.0,
@@ -122,7 +122,7 @@ def test_pano_image_shape_after_render(room_model_data) -> None:
 def test_pano_centre_pixel_sees_red_wall_in_front(room_model_data) -> None:
     """Forward face renders the +X wall (red, rgba='1 0 0 1') so the
     output centre column samples should be predominantly red."""
-    from vector_os_nano.hardware.sim.sensors import MuJoCoPano360
+    from zeno.hardware.sim.sensors import MuJoCoPano360
     pano = MuJoCoPano360(
         *room_model_data,
         out_w=256, out_h=128, face_size=64, vfov_deg=120.0,
@@ -136,7 +136,7 @@ def test_pano_centre_pixel_sees_red_wall_in_front(room_model_data) -> None:
 
 
 def test_pano_rate_limit_caches(room_model_data) -> None:
-    from vector_os_nano.hardware.sim.sensors import MuJoCoPano360
+    from zeno.hardware.sim.sensors import MuJoCoPano360
     pano = MuJoCoPano360(
         *room_model_data,
         out_w=128, out_h=64, face_size=32, rate_hz=2.0,
@@ -155,7 +155,7 @@ def test_pano_rate_limit_caches(room_model_data) -> None:
 def test_gt_odom_after_simulated_translation(room_model_data) -> None:
     """Translate the trunk 0.5 m in 1 s → linear vx ≈ 0.5 m/s."""
     import mujoco
-    from vector_os_nano.hardware.sim.sensors import GroundTruthOdomPublisher
+    from zeno.hardware.sim.sensors import GroundTruthOdomPublisher
 
     model, data = room_model_data
     # Reset trunk to known initial pose
@@ -180,7 +180,7 @@ def test_gt_odom_after_simulated_translation(room_model_data) -> None:
 def test_gt_odom_orientation_round_trip(room_model_data) -> None:
     """Set body quaternion to a known yaw rotation → ROS xyzw matches."""
     import mujoco
-    from vector_os_nano.hardware.sim.sensors import GroundTruthOdomPublisher
+    from zeno.hardware.sim.sensors import GroundTruthOdomPublisher
 
     model, data = room_model_data
     # 90° yaw: wxyz = (cos(45°), 0, 0, sin(45°))
@@ -208,7 +208,7 @@ def test_all_three_sensors_can_step_in_same_model(room_model_data) -> None:
     once each; nothing crashes, nothing else interferes with the other."""
     import mujoco
 
-    from vector_os_nano.hardware.sim.sensors import (
+    from zeno.hardware.sim.sensors import (
         GroundTruthOdomPublisher,
         MuJoCoLivox360,
         MuJoCoPano360,

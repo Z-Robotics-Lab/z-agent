@@ -298,13 +298,13 @@ def baseline_namespace(baseline: ActorBaseline) -> dict[str, Callable[..., Any]]
     )
     ns: dict[str, Callable[..., Any]] = {}
     try:
-        from vector_os_nano.vcli.worlds.go2_sim_oracle import make_at_position, make_facing
+        from zeno.vcli.worlds.go2_sim_oracle import make_at_position, make_facing
         ns["at_position"] = make_at_position(stub)
         ns["facing"] = make_facing(stub)
     except Exception as exc:  # noqa: BLE001
         logger.debug("actor_causation: go2 oracle bind failed: %s", exc)
     try:
-        from vector_os_nano.vcli.worlds.arm_sim_oracle import make_arm_at_home
+        from zeno.vcli.worlds.arm_sim_oracle import make_arm_at_home
         ns["arm_at_home"] = make_arm_at_home(stub)
     except Exception as exc:  # noqa: BLE001
         logger.debug("actor_causation: arm oracle bind failed: %s", exc)

@@ -30,12 +30,12 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from vector_os_nano.perception.detector_capability import DetectorCapability
-from vector_os_nano.vcli.cognitive.capabilities import CapabilityRegistry
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
-from vector_os_nano.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
+from zeno.perception.detector_capability import DetectorCapability
+from zeno.vcli.cognitive.capabilities import CapabilityRegistry
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.cognitive.types import GoalTree, SubGoal
+from zeno.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ def test_decomposer_does_not_clear_empty_strategy_detect_step() -> None:
     producer's plan validation (the precondition for the route above)."""
     from unittest.mock import MagicMock
 
-    from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
+    from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
 
     skill_registry = MagicMock()
     skill_registry.list_skills.return_value = ["perception_grasp", "navigate"]

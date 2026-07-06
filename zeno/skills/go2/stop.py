@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class StopSkill:
 
         # Signal global abort — stops VGG, GoalExecutor, navigate, explore
         try:
-            from vector_os_nano.vcli.cognitive.abort import request_abort
+            from zeno.vcli.cognitive.abort import request_abort
             request_abort()
             logger.info("[STOP] Global abort signal sent")
         except Exception:
@@ -60,7 +60,7 @@ class StopSkill:
 
         # Cancel any background exploration
         try:
-            from vector_os_nano.skills.go2.explore import cancel_exploration, is_exploring
+            from zeno.skills.go2.explore import cancel_exploration, is_exploring
             if is_exploring():
                 cancel_exploration()
                 logger.info("[STOP] Background exploration cancelled")

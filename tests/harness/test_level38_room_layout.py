@@ -13,7 +13,7 @@ import textwrap
 
 import pytest
 
-from vector_os_nano.core.scene_graph import SceneGraph, RoomNode
+from zeno.core.scene_graph import SceneGraph, RoomNode
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ class TestExploreWithLayout:
     def test_no_vlm_room_discovery_in_explore(self):
         """explore.py should NOT have VLM room discovery logic."""
         import inspect
-        from vector_os_nano.skills.go2 import explore
+        from zeno.skills.go2 import explore
         source = inspect.getsource(explore._exploration_loop)
         assert "_vlm_discover" not in source, "VLM discovery should be removed"
         assert "_VLM_ROOM_INTERVAL" not in source, "VLM interval should be removed"
@@ -135,7 +135,7 @@ class TestExploreWithLayout:
     def test_explore_uses_nearest_room(self):
         """explore.py should use SceneGraph.nearest_room() for room detection."""
         import inspect
-        from vector_os_nano.skills.go2 import explore
+        from zeno.skills.go2 import explore
         source = inspect.getsource(explore._exploration_loop)
         assert "nearest_room" in source
 

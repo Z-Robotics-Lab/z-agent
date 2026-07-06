@@ -154,7 +154,7 @@ import re
 _BRIDGE_PATH = Path(__file__).parent.parent.parent / "scripts" / "go2_vnav_bridge.py"
 _MUJOCO_PATH = (
     Path(__file__).parent.parent.parent
-    / "vector_os_nano" / "hardware" / "sim" / "mujoco_go2.py"
+    / "zeno" / "hardware" / "sim" / "mujoco_go2.py"
 )
 
 

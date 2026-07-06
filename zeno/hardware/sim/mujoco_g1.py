@@ -50,13 +50,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from vector_os_nano.embodiments.config import load_embodiment_config
-from vector_os_nano.embodiments.dof_layout import DofLayout
-from vector_os_nano.hardware.base import (
+from zeno.embodiments.config import load_embodiment_config
+from zeno.embodiments.dof_layout import DofLayout
+from zeno.hardware.base import (
     ensure_finite_base_velocity,
     ensure_finite_nav_goal,
 )
-from vector_os_nano.hardware.sim.sensors.g1_lidar import g1_lidar_scan
+from zeno.hardware.sim.sensors.g1_lidar import g1_lidar_scan
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ def obstacles_from_model(
     Returns list of convex polygons [(x, y), ...] in world frame.
     """
     mj = _get_mujoco()
-    from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
+    from zeno.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
 
     geom_box = int(mj.mjtGeom.mjGEOM_BOX)
     geom_cyl = int(mj.mjtGeom.mjGEOM_CYLINDER)
@@ -354,7 +354,7 @@ def _build_g1_room_scene_xml() -> Path:
 
     Returns the path to the written scene XML.
     """
-    from vector_os_nano.hardware.sim.scene_builder import build_room_scene
+    from zeno.hardware.sim.scene_builder import build_room_scene
 
     if not _ROOM_XML.exists():
         raise FileNotFoundError(f"go2_room.xml not found at {_ROOM_XML}")
@@ -891,7 +891,7 @@ class MuJoCoG1:
                           or completely boxed in; does NOT fall back to
                           straight-line (fail-loud per spec).
         """
-        from vector_os_nano.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
+        from zeno.hardware.sim import g1_vgraph as vg  # noqa: PLC0415
 
         ensure_finite_nav_goal(x, y, "MuJoCoG1.navigate_to")
         self._require_connection()
@@ -1069,7 +1069,7 @@ class MuJoCoG1:
         MuJoCo (w,x,y,z); Odometry stores qx/qy/qz/qw like the go2 path.
         """
         self._require_connection()
-        from vector_os_nano.core.types import Odometry  # noqa: PLC0415
+        from zeno.core.types import Odometry  # noqa: PLC0415
         off = self._offsets
         assert off is not None
         qa = off.pelvis_qpos_adr
@@ -1098,7 +1098,7 @@ class MuJoCoG1:
     def get_lidar_scan(self) -> Any:
         """Cast lidar rays from head height, return LaserScan + 3D points.
 
-        Thin wrapper around :func:`~vector_os_nano.hardware.sim.sensors.g1_lidar.g1_lidar_scan`.
+        Thin wrapper around :func:`~zeno.hardware.sim.sensors.g1_lidar.g1_lidar_scan`.
         Lidar mounted at ~1.51 m (pelvis_z + LIDAR_OFFSET_Z) — above all g1 leg
         geoms.  Uses the live pelvis pose so the scan is valid while walking.
         """

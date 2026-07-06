@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.core.scene_graph import SceneGraph
+from zeno.core.scene_graph import SceneGraph
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +180,7 @@ def test_no_perception_falls_back_to_names_only_no_crash():
 def test_real_localizer_with_none_perception_returns_empty():
     """Integration with the REAL localize_objects_3d: perception=None yields []
     (its internal guard), so the hook routes to the names-only path safely."""
-    from vector_os_nano.perception.object_localizer import localize_objects_3d
+    from zeno.perception.object_localizer import localize_objects_3d
 
     sg = SceneGraph()
     _run_auto_observe_hook(

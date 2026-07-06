@@ -34,8 +34,8 @@ from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-from vector_os_nano.vcli.worlds import DecomposeVocab, World
-from vector_os_nano.vcli.worlds.registry import WorldRegistry
+from zeno.vcli.worlds import DecomposeVocab, World
+from zeno.vcli.worlds.registry import WorldRegistry
 
 # ---------------------------------------------------------------------------
 # Invariant 4 — kernel import purity (fresh-interpreter, no concrete-world leak)
@@ -56,7 +56,7 @@ _CONCRETE_WORLD_MARKERS = (
 
 _LEAK_PROBE = r"""
 import sys
-import vector_os_nano.vcli.engine  # the domain-general kernel
+import zeno.vcli.engine  # the domain-general kernel
 markers = {markers!r}
 leaked = sorted(
     m for m in sys.modules
@@ -72,7 +72,7 @@ def _concrete_worlds_loaded_by_importing(module: str, markers: tuple[str, ...]) 
     Runs in a fresh interpreter so the answer is not contaminated by the pytest
     session's already-populated ``sys.modules``.
     """
-    probe = _LEAK_PROBE.replace("vector_os_nano.vcli.engine", module).format(markers=markers)
+    probe = _LEAK_PROBE.replace("zeno.vcli.engine", module).format(markers=markers)
     result = subprocess.run(
         [sys.executable, "-c", probe],
         capture_output=True,
@@ -88,7 +88,7 @@ def _concrete_worlds_loaded_by_importing(module: str, markers: tuple[str, ...]) 
 def test_kernel_import_leaks_no_concrete_world() -> None:
     """Importing the kernel engine must not load any concrete world (Invariant 4)."""
     leaked = _concrete_worlds_loaded_by_importing(
-        "vector_os_nano.vcli.engine", _CONCRETE_WORLD_MARKERS
+        "zeno.vcli.engine", _CONCRETE_WORLD_MARKERS
     )
     assert leaked == [], (
         "importing the kernel engine eagerly loaded concrete world module(s) "
@@ -106,7 +106,7 @@ def test_cli_entry_import_leaks_no_concrete_world() -> None:
     stays world-free (worlds load only when one is resolved for a session).
     """
     leaked = _concrete_worlds_loaded_by_importing(
-        "vector_os_nano.vcli.cli", _CONCRETE_WORLD_MARKERS
+        "zeno.vcli.cli", _CONCRETE_WORLD_MARKERS
     )
     assert leaked == [], (
         "importing the CLI entry module eagerly loaded concrete world module(s) "
@@ -124,7 +124,7 @@ def test_no_domain_world_leaks_from_the_worlds_seam() -> None:
     packages — that is what keeps a third-party world truly optional.
     """
     leaked = _concrete_worlds_loaded_by_importing(
-        "vector_os_nano.vcli.worlds.registry", ("playground",)
+        "zeno.vcli.worlds.registry", ("playground",)
     )
     assert leaked == [], (
         f"importing the world registry seam leaked domain world(s) {leaked!r}"
@@ -149,9 +149,9 @@ def test_no_domain_world_leaks_from_the_worlds_seam() -> None:
 # must load ONLY on resolution.
 _WORLDS_SEAM_ALLOWLIST = frozenset(
     {
-        "vector_os_nano.vcli.worlds",
-        "vector_os_nano.vcli.worlds.base",
-        "vector_os_nano.vcli.worlds.registry",
+        "zeno.vcli.worlds",
+        "zeno.vcli.worlds.base",
+        "zeno.vcli.worlds.registry",
     }
 )
 
@@ -160,8 +160,8 @@ import sys
 import {module}
 loaded = sorted(
     m for m in sys.modules
-    if m == "vector_os_nano.vcli.worlds"
-    or m.startswith("vector_os_nano.vcli.worlds.")
+    if m == "zeno.vcli.worlds"
+    or m.startswith("zeno.vcli.worlds.")
 )
 print("\n".join(loaded))
 """
@@ -200,7 +200,7 @@ def test_kernel_import_leaks_no_worlds_module_outside_the_seam() -> None:
     ``worlds/mars_rover.py`` or a new ``*_oracle.py``) without editing a marker
     list — the guard tracks the actual package, not a memorised enumeration.
     """
-    loaded, outside = _worlds_leak_outside_seam("vector_os_nano.vcli.engine")
+    loaded, outside = _worlds_leak_outside_seam("zeno.vcli.engine")
     # Anti-vacuous: the seam MUST have loaded (proves the probe ran and the
     # import graph was actually walked — an empty result is only meaningful when
     # we know imports happened).
@@ -215,7 +215,7 @@ def test_kernel_import_leaks_no_worlds_module_outside_the_seam() -> None:
 
 def test_cli_entry_import_leaks_no_worlds_module_outside_the_seam() -> None:
     """The acceptance-face CLI entry loads ONLY the seam (Invariant 4, allowlist)."""
-    loaded, outside = _worlds_leak_outside_seam("vector_os_nano.vcli.cli")
+    loaded, outside = _worlds_leak_outside_seam("zeno.vcli.cli")
     assert loaded, "probe loaded no vcli.worlds module at all — import likely failed"
     assert outside == [], (
         "importing the CLI entry module eagerly loaded a NON-seam vcli.worlds "
@@ -231,9 +231,9 @@ def test_allowlist_guard_fires_on_a_real_concrete_world_leak() -> None:
     genuine concrete world; importing it must surface a non-seam module — so a
     real kernel-side leak of any concrete world would be caught identically.
     """
-    loaded, outside = _worlds_leak_outside_seam("vector_os_nano.vcli.worlds.dev")
-    assert "vector_os_nano.vcli.worlds.dev" in loaded
-    assert "vector_os_nano.vcli.worlds.dev" in outside, (
+    loaded, outside = _worlds_leak_outside_seam("zeno.vcli.worlds.dev")
+    assert "zeno.vcli.worlds.dev" in loaded
+    assert "zeno.vcli.worlds.dev" in outside, (
         "the allowlist filter failed to flag a genuinely-leaked concrete world — "
         "the guard would be vacuous"
     )
@@ -420,7 +420,7 @@ def test_byo_predicate_is_graded_by_the_frozen_classifier_zero_kernel_edits() ->
     Both consume the world's ground truth (which the actor cannot author), so a
     third party's Verify contribution is genuinely load-bearing, not decorative.
     """
-    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+    from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
 
     live = _byo_oracle_names()
     assert classify_verify_expr("acme_gripper_pos() == 1", live) == "GROUNDED"
@@ -441,7 +441,7 @@ def test_byo_bare_predicate_idiom_is_the_zero_edit_boundary() -> None:
     This is a CHARACTERIZATION guard, not a wish: if a refactor ever grounds a bare
     BYO call, the moat semantics changed under us and this goes RED first.
     """
-    from vector_os_nano.vcli.cognitive.evidence_classifier import (
+    from zeno.vcli.cognitive.evidence_classifier import (
         _PREDICATE_ORACLES,
         classify_verify_expr,
     )
@@ -459,7 +459,7 @@ def test_byo_predicate_grounding_preserves_the_moat() -> None:
     would be a way to smuggle in a self-certifying grade (Invariant 1). Also: a name
     the world never contributed cannot ground even in the grounding idioms.
     """
-    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+    from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
 
     live = _byo_oracle_names()
     # short-circuit: an oracle OR'd with a truthy constant is not gated by the oracle
@@ -507,7 +507,7 @@ def _engine_with_byo_world(world: Any) -> Any:
     LLM-free while ``_build_verifier_namespace`` / ``_merge_world_verify_namespace``
     run the genuine kernel code.
     """
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     engine = VectorEngine(backend=SimpleNamespace())
     engine._world = world  # the one line a resolved session wires; no kernel edit
@@ -524,7 +524,7 @@ def test_byo_predicate_reaches_oracle_names_through_the_real_engine_seam() -> No
     (engine.py). If that merge regressed, the name would be missing and this goes
     RED — closing the "asserted by code-reading" gap E116 left.
     """
-    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
+    from zeno.vcli.cognitive.trace_store import verify_oracle_names
 
     engine = _engine_with_byo_world(_AcmeArmWorld())
     names = verify_oracle_names(_byo_agent(), engine)
@@ -542,12 +542,12 @@ def test_byo_predicate_passes_the_done_gate_end_to_end_zero_kernel_edit() -> Non
     ``evidence_passed`` (True). This is the North Star claim ("bring a
     verify-predicate") proven at the DONE-GATE, one level above E116's classifier.
     """
-    from vector_os_nano.vcli.cognitive.trace_store import (
+    from zeno.vcli.cognitive.trace_store import (
         classify_step_evidence,
         evidence_passed,
         verify_oracle_names,
     )
-    from vector_os_nano.vcli.cognitive.types import (
+    from zeno.vcli.cognitive.types import (
         ExecutionTrace,
         GoalTree,
         StepRecord,
@@ -585,13 +585,13 @@ def test_byo_predicate_done_gate_moat_holds_under_actor_causation() -> None:
     (Invariant 1). Non-tautological: ``verify_result`` stays True — only causation
     changes the verdict.
     """
-    from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-    from vector_os_nano.vcli.cognitive.trace_store import (
+    from zeno.vcli.cognitive.actor_causation import ActorCaused
+    from zeno.vcli.cognitive.trace_store import (
         classify_step_evidence,
         evidence_passed,
         verify_oracle_names,
     )
-    from vector_os_nano.vcli.cognitive.types import (
+    from zeno.vcli.cognitive.types import (
         ExecutionTrace,
         GoalTree,
         StepRecord,
@@ -627,8 +627,8 @@ def test_byo_predicate_delivery_fails_closed_without_an_engine() -> None:
     seam can only ever make verification STRICTER when the namespace is absent —
     never a spurious pass.
     """
-    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
-    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
+    from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
+    from zeno.vcli.cognitive.trace_store import verify_oracle_names
 
     names = verify_oracle_names(_byo_agent(), None)
     assert names == frozenset()

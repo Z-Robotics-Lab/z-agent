@@ -21,7 +21,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from vector_os_nano.vcli.engine import VectorEngine
+from zeno.vcli.engine import VectorEngine
 
 
 def _make_engine() -> VectorEngine:
@@ -35,7 +35,7 @@ def _make_engine() -> VectorEngine:
 
 
 def test_viewer_live_under_mjpython_runs_synchronously(monkeypatch) -> None:
-    import vector_os_nano.hardware.sim.viewer_mode as vm
+    import zeno.hardware.sim.viewer_mode as vm
     monkeypatch.setattr(vm, "running_under_mjpython", lambda: True)
 
     eng = _make_engine()
@@ -73,7 +73,7 @@ def test_viewer_live_under_mjpython_runs_synchronously(monkeypatch) -> None:
 
 
 def test_viewer_live_off_mjpython_runs_in_background_thread(monkeypatch) -> None:
-    import vector_os_nano.hardware.sim.viewer_mode as vm
+    import zeno.hardware.sim.viewer_mode as vm
     monkeypatch.setattr(vm, "running_under_mjpython", lambda: False)
 
     eng = _make_engine()

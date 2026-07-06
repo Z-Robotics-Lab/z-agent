@@ -21,7 +21,7 @@ A ``World`` contributes five things to the domain-general kernel:
 Nothing here subclasses or imports a concrete kernel world. The world satisfies
 the ``World`` Protocol structurally (duck typing) and plugs into the *public*
 seam only: ``get_world_registry()`` / ``resolve_world_named()`` / the ``World``
-and ``DecomposeVocab`` types re-exported from ``vector_os_nano.vcli.worlds``.
+and ``DecomposeVocab`` types re-exported from ``zeno.vcli.worlds``.
 
 Run it (no robot, no simulator, no LLM required)::
 
@@ -39,7 +39,7 @@ from typing import Any
 
 # The ONLY kernel imports a world author needs: the seam. No concrete world, no
 # engine internals, no editing kernel code.
-from vector_os_nano.vcli.worlds import (
+from zeno.vcli.worlds import (
     DecomposeVocab,
     World,
     get_world_registry,

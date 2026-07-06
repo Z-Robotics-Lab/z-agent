@@ -216,7 +216,7 @@ def resolve_credentials(
 
     if not api_key:
         # Vector CLI's own OAuth credentials (independent rate limits)
-        from vector_os_nano.vcli.oauth import load_credentials
+        from zeno.vcli.oauth import load_credentials
         own_creds = load_credentials()
         if own_creds:
             api_key = own_creds["accessToken"]

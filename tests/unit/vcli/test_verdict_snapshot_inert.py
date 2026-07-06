@@ -14,8 +14,8 @@ import inspect
 
 import numpy as np
 
-from vector_os_nano.acceptance import capture
-from vector_os_nano.vcli import cli
+from zeno.acceptance import capture
+from zeno.vcli import cli
 
 
 def test_snapshot_fns_take_no_verdict():

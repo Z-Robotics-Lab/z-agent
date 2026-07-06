@@ -16,8 +16,8 @@ Run with: pytest tests/unit/test_arm_protocol.py -v
 import pytest
 from unittest.mock import MagicMock, patch
 
-from vector_os_nano.hardware.so101.arm import SO101Arm
-from vector_os_nano.hardware.so101.joint_config import ARM_JOINT_NAMES
+from zeno.hardware.so101.arm import SO101Arm
+from zeno.hardware.so101.joint_config import ARM_JOINT_NAMES
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ class TestSO101ArmConnected:
 
         if read_positions is None:
             # Default: midpoint for each joint
-            from vector_os_nano.hardware.so101.joint_config import JOINT_CONFIG, ARM_JOINT_NAMES
+            from zeno.hardware.so101.joint_config import JOINT_CONFIG, ARM_JOINT_NAMES
             read_positions = [
                 (JOINT_CONFIG[n]["enc_min"] + JOINT_CONFIG[n]["enc_max"]) // 2
                 for n in ARM_JOINT_NAMES
@@ -181,7 +181,7 @@ class TestSO101ArmMoveJointsValidation:
     """move_joints must validate input dimensions."""
 
     def _connected_arm(self):
-        from vector_os_nano.hardware.so101.joint_config import JOINT_CONFIG, ARM_JOINT_NAMES
+        from zeno.hardware.so101.joint_config import JOINT_CONFIG, ARM_JOINT_NAMES
         arm = SO101Arm()
         mock_bus = MagicMock()
         mock_bus.connect.return_value = True

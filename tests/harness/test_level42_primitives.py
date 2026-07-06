@@ -129,7 +129,7 @@ def _make_mocks() -> tuple[MagicMock, MagicMock, MagicMock]:
 
 def _init_ctx(base: Any = None, sg: Any = None, vlm: Any = None) -> None:
     """Re-initialize primitives with fresh context."""
-    from vector_os_nano.vcli.primitives import PrimitiveContext, init_primitives
+    from zeno.vcli.primitives import PrimitiveContext, init_primitives
     ctx = PrimitiveContext(base=base, scene_graph=sg, vlm=vlm)
     init_primitives(ctx)
 
@@ -143,27 +143,27 @@ class TestAC13Importability:
     """AC-13: All primitive modules importable, functions exist."""
 
     def test_primitives_package_importable(self) -> None:
-        import vector_os_nano.vcli.primitives as pkg
+        import zeno.vcli.primitives as pkg
         assert pkg is not None
 
     def test_locomotion_module_importable(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         assert locomotion is not None
 
     def test_navigation_module_importable(self) -> None:
-        from vector_os_nano.vcli.primitives import navigation
+        from zeno.vcli.primitives import navigation
         assert navigation is not None
 
     def test_perception_module_importable(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         assert perception is not None
 
     def test_world_module_importable(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         assert world is not None
 
     def test_locomotion_functions_exist(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         for fn_name in [
             "get_position", "get_heading", "set_velocity", "stop",
             "walk_forward", "turn", "stand", "sit",
@@ -172,7 +172,7 @@ class TestAC13Importability:
             assert callable(getattr(locomotion, fn_name))
 
     def test_navigation_functions_exist(self) -> None:
-        from vector_os_nano.vcli.primitives import navigation
+        from zeno.vcli.primitives import navigation
         for fn_name in [
             "nearest_room", "publish_goal", "wait_until_near",
             "get_door_chain", "navigate_to_room",
@@ -181,7 +181,7 @@ class TestAC13Importability:
             assert callable(getattr(navigation, fn_name))
 
     def test_perception_functions_exist(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         for fn_name in [
             "capture_image", "describe_scene", "detect_objects",
             "identify_room", "measure_distance", "scan_360",
@@ -190,7 +190,7 @@ class TestAC13Importability:
             assert callable(getattr(perception, fn_name))
 
     def test_world_functions_exist(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         for fn_name in [
             "query_rooms", "query_doors", "query_objects",
             "get_visited_rooms", "path_between", "world_stats",
@@ -227,7 +227,7 @@ class TestAC14TypeHintsAndDocstrings:
     }
 
     def test_all_functions_have_docstrings(self) -> None:
-        base_pkg = "vector_os_nano.vcli.primitives"
+        base_pkg = "zeno.vcli.primitives"
         for mod_name, fn_names in self._MODULES_FUNCS.items():
             mod = importlib.import_module(f"{base_pkg}.{mod_name}")
             for fn_name in fn_names:
@@ -237,7 +237,7 @@ class TestAC14TypeHintsAndDocstrings:
                 )
 
     def test_all_functions_have_return_annotations(self) -> None:
-        base_pkg = "vector_os_nano.vcli.primitives"
+        base_pkg = "zeno.vcli.primitives"
         for mod_name, fn_names in self._MODULES_FUNCS.items():
             mod = importlib.import_module(f"{base_pkg}.{mod_name}")
             for fn_name in fn_names:
@@ -260,22 +260,22 @@ class TestAC15NoHardwareError:
         _init_ctx(base=None)
 
     def test_get_position_raises_without_base(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         with pytest.raises(RuntimeError, match="[Nn]o hardware|[Nn]ot connected|[Nn]o base"):
             locomotion.get_position()
 
     def test_get_heading_raises_without_base(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         with pytest.raises(RuntimeError):
             locomotion.get_heading()
 
     def test_set_velocity_raises_without_base(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         with pytest.raises(RuntimeError):
             locomotion.set_velocity(0.1, 0.0, 0.0)
 
     def test_stop_raises_without_base(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         with pytest.raises(RuntimeError):
             locomotion.stop()
 
@@ -293,17 +293,17 @@ class TestAC16GetPosition:
         _init_ctx(base=mock_base, sg=mock_sg, vlm=mock_vlm)
 
     def test_get_position_returns_tuple(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         pos = locomotion.get_position()
         assert isinstance(pos, tuple)
 
     def test_get_position_three_elements(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         pos = locomotion.get_position()
         assert len(pos) == 3
 
     def test_get_position_matches_mock(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         pos = locomotion.get_position()
         assert pos == (10.0, 5.0, 0.3)
 
@@ -321,12 +321,12 @@ class TestAC17GetHeading:
         _init_ctx(base=mock_base, sg=mock_sg, vlm=mock_vlm)
 
     def test_get_heading_returns_float(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         h = locomotion.get_heading()
         assert isinstance(h, float)
 
     def test_get_heading_matches_mock(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         h = locomotion.get_heading()
         assert abs(h - 1.57) < 1e-6
 
@@ -344,17 +344,17 @@ class TestAC18DescribeScene:
         _init_ctx(base=mock_base, sg=mock_sg, vlm=mock_vlm)
 
     def test_describe_scene_returns_string(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         result = perception.describe_scene()
         assert isinstance(result, str)
 
     def test_describe_scene_non_empty(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         result = perception.describe_scene()
         assert len(result) > 0
 
     def test_describe_scene_matches_mock_summary(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         result = perception.describe_scene()
         assert "kitchen" in result.lower()
 
@@ -372,12 +372,12 @@ class TestAC19NearestRoom:
         _init_ctx(base=mock_base, sg=mock_sg, vlm=mock_vlm)
 
     def test_nearest_room_returns_string(self) -> None:
-        from vector_os_nano.vcli.primitives import navigation
+        from zeno.vcli.primitives import navigation
         result = navigation.nearest_room()
         assert isinstance(result, str) or result is None
 
     def test_nearest_room_returns_kitchen(self) -> None:
-        from vector_os_nano.vcli.primitives import navigation
+        from zeno.vcli.primitives import navigation
         result = navigation.nearest_room()
         assert result == "kitchen"
 
@@ -395,17 +395,17 @@ class TestAC20QueryRooms:
         _init_ctx(base=mock_base, sg=mock_sg, vlm=mock_vlm)
 
     def test_query_rooms_returns_list(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         rooms = world.query_rooms()
         assert isinstance(rooms, list)
 
     def test_query_rooms_count(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         rooms = world.query_rooms()
         assert len(rooms) == 2
 
     def test_query_rooms_dict_shape(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         rooms = world.query_rooms()
         for r in rooms:
             assert "id" in r
@@ -429,14 +429,14 @@ class TestAdditionalPrimitives:
         _init_ctx(base=mock_base, sg=mock_sg, vlm=mock_vlm)
 
     def test_world_get_visited_rooms(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         visited = world.get_visited_rooms()
         assert isinstance(visited, list)
         assert "kitchen" in visited
         assert "hallway" in visited
 
     def test_navigation_get_door_chain(self) -> None:
-        from vector_os_nano.vcli.primitives import navigation
+        from zeno.vcli.primitives import navigation
         chain = navigation.get_door_chain("kitchen", "hallway")
         assert isinstance(chain, list)
         assert len(chain) > 0
@@ -446,7 +446,7 @@ class TestAdditionalPrimitives:
         assert isinstance(label, str)
 
     def test_perception_detect_objects_returns_list_of_dicts(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         results = perception.detect_objects("cup")
         assert isinstance(results, list)
         assert len(results) > 0
@@ -457,7 +457,7 @@ class TestAdditionalPrimitives:
         assert isinstance(obj["confidence"], float)
 
     def test_world_stats_keys(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         stats = world.world_stats()
         assert isinstance(stats, dict)
         assert "rooms" in stats
@@ -465,7 +465,7 @@ class TestAdditionalPrimitives:
         assert "visited" in stats
 
     def test_init_primitives_sets_context_in_all_modules(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion, navigation, perception, world
+        from zeno.vcli.primitives import locomotion, navigation, perception, world
         # After setup_method calls _init_ctx, all modules should have _ctx set
         assert locomotion._ctx is not None
         assert navigation._ctx is not None
@@ -473,7 +473,7 @@ class TestAdditionalPrimitives:
         assert world._ctx is not None
 
     def test_perception_scan_360_returns_list_of_tuples(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         scan = perception.scan_360()
         assert isinstance(scan, list)
         assert len(scan) > 0
@@ -482,49 +482,49 @@ class TestAdditionalPrimitives:
         assert isinstance(dist, float)
 
     def test_locomotion_stop_calls_set_velocity_zero(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         locomotion.stop()
         self.mock_base.set_velocity.assert_called_once_with(0.0, 0.0, 0.0)
 
     def test_locomotion_stand_delegates_to_base(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         result = locomotion.stand()
         self.mock_base.stand.assert_called_once()
         assert result is True
 
     def test_locomotion_sit_delegates_to_base(self) -> None:
-        from vector_os_nano.vcli.primitives import locomotion
+        from zeno.vcli.primitives import locomotion
         result = locomotion.sit()
         self.mock_base.sit.assert_called_once()
         assert result is True
 
     def test_navigation_wait_until_near_already_near(self) -> None:
-        from vector_os_nano.vcli.primitives import navigation
+        from zeno.vcli.primitives import navigation
         # Robot at (10, 5), target at (10, 5) → distance = 0 → immediate True
         result = navigation.wait_until_near(10.0, 5.0, tolerance=1.0, timeout=5.0)
         assert result is True
 
     def test_world_query_objects_returns_list(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         objs = world.query_objects()
         assert isinstance(objs, list)
 
     def test_world_path_between_returns_list_of_tuples(self) -> None:
-        from vector_os_nano.vcli.primitives import world
+        from zeno.vcli.primitives import world
         path = world.path_between("kitchen", "hallway")
         assert isinstance(path, list)
         for item in path:
             assert len(item) == 2
 
     def test_perception_capture_image_returns_array(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         frame = perception.capture_image()
         # Should return the FakeNdarray with shape (240, 320, 3)
         assert hasattr(frame, "shape")
         assert frame.shape == (240, 320, 3)
 
     def test_perception_identify_room_returns_tuple(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         result = perception.identify_room()
         assert isinstance(result, tuple)
         room_name, confidence = result
@@ -534,7 +534,7 @@ class TestAdditionalPrimitives:
         assert abs(confidence - 0.95) < 1e-6
 
     def test_perception_measure_distance_returns_float(self) -> None:
-        from vector_os_nano.vcli.primitives import perception
+        from zeno.vcli.primitives import perception
         dist = perception.measure_distance(0.0)
         assert isinstance(dist, float)
         assert dist == 1.0  # mock returns [1.0]*360

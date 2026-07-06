@@ -6,7 +6,7 @@ ledger (loop/ledger/) RECORDS verdicts from this face; it never IS the verdict.
 
 ## The machine verdict — `-p / --json / VECTOR_VERDICT`
 ```bash
-python -m vector_os_nano.vcli.cli -p "<prompt>" --json    # one turn, then exit
+python -m zeno.vcli.cli -p "<prompt>" --json    # one turn, then exit
 ```
 - `--json` prints exactly ONE stdout line: `VECTOR_VERDICT {<json>}` (fixed sentinel);
   all Rich/banner output goes to stderr.

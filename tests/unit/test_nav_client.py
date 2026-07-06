@@ -11,33 +11,33 @@ from unittest.mock import MagicMock, patch
 class TestNavStackClientNoROS2:
     def test_import_without_rclpy(self):
         """NavStackClient module should import even without rclpy."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
         assert NavStackClient is not None
 
     def test_not_available_without_node(self):
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
         client = NavStackClient(node=None)
         assert not client.is_available
 
     def test_navigate_to_without_node_returns_false(self):
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
         client = NavStackClient(node=None)
         result = client.navigate_to(5.0, 3.0)
         assert result is False
 
     def test_cancel_without_node_is_noop(self):
         """cancel() with no node should not raise."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
         client = NavStackClient(node=None)
         client.cancel()  # must not raise
 
     def test_get_state_estimation_without_node_returns_none(self):
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
         client = NavStackClient(node=None)
         assert client.get_state_estimation() is None
 
     def test_default_timeout_is_positive(self):
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
         client = NavStackClient(node=None)
         assert client._timeout > 0
 
@@ -47,7 +47,7 @@ class TestNavStackClientWithMockNode:
 
     def _make_client(self):
         """Return a NavStackClient wired to a MagicMock node."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         mock_node = MagicMock()
         mock_publisher = MagicMock()
@@ -74,7 +74,7 @@ class TestNavStackClientWithMockNode:
 
     def test_navigate_to_publishes_waypoint(self):
         """navigate_to publishes to /way_point and returns True when goal_reached."""
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
 
         client, mock_node, mock_publisher = self._make_client()
 
@@ -98,7 +98,7 @@ class TestNavStackClientWithMockNode:
         assert mock_publisher.publish.called
 
     def test_navigate_to_returns_false_when_not_available(self):
-        from vector_os_nano.core.nav_client import NavStackClient
+        from zeno.core.nav_client import NavStackClient
         client = NavStackClient(node=None)
         assert client.navigate_to(1.0, 2.0) is False
 
@@ -115,8 +115,8 @@ class TestNavStackClientWithMockNode:
         assert mock_publisher.publish.called
 
     def test_get_state_estimation_returns_odometry(self):
-        from vector_os_nano.core.nav_client import NavStackClient
-        from vector_os_nano.core.types import Odometry
+        from zeno.core.nav_client import NavStackClient
+        from zeno.core.types import Odometry
 
         client, _, _ = self._make_client()
         # Inject a mock odometry snapshot.

@@ -18,10 +18,10 @@ import pytest
 _REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO))
 
-import vector_os_nano.skills.navigate as navigate_module
-from vector_os_nano.core.scene_graph import RoomNode, SceneGraph
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.navigate import (
+import zeno.skills.navigate as navigate_module
+from zeno.core.scene_graph import RoomNode, SceneGraph
+from zeno.core.types import SkillResult
+from zeno.skills.navigate import (
     NavigateSkill,
     _ROOM_ALIASES,
     _detect_current_room,

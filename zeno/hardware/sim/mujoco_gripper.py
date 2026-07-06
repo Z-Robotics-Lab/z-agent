@@ -17,7 +17,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
 
 logger = logging.getLogger(__name__)
 

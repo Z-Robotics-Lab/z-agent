@@ -27,8 +27,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.cognitive.trace_store import evidence_passed
 
 # Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
 ORACLES = frozenset({
@@ -37,13 +37,13 @@ ORACLES = frozenset({
     "describe_scene", "detect_objects", "placed_count", "nearest_room",
     "objects_in_room", "find_object", "room_coverage",
 })
-from vector_os_nano.vcli.engine import UnifiedTurnResult, VectorEngine
-from vector_os_nano.vcli.intent_router import IntentRouter
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.session import TokenUsage, create_session
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-from vector_os_nano.vcli.tools.file_tools import FileWriteTool
-from vector_os_nano.vcli.worlds import DevWorld
+from zeno.vcli.engine import UnifiedTurnResult, VectorEngine
+from zeno.vcli.intent_router import IntentRouter
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.session import TokenUsage, create_session
+from zeno.vcli.tools.base import CategorizedToolRegistry
+from zeno.vcli.tools.file_tools import FileWriteTool
+from zeno.vcli.worlds import DevWorld
 
 
 # ---------------------------------------------------------------------------

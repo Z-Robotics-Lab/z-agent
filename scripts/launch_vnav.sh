@@ -2,7 +2,7 @@
 # Go2 + Vector Navigation Stack (Full) — one-command launch
 #
 # Usage:
-#   cd ~/Desktop/vector_os_nano
+#   cd ~/Desktop/zeno
 #   ./scripts/launch_vnav.sh              # MuJoCo viewer + RViz
 #   ./scripts/launch_vnav.sh --no-gui     # headless MuJoCo
 #

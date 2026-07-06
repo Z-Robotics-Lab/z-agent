@@ -10,7 +10,7 @@ Go2 locomotion skills, persistent scene graph, and VLM perception.
 
 Both launchers call it so they can never drift:
 
-* ``vector-cli --sim-go2``      -> :func:`vector_os_nano.vcli.cli._init_agent`
+* ``vector-cli --sim-go2``      -> :func:`zeno.vcli.cli._init_agent`
 * bare-REPL NL "启动 go2 仿真"     -> ``SimStartTool._start_go2`` (VECTOR_NO_ROS2=1)
 
 It deliberately does NOT launch the external ROS2 nav stack — callers that want
@@ -113,8 +113,8 @@ def build_inprocess_go2_agent(
     # nothing (see reconcile_render_backend).
     gui = reconcile_render_backend(gui)
 
-    from vector_os_nano.core.agent import Agent  # type: ignore[import]
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # type: ignore[import]
+    from zeno.core.agent import Agent  # type: ignore[import]
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # type: ignore[import]
 
     emit("Starting Go2 MuJoCo simulation...")
     base = MuJoCoGo2(gui=gui, room=True, backend="auto")
@@ -127,8 +127,8 @@ def build_inprocess_go2_agent(
     piper_arm = piper_gripper = None
     if with_arm:
         try:
-            from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-            from vector_os_nano.hardware.sim.mujoco_piper_gripper import (
+            from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+            from zeno.hardware.sim.mujoco_piper_gripper import (
                 MuJoCoPiperGripper,
             )
 
@@ -147,7 +147,7 @@ def build_inprocess_go2_agent(
     )
 
     # Register Go2 locomotion skills.
-    from vector_os_nano.skills.go2 import get_go2_skills
+    from zeno.skills.go2 import get_go2_skills
 
     for skill in get_go2_skills():
         agent._skill_registry.register(skill)
@@ -156,7 +156,7 @@ def build_inprocess_go2_agent(
     # the ROS2 NL path via register_manipulation_skills so the launchers never
     # drift (Rule 3/11).
     if piper_arm is not None:
-        from vector_os_nano.skills.manipulation_setup import (
+        from zeno.skills.manipulation_setup import (
             register_manipulation_skills,
         )
 
@@ -166,7 +166,7 @@ def build_inprocess_go2_agent(
     # VLM perception (GPT-4o via OpenRouter), optional.
     if api_key:
         try:
-            from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+            from zeno.perception.vlm_go2 import Go2VLMPerception
 
             agent._vlm = Go2VLMPerception(config={"api_key": api_key})
             emit("VLM: GPT-4o via OpenRouter")
@@ -177,16 +177,16 @@ def build_inprocess_go2_agent(
     # look/explore can depth-localize VLM-named objects to accurate world
     # (x, y, z). Single-sourced with the ROS2 launcher via _build_go2_perception
     # (Rule 3/11) — leaves perception None when the base has no camera.
-    from vector_os_nano.vcli.tools.sim_tool import _build_go2_perception
+    from zeno.vcli.tools.sim_tool import _build_go2_perception
 
     agent._perception = _build_go2_perception(base)
     if agent._perception is not None:
         emit("Perception: RGB-D detector + segmenter")
 
     # Persistent scene graph (rooms -> viewpoints -> objects).
-    from vector_os_nano.core.scene_graph import SceneGraph
+    from zeno.core.scene_graph import SceneGraph
 
-    sg_path = os.path.expanduser("~/.vector_os_nano/scene_graph.yaml")
+    sg_path = os.path.expanduser("~/.zeno/scene_graph.yaml")
     os.makedirs(os.path.dirname(sg_path), exist_ok=True)
     sg = SceneGraph(persist_path=sg_path)
     sg.load()

@@ -138,7 +138,7 @@ class TestCalibrationTransform:
         self, T: np.ndarray, cal_data: dict
     ) -> None:
         """skills.calibration.camera_to_base() must match direct matrix multiply."""
-        from vector_os_nano.skills.calibration import camera_to_base
+        from zeno.skills.calibration import camera_to_base
 
         pts_cam = np.array(cal_data["points_camera"], dtype=np.float64)
         for p in pts_cam[:3]:

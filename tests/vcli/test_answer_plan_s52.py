@@ -23,24 +23,24 @@ import json
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.cognitive.trace_store import (
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.cognitive.trace_store import (
     evidence_passed,
     load_trace,
     replay,
     save_trace,
 )
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
-from vector_os_nano.vcli.worlds.dev import DEV_VOCAB
+from zeno.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
+from zeno.vcli.worlds.dev import DEV_VOCAB
 
 # Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
 ORACLES = frozenset({

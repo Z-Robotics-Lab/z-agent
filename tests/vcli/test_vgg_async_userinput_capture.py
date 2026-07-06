@@ -31,7 +31,7 @@ from __future__ import annotations
 import ast
 import inspect
 
-from vector_os_nano.vcli import cli as cli_mod
+from zeno.vcli import cli as cli_mod
 
 
 def _find_on_vgg_complete() -> ast.FunctionDef:

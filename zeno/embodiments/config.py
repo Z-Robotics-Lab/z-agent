@@ -4,7 +4,7 @@
 """Typed, frozen schema + loader for per-embodiment ``robot.yaml`` manifests.
 
 A robot morphology is data, not code (project CLAUDE.md Rule 11). This module
-parses ``vector_os_nano/embodiments/<id>/robot.yaml`` into immutable dataclasses
+parses ``zeno/embodiments/<id>/robot.yaml`` into immutable dataclasses
 so the generic embodiment driver (Stage 2) can READ every morphology-specific
 parameter — spawn pose, nominal stance (by joint name), sensor mounts, root body,
 gait/policy reference, capability profile — instead of hardcoding it.
@@ -262,7 +262,7 @@ def parse_embodiment_config(raw: dict[str, Any], ctx: str = "robot.yaml") -> Emb
 
 
 def load_embodiment_config(embodiment_id: str) -> EmbodimentConfig:
-    """Load ``vector_os_nano/embodiments/<embodiment_id>/robot.yaml``.
+    """Load ``zeno/embodiments/<embodiment_id>/robot.yaml``.
 
     Raises:
         EmbodimentConfigError: if the file is missing, unreadable, not a mapping,

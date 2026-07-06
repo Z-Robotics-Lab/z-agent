@@ -36,9 +36,9 @@ import math
 import time
 from typing import Optional
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.core.world_model import ObjectState, WorldModel
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.core.world_model import ObjectState, WorldModel
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +207,7 @@ class PickTopDownSkill:
         # it thinks fits, and both must self-heal via the same auto-detect path.
         # Only meaningful when a world model exists to populate/consult.
         if target is None and wm is not None:
-            from vector_os_nano.skills.utils import run_autodetect_retry
+            from zeno.skills.utils import run_autodetect_retry
             if run_autodetect_retry(params, context, log_tag="PICK-TD") > 0:
                 target = self._resolve_target(params, wm)
 

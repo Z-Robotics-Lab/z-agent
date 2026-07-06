@@ -23,8 +23,8 @@ import sys
 import time
 from typing import Any
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
 
@@ -433,7 +433,7 @@ class NavigateSkill:
 
         # Cancel background exploration if running (navigate takes priority)
         try:
-            from vector_os_nano.skills.go2.explore import cancel_exploration, is_exploring
+            from zeno.skills.go2.explore import cancel_exploration, is_exploring
             if is_exploring():
                 cancel_exploration()
                 logger.info("[NAV] Cancelled background exploration for navigation")
@@ -759,7 +759,7 @@ class NavigateSkill:
         for i, (wx, wy, label) in enumerate(waypoints):
             # --- Abort check between waypoints ---
             try:
-                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                from zeno.vcli.cognitive.abort import is_abort_requested
                 if is_abort_requested():
                     return SkillResult(
                         success=False,

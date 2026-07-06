@@ -26,12 +26,12 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.backends.types import LLMToolCall
-from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
-from vector_os_nano.vcli.engine import VectorEngine
-from vector_os_nano.vcli.hooks import ToolHookRegistry
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.tool_execution import (
+from zeno.vcli.backends.types import LLMToolCall
+from zeno.vcli.cognitive.tool_dispatcher import ToolDispatcher
+from zeno.vcli.engine import VectorEngine
+from zeno.vcli.hooks import ToolHookRegistry
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.tool_execution import (
     DECISION_ALLOW,
     DECISION_ASK_ALLOW,
     DECISION_ASK_DENY,
@@ -39,7 +39,7 @@ from vector_os_nano.vcli.tool_execution import (
     PermissionDecision,
     resolve_permission,
 )
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     PermissionResult,
     ToolContext,
     ToolRegistry,

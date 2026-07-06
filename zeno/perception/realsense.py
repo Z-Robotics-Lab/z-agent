@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from vector_os_nano.core.types import CameraIntrinsics
+from zeno.core.types import CameraIntrinsics
 
 logger = logging.getLogger(__name__)
 

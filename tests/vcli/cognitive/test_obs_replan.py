@@ -30,17 +30,17 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from vector_os_nano.vcli.cognitive.blackboard import Blackboard
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.blackboard import Blackboard
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.strategy_selector import StrategyResult
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
+from zeno.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
 
 
 # ---------------------------------------------------------------------------

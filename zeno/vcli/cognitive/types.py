@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
+from zeno.vcli.cognitive.actor_causation import ActorCaused
 
 # --------------------------------------------------------------------------
 # Failure taxonomy (W2.4) — a small CLOSED set of lowercase, world-agnostic

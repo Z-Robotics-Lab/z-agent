@@ -27,7 +27,7 @@ HEADER_LINES = (
 )
 HEADER_TEXT = "".join(HEADER_LINES)
 
-SCAN_ROOTS = ("vector_os_nano", "tests", "scripts")
+SCAN_ROOTS = ("zeno", "tests", "scripts")
 EXCLUDE_DIR_PARTS = {"__pycache__", ".venv-nano", ".venv", ".sdd", ".git"}
 EXCLUDE_FILES = {"add_spdx_headers.py"}  # this script already has its header
 

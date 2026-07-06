@@ -13,8 +13,8 @@ import logging
 import os
 from pathlib import Path
 
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
-from vector_os_nano.vcli.cognitive.experience_compiler import GoalTemplate, SubGoalTemplate
+from zeno.vcli.cognitive.types import GoalTree, SubGoal
+from zeno.vcli.cognitive.experience_compiler import GoalTemplate, SubGoalTemplate
 
 logger = logging.getLogger(__name__)
 

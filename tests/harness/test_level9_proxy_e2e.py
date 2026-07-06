@@ -134,7 +134,7 @@ def _cleanup_ros2_stubs():
         del sys.modules[k]
     # Clear scene_graph_viz lazy-import cache
     try:
-        from vector_os_nano.ros2.nodes import scene_graph_viz as _sgv
+        from zeno.ros2.nodes import scene_graph_viz as _sgv
         _sgv._MarkerArray = None
         _sgv._Marker = None
         _sgv._ColorRGBA = None
@@ -148,12 +148,12 @@ def _cleanup_ros2_stubs():
 # Now safe to import from the project
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy  # noqa: E402
-from vector_os_nano.skills.go2.look import LookSkill  # noqa: E402
-from vector_os_nano.core.scene_graph import SceneGraph  # noqa: E402
-from vector_os_nano.core.skill import SkillContext  # noqa: E402
-from vector_os_nano.core.types import SkillResult  # noqa: E402
-from vector_os_nano.perception.vlm_go2 import (  # noqa: E402
+from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy  # noqa: E402
+from zeno.skills.go2.look import LookSkill  # noqa: E402
+from zeno.core.scene_graph import SceneGraph  # noqa: E402
+from zeno.core.skill import SkillContext  # noqa: E402
+from zeno.core.types import SkillResult  # noqa: E402
+from zeno.perception.vlm_go2 import (  # noqa: E402
     DetectedObject,
     RoomIdentification,
     SceneDescription,

@@ -18,7 +18,7 @@ import logging
 import sys
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import ToolResult, ToolContext, tool
+from zeno.vcli.tools.base import ToolResult, ToolContext, tool
 
 logger = logging.getLogger(__name__)
 

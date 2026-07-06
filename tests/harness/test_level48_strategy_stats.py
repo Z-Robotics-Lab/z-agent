@@ -20,7 +20,7 @@ import tempfile
 
 import pytest
 
-from vector_os_nano.vcli.cognitive import StrategyRecord, StrategyStats
+from zeno.vcli.cognitive import StrategyRecord, StrategyStats
 
 
 # ---------------------------------------------------------------------------

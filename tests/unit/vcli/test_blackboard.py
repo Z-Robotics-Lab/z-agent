@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.blackboard import Blackboard
+from zeno.vcli.cognitive.blackboard import Blackboard
 
 
 # ---------------------------------------------------------------------------

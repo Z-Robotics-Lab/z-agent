@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.go2.explore import ExploreSkill
-from vector_os_nano.skills.go2.stop import StopSkill
-from vector_os_nano.skills.go2.where_am_i import WhereAmISkill, _heading_label
+from zeno.core.skill import SkillContext
+from zeno.core.types import SkillResult
+from zeno.skills.go2.explore import ExploreSkill
+from zeno.skills.go2.stop import StopSkill
+from zeno.skills.go2.where_am_i import WhereAmISkill, _heading_label
 
 
 # ---------------------------------------------------------------------------
@@ -217,21 +217,21 @@ class TestExploreNonBlocking:
         base = _make_base(x=10.0, y=5.0)
         ctx = _make_context(base)
         with patch(
-            "vector_os_nano.skills.go2.explore._start_bridge_on_go2",
+            "zeno.skills.go2.explore._start_bridge_on_go2",
             return_value=False,
         ):
             result = ExploreSkill().execute({}, ctx)
         assert result.success
         # Clean up background thread
-        from vector_os_nano.skills.go2.explore import cancel_exploration
+        from zeno.skills.go2.explore import cancel_exploration
         cancel_exploration()
 
     def test_already_exploring_returns_status(self):
         """Second call while exploring reports current status."""
-        from vector_os_nano.skills.go2.explore import (
+        from zeno.skills.go2.explore import (
             _explore_running, cancel_exploration,
         )
-        import vector_os_nano.skills.go2.explore as _mod
+        import zeno.skills.go2.explore as _mod
         _mod._explore_running = True
         _mod._explore_visited = {"hallway"}
         try:
@@ -247,10 +247,10 @@ class TestExploreNonBlocking:
 
     def test_cancel_exploration(self):
         """cancel_exploration sets the cancel event."""
-        from vector_os_nano.skills.go2.explore import (
+        from zeno.skills.go2.explore import (
             cancel_exploration, _explore_cancel,
         )
-        import vector_os_nano.skills.go2.explore as _mod
+        import zeno.skills.go2.explore as _mod
         _mod._explore_running = True
         cancel_exploration()
         assert _explore_cancel.is_set()
@@ -259,8 +259,8 @@ class TestExploreNonBlocking:
 
     def test_get_explored_rooms(self):
         """get_explored_rooms returns sorted room list."""
-        from vector_os_nano.skills.go2.explore import get_explored_rooms
-        import vector_os_nano.skills.go2.explore as _mod
+        from zeno.skills.go2.explore import get_explored_rooms
+        import zeno.skills.go2.explore as _mod
         _mod._explore_visited = {"kitchen", "hallway"}
         assert get_explored_rooms() == ["hallway", "kitchen"]
         _mod._explore_visited.clear()

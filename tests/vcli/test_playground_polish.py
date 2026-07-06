@@ -27,17 +27,17 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.playground import PlaygroundWorld
-from vector_os_nano.playground.catalog import (
+from zeno.playground import PlaygroundWorld
+from zeno.playground.catalog import (
     SCENARIOS,
     TABLETOP,
     TABLETOP_TRAY,
     get_scenario,
 )
-from vector_os_nano.playground.verify.arm_predicates import _HOME_JOINTS
-from vector_os_nano.playground.verify.arm_predicates import make_placed_count
-from vector_os_nano.vcli import cli
-from vector_os_nano.vcli.worlds import resolve_world_named
+from zeno.playground.verify.arm_predicates import _HOME_JOINTS
+from zeno.playground.verify.arm_predicates import make_placed_count
+from zeno.vcli import cli
+from zeno.vcli.worlds import resolve_world_named
 
 
 _HOME = list(_HOME_JOINTS)

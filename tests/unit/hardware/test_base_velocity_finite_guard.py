@@ -32,9 +32,9 @@ from pathlib import Path
 
 import pytest
 
-from vector_os_nano.hardware.base import ensure_finite_base_velocity
+from zeno.hardware.base import ensure_finite_base_velocity
 
-_HW = Path(__file__).resolve().parents[3] / "vector_os_nano" / "hardware"
+_HW = Path(__file__).resolve().parents[3] / "zeno" / "hardware"
 
 
 class TestEnsureFiniteBaseVelocity:

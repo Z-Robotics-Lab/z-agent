@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     ToolContext,
     ToolResult,
     tool,
@@ -200,17 +200,17 @@ class SysnavSimTool:
     def _build_sim_tool(self) -> Any:
         if self._sim_tool_factory is not None:
             return self._sim_tool_factory()
-        from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+        from zeno.vcli.tools.sim_tool import SimStartTool
         return SimStartTool()
 
     def _build_sim_stop_tool(self) -> Any:
-        from vector_os_nano.vcli.tools.sim_tool import SimStopTool
+        from zeno.vcli.tools.sim_tool import SimStopTool
         return SimStopTool()
 
     def _build_bridge(self, world_model: Any) -> Any:
         if self._bridge_factory is not None:
             return self._bridge_factory(world_model)
-        from vector_os_nano.integrations.sysnav_bridge import LiveSysnavBridge
+        from zeno.integrations.sysnav_bridge import LiveSysnavBridge
         return LiveSysnavBridge(world_model)
 
     # Optional — allow tests to inject the bridge factory.

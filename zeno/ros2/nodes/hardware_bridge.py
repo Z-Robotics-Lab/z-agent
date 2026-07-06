@@ -31,13 +31,13 @@ from control_msgs.action import FollowJointTrajectory, GripperCommand
 from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
 
-from vector_os_nano.hardware.so101 import (
+from zeno.hardware.so101 import (
     JOINT_CONFIG,
     SO101Arm,
     SO101Gripper,
     SerialBus,
 )
-from vector_os_nano.hardware.so101.joint_config import enc_to_rad, rad_to_enc
+from zeno.hardware.so101.joint_config import enc_to_rad, rad_to_enc
 
 # Gripper encoder limits (mirror of vector_ws constants)
 _GRIPPER_OPEN_ENC: int = 2500

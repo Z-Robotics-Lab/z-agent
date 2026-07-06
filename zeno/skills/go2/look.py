@@ -14,9 +14,9 @@ from typing import Any
 
 import numpy as np  # noqa: F401 — used by callers for frame type
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.perception.object_localizer import localize_objects_3d
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.perception.object_localizer import localize_objects_3d
 
 logger = logging.getLogger(__name__)
 
@@ -422,7 +422,7 @@ def _fallback_room(context: SkillContext) -> str:
     if context.base is None:
         return "unknown"
     try:
-        from vector_os_nano.skills.navigate import _detect_current_room
+        from zeno.skills.navigate import _detect_current_room
         pos = context.base.get_position()
         x = float(pos[0])
         y = float(pos[1])

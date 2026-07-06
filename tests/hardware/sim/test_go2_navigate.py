@@ -25,8 +25,8 @@ import pytest
 
 mujoco = pytest.importorskip("mujoco")
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-from vector_os_nano.hardware.sim.mujoco_g1 import obstacles_from_model
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.mujoco_g1 import obstacles_from_model
 
 # Pick-table footprint (x ∈ [10.80, 11.10], y ∈ [2.75, 3.25])
 _TABLE_X_MIN: float = 10.80
@@ -149,7 +149,7 @@ def test_navigate_to_with_piper_attached_does_not_crash() -> None:
     in bounded wall-time having moved the dog. Self-contained (own arm-enabled sim).
     """
     os.environ["VECTOR_SIM_WITH_ARM"] = "1"
-    from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
+    from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
 
     go2 = MuJoCoGo2(gui=False, room=True, backend="mpc")
     go2.connect()

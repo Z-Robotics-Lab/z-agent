@@ -18,9 +18,9 @@ idempotent and additive.
 
 from __future__ import annotations
 
-from vector_os_nano.playground.catalog import SCENARIOS, get_scenario
-from vector_os_nano.playground.scenario import Scenario
-from vector_os_nano.playground.world import PlaygroundWorld
+from zeno.playground.catalog import SCENARIOS, get_scenario
+from zeno.playground.scenario import Scenario
+from zeno.playground.world import PlaygroundWorld
 
 __all__ = [
     "PlaygroundWorld",
@@ -53,7 +53,7 @@ def register_scenarios(registry: object | None = None) -> None:
     own bootstrap — never raises. Defaults to the process-wide registry.
     """
     if registry is None:
-        from vector_os_nano.vcli.worlds.registry import get_world_registry
+        from zeno.vcli.worlds.registry import get_world_registry
 
         registry = get_world_registry()
 

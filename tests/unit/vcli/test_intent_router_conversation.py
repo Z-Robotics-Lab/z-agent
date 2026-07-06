@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli.intent_router import IntentRouter
+from zeno.vcli.intent_router import IntentRouter
 
 
 @pytest.fixture

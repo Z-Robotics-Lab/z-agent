@@ -80,7 +80,7 @@ class MockBase:
         return None
 
     def get_odometry(self) -> Any:
-        from vector_os_nano.core.types import Odometry
+        from zeno.core.types import Odometry
         return Odometry(
             timestamp=time.time(),
             x=self._pos[0],
@@ -188,9 +188,9 @@ def _make_llm_response(text: str) -> Any:
 
 def _make_agent_with_skills(base: MockBase) -> Any:
     """Create a minimal Agent-like object with real Go2 skills registered."""
-    from vector_os_nano.core.skill import SkillRegistry
-    from vector_os_nano.skills.go2 import get_go2_skills
-    from vector_os_nano.core.scene_graph import SceneGraph
+    from zeno.core.skill import SkillRegistry
+    from zeno.skills.go2 import get_go2_skills
+    from zeno.core.scene_graph import SceneGraph
 
     # Use a plain object instead of Agent to avoid heavy __init__ dependencies
     class _FakeAgent:
@@ -224,7 +224,7 @@ def _make_agent_with_skills(base: MockBase) -> Any:
 
 def _build_skill_context(base: MockBase, sg: Any) -> Any:
     """Build a SkillContext with the mock base and scene graph."""
-    from vector_os_nano.core.skill import SkillContext
+    from zeno.core.skill import SkillContext
 
     return SkillContext(
         bases={"go2": base},
@@ -244,7 +244,7 @@ class TestVGGUnifiedPipeline:
         """'explore' matches ExploreSkill → VGG (1-step GoalTree)."""
         base = MockBase()
         agent = _make_agent_with_skills(base)
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("explore", skill_registry=agent._skill_registry)
@@ -254,7 +254,7 @@ class TestVGGUnifiedPipeline:
         """'去厨房' matches NavigateSkill → VGG (1-step GoalTree)."""
         base = MockBase()
         agent = _make_agent_with_skills(base)
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("去厨房", skill_registry=agent._skill_registry)
@@ -264,7 +264,7 @@ class TestVGGUnifiedPipeline:
         """'站起来' matches StandSkill → VGG (1-step GoalTree)."""
         base = MockBase()
         agent = _make_agent_with_skills(base)
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("站起来", skill_registry=agent._skill_registry)
@@ -274,7 +274,7 @@ class TestVGGUnifiedPipeline:
         """'去厨房看看有没有杯子' should trigger VGG (multi-step)."""
         base = MockBase()
         agent = _make_agent_with_skills(base)
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg(
@@ -286,7 +286,7 @@ class TestVGGUnifiedPipeline:
         """'巡逻所有房间' should trigger VGG (scope + multi-action)."""
         base = MockBase()
         agent = _make_agent_with_skills(base)
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("巡逻所有房间", skill_registry=agent._skill_registry)
@@ -294,7 +294,7 @@ class TestVGGUnifiedPipeline:
 
     def test_explore_with_no_registry_triggers_vgg(self) -> None:
         """Without skill_registry, 'explore' triggers VGG via motor pattern."""
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
 
         router = IntentRouter()
         result = router.should_use_vgg("explore", skill_registry=None)
@@ -338,7 +338,7 @@ class TestVGGGoalDecomposerIntegration:
         base = MockBase()
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
-        from vector_os_nano.vcli.cognitive import GoalDecomposer
+        from zeno.vcli.cognitive import GoalDecomposer
 
         decomposer = GoalDecomposer(backend, skill_registry=agent._skill_registry)
 
@@ -361,7 +361,7 @@ class TestVGGGoalDecomposerIntegration:
         base = MockBase()
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
-        from vector_os_nano.vcli.cognitive import GoalDecomposer
+        from zeno.vcli.cognitive import GoalDecomposer
 
         decomposer = GoalDecomposer(backend, skill_registry=agent._skill_registry)
         assert "scan_room_360_then_report" not in decomposer.KNOWN_STRATEGIES
@@ -372,7 +372,7 @@ class TestVGGGoalDecomposerIntegration:
         base = MockBase()
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
-        from vector_os_nano.vcli.cognitive import GoalDecomposer
+        from zeno.vcli.cognitive import GoalDecomposer
 
         decomposer = GoalDecomposer(backend, skill_registry=agent._skill_registry)
         tree = decomposer.decompose("navigate to kitchen", "Position: (10.0, 3.0)")
@@ -390,7 +390,7 @@ class TestVGGGoalDecomposerIntegration:
         base = MockBase()
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
-        from vector_os_nano.vcli.cognitive import GoalDecomposer
+        from zeno.vcli.cognitive import GoalDecomposer
 
         decomposer = GoalDecomposer(backend, skill_registry=agent._skill_registry)
         tree = decomposer.decompose(
@@ -423,8 +423,8 @@ class TestVGGStrategySelector:
 
     def test_navigate_skill_resolves(self) -> None:
         """'navigate_skill' strategy should resolve to skill executor_type='skill', name='navigate'."""
-        from vector_os_nano.vcli.cognitive import StrategySelector
-        from vector_os_nano.vcli.cognitive.types import SubGoal
+        from zeno.vcli.cognitive import StrategySelector
+        from zeno.vcli.cognitive.types import SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -445,8 +445,8 @@ class TestVGGStrategySelector:
 
     def test_look_skill_resolves(self) -> None:
         """'look_skill' strategy → executor_type='skill', name='look'."""
-        from vector_os_nano.vcli.cognitive import StrategySelector
-        from vector_os_nano.vcli.cognitive.types import SubGoal
+        from zeno.vcli.cognitive import StrategySelector
+        from zeno.vcli.cognitive.types import SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -497,8 +497,8 @@ class TestVGGGoalExecutorIntegration:
 
     def _make_executor(self, base: MockBase, agent: Any) -> Any:
         """Create a GoalExecutor with real components and proper build_context."""
-        from vector_os_nano.vcli.cognitive import GoalVerifier, StrategySelector, GoalExecutor
-        from vector_os_nano.core.skill import SkillContext
+        from zeno.vcli.cognitive import GoalVerifier, StrategySelector, GoalExecutor
+        from zeno.core.skill import SkillContext
 
         sg = agent._spatial_memory
 
@@ -537,7 +537,7 @@ class TestVGGGoalExecutorIntegration:
         """build_context() should return SkillContext with base accessible."""
         base = MockBase()
         agent = _make_agent_with_skills(base)
-        from vector_os_nano.core.skill import SkillContext
+        from zeno.core.skill import SkillContext
 
         sg = agent._spatial_memory
         ctx = SkillContext(bases={"go2": base}, services={"spatial_memory": sg})
@@ -547,7 +547,7 @@ class TestVGGGoalExecutorIntegration:
 
     def test_executor_no_nonetype_base_error(self) -> None:
         """GoalExecutor should NOT raise 'NoneType has no attribute base'."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -576,7 +576,7 @@ class TestVGGGoalExecutorIntegration:
 
     def test_executor_skill_result_is_skill_result_type(self) -> None:
         """GoalExecutor._execute_skill should get a SkillResult from the skill."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -606,7 +606,7 @@ class TestVGGGoalExecutorIntegration:
 
     def test_executor_handles_missing_skill_gracefully(self) -> None:
         """When strategy resolves to a non-existent skill, error is clean (no NoneType crash)."""
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         base = MockBase()
         agent = _make_agent_with_skills(base)
@@ -648,8 +648,8 @@ class TestVGGFullPipelineIntegration:
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
 
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
         engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)
@@ -666,8 +666,8 @@ class TestVGGFullPipelineIntegration:
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
 
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
         engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)
@@ -685,8 +685,8 @@ class TestVGGFullPipelineIntegration:
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
 
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
         engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)
@@ -702,8 +702,8 @@ class TestVGGFullPipelineIntegration:
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
 
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
         engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)
@@ -727,8 +727,8 @@ class TestVGGFullPipelineIntegration:
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
 
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
         engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)
@@ -746,8 +746,8 @@ class TestVGGFullPipelineIntegration:
         agent = _make_agent_with_skills(base)
         backend = MockLLMBackend()
 
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.intent_router import IntentRouter
 
         engine = VectorEngine(backend=backend, intent_router=IntentRouter())
         engine.init_vgg(agent=agent, skill_registry=agent._skill_registry)

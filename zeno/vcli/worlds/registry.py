@@ -31,7 +31,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from vector_os_nano.vcli.worlds.base import World
+    from zeno.vcli.worlds.base import World
 
 # A factory builds a fresh world instance. Worlds are cheap, stateless shims, so
 # the registry stores factories (not singletons) and resolution returns a new
@@ -50,8 +50,8 @@ ROBOT_WORLD = "robot"
 GO2W_WORLD = "go2w"
 GO2W_WORLD_ALIAS = "isaac-go2w"
 _LAZY_BUILTIN_WORLDS: dict[str, tuple[str, str]] = {
-    GO2W_WORLD: ("vector_os_nano.vcli.worlds.go2w", "IsaacGo2WWorld"),
-    GO2W_WORLD_ALIAS: ("vector_os_nano.vcli.worlds.go2w", "IsaacGo2WWorld"),
+    GO2W_WORLD: ("zeno.vcli.worlds.go2w", "IsaacGo2WWorld"),
+    GO2W_WORLD_ALIAS: ("zeno.vcli.worlds.go2w", "IsaacGo2WWorld"),
 }
 
 
@@ -151,8 +151,8 @@ def _ensure_builtin_worlds(registry: "WorldRegistry") -> None:
         and all(wid in registry._factories for wid in _LAZY_BUILTIN_WORLDS)
     ):
         return
-    from vector_os_nano.vcli.worlds.dev import DevWorld
-    from vector_os_nano.vcli.worlds.robot import RobotWorld
+    from zeno.vcli.worlds.dev import DevWorld
+    from zeno.vcli.worlds.robot import RobotWorld
 
     if DEV_WORLD not in registry._factories:
         registry.register(DEV_WORLD, DevWorld)

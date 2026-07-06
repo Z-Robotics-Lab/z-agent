@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import PermissionResult, ToolContext, ToolResult, tool
+from zeno.vcli.tools.base import PermissionResult, ToolContext, ToolResult, tool
 
 # ---------------------------------------------------------------------------
 # Constants

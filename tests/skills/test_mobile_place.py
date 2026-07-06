@@ -18,9 +18,9 @@ import math
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.mobile_place import MobilePlaceSkill
+from zeno.core.skill import SkillContext
+from zeno.core.types import SkillResult
+from zeno.skills.mobile_place import MobilePlaceSkill
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ _DOG_AT_APPROACH_X = 0.55  # clearance default 0.55
 def _patch_wait_stable(return_val: bool = True):
     """Patch _wait_stable at the module level."""
     return patch(
-        "vector_os_nano.skills.mobile_place._wait_stable",
+        "zeno.skills.mobile_place._wait_stable",
         return_value=return_val,
     )
 
@@ -119,7 +119,7 @@ def _patch_wait_stable(return_val: bool = True):
 def _patch_approach_pose(approach_xyz: tuple[float, float, float] = (0.55, 0.0, math.pi)):
     """Patch compute_approach_pose at the mobile_place module level."""
     return patch(
-        "vector_os_nano.skills.mobile_place.compute_approach_pose",
+        "zeno.skills.mobile_place.compute_approach_pose",
         return_value=approach_xyz,
     )
 
@@ -186,7 +186,7 @@ def test_mobile_place_calls_navigate_then_wait_then_place_in_order() -> None:
     approach = (5.0 - 0.55, 5.0, 0.0)
     with _patch_approach_pose(approach):
         with patch(
-            "vector_os_nano.skills.mobile_place._wait_stable",
+            "zeno.skills.mobile_place._wait_stable",
             side_effect=_wait_side_effect,
         ):
             result = skill.execute({"target_xyz": _TARGET_FAR}, ctx)
@@ -579,7 +579,7 @@ def test_mobile_place_skip_navigate_flag_bypasses_navigate() -> None:
 
 def test_wait_stable_returns_true_when_stable() -> None:
     """_wait_stable returns True when base stops moving within timeout."""
-    from vector_os_nano.skills.mobile_place import _wait_stable
+    from zeno.skills.mobile_place import _wait_stable
 
     base = MagicMock()
     # Position does not change → speed = 0 → stable immediately
@@ -600,7 +600,7 @@ def test_wait_stable_returns_true_when_stable() -> None:
 
 def test_wait_stable_returns_false_on_timeout() -> None:
     """_wait_stable returns False when base never stabilises within timeout."""
-    from vector_os_nano.skills.mobile_place import _wait_stable
+    from zeno.skills.mobile_place import _wait_stable
 
     base = MagicMock()
     # Position changes each call → always moving
@@ -634,7 +634,7 @@ def _make_centering_arm(ee_xy: tuple[float, float], ee_z: float = 0.5,
 
 def test_center_over_receptacle_moves_ee_toward_centre() -> None:
     """EE at the near third → top-down IK is solved for the bin CENTRE and the arm moves."""
-    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+    from zeno.skills.mobile_place import _center_over_receptacle
 
     # geom = (cx, cy, rest_z, region); centre (10.95, 4.60); EE docked at near third x=10.80.
     geom = (10.95, 4.60, 0.32, (10.77, 4.20, 11.13, 5.00))
@@ -651,7 +651,7 @@ def test_center_over_receptacle_moves_ee_toward_centre() -> None:
 
 def test_center_over_receptacle_noop_when_already_central() -> None:
     """EE already at the centre → no IK, no move (idempotent)."""
-    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+    from zeno.skills.mobile_place import _center_over_receptacle
 
     geom = (10.95, 4.60, 0.32, (10.77, 4.20, 11.13, 5.00))
     arm = _make_centering_arm(ee_xy=(10.95, 4.60), ee_z=0.5)
@@ -664,7 +664,7 @@ def test_center_over_receptacle_noop_when_already_central() -> None:
 
 def test_center_over_receptacle_no_move_when_ik_unreachable() -> None:
     """If neither top-down nor position IK converges, the dock pose is kept (no move, no raise)."""
-    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+    from zeno.skills.mobile_place import _center_over_receptacle
 
     geom = (10.95, 4.60, 0.32, (10.77, 4.20, 11.13, 5.00))
     arm = _make_centering_arm(ee_xy=(10.80, 4.60), ee_z=0.5, ik_ok=False)
@@ -676,7 +676,7 @@ def test_center_over_receptacle_no_move_when_ik_unreachable() -> None:
 
 def test_center_over_receptacle_safe_when_geom_none() -> None:
     """geom None (no scene receptacle resolvable) → no-op, never raises."""
-    from vector_os_nano.skills.mobile_place import _center_over_receptacle
+    from zeno.skills.mobile_place import _center_over_receptacle
 
     arm = _make_centering_arm(ee_xy=(10.80, 4.60))
     _center_over_receptacle(arm, None)

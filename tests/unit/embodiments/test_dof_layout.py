@@ -28,19 +28,19 @@ import pytest
 # Force headless EGL rendering (matches test_g1_room.py) — no GL window.
 os.environ.setdefault("MUJOCO_GL", "egl")
 
-from vector_os_nano.embodiments.config import load_embodiment_config
-from vector_os_nano.embodiments.dof_layout import (
+from zeno.embodiments.config import load_embodiment_config
+from zeno.embodiments.dof_layout import (
     DofLayout,
     _resolve_stance_angle,
     build_robot_geom_set,
 )
 
 # Driver constants (the values behavior must stay identical to).
-from vector_os_nano.hardware.sim.mujoco_go2 import (
+from zeno.hardware.sim.mujoco_go2 import (
     _STAND_JOINTS,
     _build_room_scene_xml,
 )
-from vector_os_nano.hardware.sim.mujoco_g1 import (
+from zeno.hardware.sim.mujoco_g1 import (
     _DEFAULT_ANGLES,
     _G1_PELVIS_Z,
     _G1_SPAWN_X,

@@ -7,7 +7,7 @@ Strategy
 --------
 - Inject fake rclpy + ROS2 message modules into sys.modules so no live DDS
   is needed.
-- Patch ``vector_os_nano.hardware.ros2.runtime.get_ros2_runtime`` to return a
+- Patch ``zeno.hardware.ros2.runtime.get_ros2_runtime`` to return a
   Mock runtime so we can assert add_node / remove_node calls.
 - Reset the singleton (``_runtime = None``) in teardown to isolate tests.
 - Control ``VECTOR_SHARED_EXECUTOR`` env var per test.
@@ -142,11 +142,11 @@ def _make_runtime_mock() -> MagicMock:
 def reset_runtime_singleton():
     """Reset _runtime singleton before and after every test."""
     # Ensure the runtime module is freshly loaded each time
-    runtime_mod = sys.modules.get("vector_os_nano.hardware.ros2.runtime")
+    runtime_mod = sys.modules.get("zeno.hardware.ros2.runtime")
     if runtime_mod is not None:
         runtime_mod._runtime = None
     yield
-    runtime_mod = sys.modules.get("vector_os_nano.hardware.ros2.runtime")
+    runtime_mod = sys.modules.get("zeno.hardware.ros2.runtime")
     if runtime_mod is not None:
         runtime_mod._runtime = None
 
@@ -184,10 +184,10 @@ def test_go2_proxy_connect_uses_shared_runtime_when_env_on(monkeypatch):
 
     try:
         with patch(
-            "vector_os_nano.hardware.ros2.runtime.get_ros2_runtime",
+            "zeno.hardware.ros2.runtime.get_ros2_runtime",
             return_value=runtime_mock,
         ):
-            from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+            from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
 
             proxy = Go2ROS2Proxy()
             proxy.connect()
@@ -237,10 +237,10 @@ def test_piper_proxy_connect_uses_shared_runtime_when_env_on(monkeypatch):
 
     try:
         with patch(
-            "vector_os_nano.hardware.ros2.runtime.get_ros2_runtime",
+            "zeno.hardware.ros2.runtime.get_ros2_runtime",
             return_value=runtime_mock,
         ), patch("os.path.exists", return_value=True):
-            from vector_os_nano.hardware.sim.piper_ros2_proxy import PiperROS2Proxy
+            from zeno.hardware.sim.piper_ros2_proxy import PiperROS2Proxy
 
             proxy = PiperROS2Proxy(
                 base_proxy=fake_base,
@@ -276,10 +276,10 @@ def test_piper_gripper_proxy_connect_uses_shared_runtime_when_env_on(monkeypatch
 
     try:
         with patch(
-            "vector_os_nano.hardware.ros2.runtime.get_ros2_runtime",
+            "zeno.hardware.ros2.runtime.get_ros2_runtime",
             return_value=runtime_mock,
         ):
-            from vector_os_nano.hardware.sim.piper_ros2_proxy import (
+            from zeno.hardware.sim.piper_ros2_proxy import (
                 PiperGripperROS2Proxy,
             )
 
@@ -321,10 +321,10 @@ def test_go2_proxy_connect_uses_legacy_spin_when_env_zero(monkeypatch):
 
     try:
         with patch(
-            "vector_os_nano.hardware.ros2.runtime.get_ros2_runtime",
+            "zeno.hardware.ros2.runtime.get_ros2_runtime",
             return_value=runtime_mock,
         ), patch.object(threading.Thread, "start", _capture_start):
-            from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+            from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
 
             proxy = Go2ROS2Proxy()
             proxy.connect()
@@ -358,10 +358,10 @@ def test_go2_proxy_disconnect_calls_remove_node(monkeypatch):
 
     try:
         with patch(
-            "vector_os_nano.hardware.ros2.runtime.get_ros2_runtime",
+            "zeno.hardware.ros2.runtime.get_ros2_runtime",
             return_value=runtime_mock,
         ):
-            from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+            from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
 
             proxy = Go2ROS2Proxy()
             proxy.connect()

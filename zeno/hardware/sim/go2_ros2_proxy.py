@@ -14,7 +14,7 @@ import time
 import logging
 from typing import Any, Callable
 
-from vector_os_nano.hardware.base import (
+from zeno.hardware.base import (
     ensure_finite_base_velocity,
     ensure_finite_nav_goal,
 )
@@ -172,7 +172,7 @@ class Go2ROS2Proxy:
             # Route to shared executor or legacy per-proxy spin.
             import os as _os
             if _os.environ.get("VECTOR_SHARED_EXECUTOR", "1") == "1":
-                from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+                from zeno.hardware.ros2.runtime import get_ros2_runtime
                 get_ros2_runtime().add_node(self._node)
                 self._shared_runtime_used = True
             else:
@@ -205,7 +205,7 @@ class Go2ROS2Proxy:
         """Destroy the rclpy node and mark proxy as disconnected."""
         if self._shared_runtime_used and self._node is not None:
             try:
-                from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+                from zeno.hardware.ros2.runtime import get_ros2_runtime
                 get_ros2_runtime().remove_node(self._node)
             except Exception:
                 pass  # best effort — don't block teardown
@@ -404,7 +404,7 @@ class Go2ROS2Proxy:
 
     def get_odometry(self) -> Any:
         """Return latest Odometry data as a types.Odometry dataclass."""
-        from vector_os_nano.core.types import Odometry
+        from zeno.core.types import Odometry
         pos = self._position
         return Odometry(
             timestamp=time.time(),
@@ -577,7 +577,7 @@ class Go2ROS2Proxy:
 
             # --- Abort check (cognitive layer) ---
             try:
-                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                from zeno.vcli.cognitive.abort import is_abort_requested
                 if is_abort_requested():
                     logger.info("[NAV] Abort requested — cancelling navigate_to")
                     self._nav_goal = None
@@ -700,7 +700,7 @@ class Go2ROS2Proxy:
 
             # Abort check
             try:
-                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                from zeno.vcli.cognitive.abort import is_abort_requested
                 if is_abort_requested():
                     return False
             except ImportError:
@@ -892,7 +892,7 @@ class Go2ROS2Proxy:
         if self._marker_pub is None:
             return
         try:
-            from vector_os_nano.ros2.nodes.scene_graph_viz import (
+            from zeno.ros2.nodes.scene_graph_viz import (
                 build_scene_graph_markers,
                 _TRAJECTORY_MAX_POINTS,
             )

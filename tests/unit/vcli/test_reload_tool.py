@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_os_nano.vcli.tools.base import ToolContext
+from zeno.vcli.tools.base import ToolContext
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ def _make_mock_registry(skill_name: str = "stand") -> MagicMock:
     fake_skill.__class__ = type(
         "StandSkill",
         (),
-        {"__module__": "vector_os_nano.skills.go2.stance"},
+        {"__module__": "zeno.skills.go2.stance"},
     )
     fake_skill.name = skill_name
 
@@ -62,7 +62,7 @@ def _make_context(registry=None, use_app_state: bool = True) -> MagicMock:
 
 @pytest.fixture()
 def tool():
-    from vector_os_nano.vcli.tools.reload_tool import SkillReloadTool
+    from zeno.vcli.tools.reload_tool import SkillReloadTool
     return SkillReloadTool()
 
 
@@ -103,7 +103,7 @@ class TestReloadKnownSkill:
         ctx = _make_context(registry)
 
         # Build a fake module containing a StandSkill class
-        fake_module = types.ModuleType("vector_os_nano.skills.go2.stance")
+        fake_module = types.ModuleType("zeno.skills.go2.stance")
         new_instance_holder: list = []
 
         class StandSkill:
@@ -114,7 +114,7 @@ class TestReloadKnownSkill:
 
         fake_module.StandSkill = StandSkill
 
-        with patch.dict(sys.modules, {"vector_os_nano.skills.go2.stance": fake_module}):
+        with patch.dict(sys.modules, {"zeno.skills.go2.stance": fake_module}):
             with patch("importlib.reload", return_value=fake_module):
                 result = tool.execute({"skill_name": "stand"}, ctx)
 
@@ -128,14 +128,14 @@ class TestReloadKnownSkill:
         registry = _make_mock_registry("stand")
         ctx = _make_context(registry)
 
-        fake_module = types.ModuleType("vector_os_nano.skills.go2.stance")
+        fake_module = types.ModuleType("zeno.skills.go2.stance")
 
         class StandSkill:
             name = "stand"
 
         fake_module.StandSkill = StandSkill
 
-        with patch.dict(sys.modules, {"vector_os_nano.skills.go2.stance": fake_module}):
+        with patch.dict(sys.modules, {"zeno.skills.go2.stance": fake_module}):
             with patch("importlib.reload", return_value=fake_module):
                 result = tool.execute({"skill_name": "stand"}, ctx)
 
@@ -145,19 +145,19 @@ class TestReloadKnownSkill:
         registry = _make_mock_registry("stand")
         ctx = _make_context(registry)
 
-        fake_module = types.ModuleType("vector_os_nano.skills.go2.stance")
+        fake_module = types.ModuleType("zeno.skills.go2.stance")
 
         class StandSkill:
             name = "stand"
 
         fake_module.StandSkill = StandSkill
 
-        with patch.dict(sys.modules, {"vector_os_nano.skills.go2.stance": fake_module}):
+        with patch.dict(sys.modules, {"zeno.skills.go2.stance": fake_module}):
             with patch("importlib.reload", return_value=fake_module):
                 result = tool.execute({"skill_name": "stand"}, ctx)
 
         assert result.metadata.get("skill_name") == "stand"
-        assert result.metadata.get("module") == "vector_os_nano.skills.go2.stance"
+        assert result.metadata.get("module") == "zeno.skills.go2.stance"
         assert result.metadata.get("class") == "StandSkill"
 
 
@@ -192,14 +192,14 @@ class TestReloadPreservesOtherSkills:
         registry = _make_mock_registry("stand")
         ctx = _make_context(registry)
 
-        fake_module = types.ModuleType("vector_os_nano.skills.go2.stance")
+        fake_module = types.ModuleType("zeno.skills.go2.stance")
 
         class StandSkill:
             name = "stand"
 
         fake_module.StandSkill = StandSkill
 
-        with patch.dict(sys.modules, {"vector_os_nano.skills.go2.stance": fake_module}):
+        with patch.dict(sys.modules, {"zeno.skills.go2.stance": fake_module}):
             with patch("importlib.reload", return_value=fake_module):
                 tool.execute({"skill_name": "stand"}, ctx)
 
@@ -214,9 +214,9 @@ class TestReloadModuleSyntaxError:
         registry = _make_mock_registry("stand")
         ctx = _make_context(registry)
 
-        fake_module = types.ModuleType("vector_os_nano.skills.go2.stance")
+        fake_module = types.ModuleType("zeno.skills.go2.stance")
 
-        with patch.dict(sys.modules, {"vector_os_nano.skills.go2.stance": fake_module}):
+        with patch.dict(sys.modules, {"zeno.skills.go2.stance": fake_module}):
             with patch("importlib.reload", side_effect=SyntaxError("bad syntax")):
                 result = tool.execute({"skill_name": "stand"}, ctx)
 
@@ -227,9 +227,9 @@ class TestReloadModuleSyntaxError:
         registry = _make_mock_registry("stand")
         ctx = _make_context(registry)
 
-        fake_module = types.ModuleType("vector_os_nano.skills.go2.stance")
+        fake_module = types.ModuleType("zeno.skills.go2.stance")
 
-        with patch.dict(sys.modules, {"vector_os_nano.skills.go2.stance": fake_module}):
+        with patch.dict(sys.modules, {"zeno.skills.go2.stance": fake_module}):
             with patch("importlib.reload", side_effect=SyntaxError("bad syntax")):
                 tool.execute({"skill_name": "stand"}, ctx)
 
@@ -244,14 +244,14 @@ class TestRegistryDiscovery:
         registry = _make_mock_registry("stand")
         ctx = _make_context(registry, use_app_state=False)
 
-        fake_module = types.ModuleType("vector_os_nano.skills.go2.stance")
+        fake_module = types.ModuleType("zeno.skills.go2.stance")
 
         class StandSkill:
             name = "stand"
 
         fake_module.StandSkill = StandSkill
 
-        with patch.dict(sys.modules, {"vector_os_nano.skills.go2.stance": fake_module}):
+        with patch.dict(sys.modules, {"zeno.skills.go2.stance": fake_module}):
             with patch("importlib.reload", return_value=fake_module):
                 result = tool.execute({"skill_name": "stand"}, ctx)
 

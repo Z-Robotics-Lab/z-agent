@@ -6,7 +6,7 @@
 Ties together VectorEngine, Session, PermissionContext, and all tools
 into an interactive agent loop with V's personality.
 
-    python -m vector_os_nano.vcli.cli [options]
+    python -m zeno.vcli.cli [options]
     # or via console_scripts: vector-cli [options]
 """
 from __future__ import annotations
@@ -41,19 +41,19 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 
-from vector_os_nano.vcli.backends import create_backend
-from vector_os_nano.vcli.engine import VectorEngine, TurnResult
-from vector_os_nano.vcli.session import (
+from zeno.vcli.backends import create_backend
+from zeno.vcli.engine import VectorEngine, TurnResult
+from zeno.vcli.session import (
     Session,
     create_session,
     get_latest_session,
     list_sessions,
     load_session,
 )
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.prompt import build_system_prompt
-from vector_os_nano.vcli.turn_status import TurnStatus
-from vector_os_nano.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.prompt import build_system_prompt
+from zeno.vcli.turn_status import TurnStatus
+from zeno.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -493,9 +493,9 @@ def _repl_attempt_native(
     session text, so the scratch session loses no routing context — and an embodiment
     switch done on a prior (legacy) turn is already reflected on the engine.
     """
-    from vector_os_nano.vcli.backends.openai_compat import ModelUnavailableError
-    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
-    from vector_os_nano.vcli.verdict import VerdictReport
+    from zeno.vcli.backends.openai_compat import ModelUnavailableError
+    from zeno.vcli.cognitive.trace_store import verify_oracle_names
+    from zeno.vcli.verdict import VerdictReport
 
     agent = getattr(engine, "_vgg_agent", None)
     scratch = create_session(metadata={"native_scratch": True})
@@ -759,7 +759,7 @@ def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
     Fails loud on an unknown world/scenario id with the valid set — never a silent
     fallback to another world.
     """
-    from vector_os_nano.vcli.worlds import (
+    from zeno.vcli.worlds import (
         get_world_registry,
         resolve_world,
         resolve_world_named,
@@ -784,7 +784,7 @@ def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
 
     # Explicit playground track: importing the package runs register_scenarios(),
     # wiring the scenario factories into the process-wide world registry.
-    import vector_os_nano.playground  # noqa: F401  (side-effect: register scenarios)
+    import zeno.playground  # noqa: F401  (side-effect: register scenarios)
 
     try:
         return resolve_world_named(scenario)
@@ -880,10 +880,10 @@ def enter_scenario(scenario_id: str, app_state: dict[str, Any]) -> Any:
     Returns the resolved world. Fails loud (``KeyError`` with the valid set) on an
     unknown scenario id — never a silent fallback to another world.
     """
-    from vector_os_nano.vcli.worlds import resolve_world_named
+    from zeno.vcli.worlds import resolve_world_named
 
     # Explicit playground track: importing the package runs register_scenarios().
-    import vector_os_nano.playground  # noqa: F401  (side-effect: register scenarios)
+    import zeno.playground  # noqa: F401  (side-effect: register scenarios)
 
     world = resolve_world_named(scenario_id)  # KeyError -> fail loud, caller reports
 
@@ -930,7 +930,7 @@ def _build_world_embodiment(args: argparse.Namespace) -> Any:
     if not world_id:
         return None
     try:
-        from vector_os_nano.vcli.worlds import get_world_registry
+        from zeno.vcli.worlds import get_world_registry
 
         _load_world_plugins()  # a plugin may contribute this world id
         world = get_world_registry().resolve(world_id)  # KeyError surfaces in resolver
@@ -957,12 +957,12 @@ def _init_agent(args: argparse.Namespace) -> Any:
         # the session runs agent-less exactly as before.
         return _build_world_embodiment(args)
     try:
-        from vector_os_nano.core.agent import Agent  # type: ignore[import]
+        from zeno.core.agent import Agent  # type: ignore[import]
         if args.sim:
-            from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
-            from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
-            from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
-            from vector_os_nano.skills.pick import SIM_PICK_CONFIG
+            from zeno.hardware.sim.mujoco_arm import MuJoCoArm  # type: ignore[import]
+            from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper  # type: ignore[import]
+            from zeno.hardware.sim.mujoco_perception import MuJoCoPerception  # type: ignore[import]
+            from zeno.skills.pick import SIM_PICK_CONFIG
             arm = MuJoCoArm(gui=not getattr(args, "headless", False))
             arm.connect()
             gripper = MuJoCoGripper(arm)
@@ -986,7 +986,7 @@ def _init_agent(args: argparse.Namespace) -> Any:
         _go2_gui = not getattr(args, "headless", False)
 
         # Load config for API key
-        from vector_os_nano.core.config import load_config
+        from zeno.core.config import load_config
         cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__)
         ))), "config", "user.yaml")
@@ -1003,7 +1003,7 @@ def _init_agent(args: argparse.Namespace) -> Any:
         # (sim_tool._start_go2 under VECTOR_NO_ROS2=1) provides. Both build the
         # agent through the SAME helper (Rule 3/11) so they can never drift.
         _with_arm = os.environ.get("VECTOR_SIM_WITH_ARM", "0") == "1"
-        from vector_os_nano.hardware.sim.go2_inprocess import (
+        from zeno.hardware.sim.go2_inprocess import (
             build_inprocess_go2_agent,
         )
         agent = build_inprocess_go2_agent(
@@ -1188,7 +1188,7 @@ def _handle_slash_command(
         return False
 
     elif cmd == "login":
-        from vector_os_nano.vcli.config import load_config, save_config
+        from zeno.vcli.config import load_config, save_config
         provider_choice = args_rest[0] if args_rest else None
         if provider_choice not in ("claude", "anthropic", "openrouter", None):
             console.print(f"[yellow]  Usage: /login claude | /login anthropic | /login openrouter[/]")
@@ -1207,7 +1207,7 @@ def _handle_slash_command(
         config = load_config()
 
         if provider_choice == "claude":
-            from vector_os_nano.vcli.oauth import login_oauth
+            from zeno.vcli.oauth import login_oauth
             console.print(f"\n[bold {TEAL}]Claude subscription login[/]")
             console.print("[dim]  Opening browser for authentication...[/dim]\n")
             creds = login_oauth()
@@ -1244,7 +1244,7 @@ def _handle_slash_command(
                 console.print("[dim]  Cancelled.[/dim]")
 
     elif cmd == "config":
-        from vector_os_nano.vcli.config import load_config, load_claude_oauth, _CONFIG_PATH
+        from zeno.vcli.config import load_config, load_claude_oauth, _CONFIG_PATH
         config = load_config()
         oauth = load_claude_oauth()
         console.print()
@@ -1379,7 +1379,7 @@ def _handle_slash_command(
 
     elif cmd == "clear_memory":
         import os as _os
-        _sg_path = _os.path.expanduser("~/.vector_os_nano/scene_graph.yaml")
+        _sg_path = _os.path.expanduser("~/.zeno/scene_graph.yaml")
         cleared = False
 
         # Clear in-memory scene graph if agent is running
@@ -1388,7 +1388,7 @@ def _handle_slash_command(
             sm = getattr(agent_obj, "_spatial_memory", None)
             if sm is not None:
                 persist_path = getattr(sm, "_persist_path", None) or _sg_path
-                from vector_os_nano.core.scene_graph import SceneGraph
+                from zeno.core.scene_graph import SceneGraph
                 new_sg = SceneGraph(persist_path=persist_path)
                 agent_obj._spatial_memory = new_sg
                 base = getattr(agent_obj, "_base", None)
@@ -1404,7 +1404,7 @@ def _handle_slash_command(
             pass
 
         # Delete terrain map if present
-        _terrain_path = _os.path.expanduser("~/.vector_os_nano/terrain_map.npz")
+        _terrain_path = _os.path.expanduser("~/.zeno/terrain_map.npz")
         try:
             _os.remove(_terrain_path)
             cleared = True
@@ -1450,7 +1450,7 @@ def _handle_slash_command(
                     or_key = os.environ.get("OPENROUTER_API_KEY", "")
                     if not or_key:
                         try:
-                            from vector_os_nano.vcli.config import load_config as _lc
+                            from zeno.vcli.config import load_config as _lc
                             or_key = _lc().get("openrouter_api_key", "")
                         except Exception:
                             pass
@@ -1557,7 +1557,7 @@ def _setup_explore_events(console: Any) -> None:
     from a background thread — Rich Console is not thread-safe.
     """
     try:
-        from vector_os_nano.skills.go2.explore import set_event_callback
+        from zeno.skills.go2.explore import set_event_callback
     except ImportError:
         return
 
@@ -1649,7 +1649,7 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
     # regardless of where this file sits or how the CLI was launched. The old
     # parents[N]-from-__file__ computation was off by one and resolved to $HOME, so
     # mjpython was never found and the viewer silently fell back to headless.
-    from vector_os_nano.vcli.tools.sim_tool import locate_mjpython
+    from zeno.vcli.tools.sim_tool import locate_mjpython
     mjpython: str | None = locate_mjpython()
 
     if not mjpython:
@@ -1664,17 +1664,17 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
     # VECTOR_REEXEC=1 prevents infinite loops.
     new_env = os.environ.copy()
     new_env["VECTOR_REEXEC"] = "1"
-    os.execve(mjpython, [mjpython, "-m", "vector_os_nano.vcli.cli"] + sys.argv[1:], new_env)
+    os.execve(mjpython, [mjpython, "-m", "zeno.vcli.cli"] + sys.argv[1:], new_env)
 
 
 # Loggers whose per-step INFO/WARNING lines are pure REPL noise on the non-verbose
 # console (the rich step UI already surfaces every failure).  Quieted to ERROR on
 # the non-verbose REPL; restored to NOTSET under --verbose.
 _QUIET_LOGGERS: tuple[str, ...] = (
-    "vector_os_nano.vcli.cognitive",   # step-failure WARNINGs duplicated by rich UI
-    "vector_os_nano.skills",           # [PICK]/[SCAN] INFO lines
-    "vector_os_nano.perception",       # perception pipeline INFO lines
-    "vector_os_nano.hardware",         # [SIM DETECT] INFO/WARNING lines
+    "zeno.vcli.cognitive",   # step-failure WARNINGs duplicated by rich UI
+    "zeno.skills",           # [PICK]/[SCAN] INFO lines
+    "zeno.perception",       # perception pipeline INFO lines
+    "zeno.hardware",         # [SIM DETECT] INFO/WARNING lines
 )
 
 # Back-compat alias used by the existing tests.
@@ -1716,7 +1716,7 @@ def _ensure_sigint_under_mjpython() -> None:
     and return to the prompt. No-op off mjpython; harmless if it cannot be set
     (e.g. not the main thread).
     """
-    from vector_os_nano.hardware.sim.viewer_mode import running_under_mjpython
+    from zeno.hardware.sim.viewer_mode import running_under_mjpython
     if not running_under_mjpython():
         return
     import signal
@@ -1805,7 +1805,7 @@ def _build_turn_context(
     run drives the REAL cli.main with a deterministic plan.
     """
     # Resolve API key + provider from CLI flags > env vars > config file
-    from vector_os_nano.vcli.config import resolve_credentials
+    from zeno.vcli.config import resolve_credentials
     api_key, provider, model, base_url = resolve_credentials(
         cli_api_key=args.api_key,
         cli_base_url=args.base_url,
@@ -1840,7 +1840,7 @@ def _build_turn_context(
                 break
         registry.register(t, category=cat)
     if agent is not None:
-        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+        from zeno.vcli.tools.skill_wrapper import wrap_skills
         for skill_tool in wrap_skills(agent):
             registry.register(skill_tool, category="robot")
     else:
@@ -1884,7 +1884,7 @@ def _build_turn_context(
     # System prompt (with live robot context)
     robot_ctx_provider = None
     try:
-        from vector_os_nano.vcli.robot_context import RobotContextProvider
+        from zeno.vcli.robot_context import RobotContextProvider
         base = getattr(agent, "_base", None) if agent else None
         sg = getattr(agent, "_spatial_memory", None) if agent else None
         arm = getattr(agent, "_arm", None) if agent else None
@@ -1897,7 +1897,7 @@ def _build_turn_context(
 
     # Wrap in DynamicSystemPrompt so robot state refreshes each turn
     try:
-        from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
+        from zeno.vcli.dynamic_prompt import DynamicSystemPrompt
         system_prompt = DynamicSystemPrompt(system_prompt, robot_ctx_provider)
     except ImportError:
         pass
@@ -1906,12 +1906,12 @@ def _build_turn_context(
     intent_router = None
     hooks = None
     try:
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
         intent_router = IntentRouter()
     except ImportError:
         pass
     try:
-        from vector_os_nano.vcli.hooks import ToolHookRegistry
+        from zeno.vcli.hooks import ToolHookRegistry
         hooks = ToolHookRegistry()
     except ImportError:
         pass
@@ -2001,7 +2001,7 @@ def _safe_verdict_snapshot(agent: Any) -> None:
     capture module is imported lazily so non-sim turns never pay the cost.
     """
     try:
-        from vector_os_nano.acceptance import capture
+        from zeno.acceptance import capture
 
         capture.snapshot_on_verdict(agent)
     except Exception:  # noqa: BLE001 — a snapshot must NEVER affect the turn / verdict
@@ -2027,7 +2027,7 @@ def _hold_sim_lock_until_exit() -> None:
     """
     import atexit
 
-    from vector_os_nano.acceptance import sim_lock
+    from zeno.acceptance import sim_lock
 
     timeout = float(os.environ.get("VECTOR_SIM_LOCK_TIMEOUT", "600"))
     cm = sim_lock.sim_lock(nuke_after=True, wait_timeout=timeout)
@@ -2057,8 +2057,8 @@ def run_one_turn(args: Any) -> int:
 
     Exit codes: 0 = verified, 2 = ran (not verified), 1 = error / no trace.
     """
-    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
-    from vector_os_nano.vcli.verdict import VerdictReport
+    from zeno.vcli.cognitive.trace_store import verify_oracle_names
+    from zeno.vcli.verdict import VerdictReport
 
     prompt = args.print_prompt
     emit_json = bool(getattr(args, "json", False))
@@ -2083,7 +2083,7 @@ def run_one_turn(args: Any) -> int:
     # harnesses set VECTOR_SIM_LOCK=1). Acquire BEFORE building the sim; hold for the process; release
     # + teardown at exit. Fail-fast (never run a 2nd concurrent sim) if the host can't be cleared.
     if _sim_lock_enabled(args):
-        from vector_os_nano.acceptance.sim_lock import SimBusy
+        from zeno.acceptance.sim_lock import SimBusy
 
         try:
             _hold_sim_lock_until_exit()
@@ -2214,7 +2214,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_code)
 
     # Resolve API key + provider from CLI flags > env vars > config file
-    from vector_os_nano.vcli.config import resolve_credentials
+    from zeno.vcli.config import resolve_credentials
     api_key, provider, model, base_url = resolve_credentials(
         cli_api_key=args.api_key,
         cli_base_url=args.base_url,
@@ -2249,7 +2249,7 @@ def main(argv: list[str] | None = None) -> None:
                 break
         registry.register(t, category=cat)
     if agent is not None:
-        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+        from zeno.vcli.tools.skill_wrapper import wrap_skills
         for skill_tool in wrap_skills(agent):
             registry.register(skill_tool, category="robot")
     else:
@@ -2293,7 +2293,7 @@ def main(argv: list[str] | None = None) -> None:
     # System prompt (with live robot context)
     robot_ctx_provider = None
     try:
-        from vector_os_nano.vcli.robot_context import RobotContextProvider
+        from zeno.vcli.robot_context import RobotContextProvider
         base = getattr(agent, "_base", None) if agent else None
         sg = getattr(agent, "_spatial_memory", None) if agent else None
         arm = getattr(agent, "_arm", None) if agent else None
@@ -2306,7 +2306,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Wrap in DynamicSystemPrompt so robot state refreshes each turn
     try:
-        from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
+        from zeno.vcli.dynamic_prompt import DynamicSystemPrompt
         system_prompt = DynamicSystemPrompt(system_prompt, robot_ctx_provider)
     except ImportError:
         pass
@@ -2315,12 +2315,12 @@ def main(argv: list[str] | None = None) -> None:
     intent_router = None
     hooks = None
     try:
-        from vector_os_nano.vcli.intent_router import IntentRouter
+        from zeno.vcli.intent_router import IntentRouter
         intent_router = IntentRouter()
     except ImportError:
         pass
     try:
-        from vector_os_nano.vcli.hooks import ToolHookRegistry
+        from zeno.vcli.hooks import ToolHookRegistry
         hooks = ToolHookRegistry()
     except ImportError:
         pass
@@ -2408,7 +2408,7 @@ def main(argv: list[str] | None = None) -> None:
     def _vgg_step_view_display(view: dict[str, Any]) -> None:
         """Render one per-step EXPORT VIEW (sub-goal/strategy/verify/PASS-FAIL)."""
         try:
-            from vector_os_nano.vcli.cognitive.observation import render_step_view
+            from zeno.vcli.cognitive.observation import render_step_view
             verify = _vgg_verify_by_name.get(view.get("sub_goal_name"))
             line = render_step_view(view, verify)
             ok = bool(view.get("success")) and bool(view.get("verify_result"))
@@ -2448,7 +2448,7 @@ def main(argv: list[str] | None = None) -> None:
         pass
 
     # Banner — detect auth source for display
-    from vector_os_nano.vcli.config import load_claude_oauth
+    from zeno.vcli.config import load_claude_oauth
     _oauth = load_claude_oauth()
     if _oauth and api_key == _oauth.get("accessToken"):
         provider_display = f"Claude {_oauth.get('subscriptionType', 'auth')}"
@@ -2812,7 +2812,7 @@ def main(argv: list[str] | None = None) -> None:
                         # GoalVerifier uses. Fail CLOSED (not verified) on any error
                         # so the moat never silently passes.
                         try:
-                            from vector_os_nano.vcli.cognitive.trace_store import (
+                            from zeno.vcli.cognitive.trace_store import (
                                 evidence_passed,
                                 verify_oracle_names,
                             )
@@ -2836,7 +2836,7 @@ def main(argv: list[str] | None = None) -> None:
                         # outcome — from the run snapshot (pure EXPORT VIEW; never
                         # re-derived from frozen types). Best-effort display.
                         try:
-                            from vector_os_nano.vcli.cognitive.observation import (
+                            from zeno.vcli.cognitive.observation import (
                                 render_run_snapshot,
                             )
                             snapshot = engine.vgg_run_snapshot(trace)

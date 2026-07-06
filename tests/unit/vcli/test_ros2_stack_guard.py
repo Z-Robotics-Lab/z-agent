@@ -18,7 +18,7 @@ import importlib
 
 import pytest
 
-cli = importlib.import_module("vector_os_nano.vcli.cli")
+cli = importlib.import_module("zeno.vcli.cli")
 
 
 @pytest.fixture(autouse=True)

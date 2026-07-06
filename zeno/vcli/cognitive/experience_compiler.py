@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal
+from zeno.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal
 
 logger = logging.getLogger(__name__)
 

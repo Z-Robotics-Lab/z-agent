@@ -5,9 +5,9 @@
 import time
 import pytest
 from unittest.mock import MagicMock
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.object_memory import ObjectMemory
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.object_memory import ObjectMemory
 
 
 class TestNamespaceExtension:

@@ -32,7 +32,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vector_os_nano.embodiments import load_embodiment_config
+from zeno.embodiments import load_embodiment_config
 
 # Repo root, four parents up from tests/unit/embodiments/<this file>.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -69,24 +69,24 @@ def _read_module_float_const(path: Path, name: str) -> float:
 # cheap, sim-free import; skip cleanly if the binding is unavailable so the guard
 # never turns into an environment false-positive.
 go2 = pytest.importorskip(
-    "vector_os_nano.hardware.sim.mujoco_go2",
+    "zeno.hardware.sim.mujoco_go2",
     reason="mujoco binding required to read the go2 driver's authoritative constants",
 )
 g1 = pytest.importorskip(
-    "vector_os_nano.hardware.sim.mujoco_g1",
+    "zeno.hardware.sim.mujoco_g1",
     reason="mujoco binding required to read the g1 driver's authoritative constants",
 )
 piper = pytest.importorskip(
-    "vector_os_nano.hardware.sim.mujoco_piper",
+    "zeno.hardware.sim.mujoco_piper",
     reason="mujoco binding required to read the piper driver's authoritative constants",
 )
 piper_gripper = pytest.importorskip(
-    "vector_os_nano.hardware.sim.mujoco_piper_gripper",
+    "zeno.hardware.sim.mujoco_piper_gripper",
     reason="mujoco binding required to read the piper gripper driver's constant",
 )
 # The ROS2 proxy imports only numpy + stdlib at module load (rclpy is lazy), so it
 # imports cleanly with or without the mujoco binding.
-from vector_os_nano.hardware.sim import piper_ros2_proxy as piper_proxy  # noqa: E402
+from zeno.hardware.sim import piper_ros2_proxy as piper_proxy  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ def test_piper_proxy_sensor_offset_matches_driver() -> None:
     load, but we read its literals with ast anyway — symmetric with the bridge
     guard and immune to any future import-time dependency.
     """
-    proxy = _REPO_ROOT / "vector_os_nano" / "hardware" / "sim" / "piper_ros2_proxy.py"
+    proxy = _REPO_ROOT / "zeno" / "hardware" / "sim" / "piper_ros2_proxy.py"
     assert _read_module_float_const(proxy, "_BODY_SENSOR_DX") == pytest.approx(
         go2._LIDAR_OFFSET_X
     )
@@ -339,16 +339,16 @@ def test_piper_proxy_constants_mirror_driver() -> None:
 # EXCLUDED — pinning it would encode a false invariant.
 # ---------------------------------------------------------------------------
 _HOME_POSE_FALLBACK_MODULES: tuple[tuple[str, str], ...] = (
-    ("vector_os_nano.skills.home", "_DEFAULT_HOME_JOINTS"),
-    ("vector_os_nano.skills.pick", "_DEFAULT_HOME_JOINTS"),
-    ("vector_os_nano.skills.place", "_DEFAULT_HOME_JOINTS"),
-    ("vector_os_nano.skills.handover", "_DEFAULT_HOME_JOINTS"),
+    ("zeno.skills.home", "_DEFAULT_HOME_JOINTS"),
+    ("zeno.skills.pick", "_DEFAULT_HOME_JOINTS"),
+    ("zeno.skills.place", "_DEFAULT_HOME_JOINTS"),
+    ("zeno.skills.handover", "_DEFAULT_HOME_JOINTS"),
     # wave is the FIFTH skill that returns the arm home; E161 missed it because it
     # inlined the pose literal into its ``.get(..., [...])`` fallback instead of a
     # ``_DEFAULT_HOME_JOINTS`` constant like the other four. Made symmetric here so
     # the same guard pins it to the config authority (else a drifted default.yaml
     # leaves wave sending the arm to a pose the oracle no longer grades).
-    ("vector_os_nano.skills.wave", "_DEFAULT_HOME_JOINTS"),
+    ("zeno.skills.wave", "_DEFAULT_HOME_JOINTS"),
 )
 
 
@@ -363,8 +363,8 @@ def test_so101_home_pose_chain_mirrors_config_authority() -> None:
     """
     import importlib
 
-    from vector_os_nano.core.config import load_config
-    from vector_os_nano.vcli.worlds.arm_sim_oracle import _HOME_JOINTS as oracle_home
+    from zeno.core.config import load_config
+    from zeno.vcli.worlds.arm_sim_oracle import _HOME_JOINTS as oracle_home
 
     authority = load_config()["skills"]["home"]["joint_values"]
     assert isinstance(authority, list) and authority, (
@@ -400,7 +400,7 @@ def test_config_missing_file_fallback_home_pose_matches_default_yaml(
     """
     import yaml
 
-    from vector_os_nano.core import config as config_mod
+    from zeno.core import config as config_mod
 
     # The runtime authority, read straight from the YAML — never via the fallback.
     default_yaml = config_mod._DEFAULT_YAML

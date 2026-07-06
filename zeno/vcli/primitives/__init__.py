@@ -8,11 +8,11 @@ pattern where generated code calls module-level functions directly.
 
 Usage::
 
-    from vector_os_nano.vcli.primitives import init_primitives, PrimitiveContext
+    from zeno.vcli.primitives import init_primitives, PrimitiveContext
     ctx = PrimitiveContext(base=robot_base, scene_graph=sg, vlm=vlm)
     init_primitives(ctx)
 
-    from vector_os_nano.vcli.primitives import locomotion
+    from zeno.vcli.primitives import locomotion
     pos = locomotion.get_position()
 """
 from __future__ import annotations
@@ -50,7 +50,7 @@ def init_primitives(ctx: PrimitiveContext) -> None:
     """
     global _ctx
     _ctx = ctx
-    from vector_os_nano.vcli.primitives import locomotion, navigation, perception, world
+    from zeno.vcli.primitives import locomotion, navigation, perception, world
     locomotion._ctx = ctx
     navigation._ctx = ctx
     perception._ctx = ctx

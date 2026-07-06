@@ -16,7 +16,7 @@ import math
 import numpy as np
 import pytest
 
-from vector_os_nano.perception.depth_projection import (
+from zeno.perception.depth_projection import (
     CameraIntrinsics,
     camera_to_world,
     center_depth,

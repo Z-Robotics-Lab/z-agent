@@ -26,27 +26,27 @@ def main() -> int:
     res: dict = {"goal": _GOAL}
     go2 = piper = gripper = None
     try:
-        from vector_os_nano.core.agent import Agent
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-        from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-        from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
-        from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
-        from vector_os_nano.skills.go2 import get_go2_skills
-        from vector_os_nano.skills.mobile_pick import MobilePickSkill
-        from vector_os_nano.skills.mobile_place import MobilePlaceSkill
-        from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-        from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
-        from vector_os_nano.vcli.cli import create_backend_with_fake_seam
-        from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
-        from vector_os_nano.vcli.config import resolve_credentials
-        from vector_os_nano.vcli.engine import VectorEngine
-        from vector_os_nano.vcli.permissions import PermissionContext
-        from vector_os_nano.vcli.session import Session
-        from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-        from vector_os_nano.vcli.verdict import VerdictReport
-        from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
-        from vector_os_nano.vcli.worlds.robot import RobotWorld
+        from zeno.core.agent import Agent
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+        from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
+        from zeno.perception.go2_grasp_perception import Go2GraspPerception
+        from zeno.skills.go2 import get_go2_skills
+        from zeno.skills.mobile_pick import MobilePickSkill
+        from zeno.skills.mobile_place import MobilePlaceSkill
+        from zeno.skills.perception_grasp import PerceptionGraspSkill
+        from zeno.skills.pick_top_down import PickTopDownSkill
+        from zeno.skills.place_top_down import PlaceTopDownSkill
+        from zeno.vcli.cli import create_backend_with_fake_seam
+        from zeno.vcli.cognitive.trace_store import verify_oracle_names
+        from zeno.vcli.config import resolve_credentials
+        from zeno.vcli.engine import VectorEngine
+        from zeno.vcli.permissions import PermissionContext
+        from zeno.vcli.session import Session
+        from zeno.vcli.tools.base import CategorizedToolRegistry
+        from zeno.vcli.verdict import VerdictReport
+        from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
+        from zeno.vcli.worlds.robot import RobotWorld
 
         go2 = MuJoCoGo2(gui=False, room=True, backend="mpc")
         go2.connect()

@@ -36,7 +36,7 @@ import sys
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/vector_os_nano"
+ROOT = "/home/yusen/Desktop/zeno"
 # (tx, ty) legs — demanded literal coordinates the human states in NL.
 # Overridable via env (G1_NAV_A / G1_NAV_B, "x,y") so a re-verify round can demand DIFFERENT
 # coords than a prior run — non-memorized selectivity (a resolver that walks to arbitrary
@@ -125,7 +125,7 @@ def _eyes_frame(snap: str, tag: str) -> None:
 def _llm_preflight() -> None:
     sys.path.insert(0, ROOT)
     try:
-        from vector_os_nano.vcli.config import resolve_credentials  # noqa: PLC0415
+        from zeno.vcli.config import resolve_credentials  # noqa: PLC0415
         key, provider, model, base_url = resolve_credentials()
     except Exception as e:  # noqa: BLE001
         print(f"[driver] PREFLIGHT: resolve_credentials failed ({e}); proceeding blind.", flush=True)
@@ -165,7 +165,7 @@ def nav_calls(snap: str) -> list[tuple[str, str]]:
 _llm_preflight()
 print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim); A={LEG_A} B={LEG_B} provider={PROVIDER}", flush=True)
 child = pexpect.spawn(
-    f"{ROOT}/.venv/bin/python", ["-m", "vector_os_nano.vcli.cli", "--native-loop"],
+    f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli", "--native-loop"],
     env=env, cwd=ROOT, encoding="utf-8", codec_errors="replace",
     timeout=120, dimensions=(50, 200),
 )

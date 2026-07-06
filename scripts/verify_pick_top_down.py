@@ -46,13 +46,13 @@ _CHILD_TEMPLATE = textwrap.dedent("""
     import os, sys, time, logging, mujoco
     os.environ["VECTOR_SIM_WITH_ARM"] = "1"
     logging.basicConfig(level=logging.ERROR, stream=sys.stderr)
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-    from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-    from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
-    from vector_os_nano.core.world_model import WorldModel, ObjectState
-    from vector_os_nano.core.skill import SkillContext
-    from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+    from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
+    from zeno.core.world_model import WorldModel, ObjectState
+    from zeno.core.skill import SkillContext
+    from zeno.skills.pick_top_down import PickTopDownSkill
+    from zeno.vcli.tools.sim_tool import SimStartTool
 
     OBJ = "{obj_id}"
 

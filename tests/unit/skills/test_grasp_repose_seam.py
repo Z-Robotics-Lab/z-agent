@@ -25,12 +25,12 @@ import math
 import numpy as np
 import pytest
 
-from vector_os_nano.skills.perception_grasp import (
+from zeno.skills.perception_grasp import (
     PerceptionGraspSkill,
     _approach_and_seat,
     _grasp_ready_repose,
 )
-from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
+from zeno.skills.utils.approach_pose import compute_approach_pose
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +211,7 @@ def test_seat_approach_creeps_forward_and_does_not_call_navigate_to():
     """From the head-on perceive standoff the seat-approach must creep forward (a vx>0
     walk) and must NOT hand the final hop to the planner (navigate_to), whose flaky
     bail-to-far was the failure mode D95 retires."""
-    from vector_os_nano.skills.perception_grasp import _approach_and_seat
+    from zeno.skills.perception_grasp import _approach_and_seat
 
     obj = (10.86, 3.00)
     base = _SeatBase(start_pos=(9.90, 3.00), heading=0.0)  # ~0.96 m head-on
@@ -228,7 +228,7 @@ def test_seat_approach_creeps_forward_and_does_not_call_navigate_to():
 def test_seat_approach_seats_against_the_table_edge():
     """The creep must drive the dog forward to the table-edge jam (its repeatable,
     IK-reachable standoff), not stop short at the far perceive pose."""
-    from vector_os_nano.skills.perception_grasp import _approach_and_seat
+    from zeno.skills.perception_grasp import _approach_and_seat
 
     obj = (10.86, 3.00)
     base = _SeatBase(start_pos=(9.90, 3.00), heading=0.0, table_x=10.46)

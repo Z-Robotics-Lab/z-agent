@@ -8,10 +8,10 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.core.skill import SkillRegistry
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.session import Session
+    from zeno.core.agent import Agent
+    from zeno.core.skill import SkillRegistry
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.session import Session
 
 
 def skills_to_mcp_tools(registry: SkillRegistry) -> list[dict]:

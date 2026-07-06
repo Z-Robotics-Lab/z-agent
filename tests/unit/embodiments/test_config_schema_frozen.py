@@ -31,8 +31,8 @@ import inspect
 
 import pytest
 
-from vector_os_nano.embodiments import config as cfg_mod
-from vector_os_nano.embodiments.config import load_embodiment_config
+from zeno.embodiments import config as cfg_mod
+from zeno.embodiments.config import load_embodiment_config
 
 
 def _module_dataclasses() -> list[type]:

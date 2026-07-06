@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from vector_os_nano.vcli.tools.base import ToolContext
+from zeno.vcli.tools.base import ToolContext
 
 
 # ---------------------------------------------------------------------------
@@ -31,13 +31,13 @@ def _make_context() -> MagicMock:
 
 @pytest.fixture()
 def nav_tool():
-    from vector_os_nano.vcli.tools.nav_tools import NavStateTool
+    from zeno.vcli.tools.nav_tools import NavStateTool
     return NavStateTool()
 
 
 @pytest.fixture()
 def terrain_tool():
-    from vector_os_nano.vcli.tools.nav_tools import TerrainStatusTool
+    from zeno.vcli.tools.nav_tools import TerrainStatusTool
     return TerrainStatusTool()
 
 
@@ -48,9 +48,9 @@ def terrain_tool():
 
 class TestNavStateTool:
 
-    @patch("vector_os_nano.vcli.tools.nav_tools._is_exploring", return_value=True)
-    @patch("vector_os_nano.vcli.tools.nav_tools._is_nav_stack_running", return_value=True)
-    @patch("vector_os_nano.vcli.tools.nav_tools._get_explored_rooms", return_value=["kitchen", "hallway"])
+    @patch("zeno.vcli.tools.nav_tools._is_exploring", return_value=True)
+    @patch("zeno.vcli.tools.nav_tools._is_nav_stack_running", return_value=True)
+    @patch("zeno.vcli.tools.nav_tools._get_explored_rooms", return_value=["kitchen", "hallway"])
     def test_nav_state_all_fields(self, mock_rooms, mock_nav, mock_explore, nav_tool):
         """Output must include all required diagnostic fields."""
         ctx = _make_context()
@@ -63,9 +63,9 @@ class TestNavStateTool:
         assert "explored_rooms" in data
         assert "tare_running" in data
 
-    @patch("vector_os_nano.vcli.tools.nav_tools._is_exploring", return_value=True)
-    @patch("vector_os_nano.vcli.tools.nav_tools._is_nav_stack_running", return_value=True)
-    @patch("vector_os_nano.vcli.tools.nav_tools._get_explored_rooms", return_value=["kitchen", "hallway"])
+    @patch("zeno.vcli.tools.nav_tools._is_exploring", return_value=True)
+    @patch("zeno.vcli.tools.nav_tools._is_nav_stack_running", return_value=True)
+    @patch("zeno.vcli.tools.nav_tools._get_explored_rooms", return_value=["kitchen", "hallway"])
     def test_nav_state_values(self, mock_rooms, mock_nav, mock_explore, nav_tool):
         """Mocked values must flow through to the output JSON."""
         ctx = _make_context()
@@ -84,9 +84,9 @@ class TestNavStateTool:
         """
         ctx = _make_context()
         # Patch helpers to simulate ImportError behaviour (returns defaults)
-        with patch("vector_os_nano.vcli.tools.nav_tools._is_exploring", return_value=False), \
-             patch("vector_os_nano.vcli.tools.nav_tools._is_nav_stack_running", return_value=False), \
-             patch("vector_os_nano.vcli.tools.nav_tools._get_explored_rooms", return_value=[]):
+        with patch("zeno.vcli.tools.nav_tools._is_exploring", return_value=False), \
+             patch("zeno.vcli.tools.nav_tools._is_nav_stack_running", return_value=False), \
+             patch("zeno.vcli.tools.nav_tools._get_explored_rooms", return_value=[]):
             result = nav_tool.execute({}, ctx)
         assert not result.is_error
         data = json.loads(result.content)
@@ -114,7 +114,7 @@ class TestTerrainStatusTool:
         np.savez(str(npz_file), ix=ix)
 
         ctx = _make_context()
-        with patch("vector_os_nano.vcli.tools.nav_tools._TERRAIN_PATH", str(npz_file)):
+        with patch("zeno.vcli.tools.nav_tools._TERRAIN_PATH", str(npz_file)):
             result = terrain_tool.execute({}, ctx)
 
         assert not result.is_error
@@ -127,7 +127,7 @@ class TestTerrainStatusTool:
         """When terrain file is absent, file_exists=False with graceful output."""
         missing = tmp_path / "no_terrain_here.npz"
         ctx = _make_context()
-        with patch("vector_os_nano.vcli.tools.nav_tools._TERRAIN_PATH", str(missing)):
+        with patch("zeno.vcli.tools.nav_tools._TERRAIN_PATH", str(missing)):
             result = terrain_tool.execute({}, ctx)
 
         assert not result.is_error
@@ -142,7 +142,7 @@ class TestTerrainStatusTool:
         np.savez(str(npz_file), ix=np.array([10, 20]))
 
         ctx = _make_context()
-        with patch("vector_os_nano.vcli.tools.nav_tools._TERRAIN_PATH", str(npz_file)):
+        with patch("zeno.vcli.tools.nav_tools._TERRAIN_PATH", str(npz_file)):
             result = terrain_tool.execute({}, ctx)
 
         data = json.loads(result.content)

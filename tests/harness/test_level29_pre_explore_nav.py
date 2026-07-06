@@ -281,7 +281,7 @@ class TestRoomConnectivity:
         Pre-explore navigation still relies on hardcoded _ROOM_DOORS.
         """
         import importlib
-        sg_mod = importlib.import_module("vector_os_nano.core.scene_graph")
+        sg_mod = importlib.import_module("zeno.core.scene_graph")
         src = inspect.getsource(sg_mod)
         assert "connected_rooms" in src, (
             "SceneGraph has no room connectivity data"

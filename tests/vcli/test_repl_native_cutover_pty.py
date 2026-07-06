@@ -47,7 +47,7 @@ def _nuke_and_restore() -> None:
     for cmd in (
         ["rosm", "nuke", "--yes"],
         ["git", "checkout",
-         "vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml"],
+         "zeno/hardware/sim/mjcf/go2/scene_room_piper.xml"],
     ):
         try:
             subprocess.run(cmd, timeout=30, capture_output=True)

@@ -22,9 +22,9 @@ from typing import Any
 
 import numpy as np
 
-from vector_os_nano.core.skill import SkillRegistry
-from vector_os_nano.skills import get_default_skills
-from vector_os_nano.vcli.native_loop import _ARM_REQUIRING_SKILLS, _build_motor_tools
+from zeno.core.skill import SkillRegistry
+from zeno.skills import get_default_skills
+from zeno.vcli.native_loop import _ARM_REQUIRING_SKILLS, _build_motor_tools
 
 
 class _Base:

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Tests for MCP resource handlers (vector_os_nano/mcp/resources.py)."""
+"""Tests for MCP resource handlers (zeno/mcp/resources.py)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import numpy as np
 import pytest
 
-from vector_os_nano.mcp.resources import (
+from zeno.mcp.resources import (
     RESOURCE_DEFINITIONS,
     _read_objects,
     _read_robot_state,
@@ -200,7 +200,7 @@ class TestReadCamera:
         agent._arm.render = MagicMock(return_value=_SMALL_BGR)
 
         with patch(
-            "vector_os_nano.mcp.resources.asyncio.to_thread",
+            "zeno.mcp.resources.asyncio.to_thread",
             new=AsyncMock(return_value=_SMALL_BGR),
         ):
             result = await read_resource(agent, "camera://overhead")
@@ -237,7 +237,7 @@ class TestReadCamera:
         agent = _make_agent()
         agent._arm = MagicMock()
         with patch(
-            "vector_os_nano.mcp.resources.asyncio.to_thread",
+            "zeno.mcp.resources.asyncio.to_thread",
             new=AsyncMock(return_value=None),
         ):
             with pytest.raises(ValueError, match="returned no image"):
@@ -281,7 +281,7 @@ class TestReadResourceRouting:
             agent = _make_agent()
             agent._arm = MagicMock()
             with patch(
-                "vector_os_nano.mcp.resources.asyncio.to_thread",
+                "zeno.mcp.resources.asyncio.to_thread",
                 new=AsyncMock(return_value=_SMALL_BGR),
             ):
                 result = await read_resource(agent, f"camera://{camera}")

@@ -13,8 +13,8 @@ from typing import Any, Callable
 
 import anthropic
 
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.session import TokenUsage
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.session import TokenUsage
 
 logger = logging.getLogger(__name__)
 

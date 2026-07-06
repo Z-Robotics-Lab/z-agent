@@ -25,14 +25,14 @@ from typing import Any
 
 import numpy as np
 
-from vector_os_nano.core.types import Pose3D
-from vector_os_nano.perception._centroid import (
+from zeno.core.types import Pose3D
+from zeno.perception._centroid import (
     remove_depth_outliers,
     robust_centroid,
     select_nearest_cluster,
 )
-from vector_os_nano.perception.depth_projection import camera_to_world
-from vector_os_nano.perception.pointcloud import rgbd_to_pointcloud_fast
+from zeno.perception.depth_projection import camera_to_world
+from zeno.perception.pointcloud import rgbd_to_pointcloud_fast
 
 _MIN_POINTS = 4
 

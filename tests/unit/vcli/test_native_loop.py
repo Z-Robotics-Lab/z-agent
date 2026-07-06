@@ -31,13 +31,13 @@ from tests.harness.fake_backend import (
     FakeToolScriptBackend,
     tool_turn,
 )
-from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-from vector_os_nano.vcli.cognitive.trace_store import (
+from zeno.vcli.cognitive.actor_causation import ActorCaused
+from zeno.vcli.cognitive.trace_store import (
     evidence_passed,
     verify_oracle_names,
 )
-from vector_os_nano.vcli.session import Session
-from vector_os_nano.vcli.verdict import VerdictReport
+from zeno.vcli.session import Session
+from zeno.vcli.verdict import VerdictReport
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ class _FakeBase:
     """
 
     # mark as a sim adapter so SkillWrapperTool auto-allows the motor skill.
-    __module__ = "vector_os_nano.hardware.sim.fake"
+    __module__ = "zeno.hardware.sim.fake"
 
     def __init__(self, x: float, y: float) -> None:
         self._x, self._y, self._yaw = float(x), float(y), 0.0
@@ -91,7 +91,7 @@ class _FakeWalkSkill:
     effects = {"is_moving": False}
 
     def execute(self, params, context):
-        from vector_os_nano.core.types import SkillResult
+        from zeno.core.types import SkillResult
 
         base = context.base
         if base is None:
@@ -105,7 +105,7 @@ class _FakeWalkSkill:
 
 def _make_agent(x: float = 0.0, y: float = 0.0):
     """A duck-typed agent: a fake base + a real SkillRegistry with the walk skill."""
-    from vector_os_nano.core.skill import SkillRegistry
+    from zeno.core.skill import SkillRegistry
 
     base = _FakeBase(x, y)
     reg = SkillRegistry()
@@ -131,10 +131,10 @@ def _make_agent(x: float = 0.0, y: float = 0.0):
 
 def _make_engine(agent, backend):
     """A REAL VectorEngine wired for VGG over the fake agent + a scripted backend."""
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.worlds.robot import RobotWorld
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.worlds.robot import RobotWorld
 
     eng = VectorEngine(
         backend=backend,
@@ -352,7 +352,7 @@ def test_scene_object_names_single_sources_canonical_names() -> None:
     This is the SAME ground truth ``holding_object`` matches against, so the names
     the model is taught are exactly the names the oracle accepts (no split source).
     """
-    from vector_os_nano.vcli.native_loop import _scene_object_names
+    from zeno.vcli.native_loop import _scene_object_names
 
     agent = _arm_agent({"banana": [0.1, 0.1, 0.06], "mug": [0.2, 0.0, 0.06]})
     assert _scene_object_names(agent) == ("banana", "mug")
@@ -360,7 +360,7 @@ def test_scene_object_names_single_sources_canonical_names() -> None:
 
 def test_scene_object_names_fail_safe_empty() -> None:
     """No agent / no arm / no getter / raising getter -> EMPTY (pre-step-7 prompt)."""
-    from vector_os_nano.vcli.native_loop import _scene_object_names
+    from zeno.vcli.native_loop import _scene_object_names
 
     assert _scene_object_names(None) == ()
     assert _scene_object_names(SimpleNamespace(_arm=None)) == ()
@@ -375,7 +375,7 @@ def test_scene_object_names_fail_safe_empty() -> None:
 
 def test_system_prompt_lists_object_vocab_when_present() -> None:
     """The prompt teaches the canonical names + the translate-to-scene-name rule."""
-    from vector_os_nano.vcli.native_loop import _native_system_prompt
+    from zeno.vcli.native_loop import _native_system_prompt
 
     blocks = _native_system_prompt(None, frozenset({"holding_object"}), ("banana", "mug"))
     text = blocks[0]["text"]
@@ -388,7 +388,7 @@ def test_system_prompt_lists_object_vocab_when_present() -> None:
 
 def test_system_prompt_omits_object_vocab_when_empty() -> None:
     """An EMPTY object set yields the EXACT pre-step-7 prompt (no object list)."""
-    from vector_os_nano.vcli.native_loop import _native_system_prompt
+    from zeno.vcli.native_loop import _native_system_prompt
 
     with_names = _native_system_prompt(None, frozenset({"holding_object"}), ("banana",))
     without = _native_system_prompt(None, frozenset({"holding_object"}), ())
@@ -408,7 +408,7 @@ def test_system_prompt_teaches_compound_fetch_and_place() -> None:
     matches. The prompt now teaches the two-action compound: after the grasp verifies,
     call mobile_place + verify resting_on_receptacle BEFORE finishing.
     """
-    from vector_os_nano.vcli.native_loop import _native_system_prompt
+    from zeno.vcli.native_loop import _native_system_prompt
 
     text = _native_system_prompt(
         None,
@@ -435,7 +435,7 @@ def test_bring_is_complete_at_the_hold_no_auto_handover() -> None:
     teaches that holding IS the delivery: finish at the hold, call handover ONLY on
     an explicit hand-over request (递给我/给我).
     """
-    from vector_os_nano.vcli.native_loop import _native_system_prompt
+    from zeno.vcli.native_loop import _native_system_prompt
 
     text = _native_system_prompt(
         None, frozenset({"holding_object"}), ("pickable_bottle_green",)
@@ -460,7 +460,7 @@ def test_place_clause_is_not_a_navigation_goal() -> None:
     (1) forbid navigate/walk for a place clause and (2) NOT offer navigate as the way
     to reach 'a place'.
     """
-    from vector_os_nano.vcli.native_loop import _native_system_prompt
+    from zeno.vcli.native_loop import _native_system_prompt
 
     text = _native_system_prompt(
         None,
@@ -486,7 +486,7 @@ def test_system_prompt_teaches_post_place_empty_gripper_is_not_a_drop() -> None:
     mobile_place, an empty gripper is EXPECTED; verify resting_on_receptacle (NOT
     holding_object / describe); do NOT re-grasp; finish once it passes.
     """
-    from vector_os_nano.vcli.native_loop import _native_system_prompt
+    from zeno.vcli.native_loop import _native_system_prompt
 
     text = _native_system_prompt(
         None,
@@ -512,7 +512,7 @@ def test_oracle_stays_strict_wrong_canonical_name_is_false() -> None:
     returns False — verifying that the vocab-expose approach left ``make_holding_object``
     strictly canonical (case-insensitive EXACT on the scene name, no fuzzy/loose match).
     """
-    from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+    from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
 
     class _Arm:
         _connected = True
@@ -570,7 +570,7 @@ def _engine_with_code_tools():
 
 
 def test_robot_world_drops_mutating_code_tools() -> None:
-    from vector_os_nano.vcli.native_loop import _build_motor_tools
+    from zeno.vcli.native_loop import _build_motor_tools
 
     robot_agent = SimpleNamespace(_base=None, _arm=None, _perception=None, _skill_registry=None)
     tools = _build_motor_tools(robot_agent, _engine_with_code_tools())
@@ -585,7 +585,7 @@ def test_robot_world_drops_mutating_code_tools() -> None:
 
 
 def test_dev_world_keeps_full_code_tool_set() -> None:
-    from vector_os_nano.vcli.native_loop import _build_motor_tools
+    from zeno.vcli.native_loop import _build_motor_tools
 
     tools = _build_motor_tools(None, _engine_with_code_tools())  # dev world: no agent
     for name in ("file_read", "file_write", "file_edit", "bash", "glob", "grep"):
@@ -610,7 +610,7 @@ class _FakeGraspSkill:
     effects: dict = {}
 
     def execute(self, params, context):
-        from vector_os_nano.core.types import SkillResult
+        from zeno.core.types import SkillResult
 
         return SkillResult(
             success=True,
@@ -621,7 +621,7 @@ class _FakeGraspSkill:
 def test_skill_diagnosis_threads_into_step_and_verdict() -> None:
     """A skill's result_data['diagnosis'] reaches StepRecord.result_data AND the
     StepVerdict.diagnosis — INFORMATIONAL only, ``verified`` stays the spine's call."""
-    from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+    from zeno.vcli.cognitive.trace_store import evidence_passed
 
     backend = FakeToolScriptBackend.from_tool_script(
         [
@@ -666,13 +666,13 @@ class _OkSkillTool:
         self.name = name
 
     def execute(self, params, context):
-        from vector_os_nano.vcli.tools.base import ToolResult
+        from zeno.vcli.tools.base import ToolResult
 
         return ToolResult(content=f"{self.name} ok")
 
 
 def _post_place_runner():
-    from vector_os_nano.vcli.native_loop import NativeStepRunner
+    from zeno.vcli.native_loop import NativeStepRunner
 
     agent, _base = _make_agent(0.0, 0.0)
     motor = {"mobile_place": _OkSkillTool("mobile_place"),
@@ -745,7 +745,7 @@ def _spin(n: int):
 def test_degenerate_spin_without_verify_breaks_early_and_honestly() -> None:
     """20 action turns with NO verify -> the guard breaks BEFORE max_turns (and before
     the script ends), and the trace grades honestly (no steps, not verified)."""
-    from vector_os_nano.vcli.native_loop import (
+    from zeno.vcli.native_loop import (
         _MAX_NATIVE_TURNS,
         _MAX_TURNS_WITHOUT_VERIFY,
     )
@@ -768,7 +768,7 @@ def test_degenerate_spin_without_verify_breaks_early_and_honestly() -> None:
 def test_degenerate_spin_nudges_once_to_verify_before_breaking() -> None:
     """At the soft threshold the runner injects ONE nudge telling the model to verify
     (so a thrashing run finally emits a verdict + fires the eyes-judge)."""
-    from vector_os_nano.vcli.native_loop import _UNPRODUCTIVE_SPIN_NUDGE
+    from zeno.vcli.native_loop import _UNPRODUCTIVE_SPIN_NUDGE
 
     backend = _CallRecorder.make(_spin(20))
     agent, _ = _make_agent(0.0, 0.0)
@@ -786,7 +786,7 @@ def test_periodic_verify_never_trips_the_degenerate_guard() -> None:
     regression of a healthy, multi-step task (a NEW measurement is what proves progress,
     not the turn count). R279/E76: the reset is goal-aware — each burst closes on a NOVEL
     (predicate,result), not the SAME sub-check re-read (that is the thrash, tested below)."""
-    from vector_os_nano.vcli.native_loop import _MAX_TURNS_WITHOUT_VERIFY
+    from zeno.vcli.native_loop import _MAX_TURNS_WITHOUT_VERIFY
 
     walk = ("walk", {"distance": 0.1, "speed": 0.3})
     # THREE 4-walk bursts, each closed by a DISTINCT passing verify (novel expr -> real
@@ -817,7 +817,7 @@ def test_repeated_identical_verify_does_not_dodge_the_spin_guard() -> None:
     counter) is NOT progress -> only the FIRST occurrence of a given (predicate,result)
     resets; the repeats let the counter climb to the honest hard break. Without this a
     thrash dodges break@12 and falls back to the _MAX_NATIVE_TURNS cap (R278 frontier)."""
-    from vector_os_nano.vcli.native_loop import (
+    from zeno.vcli.native_loop import (
         _MAX_NATIVE_TURNS,
         _MAX_TURNS_WITHOUT_VERIFY,
     )
@@ -861,7 +861,7 @@ def test_finish_after_a_failed_verify_is_refused_then_the_run_continues() -> Non
     """FAIL verify -> finish is refused with the quantity nudge -> the run keeps going
     and a later PASSING verify lets it finish. Without the guard the finish at turn 2
     ends the run (2 calls); the guard makes it reach the passing verify + real finish."""
-    from vector_os_nano.vcli.native_loop import _FINISH_ON_FAIL_NUDGE
+    from zeno.vcli.native_loop import _FINISH_ON_FAIL_NUDGE
 
     fail = ("verify", {"expr": "at_position(100.0, 100.0, 0.001)"})  # base at origin -> False
     ok = ("verify", {"expr": "at_position(0.0, 0.0, 1000.0)"})  # huge tol -> True
@@ -890,7 +890,7 @@ def test_finish_on_fail_guardrail_is_bounded_and_never_forces_a_green() -> None:
     reach the requested count) still TERMINATES: the finish-on-fail nudge is bounded
     like the D23 verify nudge, so it can never wedge the turn — and the trace grades
     honestly (the goal predicate never passed), NEVER a forced green."""
-    from vector_os_nano.vcli.native_loop import _MAX_VERIFY_NUDGES
+    from zeno.vcli.native_loop import _MAX_VERIFY_NUDGES
 
     fail = ("verify", {"expr": "at_position(100.0, 100.0, 0.001)"})
     # 1 failing verify then finish forever: after _MAX_VERIFY_NUDGES refusals the guard

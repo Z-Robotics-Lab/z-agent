@@ -13,9 +13,9 @@ from __future__ import annotations
 import logging
 import time
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.core.world_model import ObjectState
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.core.world_model import ObjectState
 
 logger = logging.getLogger(__name__)
 

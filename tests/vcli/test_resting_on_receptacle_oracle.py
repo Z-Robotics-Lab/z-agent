@@ -4,7 +4,7 @@
 fake arm/gripper — no MuJoCo. Pins the monotonicity contract: ``make_resting_on_receptacle``
 credits ONLY a genuine placement (in-region + at the rest height + at rest + released), and the
 floor-only ``make_placed_count`` is BYTE-UNCHANGED (no existing ACCEPT path widened)."""
-from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+from zeno.vcli.worlds.arm_sim_oracle import (
     make_placed_count,
     make_resting_on_receptacle,
 )

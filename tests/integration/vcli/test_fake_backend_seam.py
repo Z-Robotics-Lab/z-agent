@@ -25,13 +25,13 @@ from unittest.mock import patch
 
 import pytest
 
-from vector_os_nano.vcli.backends import LLMBackend
+from zeno.vcli.backends import LLMBackend
 
 
 @pytest.mark.cli_main
 def test_absent_env_uses_real_create_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("VECTOR_FAKE_LLM", raising=False)
-    from vector_os_nano.vcli import cli
+    from zeno.vcli import cli
 
     sentinel = object()
     with patch.object(cli, "create_backend", return_value=sentinel) as real:
@@ -53,7 +53,7 @@ def test_present_env_uses_fake_backend(tmp_path: Path, monkeypatch: pytest.Monke
     plan_file = tmp_path / "plan.json"
     plan_file.write_text(json.dumps(plan), encoding="utf-8")
     monkeypatch.setenv("VECTOR_FAKE_LLM", str(plan_file))
-    from vector_os_nano.vcli import cli
+    from zeno.vcli import cli
 
     # create_backend must NOT be called when the fake seam is active.
     with patch.object(cli, "create_backend") as real:
@@ -87,10 +87,10 @@ def test_canned_plan_with_true_verify_classifies_ran_not_grounded(tmp_path: Path
     # decomposer parses + validates it, then the evidence gate classifies the step
     # RAN, so a VerdictReport over it is NOT verified. The fake LLM injects only the
     # plan; it cannot launder a verdict.
-    from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-    from vector_os_nano.vcli.cognitive.trace_store import classify_step_evidence
-    from vector_os_nano.vcli.cognitive.types import ExecutionTrace, StepRecord
-    from vector_os_nano.vcli.verdict import VerdictReport
+    from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+    from zeno.vcli.cognitive.trace_store import classify_step_evidence
+    from zeno.vcli.cognitive.types import ExecutionTrace, StepRecord
+    from zeno.vcli.verdict import VerdictReport
     from tests.harness.fake_backend import FakeBackend
 
     plan = {

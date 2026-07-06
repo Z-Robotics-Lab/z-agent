@@ -29,7 +29,7 @@ def test_cli_imports_without_robot_deps() -> None:
     for mod in _ROBOT_DEPS:
         sys.modules.pop(mod, None)
 
-    import vector_os_nano.vcli.cli  # noqa: F401
+    import zeno.vcli.cli  # noqa: F401
 
     leaked = [m for m in _ROBOT_DEPS if m in sys.modules]
     assert leaked == [], f"CLI import leaked robot deps: {leaked}"
@@ -37,6 +37,6 @@ def test_cli_imports_without_robot_deps() -> None:
 
 def test_cli_main_is_callable() -> None:
     """The console-script entry point exists and is callable."""
-    from vector_os_nano.vcli.cli import main
+    from zeno.vcli.cli import main
 
     assert callable(main)

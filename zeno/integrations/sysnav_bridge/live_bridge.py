@@ -21,8 +21,8 @@ import threading
 import time
 from typing import Any
 
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.integrations.sysnav_bridge.topic_interfaces import (
+from zeno.core.world_model import WorldModel
+from zeno.integrations.sysnav_bridge.topic_interfaces import (
     object_node_to_state,
 )
 
@@ -49,7 +49,7 @@ class LiveSysnavBridge:
     def __init__(
         self,
         world_model: WorldModel,
-        node_name: str = "vector_os_nano_sysnav_bridge",
+        node_name: str = "zeno_sysnav_bridge",
         topic: str = "/object_nodes_list",
         queue_size: int = 50,
         on_disconnect_after_s: float = 5.0,

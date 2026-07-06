@@ -11,7 +11,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from vector_os_nano.core.agent import Agent
+    from zeno.core.agent import Agent
 
 
 # ---------------------------------------------------------------------------

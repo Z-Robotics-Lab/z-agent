@@ -20,7 +20,7 @@ import time
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/vector_os_nano"
+ROOT = "/home/yusen/Desktop/zeno"
 CASE = sys.argv[1] if len(sys.argv) > 1 else "404"
 MODEL = {
     "400": "vector/does-not-exist-xyz",      # invalid model id
@@ -45,7 +45,7 @@ os.system(f"rm -f {LOG}")
 
 print(f"[driver] case={CASE} model={MODEL!r} — spawning BARE vector-cli REPL (no flag)", flush=True)
 child = pexpect.spawn(
-    f"{ROOT}/.venv/bin/python", ["-m", "vector_os_nano.vcli.cli"],
+    f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli"],
     cwd=ROOT, env=env, encoding="utf-8", timeout=120, dimensions=(40, 160),
 )
 child.logfile = open(LOG, "w", encoding="utf-8")

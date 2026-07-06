@@ -98,7 +98,7 @@ class TestLevel4Patrol:
     @pytest.fixture
     def go2(self):
         """Create a headless Go2 sim with room=True, sinusoidal backend."""
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
         robot = MuJoCoGo2(gui=False, room=True, backend="sinusoidal")
         robot.connect()
@@ -109,7 +109,7 @@ class TestLevel4Patrol:
     @pytest.fixture
     def vlm(self):
         """Instantiate the VLM perception wrapper with the real API key."""
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
 
         key = _get_api_key()
         return Go2VLMPerception(config={"api_key": key})
@@ -123,7 +123,7 @@ class TestLevel4Patrol:
         and NavigateSkill returns "Room position unknown. Explore more."
         """
         import os
-        from vector_os_nano.core.scene_graph import SceneGraph
+        from zeno.core.scene_graph import SceneGraph
 
         sg = SceneGraph()
         layout = os.path.join(
@@ -141,9 +141,9 @@ class TestLevel4Patrol:
     @pytest.mark.timeout(120)
     def test_navigate_and_look(self, go2, vlm, spatial_memory):
         """Navigate to hallway and describe the scene with the real VLM."""
-        from vector_os_nano.core.skill import SkillContext
-        from vector_os_nano.skills.go2.look import LookSkill
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.core.skill import SkillContext
+        from zeno.skills.go2.look import LookSkill
+        from zeno.skills.navigate import NavigateSkill
 
         ctx = SkillContext(
             bases={"default": go2},
@@ -170,9 +170,9 @@ class TestLevel4Patrol:
     @pytest.mark.timeout(120)
     def test_two_room_patrol(self, go2, vlm, spatial_memory):
         """Patrol 2 rooms (hallway + kitchen): navigate, look, record observations."""
-        from vector_os_nano.core.skill import SkillContext, SkillRegistry
-        from vector_os_nano.skills.go2.look import LookSkill
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.core.skill import SkillContext, SkillRegistry
+        from zeno.skills.go2.look import LookSkill
+        from zeno.skills.navigate import NavigateSkill
 
         nav = NavigateSkill()
         look = LookSkill()
@@ -220,7 +220,7 @@ class TestLevel4Patrol:
         frame = go2.get_camera_frame()
         assert frame is not None, "get_camera_frame() returned None"
 
-        from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+        from zeno.perception.vlm_go2 import Go2VLMPerception
 
         key = _get_api_key()
         isolated_vlm = Go2VLMPerception(config={"api_key": key})
@@ -234,9 +234,9 @@ class TestLevel4Patrol:
     @pytest.mark.timeout(120)
     def test_spatial_memory_persists_observations(self, go2, vlm, spatial_memory):
         """After looking in a room, spatial memory records the observation."""
-        from vector_os_nano.core.skill import SkillContext
-        from vector_os_nano.skills.go2.look import LookSkill
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.core.skill import SkillContext
+        from zeno.skills.go2.look import LookSkill
+        from zeno.skills.navigate import NavigateSkill
 
         nav = NavigateSkill()
         look = LookSkill()

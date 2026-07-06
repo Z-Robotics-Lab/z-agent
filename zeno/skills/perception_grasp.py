@@ -34,11 +34,11 @@ import math
 import os
 from typing import Any
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
-from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
-from vector_os_nano.skills.utils.terminal_dock import dock_converged, terminal_dock
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.perception.grasp_point import grasp_point_from_rgbd
+from zeno.skills.utils.approach_pose import compute_approach_pose
+from zeno.skills.utils.terminal_dock import dock_converged, terminal_dock
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ def _resolve_unique_category(
     no known colour. Pure: reads only the query text + the scene's declared object
     NAMES (never a pose, never the actor's output).
     """
-    from vector_os_nano.perception.grounding_dino import _ZH_NOUN_EN
+    from zeno.perception.grounding_dino import _ZH_NOUN_EN
 
     q = (query or "").strip().lower()
     if not q:
@@ -229,7 +229,7 @@ def _resolve_ordinal_target(query: str, detections: Any) -> Any:
         return None
 
     q = (query or "").strip().lower()
-    from vector_os_nano.perception.grounding_dino import _ZH_NOUN_EN
+    from zeno.perception.grounding_dino import _ZH_NOUN_EN
 
     noun: str | None = None
     for zh, en in _ZH_NOUN_EN.items():
@@ -273,7 +273,7 @@ def _ordinal_detections_from_catalog(
     This only supplies the LEFT/RIGHT ordering for ordinal selection; the verify oracle is
     untouched.
     """
-    from vector_os_nano.perception.depth_projection import world_to_pixel
+    from zeno.perception.depth_projection import world_to_pixel
 
     dets: list[dict] = []
     for name, pos in dict(catalog or {}).items():
@@ -623,7 +623,7 @@ def _far_localize_and_approach(
     pts = seed_pts
     if pts is None:
         try:
-            from vector_os_nano.perception.object_localizer import localize_objects_3d
+            from zeno.perception.object_localizer import localize_objects_3d
             pts = localize_objects_3d(perception, [query])
         except Exception as exc:  # noqa: BLE001 — recovery is best-effort
             logger.info("[PGRASP] far recovery SKIP: localize raised %s", exc)
@@ -1028,7 +1028,7 @@ class PerceptionGraspSkill:
         # perception resolver selects the blob of THAT colour (not the front-most) and
         # the verify LABEL maps to the colour's scene name (the grasp POINT is still
         # perceived from depth+mask). A deictic "前面的东西" parses no colour → unchanged.
-        from vector_os_nano.perception.front_object import parse_color
+        from zeno.perception.front_object import parse_color
         color = parse_color(query)
 
         # D168 — COLOURLESS CATEGORY resolution. When the query names an object by
@@ -1090,7 +1090,7 @@ class PerceptionGraspSkill:
         _far_seed = None
         if context.base is not None:
             try:
-                from vector_os_nano.perception.object_localizer import localize_objects_3d as _loc3d
+                from zeno.perception.object_localizer import localize_objects_3d as _loc3d
                 # grounding-dino is ENGLISH open-vocab: a Chinese NL query ("绿色的瓶子") won't
                 # match. Localize by the colour-English name when a colour is resolved.
                 _loc_query = f"{color} bottle" if color else query
@@ -1232,7 +1232,7 @@ class PerceptionGraspSkill:
         ctx_cfg["skills"] = skills_cfg
         context.config = ctx_cfg
 
-        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+        from zeno.skills.pick_top_down import PickTopDownSkill
         pick_params = dict(params)
         pick_params["target_xyz"] = [gp.x, gp.y, gp.z]
         pick_params["object_id"] = resolved
@@ -1674,7 +1674,7 @@ class PerceptionGraspSkill:
                 # n_hue_anywhere≈0 ⇒ the colour never rendered (lighting/material).
                 if _mask_px == 0 and rgb is not None:
                     try:
-                        from vector_os_nano.perception.front_object import (
+                        from zeno.perception.front_object import (
                             mask_gate_breakdown,
                         )
                         _bd = mask_gate_breakdown(rgb, depth, color=color)

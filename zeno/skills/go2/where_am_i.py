@@ -4,16 +4,16 @@
 """WhereAmISkill -- report the robot's current position and room.
 
 Reads position and heading from context.base and uses the room map from
-vector_os_nano.skills.navigate to determine which room the robot is in.
+zeno.skills.navigate to determine which room the robot is in.
 """
 from __future__ import annotations
 
 import logging
 import math
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.navigate import _detect_current_room
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.skills.navigate import _detect_current_room
 
 logger = logging.getLogger(__name__)
 

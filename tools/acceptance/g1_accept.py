@@ -36,7 +36,7 @@ import sys
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/vector_os_nano"
+ROOT = "/home/yusen/Desktop/zeno"
 RED = sys.argv[1] if len(sys.argv) > 1 else "找前面的红色的东西"
 GREEN = sys.argv[2] if len(sys.argv) > 2 else "找前面的绿色的东西"
 TAG = sys.argv[3] if len(sys.argv) > 3 else "g1r"
@@ -125,7 +125,7 @@ def _eyes_frame(snap: str, tag: str) -> None:
 def _llm_preflight() -> None:
     sys.path.insert(0, ROOT)
     try:
-        from vector_os_nano.vcli.config import resolve_credentials  # noqa: PLC0415
+        from zeno.vcli.config import resolve_credentials  # noqa: PLC0415
         key, provider, model, base_url = resolve_credentials()
     except Exception as e:  # noqa: BLE001
         print(f"[driver] PREFLIGHT: resolve_credentials failed ({e}); proceeding blind.", flush=True)
@@ -162,7 +162,7 @@ def parse_verdicts(snap: str) -> list[tuple[str, bool]]:
 _llm_preflight()
 print(f"[driver] spawning BARE vector-cli REPL (no -p/--sim); RED={RED!r} GREEN={GREEN!r} provider={PROVIDER}", flush=True)
 child = pexpect.spawn(
-    f"{ROOT}/.venv/bin/python", ["-m", "vector_os_nano.vcli.cli", "--native-loop"],
+    f"{ROOT}/.venv/bin/python", ["-m", "zeno.vcli.cli", "--native-loop"],
     env=env, cwd=ROOT, encoding="utf-8", codec_errors="replace",
     timeout=120, dimensions=(50, 200),
 )

@@ -6,7 +6,7 @@
 Public surface:
 
 * :func:`g1_lidar_scan` — cast lidar rays from a given world position in a
-  MuJoCo model+data pair and return a :class:`~vector_os_nano.core.types.LaserScan`
+  MuJoCo model+data pair and return a :class:`~zeno.core.types.LaserScan`
   with attached 3-D point-cloud diagnostics.  Behaviour is byte-for-byte identical
   to the inline code that previously lived inside ``MuJoCoG1.get_lidar_scan``.
 """
@@ -51,14 +51,14 @@ def g1_lidar_scan(
             index 0 is behind the robot (``heading - 180 deg``).
 
     Returns:
-        A :class:`~vector_os_nano.core.types.LaserScan`-like object with all
+        A :class:`~zeno.core.types.LaserScan`-like object with all
         standard ``LaserScan`` fields PLUS the diagnostic attributes
         ``n_returns``, ``min_range``, ``median_range``, ``points_3d``, and
         ``near_zero_self_hits``.
     """
-    from vector_os_nano.core.types import LaserScan  # noqa: PLC0415
+    from zeno.core.types import LaserScan  # noqa: PLC0415
 
-    from vector_os_nano.hardware.sim.sensors.lidar_raycast import (  # noqa: PLC0415
+    from zeno.hardware.sim.sensors.lidar_raycast import (  # noqa: PLC0415
         raycast_lidar,
     )
 

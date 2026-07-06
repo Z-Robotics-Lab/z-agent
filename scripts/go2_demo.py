@@ -5,7 +5,7 @@
 """Go2 locomotion visual demo — MuJoCo viewer.
 
 Usage:
-    cd ~/Desktop/vector_os_nano
+    cd ~/Desktop/zeno
     .venv-nano/bin/python scripts/go2_demo.py              # auto: MPC if available, else sinusoidal
     .venv-nano/bin/python scripts/go2_demo.py --mpc        # force MPC backend
     .venv-nano/bin/python scripts/go2_demo.py --sinusoidal # force sinusoidal backend
@@ -18,30 +18,30 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Bootstrap: stub vector_os_nano packages so we can import mujoco_go2
+# Bootstrap: stub zeno packages so we can import mujoco_go2
 # without triggering the full package __init__ (which needs httpx etc.)
 # ---------------------------------------------------------------------------
 
 _repo = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_repo))
 
-pkg = types.ModuleType("vector_os_nano")
-pkg.__path__ = [str(_repo / "vector_os_nano")]
-pkg.__package__ = "vector_os_nano"
-sys.modules["vector_os_nano"] = pkg
+pkg = types.ModuleType("zeno")
+pkg.__path__ = [str(_repo / "zeno")]
+pkg.__package__ = "zeno"
+sys.modules["zeno"] = pkg
 
-core = types.ModuleType("vector_os_nano.core")
-core.__path__ = [str(_repo / "vector_os_nano" / "core")]
-core.__package__ = "vector_os_nano.core"
-sys.modules["vector_os_nano.core"] = core
+core = types.ModuleType("zeno.core")
+core.__path__ = [str(_repo / "zeno" / "core")]
+core.__package__ = "zeno.core"
+sys.modules["zeno.core"] = core
 
-hw = types.ModuleType("vector_os_nano.hardware")
-hw.__path__ = [str(_repo / "vector_os_nano" / "hardware")]
-sys.modules["vector_os_nano.hardware"] = hw
+hw = types.ModuleType("zeno.hardware")
+hw.__path__ = [str(_repo / "zeno" / "hardware")]
+sys.modules["zeno.hardware"] = hw
 
-sim = types.ModuleType("vector_os_nano.hardware.sim")
-sim.__path__ = [str(_repo / "vector_os_nano" / "hardware" / "sim")]
-sys.modules["vector_os_nano.hardware.sim"] = sim
+sim = types.ModuleType("zeno.hardware.sim")
+sim.__path__ = [str(_repo / "zeno" / "hardware" / "sim")]
+sys.modules["zeno.hardware.sim"] = sim
 
 
 @dataclass(frozen=True)
@@ -61,16 +61,16 @@ class LaserScan:
     ranges: tuple = ()
 
 
-ct = types.ModuleType("vector_os_nano.core.types")
+ct = types.ModuleType("zeno.core.types")
 ct.Odometry = Odometry
 ct.LaserScan = LaserScan
-sys.modules["vector_os_nano.core.types"] = ct
+sys.modules["zeno.core.types"] = ct
 
 # ---------------------------------------------------------------------------
 # Demo
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
 
 
 def _pos_str(go2):

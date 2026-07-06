@@ -28,9 +28,9 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.playground import PlaygroundWorld, register_scenarios
-from vector_os_nano.playground.catalog import GO2_ROOM, get_scenario
-from vector_os_nano.playground.verify.base_predicates import _FACING_TOL_RAD
+from zeno.playground import PlaygroundWorld, register_scenarios
+from zeno.playground.catalog import GO2_ROOM, get_scenario
+from zeno.playground.verify.base_predicates import _FACING_TOL_RAD
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def _base_agent(base: Any = None) -> SimpleNamespace:
 class TestGo2Scenario:
     def test_scenario_registered_and_has_base(self) -> None:
         register_scenarios()  # idempotent
-        from vector_os_nano.vcli.worlds.registry import resolve_world_named
+        from zeno.vcli.worlds.registry import resolve_world_named
 
         world = resolve_world_named("go2_room")
         assert type(world).__name__ == "PlaygroundWorld"
@@ -266,9 +266,9 @@ class TestFailSafe:
 
 
 def _make_engine():
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.intent_router import IntentRouter
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.intent_router import IntentRouter
+    from zeno.vcli.tools.base import CategorizedToolRegistry
 
     class _MockBackend:
         def call(self, messages, tools, system, max_tokens, on_text=None):
@@ -287,7 +287,7 @@ def _make_engine():
 
 class TestKernelIntegration:
     def test_base_predicates_via_goal_verifier(self) -> None:
-        from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+        from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
         # (17, 2.5) is the REAL kitchen centre (f_kitchen pos="17 2.5").
         base = FakeBase(position=[17.0, 2.5, 0.3], heading=0.0)
@@ -309,7 +309,7 @@ class TestKernelIntegration:
 
     def test_resolved_via_scenario_flag(self) -> None:
         """The --scenario launch path resolves the go2 playground world."""
-        from vector_os_nano.vcli.cli import _resolve_active_world, parse_args
+        from zeno.vcli.cli import _resolve_active_world, parse_args
 
         args = parse_args(["--scenario", "go2_room"])
         world = _resolve_active_world(args, agent=_base_agent(None))

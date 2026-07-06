@@ -14,8 +14,8 @@ import math
 import numpy as np
 import pytest
 
-from vector_os_nano.hardware.sim.sensors import LidarSample, MuJoCoLivox360
-from vector_os_nano.hardware.sim.sensors.lidar360 import _build_ray_dirs
+from zeno.hardware.sim.sensors import LidarSample, MuJoCoLivox360
+from zeno.hardware.sim.sensors.lidar360 import _build_ray_dirs
 
 
 # ---------------------------------------------------------------------------

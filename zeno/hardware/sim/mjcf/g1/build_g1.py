@@ -9,7 +9,7 @@ set meshdir="", add a forward-pointing head camera on torso_link, then
 write the compiled model to g1.xml.
 
 Usage:
-    python3 vector_os_nano/hardware/sim/mjcf/g1/build_g1.py
+    python3 zeno/hardware/sim/mjcf/g1/build_g1.py
 """
 from __future__ import annotations
 

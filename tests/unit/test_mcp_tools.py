@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from vector_os_nano.mcp.tools import (
+from zeno.mcp.tools import (
     skills_to_mcp_tools,
     skill_schema_to_mcp_tool,
     build_natural_language_tool,
@@ -173,8 +173,8 @@ class TestSkillSchemaAllOptional:
 
 class TestSkillsToMcpTools:
     def _make_registry(self) -> "SkillRegistry":
-        from vector_os_nano.core.skill import SkillRegistry
-        from vector_os_nano.skills import get_default_skills
+        from zeno.core.skill import SkillRegistry
+        from zeno.skills import get_default_skills
 
         registry = SkillRegistry()
         for s in get_default_skills():

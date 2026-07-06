@@ -7,8 +7,8 @@ Replaces hard-coded gripper routing in Agent._try_direct().
 """
 from __future__ import annotations
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
 
 
 @skill(

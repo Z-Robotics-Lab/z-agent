@@ -12,8 +12,8 @@ existing anthropic/openrouter paths are untouched.
 """
 from __future__ import annotations
 
-import vector_os_nano.vcli.config as config
-import vector_os_nano.vcli.oauth as oauth
+import zeno.vcli.config as config
+import zeno.vcli.oauth as oauth
 
 
 def _patch_config(monkeypatch, cfg: dict) -> None:

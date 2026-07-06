@@ -24,12 +24,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.vcli.native_loop import (
+from zeno.vcli.native_loop import (
     _NativeDetectTool,
     _build_motor_tools,
     _registered_capability,
 )
-from vector_os_nano.vcli.worlds.robot import RobotWorld
+from zeno.vcli.worlds.robot import RobotWorld
 
 
 # --- fakes -----------------------------------------------------------------
@@ -128,7 +128,7 @@ def test_g1_detect_verify_classifies_RAN_not_grounded():
     """The moat-level proof: with no detect_objects oracle in the g1 namespace,
     ``len(detect_objects()) > 0`` classifies RAN — fail-closed to the honest
     D50 grade, NEVER a GROUNDED on a self-read."""
-    from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+    from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
 
     ns = RobotWorld().build_verify_namespace(_G1Agent())
     oracle_names = frozenset(ns)  # single-sourced from the live verify-namespace

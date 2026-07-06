@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vector_os_nano.playground.scenario import Scenario
+from zeno.playground.scenario import Scenario
 
 # Resolve bundled scene XMLs from the installed package, not a hardcoded path.
 _SIM_DIR = Path(__file__).resolve().parent.parent / "hardware" / "sim"

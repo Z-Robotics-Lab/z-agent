@@ -23,10 +23,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.blackboard import Blackboard
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategyResult
-from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
+from zeno.vcli.cognitive.blackboard import Blackboard
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.strategy_selector import StrategyResult
+from zeno.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ def _build(objects: list[dict[str, Any]]) -> tuple[GoalExecutor, dict[str, Any]]
     body that 'picks' each item. Returns (executor, state) where ``state`` records
     the order of picked names so per-item binding can be asserted.
     """
-    from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+    from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
     state: dict[str, Any] = {"picked": []}
 
@@ -261,7 +261,7 @@ def test_foreach_runs_after_producing_step() -> None:
 
 
 def test_foreach_body_honors_intra_body_depends_on() -> None:
-    from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+    from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
     order: list[str] = []
 

@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vector_os_nano.vcli.tools.base import ToolContext, ToolResult
+from zeno.vcli.tools.base import ToolContext, ToolResult
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ def _make_agent(skills: list[Any] | None = None) -> MagicMock:
 
 class TestWrapSingleSkill:
     def test_wrap_single_skill(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -133,7 +133,7 @@ class TestWrapSingleSkill:
 
     def test_wrap_skill_name_fallback_to_name_attr(self) -> None:
         """description falls back to skill.name when description attr is absent."""
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         class NoDescSkill:
             name = "no_desc"
@@ -159,7 +159,7 @@ class TestWrapSingleSkill:
 
 class TestWrapperInputSchema:
     def test_wrapper_input_schema(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -171,7 +171,7 @@ class TestWrapperInputSchema:
         assert "timeout" in schema["properties"]
 
     def test_schema_type_mapping(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -182,7 +182,7 @@ class TestWrapperInputSchema:
         assert props["timeout"]["type"] == "number"
 
     def test_schema_required_excludes_optional(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -194,7 +194,7 @@ class TestWrapperInputSchema:
         assert "timeout" not in required
 
     def test_schema_empty_parameters(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockFailingSkill()
         agent = _make_agent([skill])
@@ -206,7 +206,7 @@ class TestWrapperInputSchema:
         assert schema["required"] == []
 
     def test_schema_description_in_property(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -223,7 +223,7 @@ class TestWrapperInputSchema:
 
 class TestWrapperExecute:
     def test_wrapper_execute_calls_skill(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MagicMock()
         skill.name = "mock_skill"
@@ -244,7 +244,7 @@ class TestWrapperExecute:
         assert call_params == {"param": "value"}
 
     def test_wrapper_formats_result_success(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         skill_instance = MagicMock(spec=MockSkill)
@@ -269,7 +269,7 @@ class TestWrapperExecute:
         assert "succeeded" in result.content.lower()
 
     def test_wrapper_formats_result_with_data(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MagicMock()
         skill.name = "data_skill"
@@ -287,7 +287,7 @@ class TestWrapperExecute:
         assert "key" in result.content or result.metadata.get("key") == "val"
 
     def test_wrapper_error_result(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockFailingSkill()
         skill_instance = MagicMock(spec=MockFailingSkill)
@@ -311,7 +311,7 @@ class TestWrapperExecute:
         assert "hardware error" in result.content
 
     def test_wrapper_error_no_message_uses_fallback(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MagicMock()
         skill.name = "silent_fail"
@@ -330,7 +330,7 @@ class TestWrapperExecute:
         assert "silent_fail" in result.content
 
     def test_wrapper_syncs_robot_state_on_success(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MagicMock()
         skill.name = "sync_test"
@@ -355,7 +355,7 @@ class TestWrapperExecute:
 
 class TestMotorSkillPermission:
     def test_motor_skill_permission_ask(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockMotorSkill()
         agent = _make_agent([skill])
@@ -366,7 +366,7 @@ class TestMotorSkillPermission:
         assert result.behavior == "ask"
 
     def test_read_skill_permission_allow(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -377,7 +377,7 @@ class TestMotorSkillPermission:
         assert result.behavior == "allow"
 
     def test_motor_keyword_in_effects(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         class GripperSkill:
             name = "close_gripper"
@@ -399,7 +399,7 @@ class TestMotorSkillPermission:
         assert result.behavior == "ask"
 
     def test_navigate_keyword_is_motor(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         class NavSkill:
             name = "go_somewhere"
@@ -426,7 +426,7 @@ class TestMotorSkillPermission:
 
 class TestConcurrencySafety:
     def test_motor_not_concurrency_safe(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockMotorSkill()
         agent = _make_agent([skill])
@@ -435,7 +435,7 @@ class TestConcurrencySafety:
         assert wrapper.is_concurrency_safe({}) is False
 
     def test_read_concurrency_safe(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -444,7 +444,7 @@ class TestConcurrencySafety:
         assert wrapper.is_concurrency_safe({}) is True
 
     def test_motor_not_read_only(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockMotorSkill()
         agent = _make_agent([skill])
@@ -453,7 +453,7 @@ class TestConcurrencySafety:
         assert wrapper.is_read_only({}) is False
 
     def test_read_skill_is_read_only(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -469,7 +469,7 @@ class TestConcurrencySafety:
 
 class TestWrapSkillsMultiple:
     def test_wrap_skills_multiple(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+        from zeno.vcli.tools.skill_wrapper import wrap_skills
 
         skill_a = MockSkill()
         skill_b = MockMotorSkill()
@@ -483,7 +483,7 @@ class TestWrapSkillsMultiple:
         assert "move_arm" in names
 
     def test_wrap_skills_returns_wrapper_instances(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills, SkillWrapperTool
+        from zeno.vcli.tools.skill_wrapper import wrap_skills, SkillWrapperTool
 
         skill = MockSkill()
         agent = _make_agent([skill])
@@ -492,7 +492,7 @@ class TestWrapSkillsMultiple:
         assert all(isinstance(t, SkillWrapperTool) for t in tools)
 
     def test_wrap_skills_empty_registry(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+        from zeno.vcli.tools.skill_wrapper import wrap_skills
 
         agent = _make_agent(skills=[])
         tools = wrap_skills(agent)
@@ -500,7 +500,7 @@ class TestWrapSkillsMultiple:
 
     def test_wrap_skills_skips_none(self) -> None:
         """registry.get() returning None for a skill name should be skipped."""
-        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+        from zeno.vcli.tools.skill_wrapper import wrap_skills
 
         agent = MagicMock()
         agent._build_context.return_value = MagicMock()
@@ -514,8 +514,8 @@ class TestWrapSkillsMultiple:
         assert tools == []
 
     def test_wrap_skills_satisfies_tool_protocol(self) -> None:
-        from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
-        from vector_os_nano.vcli.tools.base import Tool
+        from zeno.vcli.tools.skill_wrapper import wrap_skills
+        from zeno.vcli.tools.base import Tool
 
         skill = MockSkill()
         agent = _make_agent([skill])

@@ -4,7 +4,7 @@
 """L34c: Door learning during exploration."""
 import pytest
 from unittest.mock import MagicMock, patch
-from vector_os_nano.core.scene_graph import SceneGraph
+from zeno.core.scene_graph import SceneGraph
 
 
 class TestExploreDoorLearning:
@@ -14,7 +14,7 @@ class TestExploreDoorLearning:
         """explore.py should not import _ROOM_CENTERS."""
         import ast
         import inspect
-        from vector_os_nano.skills.go2 import explore
+        from zeno.skills.go2 import explore
         source = inspect.getsource(explore)
         tree = ast.parse(source)
         for node in ast.walk(tree):
@@ -68,7 +68,7 @@ class TestExploreDoorLearning:
     def test_explore_started_event_no_hardcoded_total(self):
         """Started event should have total_rooms=0 (unknown)."""
         import ast, inspect
-        from vector_os_nano.skills.go2 import explore
+        from zeno.skills.go2 import explore
         source = inspect.getsource(explore)
         # Verify no reference to len(_ROOM_CENTERS) in emit calls
         assert "len(_ROOM_CENTERS)" not in source
@@ -149,7 +149,7 @@ class TestExploreDoorLearning:
     def test_no_detect_current_room_in_source(self):
         """explore.py must not call _detect_current_room anywhere."""
         import inspect
-        from vector_os_nano.skills.go2 import explore
+        from zeno.skills.go2 import explore
         source = inspect.getsource(explore)
         assert "_detect_current_room" not in source, \
             "_detect_current_room is still referenced in explore.py"

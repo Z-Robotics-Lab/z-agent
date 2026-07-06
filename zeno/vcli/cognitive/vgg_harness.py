@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
@@ -140,7 +140,7 @@ class VGGHarness:
         for pipeline_attempt in range(cfg.max_pipeline_retries + 1):
             # --- Abort check ---
             try:
-                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                from zeno.vcli.cognitive.abort import is_abort_requested
                 if is_abort_requested():
                     break
             except ImportError:
@@ -229,7 +229,7 @@ class VGGHarness:
         never aborts the run.
         """
         try:
-            from vector_os_nano.vcli.cognitive.blackboard import Blackboard
+            from zeno.vcli.cognitive.blackboard import Blackboard
             self._executor.blackboard = Blackboard()
         except Exception as exc:  # noqa: BLE001
             logger.debug("VGGHarness: could not attach blackboard: %s", exc)
@@ -476,7 +476,7 @@ class VGGHarness:
         for i, sub_goal in enumerate(ordered):
             # --- Abort check ---
             try:
-                from vector_os_nano.vcli.cognitive.abort import is_abort_requested
+                from zeno.vcli.cognitive.abort import is_abort_requested
                 if is_abort_requested():
                     overall_success = False
                     break

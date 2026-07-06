@@ -24,8 +24,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.prompt import DEV_ROLE_PROMPT, DEV_TOOL_INSTRUCTIONS
-from vector_os_nano.vcli.worlds.base import DecomposeVocab
+from zeno.vcli.prompt import DEV_ROLE_PROMPT, DEV_TOOL_INSTRUCTIONS
+from zeno.vcli.worlds.base import DecomposeVocab
 
 # Bounds for read-only predicates (keep evaluation cheap + safe within the
 # GoalVerifier 5s sandbox).
@@ -289,7 +289,7 @@ class DevWorld:
         # backend (e.g. before /login), keeping the dev path inert until then.
         if backend is None:
             return
-        from vector_os_nano.vcli.cognitive.capabilities import LLMChatCapability
+        from zeno.vcli.cognitive.capabilities import LLMChatCapability
         registry.register(LLMChatCapability(backend))
 
     def decompose_vocab(self) -> DecomposeVocab:

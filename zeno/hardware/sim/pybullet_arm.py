@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
-from vector_os_nano.hardware.arm import ensure_finite_joint_targets
+from zeno.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 

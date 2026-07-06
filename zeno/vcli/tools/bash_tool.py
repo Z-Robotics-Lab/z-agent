@@ -14,7 +14,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     PermissionResult,
     ToolContext,
     ToolResult,

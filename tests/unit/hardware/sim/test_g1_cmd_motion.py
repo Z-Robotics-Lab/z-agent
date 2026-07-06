@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
+from zeno.hardware.sim.mujoco_g1 import MuJoCoG1
 
 
 def _fresh() -> MuJoCoG1:

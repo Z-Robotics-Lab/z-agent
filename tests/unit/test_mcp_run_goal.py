@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from vector_os_nano.mcp.tools import skills_to_mcp_tools, build_run_goal_tool
+from zeno.mcp.tools import skills_to_mcp_tools, build_run_goal_tool
 
 
 class TestRunGoalMCPTool:
@@ -50,7 +50,7 @@ class TestRunGoalMCPTool:
         assert props["verify"]["default"] is True
 
     def test_format_vgg_trace_none(self):
-        from vector_os_nano.mcp.tools import _format_vgg_trace
+        from zeno.mcp.tools import _format_vgg_trace
 
         result = _format_vgg_trace(None)
         data = json.loads(result)

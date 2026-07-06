@@ -34,7 +34,7 @@ from tools.acceptance.vlm_guard import (
 # ANSI/spinner already stripped (this is what _clean_log yields to the detector).
 CANNED_402_STREAM = (
     "native look\n"
-    "ERROR:vector_os_nano.skills.go2.look:[LOOK] VLM call failed: "
+    "ERROR:zeno.skills.go2.look:[LOOK] VLM call failed: "
     'OpenRouter API client error 402: {"error":{"message":"This request requires more '
     'credits, or fewer max_tokens. You requested up to 65536 tokens, but can only afford '
     '582.","code":402}}\n'
@@ -163,13 +163,13 @@ class TestReplCliArgv:
 
     def test_default_is_bare_native_loop(self) -> None:
         # No env → byte-identical to the historical spawn (no --verbose leaks in).
-        assert repl_cli_argv({}) == ["-m", "vector_os_nano.vcli.cli", "--native-loop"]
+        assert repl_cli_argv({}) == ["-m", "zeno.vcli.cli", "--native-loop"]
 
     def test_verbose_appended_when_flag_set(self) -> None:
         argv = repl_cli_argv({TRACE_ENV_VAR: "1"})
         assert argv[-1] == "--verbose"
         # base invocation preserved (acceptance face: --native-loop, no -p/--sim-go2)
-        assert argv[:3] == ["-m", "vector_os_nano.vcli.cli", "--native-loop"]
+        assert argv[:3] == ["-m", "zeno.vcli.cli", "--native-loop"]
 
     def test_falsey_values_do_not_enable(self) -> None:
         for falsey in ("0", "false", "no", "", "  "):

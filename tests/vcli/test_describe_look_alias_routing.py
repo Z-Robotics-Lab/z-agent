@@ -21,9 +21,9 @@ Pure registry test — no MuJoCo, no GPU, no network.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.skill import SkillRegistry
-from vector_os_nano.skills import get_default_skills
-from vector_os_nano.skills.go2 import get_go2_skills
+from zeno.core.skill import SkillRegistry
+from zeno.skills import get_default_skills
+from zeno.skills.go2 import get_go2_skills
 
 
 def _go2_registry() -> SkillRegistry:

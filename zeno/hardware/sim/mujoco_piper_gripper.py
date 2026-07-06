@@ -17,7 +17,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 logger = logging.getLogger(__name__)
 

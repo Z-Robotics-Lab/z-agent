@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from vector_os_nano.vcli.tools.base import ToolResult
+from zeno.vcli.tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@
 Pure logic — no MuJoCo / no GL — so these run in the canonical suite and pin the
 high-level run-mode distinction (macOS pump vs Linux/Windows daemon vs headless).
 """
-from vector_os_nano.hardware.sim import viewer_mode as vm
+from zeno.hardware.sim import viewer_mode as vm
 
 
 class TestResolveViewerDriveMode:

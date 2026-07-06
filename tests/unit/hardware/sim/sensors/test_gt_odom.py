@@ -12,7 +12,7 @@ import math
 
 import pytest
 
-from vector_os_nano.hardware.sim.sensors import (
+from zeno.hardware.sim.sensors import (
     GroundTruthOdomPublisher,
     OdomSample,
 )

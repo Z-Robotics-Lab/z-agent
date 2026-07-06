@@ -42,20 +42,20 @@ def _import_mujoco_go2():
     """Import MuJoCoGo2 by file path, loading its dependency chain."""
     import importlib.util
 
-    _types_path = _REPO_ROOT / "vector_os_nano" / "core" / "types.py"
+    _types_path = _REPO_ROOT / "zeno" / "core" / "types.py"
     types_spec = importlib.util.spec_from_file_location(
-        "vector_os_nano.core.types", str(_types_path)
+        "zeno.core.types", str(_types_path)
     )
     types_mod = importlib.util.module_from_spec(types_spec)  # type: ignore[arg-type]
-    sys.modules.setdefault("vector_os_nano.core.types", types_mod)
+    sys.modules.setdefault("zeno.core.types", types_mod)
     types_spec.loader.exec_module(types_mod)  # type: ignore[union-attr]
 
     spec = importlib.util.spec_from_file_location(
-        "vector_os_nano.hardware.sim.mujoco_go2",
-        str(_REPO_ROOT / "vector_os_nano" / "hardware" / "sim" / "mujoco_go2.py"),
+        "zeno.hardware.sim.mujoco_go2",
+        str(_REPO_ROOT / "zeno" / "hardware" / "sim" / "mujoco_go2.py"),
     )
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    sys.modules["vector_os_nano.hardware.sim.mujoco_go2"] = mod
+    sys.modules["zeno.hardware.sim.mujoco_go2"] = mod
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod.MuJoCoGo2
 
@@ -98,7 +98,7 @@ def go2_room_fn():
 
 
 def _get_sim_intrinsics(width: int = 320, height: int = 240):
-    from vector_os_nano.perception.depth_projection import mujoco_intrinsics
+    from zeno.perception.depth_projection import mujoco_intrinsics
     return mujoco_intrinsics(width, height, vfov_deg=42.0)
 
 
@@ -117,7 +117,7 @@ class TestDepthProjectionGroundTruth:
 
     def test_center_pixel_projects_to_camera_forward(self, go2_room):
         """Center pixel should project to a point directly in front of the camera."""
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,
@@ -182,7 +182,7 @@ class TestDepthProjectionGroundTruth:
         The camera forward axis passes through the center pixel. For center pixel,
         the projected world point should match cam_pos + depth * cam_forward exactly.
         """
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,
@@ -226,7 +226,7 @@ class TestDepthProjectionGroundTruth:
         Pick a pixel 40px to the right of center. The world projection should be
         displaced to the right (in camera's right direction) relative to center.
         """
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,
@@ -313,7 +313,7 @@ class TestDepthProjectionGroundTruth:
 
     def test_projection_within_room_bounds(self, go2_room):
         """The projected center pixel should land inside the house (0..20, 0..14)."""
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,
@@ -367,7 +367,7 @@ class TestTimingMismatchBug:
         at position B. Project using depth from A but pose from B — the result
         should be wrong by the distance the robot moved.
         """
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,
@@ -440,7 +440,7 @@ class TestTimingMismatchBug:
         This is the CORRECT behavior after the fix: capture RGB, depth, and
         pose all at the same simulation step.
         """
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,
@@ -503,7 +503,7 @@ class TestAtomicCapturePattern:
             # use cached depth + cam_pose
         """
         import time
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,
@@ -559,7 +559,7 @@ class TestAtomicCapturePattern:
             scene   = vlm.describe_scene(frame)   <- slow, AFTER sensor capture
         This test simulates that ordering and checks correctness.
         """
-        from vector_os_nano.perception.depth_projection import (
+        from zeno.perception.depth_projection import (
             mujoco_intrinsics,
             pixel_to_camera,
             camera_to_world,

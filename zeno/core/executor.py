@@ -14,7 +14,7 @@ import time
 from collections import defaultdict
 from typing import Any
 
-from vector_os_nano.core.types import ExecutionResult, StepTrace, TaskPlan, TaskStep
+from zeno.core.types import ExecutionResult, StepTrace, TaskPlan, TaskStep
 
 logger = logging.getLogger(__name__)
 

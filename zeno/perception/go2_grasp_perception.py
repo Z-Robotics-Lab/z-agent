@@ -25,8 +25,8 @@ from typing import Any
 
 import numpy as np
 
-from vector_os_nano.core.types import Detection
-from vector_os_nano.perception.depth_projection import mujoco_intrinsics
+from zeno.core.types import Detection
+from zeno.perception.depth_projection import mujoco_intrinsics
 
 logger = logging.getLogger(__name__)
 
@@ -108,13 +108,13 @@ class Go2GraspPerception:
 
     def _ensure_detector(self) -> None:
         if self._vlm is None:
-            from vector_os_nano.perception.grounding_dino import get_shared_detector
+            from zeno.perception.grounding_dino import get_shared_detector
             logger.info("[GO2-PERCEPT] using shared grounding-dino detector (lazy)")
             self._vlm = get_shared_detector()
 
     def _ensure_tracker(self) -> None:
         if self._tracker is None:
-            from vector_os_nano.perception.tracker import EdgeTAMTracker
+            from zeno.perception.tracker import EdgeTAMTracker
             logger.info("[GO2-PERCEPT] loading EdgeTAM tracker (lazy)")
             self._tracker = EdgeTAMTracker()
 
@@ -141,7 +141,7 @@ class Go2GraspPerception:
         path (VECTOR_VLM_URL local Ollama, else OPENROUTER_API_KEY).
         """
         if self._describe_vlm is None:
-            from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+            from zeno.perception.vlm_go2 import Go2VLMPerception
             logger.info("[GO2-PERCEPT] building Go2VLMPerception describe seam (lazy)")
             self._describe_vlm = Go2VLMPerception()
 
@@ -220,7 +220,7 @@ class Go2GraspPerception:
         given ('red'/'green'/'blue', D47), selects the salient blob of THAT colour
         instead of the front-most one (None if no such blob — FAIL LOUD).
         """
-        from vector_os_nano.perception.front_object import front_object_mask
+        from zeno.perception.front_object import front_object_mask
         if rgb is None:
             rgb = self.get_color_frame()
         if depth is None:

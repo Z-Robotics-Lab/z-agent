@@ -23,18 +23,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from vector_os_nano.vcli.backends import LLMBackend
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.session import Session, TokenUsage
-from vector_os_nano.vcli.tool_execution import (
+from zeno.vcli.backends import LLMBackend
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.session import Session, TokenUsage
+from zeno.vcli.tool_execution import (
     DECISION_ASK_ALLOW,
     DECISION_ASK_DENY,
     DECISION_DENY,
     execute_resolved_tool,
     resolve_permission,
 )
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     ToolContext,
     ToolRegistry,
     ToolResult,
@@ -42,18 +42,18 @@ from vector_os_nano.vcli.tools.base import (
 
 # Lazy import guard — VGG components may not be installed in all deployments
 try:
-    from vector_os_nano.vcli.cognitive import (
+    from zeno.vcli.cognitive import (
         GoalDecomposer,
         GoalExecutor,
         GoalVerifier,
         StrategySelector,
         StrategyStats,
     )
-    from vector_os_nano.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal, StepRecord
-    from vector_os_nano.vcli.cognitive.vgg_harness import VGGHarness, HarnessConfig
+    from zeno.vcli.cognitive.types import ExecutionTrace, GoalTree, SubGoal, StepRecord
+    from zeno.vcli.cognitive.vgg_harness import VGGHarness, HarnessConfig
     # Single-source the generic target-binding / prefer-suggested-verify guidance
     # so the engine's neutral intro carries exactly what the registry vocab does.
-    from vector_os_nano.vcli.cognitive.vocab_from_registry import (
+    from zeno.vcli.cognitive.vocab_from_registry import (
         _TARGET_BINDING_GUIDANCE,
     )
     _VGG_AVAILABLE = True
@@ -343,7 +343,7 @@ class VectorEngine:
         # ObjectMemory — sync from SceneGraph if available.
         # Isolated try/except: failure here must not block the rest of VGG init.
         try:
-            from vector_os_nano.vcli.cognitive.object_memory import ObjectMemory
+            from zeno.vcli.cognitive.object_memory import ObjectMemory
             _sg_ref = getattr(agent, "_spatial_memory", None)
             if _sg_ref is not None:
                 self._object_memory = ObjectMemory()
@@ -385,8 +385,8 @@ class VectorEngine:
         experience_compiler = None
         if _persist is not None:
             try:
-                from vector_os_nano.vcli.cognitive.experience_compiler import ExperienceCompiler
-                from vector_os_nano.vcli.cognitive.template_library import TemplateLibrary
+                from zeno.vcli.cognitive.experience_compiler import ExperienceCompiler
+                from zeno.vcli.cognitive.template_library import TemplateLibrary
                 template_library = TemplateLibrary(
                     persist_path=str(_persist / "goal_templates.json")
                 )
@@ -402,7 +402,7 @@ class VectorEngine:
         # and the path stays byte-identical.
         capability_registry: Any = None
         try:
-            from vector_os_nano.vcli.cognitive.capabilities import CapabilityRegistry
+            from zeno.vcli.cognitive.capabilities import CapabilityRegistry
             capability_registry = CapabilityRegistry()
             if world is not None and hasattr(world, "register_capabilities"):
                 world.register_capabilities(capability_registry, agent, _backend)
@@ -421,7 +421,7 @@ class VectorEngine:
         _vocab_kwargs: dict = {}
         # Single-source the base-capability gate (Rule 11) — the one resolver over the
         # declared CapabilityProfile, byte-identical to the prior ``_base is not None``.
-        from vector_os_nano.embodiments.capability_profile import (
+        from zeno.embodiments.capability_profile import (
             resolve_capability_profile,
         )
 
@@ -498,7 +498,7 @@ class VectorEngine:
         _skill_registry_ref = skill_registry
 
         def _build_context() -> Any:
-            from vector_os_nano.core.skill import SkillContext
+            from zeno.core.skill import SkillContext
             _base = getattr(_agent_ref, "_base", None)
             _arm = getattr(_agent_ref, "_arm", None)
             _gripper = getattr(_agent_ref, "_gripper", None)
@@ -539,7 +539,7 @@ class VectorEngine:
         code_executor: Any = None
         tool_dispatcher: Any = None
         try:
-            from vector_os_nano.vcli.cognitive.code_executor import CodeExecutor
+            from zeno.vcli.cognitive.code_executor import CodeExecutor
             # The code-as-policy sandbox must NOT receive side-effecting verifier
             # predicates (e.g. tests_pass spawns subprocesses, bypassing the
             # permission gate). The GoalVerifier keeps the full namespace; the
@@ -553,8 +553,8 @@ class VectorEngine:
         # skill/primitive path (Phase C migrates robot tools behind this seam).
         if world is not None and not world.is_robot():
             try:
-                from vector_os_nano.vcli.cognitive.tool_dispatcher import ToolDispatcher
-                from vector_os_nano.vcli.worlds.dev import DEV_TOOL_ALLOWLIST
+                from zeno.vcli.cognitive.tool_dispatcher import ToolDispatcher
+                from zeno.vcli.worlds.dev import DEV_TOOL_ALLOWLIST
                 tool_dispatcher = ToolDispatcher(
                     self._registry,
                     self._permissions,
@@ -675,7 +675,7 @@ class VectorEngine:
         class-default verify signatures if the namespace can't be built here, so
         the decomposer is never left without a verify allowlist.
         """
-        from vector_os_nano.vcli.cognitive.vocab_from_registry import (
+        from zeno.vcli.cognitive.vocab_from_registry import (
             build_decompose_vocab,
         )
 
@@ -719,7 +719,7 @@ class VectorEngine:
         if not signatures:
             # Class-default robot verify signatures — never leave the validator
             # without an allowlist.
-            from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
+            from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
 
             return dict(GoalDecomposer._VERIFY_FN_SIGNATURES)
         return signatures
@@ -733,7 +733,7 @@ class VectorEngine:
         real verify-function allowlist, so the single-source invariant holds even
         on the failure path.
         """
-        from vector_os_nano.vcli.cognitive.vocab_from_registry import (
+        from zeno.vcli.cognitive.vocab_from_registry import (
             build_decompose_vocab,
         )
 
@@ -799,7 +799,7 @@ class VectorEngine:
         # capability, match a base primitive, or fall through to the convention
         # "treat as skill" path (which never returns "invalid").
         try:
-            from vector_os_nano.vcli.cognitive.strategy_selector import _PRIMITIVE_NAMES
+            from zeno.vcli.cognitive.strategy_selector import _PRIMITIVE_NAMES
             _SKILL_SUFFIX = "_skill"
         except Exception as _imp_exc:  # noqa: BLE001
             logger.debug("preflight: strategy_selector import failed (%s) — skipping route check", _imp_exc)
@@ -898,7 +898,7 @@ class VectorEngine:
         ns: dict[str, Any] = {}
         # Domain-general dev predicates — always available (no robot required).
         try:
-            from vector_os_nano.vcli.worlds.dev import dev_verify_namespace
+            from zeno.vcli.worlds.dev import dev_verify_namespace
             ns.update(dev_verify_namespace())
         except Exception as exc:  # noqa: BLE001
             logger.debug("dev verify namespace unavailable: %s", exc)
@@ -938,7 +938,7 @@ class VectorEngine:
 
         # predict_navigation (from predict module)
         if sg:
-            from vector_os_nano.vcli.cognitive.predict import predict_navigation
+            from zeno.vcli.cognitive.predict import predict_navigation
             _current_room_fn = ns.get("nearest_room")
             def _predict_nav(target: str) -> dict:
                 current = _current_room_fn() if _current_room_fn else ""
@@ -984,7 +984,7 @@ class VectorEngine:
         world = getattr(self, "_world", None)
         if world is None:
             try:
-                from vector_os_nano.vcli.worlds.registry import resolve_world
+                from zeno.vcli.worlds.registry import resolve_world
                 world = resolve_world(agent)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("world resolution for verify namespace failed: %s", exc)
@@ -1091,7 +1091,7 @@ class VectorEngine:
         # Without this, a prior "stop" command leaves the flag set and
         # all subsequent VGG tasks are immediately aborted.
         try:
-            from vector_os_nano.vcli.cognitive.abort import clear_abort
+            from zeno.vcli.cognitive.abort import clear_abort
             clear_abort()
         except ImportError:
             pass
@@ -1227,7 +1227,7 @@ class VectorEngine:
         Returns empty string if unresolvable.
         """
         try:
-            from vector_os_nano.skills.navigate import _resolve_room
+            from zeno.skills.navigate import _resolve_room
         except ImportError:
             return ""
         agent = getattr(self, "_vgg_agent", None)
@@ -1239,7 +1239,7 @@ class VectorEngine:
         # Clear abort flag before every execute. Direct callers (e.g. tests) that
         # skip vgg_decompose() would otherwise inherit a stale abort from a prior stop.
         try:
-            from vector_os_nano.vcli.cognitive.abort import clear_abort
+            from zeno.vcli.cognitive.abort import clear_abort
             clear_abort()
         except ImportError:
             pass
@@ -1342,7 +1342,7 @@ class VectorEngine:
         # the viewer, so forcing sync-on-main there only freezes the REPL during
         # a motion (laggy Ctrl-C / "stop") with no safety benefit. Gate the
         # synchronous path on mjpython, mirroring viewer_mode's platform seam.
-        from vector_os_nano.hardware.sim.viewer_mode import (  # noqa: PLC0415
+        from zeno.hardware.sim.viewer_mode import (  # noqa: PLC0415
             running_under_mjpython,
         )
         if self._has_live_viewer() and running_under_mjpython():
@@ -1443,7 +1443,7 @@ class VectorEngine:
         app_state: dict[str, Any] | None = None,
     ) -> TurnResult:
         """P0 stop bypass — execute StopSkill directly, no LLM call."""
-        from vector_os_nano.vcli.cognitive.abort import request_abort
+        from zeno.vcli.cognitive.abort import request_abort
         request_abort()
 
         # Invalidate world context cache — robot state changes after a stop
@@ -1480,7 +1480,7 @@ class VectorEngine:
         view_cb = getattr(self, "_vgg_step_view_callback", None)
         if view_cb:
             try:
-                from vector_os_nano.vcli.cognitive.observation import step_view
+                from zeno.vcli.cognitive.observation import step_view
                 view_cb(step_view(step))
             except Exception as exc:  # noqa: BLE001
                 logger.debug("VGG: step_view emit skipped: %s", exc)
@@ -1492,7 +1492,7 @@ class VectorEngine:
         replan ``validation_notes`` + outcome) for the front-end to render. Does
         not mutate the trace and adds no fields to the frozen VGG types.
         """
-        from vector_os_nano.vcli.cognitive.observation import run_snapshot
+        from zeno.vcli.cognitive.observation import run_snapshot
         return run_snapshot(trace)
 
     # ------------------------------------------------------------------
@@ -1543,7 +1543,7 @@ class VectorEngine:
 
         # --- Clear abort flag at start of each new task ---
         try:
-            from vector_os_nano.vcli.cognitive.abort import clear_abort
+            from zeno.vcli.cognitive.abort import clear_abort
             clear_abort()
         except ImportError:
             pass
@@ -1663,7 +1663,7 @@ class VectorEngine:
         and ``--native-first`` flags remain explicit forces. Each caller feeds the
         returned trace to ``VerdictReport.from_trace`` — this never computes ``verified``.
         """
-        from vector_os_nano.vcli.native_loop import run_turn_native as _run
+        from zeno.vcli.native_loop import run_turn_native as _run
 
         return _run(
             self,
@@ -1853,7 +1853,7 @@ class VectorEngine:
         is treated as "not verified" so the moat never silently passes.
         """
         try:
-            from vector_os_nano.vcli.cognitive.trace_store import (
+            from zeno.vcli.cognitive.trace_store import (
                 evidence_passed,
                 verify_oracle_names,
             )
@@ -1991,7 +1991,7 @@ class VectorEngine:
 
         # Pre-hook
         if self._hooks is not None:
-            from vector_os_nano.vcli.hooks import ToolHookContext
+            from zeno.vcli.hooks import ToolHookContext
             self._hooks.fire_pre(ToolHookContext(tool_name=tool_name, params=params))
 
         start = time.monotonic()
@@ -2006,7 +2006,7 @@ class VectorEngine:
 
         # Post-hook
         if self._hooks is not None:
-            from vector_os_nano.vcli.hooks import ToolHookContext
+            from zeno.vcli.hooks import ToolHookContext
             self._hooks.fire_post(ToolHookContext(
                 tool_name=tool_name, params=params, result=result, duration=duration,
             ))

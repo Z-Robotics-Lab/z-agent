@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.vcli.worlds.base import DecomposeVocab
+from zeno.vcli.worlds.base import DecomposeVocab
 
 # Base locomotion primitives a mobile robot exposes in addition to its skills.
 # Included in the vocabulary only when the connected agent has a mobile base

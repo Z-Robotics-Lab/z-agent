@@ -7,7 +7,7 @@ R2a PART C: this is the project's #1-failure fix made concrete. Instead of a
 ``~/sandbox`` script that pokes the engine directly (bypassing the product), this
 harness spawns the ACTUAL entrypoint::
 
-    python -m vector_os_nano.vcli.cli -p <prompt> --json
+    python -m zeno.vcli.cli -p <prompt> --json
 
 under a stdlib ``pty`` (so the child sees a TTY, exactly like real use), waits for
 the fixed ``VECTOR_VERDICT {<json>}`` sentinel line on the child's stdout, parses
@@ -170,7 +170,7 @@ def run_cli_turn(
     Raises AssertionError if no VECTOR_VERDICT line was emitted.
     """
     argv = [
-        sys.executable, "-m", "vector_os_nano.vcli.cli",
+        sys.executable, "-m", "zeno.vcli.cli",
         "-p", prompt, "--json", "--no-permission",
     ]
     if scenario:
@@ -353,7 +353,7 @@ def run_repl_session(
     opens during an automated drive.
     """
     argv = [
-        sys.executable, "-m", "vector_os_nano.vcli.cli", "--no-permission",
+        sys.executable, "-m", "zeno.vcli.cli", "--no-permission",
     ]
     if sim:
         argv.append("--sim")

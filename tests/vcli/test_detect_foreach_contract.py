@@ -21,11 +21,11 @@ mujoco = pytest.importorskip("mujoco")  # headless sim oracle; skip if unavailab
 
 def _detect_objects():
     """Run DetectSkill against the headless MuJoCo sim oracle, return its objects list."""
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-    from vector_os_nano.skills.detect import DetectSkill
+    from zeno.core.agent import Agent
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.skills.detect import DetectSkill
 
     arm = MuJoCoArm(gui=False)
     arm.connect()

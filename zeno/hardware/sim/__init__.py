@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""vector_os_nano.hardware.sim — simulation backends.
+"""zeno.hardware.sim — simulation backends.
 
 Provides drop-in replacements for hardware arm and gripper,
 allowing skills and the Agent to run in headless simulation
@@ -16,12 +16,12 @@ MuJoCo and PyBullet are imported eagerly. Isaac Sim proxies are imported
 lazily inside try/except blocks because they depend on rclpy which is only
 available in ROS2 environments.
 """
-from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
-from vector_os_nano.hardware.sim.pybullet_gripper import SimulatedGripper
+from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+from zeno.hardware.sim.pybullet_arm import SimulatedArm
+from zeno.hardware.sim.pybullet_gripper import SimulatedGripper
 
 __all__ = [
     "MuJoCoArm",
@@ -34,21 +34,21 @@ __all__ = [
 
 # Isaac Sim proxies — optional, require rclpy (ROS2 must be sourced).
 try:
-    from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+    from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
 
     __all__ += ["IsaacSimProxy"]
 except Exception:
     pass
 
 try:
-    from vector_os_nano.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
+    from zeno.hardware.sim.isaac_sim_arm_proxy import IsaacSimArmProxy
 
     __all__ += ["IsaacSimArmProxy"]
 except Exception:
     pass
 
 try:
-    from vector_os_nano.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
+    from zeno.hardware.sim.gazebo_go2_proxy import GazeboGo2Proxy
 
     __all__ += ["GazeboGo2Proxy"]
 except Exception:

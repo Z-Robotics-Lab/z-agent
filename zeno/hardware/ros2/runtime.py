@@ -10,7 +10,7 @@ process lifetime.  Replaces the pattern where each ROS2 proxy calls
 
 Usage::
 
-    from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+    from zeno.hardware.ros2.runtime import get_ros2_runtime
 
     runtime = get_ros2_runtime()
     runtime.add_node(my_node)

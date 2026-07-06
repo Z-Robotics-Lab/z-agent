@@ -19,7 +19,7 @@ import logging
 import math
 from pathlib import Path
 from typing import Any
-from vector_os_nano.hardware.arm import ensure_finite_joint_targets
+from zeno.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 

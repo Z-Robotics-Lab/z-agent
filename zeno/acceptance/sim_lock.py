@@ -13,7 +13,7 @@ the last fd for that OFD closes — which the OS does on process death. The lock
 it; thus "the lock releases when the holder dies" holds (no stale-lock cleanup, no pidfile).
 
 Usage:
-    from vector_os_nano.acceptance import sim_lock
+    from zeno.acceptance import sim_lock
     with sim_lock.sim_lock():            # blocks until the host is sim-free, up to wait_timeout
         run_one_sim_turn()               # only OUR sim runs while we hold the lock
     # -> on exit: teardown of the sims WE started (targeted, not host-wide), then the lock releases.

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from vector_os_nano.acceptance import vision_judge as vj
+from zeno.acceptance import vision_judge as vj
 
 _ITEMS = [
     {"key": "scene_rendered", "question": "rendered?"},

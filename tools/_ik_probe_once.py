@@ -36,14 +36,14 @@ logging.getLogger().addHandler(_Cap())
 def main() -> int:
     import math
 
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-    from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper
-    from vector_os_nano.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
-    from vector_os_nano.perception.go2_grasp_perception import Go2GraspPerception
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-    from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-    from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+    from zeno.core.agent import Agent
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_piper import MuJoCoPiper
+    from zeno.hardware.sim.mujoco_piper_gripper import MuJoCoPiperGripper
+    from zeno.perception.go2_grasp_perception import Go2GraspPerception
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.skills.pick_top_down import PickTopDownSkill
+    from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
 
     go2 = MuJoCoGo2(gui=False, room=True, backend="mpc"); go2.connect()
     piper = MuJoCoPiper(go2); piper.connect()

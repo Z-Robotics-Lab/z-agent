@@ -30,9 +30,9 @@ import threading
 import time
 from typing import Any
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.perception.object_localizer import localize_objects_3d
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.perception.object_localizer import localize_objects_3d
 
 logger = logging.getLogger(__name__)
 

@@ -35,24 +35,24 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from vector_os_nano.core.scene_graph import (
+from zeno.core.scene_graph import (
     ObjectNode,
     RoomNode,
     SceneGraph,
     ViewpointNode,
 )
-from vector_os_nano.vcli.cognitive.object_memory import ObjectMemory, TrackedObject
-from vector_os_nano.vcli.cognitive.predict import (
+from zeno.vcli.cognitive.object_memory import ObjectMemory, TrackedObject
+from zeno.vcli.cognitive.predict import (
     predict_exploration_value,
     predict_navigation,
     predict_room_after_door,
 )
-from vector_os_nano.vcli.cognitive.visual_verifier import (
+from zeno.vcli.cognitive.visual_verifier import (
     VisualVerifyResult,
     should_verify,
     verify_visual,
 )
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
 
 # ---------------------------------------------------------------------------
@@ -399,8 +399,8 @@ class TestFullPipelineMuJoCo:
 
     def test_goal_executor_with_real_robot(self, go2_standing):
         """GoalExecutor runs a simple goal with real robot position data."""
-        from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.vcli.cognitive.goal_executor import GoalExecutor
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         sg = _populated_scene_graph()
         om = ObjectMemory(decay_lambda=0.001)

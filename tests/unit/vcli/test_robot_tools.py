@@ -116,7 +116,7 @@ class MockAgent:
 
 
 def _make_context(agent: Any | None = None) -> Any:
-    from vector_os_nano.vcli.tools.base import ToolContext
+    from zeno.vcli.tools.base import ToolContext
 
     return ToolContext(
         agent=agent,
@@ -134,7 +134,7 @@ def _make_context(agent: Any | None = None) -> Any:
 
 class TestWorldQueryTool:
     def _get_tool(self):
-        from vector_os_nano.vcli.tools.robot import WorldQueryTool
+        from zeno.vcli.tools.robot import WorldQueryTool
 
         return WorldQueryTool()
 
@@ -224,7 +224,7 @@ class TestWorldQueryTool:
 
 class TestRobotStatusTool:
     def _get_tool(self):
-        from vector_os_nano.vcli.tools.robot import RobotStatusTool
+        from zeno.vcli.tools.robot import RobotStatusTool
 
         return RobotStatusTool()
 
@@ -314,31 +314,31 @@ class TestRobotStatusTool:
 
 class TestRobotToolsMetadata:
     def test_world_query_read_only(self) -> None:
-        from vector_os_nano.vcli.tools.robot import WorldQueryTool
+        from zeno.vcli.tools.robot import WorldQueryTool
 
         t = WorldQueryTool()
         assert t.is_read_only({}) is True
 
     def test_robot_status_read_only(self) -> None:
-        from vector_os_nano.vcli.tools.robot import RobotStatusTool
+        from zeno.vcli.tools.robot import RobotStatusTool
 
         t = RobotStatusTool()
         assert t.is_read_only({}) is True
 
     def test_world_query_concurrency_safe(self) -> None:
-        from vector_os_nano.vcli.tools.robot import WorldQueryTool
+        from zeno.vcli.tools.robot import WorldQueryTool
 
         t = WorldQueryTool()
         assert t.is_concurrency_safe({}) is True
 
     def test_robot_status_concurrency_safe(self) -> None:
-        from vector_os_nano.vcli.tools.robot import RobotStatusTool
+        from zeno.vcli.tools.robot import RobotStatusTool
 
         t = RobotStatusTool()
         assert t.is_concurrency_safe({}) is True
 
     def test_world_query_permission_allow(self) -> None:
-        from vector_os_nano.vcli.tools.robot import WorldQueryTool
+        from zeno.vcli.tools.robot import WorldQueryTool
 
         t = WorldQueryTool()
         ctx = _make_context()
@@ -346,7 +346,7 @@ class TestRobotToolsMetadata:
         assert result.behavior == "allow"
 
     def test_robot_status_permission_allow(self) -> None:
-        from vector_os_nano.vcli.tools.robot import RobotStatusTool
+        from zeno.vcli.tools.robot import RobotStatusTool
 
         t = RobotStatusTool()
         ctx = _make_context()
@@ -354,11 +354,11 @@ class TestRobotToolsMetadata:
         assert result.behavior == "allow"
 
     def test_world_query_tool_name(self) -> None:
-        from vector_os_nano.vcli.tools.robot import WorldQueryTool
+        from zeno.vcli.tools.robot import WorldQueryTool
 
         assert WorldQueryTool.__tool_name__ == "world_query"
 
     def test_robot_status_tool_name(self) -> None:
-        from vector_os_nano.vcli.tools.robot import RobotStatusTool
+        from zeno.vcli.tools.robot import RobotStatusTool
 
         assert RobotStatusTool.__tool_name__ == "robot_status"

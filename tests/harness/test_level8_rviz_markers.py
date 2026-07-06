@@ -4,7 +4,7 @@
 """Level 8 — RViz MarkerArray: scene graph visualisation markers.
 
 Tests ``build_scene_graph_markers()`` from
-``vector_os_nano.ros2.nodes.scene_graph_viz``.
+``zeno.ros2.nodes.scene_graph_viz``.
 
 The function builds a ``visualization_msgs/MarkerArray`` from a live
 ``SceneGraph`` instance.  All tests are pure Python and run fast — no
@@ -27,7 +27,7 @@ Marker namespaces under test
     nav_goal        -- CYLINDER beacon at navigation target (only when provided)
     nav_goal_label  -- TEXT_VIEW_FACING "GOAL" label above the cylinder
 
-Reference: ``vector_os_nano/ros2/nodes/scene_graph_viz.py``
+Reference: ``zeno/ros2/nodes/scene_graph_viz.py``
 """
 from __future__ import annotations
 
@@ -73,14 +73,14 @@ class TestLevel8RVizMarkers:
     @staticmethod
     def _make_markers(sg, **kwargs):
         """Call build_scene_graph_markers and assert it returns something."""
-        from vector_os_nano.ros2.nodes.scene_graph_viz import build_scene_graph_markers
+        from zeno.ros2.nodes.scene_graph_viz import build_scene_graph_markers
         ma = build_scene_graph_markers(sg, **kwargs)
         assert ma is not None, "build_scene_graph_markers returned None (ROS2 missing?)"
         return ma
 
     @staticmethod
     def _fresh_sg():
-        from vector_os_nano.core.scene_graph import SceneGraph
+        from zeno.core.scene_graph import SceneGraph
         return SceneGraph()
 
     # ------------------------------------------------------------------
@@ -458,7 +458,7 @@ class TestLevel8RVizMarkers:
 
     def test_trajectory_capped_at_max_points(self):
         """Trajectory is capped at _TRAJECTORY_MAX_POINTS (200) most-recent entries."""
-        from vector_os_nano.ros2.nodes.scene_graph_viz import _TRAJECTORY_MAX_POINTS
+        from zeno.ros2.nodes.scene_graph_viz import _TRAJECTORY_MAX_POINTS
 
         sg = self._fresh_sg()
         # Pass more than the cap

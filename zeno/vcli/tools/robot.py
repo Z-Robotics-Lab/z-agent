@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import ToolContext, ToolResult, tool
+from zeno.vcli.tools.base import ToolContext, ToolResult, tool
 
 
 # ---------------------------------------------------------------------------

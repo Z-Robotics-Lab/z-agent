@@ -4,7 +4,7 @@
 """vcli.tools — Tool registry and discovery for Vector CLI's agentic harness."""
 from __future__ import annotations
 
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     CategorizedToolRegistry,
     PermissionResult,
     Tool,
@@ -33,18 +33,18 @@ def discover_all_tools() -> list:
     Each tool class is imported here to avoid circular imports at module level.
     The caller registers the returned instances into a ToolRegistry.
     """
-    from vector_os_nano.vcli.tools.bash_tool import BashTool
-    from vector_os_nano.vcli.tools.file_tools import FileEditTool, FileReadTool, FileWriteTool
-    from vector_os_nano.vcli.tools.robot import RobotStatusTool, WorldQueryTool
-    from vector_os_nano.vcli.tools.search_tools import GlobTool, GrepTool
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool, SimStopTool
+    from zeno.vcli.tools.bash_tool import BashTool
+    from zeno.vcli.tools.file_tools import FileEditTool, FileReadTool, FileWriteTool
+    from zeno.vcli.tools.robot import RobotStatusTool, WorldQueryTool
+    from zeno.vcli.tools.search_tools import GlobTool, GrepTool
+    from zeno.vcli.tools.sim_tool import SimStartTool, SimStopTool
     # SysNav sim integration PAUSED — v2.4 T6 bridge-wiring + G5 launch not delivered; module + tests retained, re-register when v2.4 resumes (see progress.md).
-    from vector_os_nano.vcli.tools.web_tool import WebFetchTool
-    from vector_os_nano.vcli.tools.scene_graph_tool import SceneGraphQueryTool
-    from vector_os_nano.vcli.tools.ros2_tools import Ros2TopicsTool, Ros2NodesTool, Ros2LogTool
-    from vector_os_nano.vcli.tools.nav_tools import NavStateTool, TerrainStatusTool
-    from vector_os_nano.vcli.tools.reload_tool import SkillReloadTool
-    from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
+    from zeno.vcli.tools.web_tool import WebFetchTool
+    from zeno.vcli.tools.scene_graph_tool import SceneGraphQueryTool
+    from zeno.vcli.tools.ros2_tools import Ros2TopicsTool, Ros2NodesTool, Ros2LogTool
+    from zeno.vcli.tools.nav_tools import NavStateTool, TerrainStatusTool
+    from zeno.vcli.tools.reload_tool import SkillReloadTool
+    from zeno.vcli.tools.viz_tool import FoxgloveTool
 
     return [
         # Existing tools

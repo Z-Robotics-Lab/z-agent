@@ -5,11 +5,11 @@
 
 Public surface::
 
-    from vector_os_nano.vcli import ToolRegistry, ToolResult, ToolContext, tool
+    from zeno.vcli import ToolRegistry, ToolResult, ToolContext, tool
 """
 from __future__ import annotations
 
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     PermissionResult,
     Tool,
     ToolContext,
@@ -17,7 +17,7 @@ from vector_os_nano.vcli.tools.base import (
     ToolResult,
     tool,
 )
-from vector_os_nano.vcli.tools import discover_all_tools
+from zeno.vcli.tools import discover_all_tools
 
 __all__ = [
     "discover_all_tools",

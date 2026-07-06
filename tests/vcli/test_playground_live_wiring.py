@@ -24,7 +24,7 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.vcli.cli import _resolve_active_world, parse_args
+from zeno.vcli.cli import _resolve_active_world, parse_args
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ class FakeArm:
 
 
 def _fake_arm_agent() -> SimpleNamespace:
-    from vector_os_nano.playground.verify.arm_predicates import _HOME_JOINTS
+    from zeno.playground.verify.arm_predicates import _HOME_JOINTS
 
     arm = FakeArm(
         objects={"mug": [0.22, 0.05, 0.06], "banana": [0.12, 0.12, 0.06]},
@@ -67,9 +67,9 @@ def _fake_arm_agent() -> SimpleNamespace:
 
 
 def _make_engine():
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.intent_router import IntentRouter
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.intent_router import IntentRouter
+    from zeno.vcli.tools.base import CategorizedToolRegistry
 
     class _MockBackend:
         def call(self, messages, tools, system, max_tokens, on_text=None):
@@ -131,7 +131,7 @@ class TestScenarioSelectsPlayground:
     def test_playground_predicates_evaluate_through_goal_verifier(self) -> None:
         """End-to-end: predicates from the selected scenario evaluate through the
         real GoalVerifier off the engine's merged namespace."""
-        from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+        from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
         args = parse_args(["--scenario", "tabletop"])
         agent = _fake_arm_agent()
@@ -211,10 +211,10 @@ def _arm_registry():
     """A real SkillRegistry carrying the arm skills — so ``detect_objects`` is NOT
     a registered skill and the selector would route DETECT_STRATEGY to ``invalid``
     (exactly the live case the producer override has to win over)."""
-    from vector_os_nano.core.skill import SkillRegistry
-    from vector_os_nano.skills.detect import DetectSkill
-    from vector_os_nano.skills.home import HomeSkill
-    from vector_os_nano.skills.pick import PickSkill
+    from zeno.core.skill import SkillRegistry
+    from zeno.skills.detect import DetectSkill
+    from zeno.skills.home import HomeSkill
+    from zeno.skills.pick import PickSkill
 
     reg = SkillRegistry()
     for skill in (DetectSkill(), HomeSkill(), PickSkill()):
@@ -225,7 +225,7 @@ def _arm_registry():
 class TestLiveExecutorRunsWorldPrimitive:
     def test_init_vgg_injects_world_step_primitives(self) -> None:
         """init_vgg wires the world's build_step_primitives into the executor."""
-        from vector_os_nano.playground.world import PlaygroundWorld
+        from zeno.playground.world import PlaygroundWorld
 
         agent = _fake_arm_agent()
         world = PlaygroundWorld()  # default tabletop (arm)
@@ -244,9 +244,9 @@ class TestLiveExecutorRunsWorldPrimitive:
         DETECT_STRATEGY runs the WORLD producer (not the importlib fallback, which
         would yield nothing / fail invalid). Proof: the produced objects equal the
         scenario's sim-oracle objects."""
-        from vector_os_nano.playground.world import PlaygroundWorld
-        from vector_os_nano.vcli.cognitive.blackboard import Blackboard
-        from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+        from zeno.playground.world import PlaygroundWorld
+        from zeno.vcli.cognitive.blackboard import Blackboard
+        from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
         object_names = PlaygroundWorld().scenario.object_names
         arm = _MutableStubArm(object_names)
@@ -286,11 +286,11 @@ class TestLiveExecutorRunsWorldPrimitive:
         produced item count and each per-step verify flips on real oracle state."""
         import json
 
-        from vector_os_nano.playground.world import PlaygroundWorld
-        from vector_os_nano.vcli.cognitive.blackboard import Blackboard
+        from zeno.playground.world import PlaygroundWorld
+        from zeno.vcli.cognitive.blackboard import Blackboard
 
         # A scenario WITH a tray drop-zone so placed_count() verifies per item.
-        from vector_os_nano.playground.catalog import TABLETOP_TRAY
+        from zeno.playground.catalog import TABLETOP_TRAY
 
         object_names = TABLETOP_TRAY.object_names
         n = len(object_names)
@@ -366,8 +366,8 @@ class TestLiveExecutorRunsWorldPrimitive:
 
 def _grab_everything_tree():
     """scan -> detect_all(DETECT_STRATEGY) -> foreach(obj): pick -> place."""
-    from vector_os_nano.playground.world import PlaygroundWorld
-    from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
+    from zeno.playground.world import PlaygroundWorld
+    from zeno.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
 
     body = (
         SubGoal(
@@ -449,7 +449,7 @@ class TestDefaultUnchanged:
 
     def test_default_matches_resolve_world(self) -> None:
         """The no-scenario branch is exactly resolve_world(agent)."""
-        from vector_os_nano.vcli.worlds import resolve_world
+        from zeno.vcli.worlds import resolve_world
 
         args = parse_args([])
         agent: Any = SimpleNamespace(_arm=None, _base=None)

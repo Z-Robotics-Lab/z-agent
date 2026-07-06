@@ -36,7 +36,7 @@ def _get_go2():
     if _go2 is not None and _go2._connected:
         return _go2
     mujoco = pytest.importorskip("mujoco")
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
     _go2 = MuJoCoGo2(gui=False, room=True, backend="sinusoidal")
     _go2.connect()
@@ -55,7 +55,7 @@ def go2():
 @pytest.fixture(scope="module")
 def scene_graph():
     """Fresh SceneGraph loaded with room layout."""
-    from vector_os_nano.core.scene_graph import SceneGraph
+    from zeno.core.scene_graph import SceneGraph
 
     sg = SceneGraph()
     layout_path = os.path.join(
@@ -207,7 +207,7 @@ class TestNavigate:
 
     def test_navigate_skill_resolves_room(self):
         """NavigateSkill._resolve_room handles aliases."""
-        from vector_os_nano.skills.navigate import _resolve_room
+        from zeno.skills.navigate import _resolve_room
 
         assert _resolve_room("kitchen") == "kitchen"
         assert _resolve_room("厨房") == "kitchen"
@@ -218,7 +218,7 @@ class TestNavigate:
 
     def test_navigate_skill_fuzzy_match(self):
         """Fuzzy room matching finds partial matches."""
-        from vector_os_nano.skills.navigate import _fuzzy_room_match
+        from zeno.skills.navigate import _fuzzy_room_match
 
         rooms = ["living_room", "kitchen", "master_bedroom", "guest_bedroom", "hallway"]
         assert _fuzzy_room_match("master room", rooms) == "master_bedroom"

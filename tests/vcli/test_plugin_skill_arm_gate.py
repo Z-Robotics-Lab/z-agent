@@ -30,10 +30,10 @@ from typing import Any
 
 import numpy as np
 
-from vector_os_nano.core.skill import SkillRegistry
-from vector_os_nano.embodiments.config import load_embodiment_config
-from vector_os_nano.skills import get_default_skills
-from vector_os_nano.vcli.native_loop import _build_motor_tools
+from zeno.core.skill import SkillRegistry
+from zeno.embodiments.config import load_embodiment_config
+from zeno.skills import get_default_skills
+from zeno.vcli.native_loop import _build_motor_tools
 
 _SHIPPED_MANIP = {"pick", "place", "home", "wave", "scan", "handover",
                   "gripper_open", "gripper_close", "describe"}

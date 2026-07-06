@@ -33,8 +33,8 @@ def _navigate_params(cls) -> dict:
 
 def test_go2_and_g1_navigate_to_share_the_polymorphic_contract():
     """Both planner backends accept the (x, y, timeout=...) call _NativeBaseNavigateTool makes."""
-    from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
-    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
+    from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+    from zeno.hardware.sim.mujoco_g1 import MuJoCoG1
 
     for cls in (Go2ROS2Proxy, MuJoCoG1):
         params = _navigate_params(cls)
@@ -52,7 +52,7 @@ def test_go2_and_g1_navigate_to_share_the_polymorphic_contract():
 
 def test_native_navigate_tool_is_embodiment_agnostic():
     """The kernel navigate tool dispatches via duck-typed base.navigate_to — no concrete-class branch."""
-    import vector_os_nano.vcli.native_loop as nl
+    import zeno.vcli.native_loop as nl
 
     src = inspect.getsource(nl._NativeBaseNavigateTool)
     assert "navigate_to" in src, "the tool must call the base's navigate_to"

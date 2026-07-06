@@ -9,12 +9,12 @@ adapter; specialized models (detectors/planners/VLA) register in C.3.
 """
 from __future__ import annotations
 
-from vector_os_nano.vcli.cognitive.capabilities.chat import LLMChatCapability
-from vector_os_nano.vcli.cognitive.capabilities.registry import (
+from zeno.vcli.cognitive.capabilities.chat import LLMChatCapability
+from zeno.vcli.cognitive.capabilities.registry import (
     CapabilityRegistry,
     validate_input,
 )
-from vector_os_nano.vcli.cognitive.capabilities.types import (
+from zeno.vcli.cognitive.capabilities.types import (
     Capability,
     CapabilityResult,
 )

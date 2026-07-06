@@ -8,8 +8,8 @@ machinery (create_backend + OpenAI-compat / Anthropic backends).
 
 Usage (vcli layer only; never imported by core/):
 
-    from vector_os_nano.vcli.backends import create_backend
-    from vector_os_nano.vcli.backends.text_llm_adapter import BackendTextLLM
+    from zeno.vcli.backends import create_backend
+    from zeno.vcli.backends.text_llm_adapter import BackendTextLLM
 
     backend = create_backend(provider, api_key, model, base_url)
     text_llm = BackendTextLLM(backend)
@@ -23,7 +23,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from vector_os_nano.vcli.backends import LLMBackend
+    from zeno.vcli.backends import LLMBackend
 
 logger = logging.getLogger(__name__)
 

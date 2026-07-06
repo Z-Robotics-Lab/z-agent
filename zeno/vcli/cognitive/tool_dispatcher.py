@@ -22,14 +22,14 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
-from vector_os_nano.vcli.tool_execution import (
+from zeno.vcli.tool_execution import (
     DECISION_ASK_DENY,
     DECISION_CHECK_ERROR,
     DECISION_DENY,
     execute_resolved_tool,
     resolve_permission,
 )
-from vector_os_nano.vcli.tools.base import ToolContext
+from zeno.vcli.tools.base import ToolContext
 
 logger = logging.getLogger(__name__)
 

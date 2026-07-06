@@ -24,8 +24,8 @@ import os
 import urllib.request
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import ToolContext, ToolResult, tool
-from vector_os_nano.vcli.worlds.base import DecomposeVocab
+from zeno.vcli.tools.base import ToolContext, ToolResult, tool
+from zeno.vcli.worlds.base import DecomposeVocab
 
 # The nav bridge endpoint. Overridable via GO2W_BRIDGE so a differently-hosted
 # bridge (a remote sim, a non-default port) needs no code edit — read lazily so
@@ -227,8 +227,8 @@ def go2w_at(x: float, y: float, tol: float = 0.8) -> bool:
 # ---- 技能层（VGG MOTION skill 正门）+ embodiment ------------------------------
 import time as _time
 
-from vector_os_nano.core.skill import SkillRegistry, skill
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillRegistry, skill
+from zeno.core.types import SkillResult
 
 
 @skill(aliases=["navigate", "nav_to_pos", "nav", "go to", "导航", "去", "开到", "走到"])
@@ -516,7 +516,7 @@ class IsaacGo2WEmbodiment:
 
     def _build_context(self):
         """SkillWrapperTool 合同：技能执行上下文（本 embodiment 即 base）。"""
-        from vector_os_nano.core.skill import SkillContext
+        from zeno.core.skill import SkillContext
         return SkillContext(bases={"go2w": self})
 
     def _sync_robot_state(self) -> None:
@@ -604,7 +604,7 @@ class IsaacGo2WWorld:
         # 判定语义：夹爪物理握持 + 物体举离 >0.10m + 距夹持中心 <0.08m，全 GT）。
         # 绑定到 agent 的 _arm/_gripper 鸭子合同上；agent 为 None 时 fail-safe False。
         try:
-            from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+            from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
             ns["holding_object"] = make_holding_object(agent)
         except Exception:  # noqa: BLE001 — oracle 缺席时宁缺毋假
             pass
@@ -650,7 +650,7 @@ def register() -> None:
     registry's lazy built-in factory does on ``--world go2w`` resolution — makes
     both ids resolvable. Also importable directly / via VECTOR_WORLD_PLUGINS.
     """
-    from vector_os_nano.vcli.worlds.registry import get_world_registry
+    from zeno.vcli.worlds.registry import get_world_registry
 
     reg = get_world_registry()
     reg.register(GO2W_WORLD, IsaacGo2WWorld, replace=True)

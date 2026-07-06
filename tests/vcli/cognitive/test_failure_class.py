@@ -22,15 +22,15 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.types import (
     FAILURE_CLASSES,
     GoalTree,
     StepRecord,
     SubGoal,
     classify_exec_failure,
 )
-from vector_os_nano.vcli.cognitive.vgg_harness import (
+from zeno.vcli.cognitive.vgg_harness import (
     FailureRecord,
     HarnessConfig,
     VGGHarness,

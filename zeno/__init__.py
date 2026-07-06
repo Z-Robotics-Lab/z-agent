@@ -5,7 +5,7 @@
 
 Quick start:
 
-    from vector_os_nano import Agent, SO101, Skill, SkillResult
+    from zeno import Agent, SO101, Skill, SkillResult
 
     arm = SO101(port="/dev/ttyACM0")
     agent = Agent(arm=arm)
@@ -17,19 +17,19 @@ the stable public API in v0.1.
 """
 from __future__ import annotations
 
-from vector_os_nano.version import __version__
-from vector_os_nano.core.agent import Agent
-from vector_os_nano.core.skill import Skill
-from vector_os_nano.core.types import ExecutionResult, SkillResult
+from zeno.version import __version__
+from zeno.core.agent import Agent
+from zeno.core.skill import Skill
+from zeno.core.types import ExecutionResult, SkillResult
 
 try:
-    from vector_os_nano.hardware.so101.arm import SO101Arm as SO101
+    from zeno.hardware.so101.arm import SO101Arm as SO101
 except ImportError:
     SO101 = None  # type: ignore[assignment, misc]
 
 try:
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
 except ImportError:
     MuJoCoArm = None  # type: ignore[assignment, misc]
     MuJoCoGripper = None  # type: ignore[assignment, misc]

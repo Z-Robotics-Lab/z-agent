@@ -26,8 +26,8 @@ from typing import Any
 import numpy as np
 import pytest
 
-import vector_os_nano.hardware.sim.mujoco_go2 as mg2
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+import zeno.hardware.sim.mujoco_go2 as mg2
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 
 class _FakeRenderer:

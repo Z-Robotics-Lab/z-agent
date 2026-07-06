@@ -19,9 +19,9 @@ import logging
 import math
 import time
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.skills.utils.approach_pose import compute_approach_pose
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ class MobilePickSkill:
     ]
 
     def __init__(self) -> None:
-        from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+        from zeno.skills.pick_top_down import PickTopDownSkill
 
         self._pick = PickTopDownSkill()
 
@@ -203,7 +203,7 @@ class MobilePickSkill:
 
         # v2.3: perception-driven auto-detect retry on world_model miss
         if target is None:
-            from vector_os_nano.skills.utils import run_autodetect_retry
+            from zeno.skills.utils import run_autodetect_retry
 
             if run_autodetect_retry(params, context, log_tag="MOBILE-PICK") > 0:
                 target = self._pick._resolve_target(params, context.world_model)
@@ -223,7 +223,7 @@ class MobilePickSkill:
                 and getattr(context, "perception", None) is not None
                 and context.base is not None
             ):
-                from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+                from zeno.skills.perception_grasp import PerceptionGraspSkill
                 logger.info(
                     "[MOBILE-PICK] %r not localizable in world model -> delegating to "
                     "perception_grasp (find + self-navigate + grasp)", query,

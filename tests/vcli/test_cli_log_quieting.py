@@ -11,7 +11,7 @@ duplicate WARNINGs propagate to the root console handler and flood the screen
 
 ``cli._setup_logging`` quiets the cognitive package logger to ERROR on the
 non-verbose REPL console only. This must:
-  - quiet ``vector_os_nano.vcli.cognitive`` to >= ERROR when NOT --verbose,
+  - quiet ``zeno.vcli.cognitive`` to >= ERROR when NOT --verbose,
   - leave it un-quieted under --verbose (full DEBUG preserved),
   - NOT silence ERROR/CRITICAL (only WARNING/INFO/DEBUG are dropped),
   - scope to the cognitive package only (never the root logger).
@@ -25,16 +25,16 @@ import logging
 
 import pytest
 
-from vector_os_nano.vcli import cli
+from zeno.vcli import cli
 
-COGNITIVE = "vector_os_nano.vcli.cognitive"
+COGNITIVE = "zeno.vcli.cognitive"
 
 # Additional namespaces that FIX 2 extends the quieting to.
 QUIET_NAMESPACES = [
-    "vector_os_nano.vcli.cognitive",
-    "vector_os_nano.skills",
-    "vector_os_nano.perception",
-    "vector_os_nano.hardware",
+    "zeno.vcli.cognitive",
+    "zeno.skills",
+    "zeno.perception",
+    "zeno.hardware",
 ]
 
 
@@ -101,7 +101,7 @@ def test_quieting_is_scoped_to_cognitive_not_root():
 
 def test_sibling_loggers_not_quieted():
     """A non-cognitive logger (e.g. the engine) is unaffected by the quieting."""
-    engine_log = logging.getLogger("vector_os_nano.vcli.engine")
+    engine_log = logging.getLogger("zeno.vcli.engine")
     saved = engine_log.level
     engine_log.setLevel(logging.NOTSET)
     logging.getLogger(COGNITIVE).setLevel(logging.NOTSET)

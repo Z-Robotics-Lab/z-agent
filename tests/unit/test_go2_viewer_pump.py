@@ -39,8 +39,8 @@ class _RecordingViewer:
 
 def test_headless_runs_the_background_daemon():
     """gui=False -> headless drive mode -> the daemon physics thread runs."""
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-    from vector_os_nano.hardware.sim import viewer_mode as vm
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim import viewer_mode as vm
 
     go2 = MuJoCoGo2(gui=False)
     go2.connect()
@@ -54,8 +54,8 @@ def test_headless_runs_the_background_daemon():
 
 def test_main_thread_pump_starts_no_daemon(monkeypatch):
     """Pump mode (macOS/mjpython) starts NO background thread; step() advances."""
-    from vector_os_nano.hardware.sim import viewer_mode as vm
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim import viewer_mode as vm
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
     # Force the resolver to the macOS pump decision without a real GL window.
     monkeypatch.setattr(
@@ -78,7 +78,7 @@ def test_main_thread_pump_starts_no_daemon(monkeypatch):
 
 def test_step_syncs_only_on_the_caller_thread():
     """step() must call viewer.sync() on the CALLER's thread (GLFW main-thread)."""
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
     go2 = MuJoCoGo2(gui=False)
     go2.connect()
@@ -97,8 +97,8 @@ def test_step_syncs_only_on_the_caller_thread():
 
 def test_walk_pumps_physics_on_caller_thread_in_pump_mode(monkeypatch):
     """In pump mode walk() drives the gait on the caller thread (no daemon)."""
-    from vector_os_nano.hardware.sim import viewer_mode as vm
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim import viewer_mode as vm
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
     monkeypatch.setattr(
         vm, "resolve_viewer_drive_mode",
@@ -119,8 +119,8 @@ def test_walk_pumps_physics_on_caller_thread_in_pump_mode(monkeypatch):
 
 def test_resume_physics_does_not_spawn_a_thread_in_pump_mode(monkeypatch):
     """A posture (pause/resume) must NOT restart a daemon under pump mode."""
-    from vector_os_nano.hardware.sim import viewer_mode as vm
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim import viewer_mode as vm
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
     monkeypatch.setattr(
         vm, "resolve_viewer_drive_mode",

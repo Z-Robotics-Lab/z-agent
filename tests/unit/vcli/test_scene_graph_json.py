@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from vector_os_nano.core.scene_graph import (
+from zeno.core.scene_graph import (
     ObjectNode,
     RoomNode,
     SceneGraph,
@@ -200,13 +200,13 @@ class TestSceneGraphJson:
 
 class TestToolDiscovery:
     def test_foxglove_tool_in_discovery(self):
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         tools = discover_all_tools()
         names = [t.name for t in tools]
         assert "open_foxglove" in names
 
     def test_foxglove_tool_in_system_category(self):
-        from vector_os_nano.vcli.tools import _TOOL_CATEGORIES
+        from zeno.vcli.tools import _TOOL_CATEGORIES
 
         assert "open_foxglove" in _TOOL_CATEGORIES["system"]

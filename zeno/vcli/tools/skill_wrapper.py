@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import PermissionResult, ToolContext, ToolResult
+from zeno.vcli.tools.base import PermissionResult, ToolContext, ToolResult
 
 # Keywords that indicate a skill actuates motors / moves the robot.
 # If any of these appear in the skill's preconditions or effects text,
@@ -46,8 +46,8 @@ _GRIPPER_HOLDING_PRECOND: str = "gripper_holding_any"
 # The package all SIMULATED hardware adapters live under. A connected component
 # whose module is this package (or a sub-module of it) is a simulation; anything
 # else is real hardware. Precise package match (exact, or prefix + ".") so a name
-# like "vector_os_nano.hardware.simulated_real" never false-matches "...sim".
-_SIM_HW_PKG: str = "vector_os_nano.hardware.sim"
+# like "zeno.hardware.simulated_real" never false-matches "...sim".
+_SIM_HW_PKG: str = "zeno.hardware.sim"
 
 # JSON Schema type mapping from Python / skill type names.
 _TYPE_MAP: dict[str, str] = {
@@ -264,7 +264,7 @@ class SkillWrapperTool:
 
         R2-5 (auto-allow motor skills in sim): a sim robot has no real-world
         consequence, so motor skills are safe to auto-allow. Real-hardware adapters
-        live outside ``vector_os_nano.hardware.sim.*`` — if any connected component
+        live outside ``zeno.hardware.sim.*`` — if any connected component
         resolves to a non-sim module path, we return False and motor skills keep
         their confirmation requirement. World-agnostic: duck-types the agent's arm,
         base, and gripper attributes without importing any concrete class.
@@ -293,7 +293,7 @@ class SkillWrapperTool:
         """Motor skills require confirmation on real hardware; read-only are always allowed.
 
         R2-5: when the connected robot is simulated (all hardware paths start with
-        ``vector_os_nano.hardware.sim``), motor skills are auto-allowed — a sim action
+        ``zeno.hardware.sim``), motor skills are auto-allowed — a sim action
         has no real-world consequence. On real hardware the confirmation requirement
         is preserved.
         """

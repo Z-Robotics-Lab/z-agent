@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vector_os_nano.core.types import (
+from zeno.core.types import (
     CameraIntrinsics,
     Detection,
     Pose3D,
@@ -25,7 +25,7 @@ from vector_os_nano.core.types import (
 )
 
 if TYPE_CHECKING:
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
 
 logger = logging.getLogger(__name__)
 

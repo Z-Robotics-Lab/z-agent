@@ -19,7 +19,7 @@ import mujoco
 import numpy as np
 import pytest
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 # Frozen-scene baseline positions (see test_fetch_far_scene.py).
 _GREEN_XY = (10.88, 3.00)

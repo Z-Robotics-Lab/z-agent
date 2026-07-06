@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from vector_os_nano.core.world_model import ObjectState
+from zeno.core.world_model import ObjectState
 
 
 # ---------------------------------------------------------------------------

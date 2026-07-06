@@ -197,8 +197,8 @@ sections were ruled dead (D9/D62/D72–D74) — git history keeps them.
 ## The @skill decorator (the live contract)
 
 ```python
-from vector_os_nano.core.skill import skill, SkillContext
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import skill, SkillContext
+from zeno.core.types import SkillResult
 
 @skill(aliases=["grab", "grasp", "抓", "拿", "抓起"])
 class PickSkill:
@@ -251,7 +251,7 @@ under the `robot` tool category:
 | camera_failed | 摄像头未连接，用 robot_status 检查硬件 |
 
 A skill may wrap an external VLA/VLM or a classical grasp/nav stack — the runtime routes to it by NL and
-grades it like any other step. Register via `agent.register_skill(MySkill())` or drop the file in `vector_os_nano/skills/`.
+grades it like any other step. Register via `agent.register_skill(MySkill())` or drop the file in `zeno/skills/`.
 
 ## Binding a skill's goal class to a verify oracle (D69 — read this before shipping)
 <!-- pull: 新技能上线前必读 — 物理动作的 GT oracle -->

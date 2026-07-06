@@ -22,9 +22,9 @@ from typing import Any
 import numpy as np
 import pytest
 
-from vector_os_nano.core.types import Detection
-from vector_os_nano.perception.depth_projection import camera_to_world, mujoco_intrinsics
-from vector_os_nano.perception.object_localizer import (
+from zeno.core.types import Detection
+from zeno.perception.depth_projection import camera_to_world, mujoco_intrinsics
+from zeno.perception.object_localizer import (
     _perception_is_usable,
     localize_objects_3d,
 )
@@ -424,7 +424,7 @@ class _FakeBase:
 
 def _make_context(with_perception: bool = True) -> Any:
     """Build a minimal SkillContext for look skill wiring tests."""
-    from vector_os_nano.core.skill import SkillContext
+    from zeno.core.skill import SkillContext
 
     perception = _StubPerception(label="apple") if with_perception else None
     mem = _RecordingMemory()
@@ -444,7 +444,7 @@ def test_look_skill_passes_detected_objects_when_perception_present():
     is deterministic and does not depend on the full depth pipeline.
     """
     import unittest.mock as mock
-    from vector_os_nano.skills.go2.look import LookSkill
+    from zeno.skills.go2.look import LookSkill
 
     ctx, mem = _make_context(with_perception=True)
     skill = LookSkill()
@@ -452,7 +452,7 @@ def test_look_skill_passes_detected_objects_when_perception_present():
     # Patch localize_objects_3d to return a predictable non-zero world point.
     fake_loc = [("apple", 1.1, 2.2, 3.3)]
     with mock.patch(
-        "vector_os_nano.skills.go2.look.localize_objects_3d",
+        "zeno.skills.go2.look.localize_objects_3d",
         return_value=fake_loc,
     ) as mock_loc:
         result = skill.execute({}, ctx)
@@ -485,7 +485,7 @@ def test_look_skill_passes_detected_objects_none_when_perception_absent():
     """Without perception, observe_with_viewpoint is called with
     detected_objects=None (names-only fallback — no regression).
     """
-    from vector_os_nano.skills.go2.look import LookSkill
+    from zeno.skills.go2.look import LookSkill
 
     ctx, mem = _make_context(with_perception=False)
     skill = LookSkill()
@@ -501,14 +501,14 @@ def test_look_skill_passes_detected_objects_none_when_perception_absent():
 def test_look_skill_includes_world_coords_in_result_data():
     """When localization succeeds, result_data objects include world_x/y/z."""
     import unittest.mock as mock
-    from vector_os_nano.skills.go2.look import LookSkill
+    from zeno.skills.go2.look import LookSkill
 
     ctx, _ = _make_context(with_perception=True)
     skill = LookSkill()
 
     fake_loc = [("apple", 4.0, 5.0, 6.0)]
     with mock.patch(
-        "vector_os_nano.skills.go2.look.localize_objects_3d",
+        "zeno.skills.go2.look.localize_objects_3d",
         return_value=fake_loc,
     ):
         result = skill.execute({}, ctx)
@@ -525,13 +525,13 @@ def test_look_skill_includes_world_coords_in_result_data():
 def test_look_skill_no_world_coords_when_localization_returns_empty():
     """When localize_objects_3d returns [], objects_data has no world_x/y/z keys."""
     import unittest.mock as mock
-    from vector_os_nano.skills.go2.look import LookSkill
+    from zeno.skills.go2.look import LookSkill
 
     ctx, _ = _make_context(with_perception=True)
     skill = LookSkill()
 
     with mock.patch(
-        "vector_os_nano.skills.go2.look.localize_objects_3d",
+        "zeno.skills.go2.look.localize_objects_3d",
         return_value=[],
     ):
         result = skill.execute({}, ctx)

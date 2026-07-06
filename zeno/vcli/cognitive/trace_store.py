@@ -25,9 +25,9 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal
 
-from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused, from_name
-from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.actor_causation import ActorCaused, from_name
+from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
@@ -180,7 +180,7 @@ def classify_step_evidence(
         # does NOT match the user's parsed COORDINATE goal means the model verified its
         # OWN landing, not the commanded target -> downgrade to RAN. Fail-OPEN whenever
         # the goal or the verify is not a parseable coordinate. Stricter-only.
-        from vector_os_nano.vcli.cognitive.coord_goal import coord_goal_mismatch
+        from zeno.vcli.cognitive.coord_goal import coord_goal_mismatch
 
         if coord_goal_mismatch(goal_text, sub_goal.verify):
             return "RAN"
@@ -395,7 +395,7 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     # pair — are never affected.
     if "at_position" not in oracle_names:
         return True
-    from vector_os_nano.vcli.cognitive.coord_goal import (
+    from zeno.vcli.cognitive.coord_goal import (
         at_position_const_matches,
         goal_has_coordinate_intent,
         has_necessary_at_position,
@@ -454,7 +454,7 @@ def _object_goal_turn_ok(
     """
     if "holding_object" not in oracle_names:
         return True
-    from vector_os_nano.vcli.cognitive.object_goal import (
+    from zeno.vcli.cognitive.object_goal import (
         goal_has_object_intent,
         has_necessary_manip_oracle,
     )

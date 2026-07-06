@@ -8,7 +8,7 @@ openai/gpt-4o to analyze camera frames.  No ROS2 dependency — pure Python.
 
 Typical usage::
 
-    from vector_os_nano.perception.vlm_go2 import Go2VLMPerception
+    from zeno.perception.vlm_go2 import Go2VLMPerception
 
     vlm = Go2VLMPerception()                       # key from env
     vlm = Go2VLMPerception(config={"api_key": ".."})  # key from config

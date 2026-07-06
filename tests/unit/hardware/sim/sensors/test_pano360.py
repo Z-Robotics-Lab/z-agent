@@ -16,8 +16,8 @@ import math
 import numpy as np
 import pytest
 
-from vector_os_nano.hardware.sim.sensors import MuJoCoPano360, PanoSample
-from vector_os_nano.hardware.sim.sensors.pano360 import (
+from zeno.hardware.sim.sensors import MuJoCoPano360, PanoSample
+from zeno.hardware.sim.sensors.pano360 import (
     _build_equirec_lut,
     _stitch_equirec,
 )

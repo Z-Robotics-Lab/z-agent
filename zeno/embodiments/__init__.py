@@ -13,7 +13,7 @@ Stage 2 wires the drivers to READ these configs instead of hardcoding constants.
 """
 from __future__ import annotations
 
-from vector_os_nano.embodiments.config import (
+from zeno.embodiments.config import (
     EmbodimentConfig,
     load_embodiment_config,
 )

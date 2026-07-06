@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from vector_os_nano.vcli.cognitive.visual_verifier import (
+from zeno.vcli.cognitive.visual_verifier import (
     VisualVerifyResult,
     _check_description_relevance,
     _extract_query_from_verify,

@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import ToolContext, ToolResult, tool
+from zeno.vcli.tools.base import ToolContext, ToolResult, tool
 
 
 # ---------------------------------------------------------------------------
@@ -21,7 +21,7 @@ from vector_os_nano.vcli.tools.base import ToolContext, ToolResult, tool
 
 def _is_exploring() -> bool:
     try:
-        from vector_os_nano.skills.go2.explore import is_exploring
+        from zeno.skills.go2.explore import is_exploring
         return is_exploring()
     except ImportError:
         return False
@@ -29,7 +29,7 @@ def _is_exploring() -> bool:
 
 def _is_nav_stack_running() -> bool:
     try:
-        from vector_os_nano.skills.go2.explore import is_nav_stack_running
+        from zeno.skills.go2.explore import is_nav_stack_running
         return is_nav_stack_running()
     except ImportError:
         return False
@@ -37,7 +37,7 @@ def _is_nav_stack_running() -> bool:
 
 def _get_explored_rooms() -> list[str]:
     try:
-        from vector_os_nano.skills.go2.explore import get_explored_rooms
+        from zeno.skills.go2.explore import get_explored_rooms
         return get_explored_rooms()
     except ImportError:
         return []
@@ -93,7 +93,7 @@ class NavStateTool:
 # TerrainStatusTool
 # ---------------------------------------------------------------------------
 
-_TERRAIN_PATH: str = os.path.expanduser("~/.vector_os_nano/terrain_map.npz")
+_TERRAIN_PATH: str = os.path.expanduser("~/.zeno/terrain_map.npz")
 
 
 @tool(

@@ -5,16 +5,16 @@
 
 Exports all Go2 skills and the get_go2_skills() factory.
 """
-from vector_os_nano.skills.go2.walk import WalkSkill
-from vector_os_nano.skills.go2.turn import TurnSkill
-from vector_os_nano.skills.go2.stance import StandSkill, SitSkill, LieDownSkill
-from vector_os_nano.skills.go2.explore import ExploreSkill
-from vector_os_nano.skills.go2.where_am_i import WhereAmISkill
-from vector_os_nano.skills.go2.stop import StopSkill
-from vector_os_nano.skills.go2.look import LookSkill, DescribeSceneSkill
-from vector_os_nano.skills.go2.patrol import PatrolSkill
-from vector_os_nano.skills.navigate import NavigateSkill
-from vector_os_nano.skills.navigate_to_object import NavigateToObjectSkill
+from zeno.skills.go2.walk import WalkSkill
+from zeno.skills.go2.turn import TurnSkill
+from zeno.skills.go2.stance import StandSkill, SitSkill, LieDownSkill
+from zeno.skills.go2.explore import ExploreSkill
+from zeno.skills.go2.where_am_i import WhereAmISkill
+from zeno.skills.go2.stop import StopSkill
+from zeno.skills.go2.look import LookSkill, DescribeSceneSkill
+from zeno.skills.go2.patrol import PatrolSkill
+from zeno.skills.navigate import NavigateSkill
+from zeno.skills.navigate_to_object import NavigateToObjectSkill
 
 
 def get_go2_skills() -> list:

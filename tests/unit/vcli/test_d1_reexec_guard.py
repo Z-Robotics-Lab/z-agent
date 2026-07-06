@@ -25,27 +25,27 @@ from unittest.mock import patch
 
 
 def test_headless_flag_exists():
-    from vector_os_nano.vcli.cli import parse_args
+    from zeno.vcli.cli import parse_args
     args = parse_args(["--headless"])
     assert args.headless is True
 
 
 def test_gui_flag_removed():
-    from vector_os_nano.vcli.cli import parse_args
+    from zeno.vcli.cli import parse_args
     import pytest
     with pytest.raises(SystemExit):
         parse_args(["--gui"])
 
 
 def test_sim_default_no_headless():
-    from vector_os_nano.vcli.cli import parse_args
+    from zeno.vcli.cli import parse_args
     args = parse_args(["--sim"])
     assert args.sim is True
     assert args.headless is False
 
 
 def test_sim_headless():
-    from vector_os_nano.vcli.cli import parse_args
+    from zeno.vcli.cli import parse_args
     args = parse_args(["--sim", "--headless"])
     assert args.headless is True
 
@@ -62,22 +62,22 @@ def _make_args(**kwargs) -> argparse.Namespace:
 
 
 def test_wants_window_sim_no_headless():
-    from vector_os_nano.vcli.cli import _wants_window
+    from zeno.vcli.cli import _wants_window
     assert _wants_window(_make_args(sim=True)) is True
 
 
 def test_wants_window_sim_go2_no_headless():
-    from vector_os_nano.vcli.cli import _wants_window
+    from zeno.vcli.cli import _wants_window
     assert _wants_window(_make_args(sim_go2=True)) is True
 
 
 def test_wants_window_headless_suppresses():
-    from vector_os_nano.vcli.cli import _wants_window
+    from zeno.vcli.cli import _wants_window
     assert _wants_window(_make_args(sim=True, headless=True)) is False
 
 
 def test_wants_window_no_sim():
-    from vector_os_nano.vcli.cli import _wants_window
+    from zeno.vcli.cli import _wants_window
     assert _wants_window(_make_args()) is False
 
 
@@ -88,7 +88,7 @@ def test_wants_window_no_sim():
 
 def test_reexec_guard_never_fires_in_pytest():
     """os.execve must NOT be called during test runs."""
-    from vector_os_nano.vcli.cli import _maybe_reexec_under_mjpython
+    from zeno.vcli.cli import _maybe_reexec_under_mjpython
 
     execve_called = False
 
@@ -103,7 +103,7 @@ def test_reexec_guard_never_fires_in_pytest():
 
 
 def test_reexec_guard_skips_when_headless():
-    from vector_os_nano.vcli.cli import _maybe_reexec_under_mjpython
+    from zeno.vcli.cli import _maybe_reexec_under_mjpython
 
     execve_called = False
 
@@ -118,7 +118,7 @@ def test_reexec_guard_skips_when_headless():
 
 
 def test_reexec_guard_skips_when_no_sim():
-    from vector_os_nano.vcli.cli import _maybe_reexec_under_mjpython
+    from zeno.vcli.cli import _maybe_reexec_under_mjpython
 
     execve_called = False
 
@@ -133,7 +133,7 @@ def test_reexec_guard_skips_when_no_sim():
 
 
 def test_reexec_guard_skips_when_already_reexecd(monkeypatch):
-    from vector_os_nano.vcli.cli import _maybe_reexec_under_mjpython
+    from zeno.vcli.cli import _maybe_reexec_under_mjpython
 
     monkeypatch.setenv("VECTOR_REEXEC", "1")
     execve_called = False
@@ -154,7 +154,7 @@ def test_reexec_guard_skips_when_already_reexecd(monkeypatch):
 
 
 def test_headless_routes_to_sim():
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.vcli.intent_router import IntentRouter
     router = IntentRouter()
     result = router.route("start arm sim headless")
     assert result is not None
@@ -162,7 +162,7 @@ def test_headless_routes_to_sim():
 
 
 def test_wuwindow_routes_to_sim():
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.vcli.intent_router import IntentRouter
     router = IntentRouter()
     result = router.route("启动仿真无窗口")
     assert result is not None
@@ -170,13 +170,13 @@ def test_wuwindow_routes_to_sim():
 
 
 def test_headless_not_vgg():
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.vcli.intent_router import IntentRouter
     router = IntentRouter()
     assert router.should_use_vgg("start arm sim headless") is False
 
 
 def test_no_window_not_vgg():
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.vcli.intent_router import IntentRouter
     router = IntentRouter()
     assert router.should_use_vgg("start arm sim no window") is False
 
@@ -187,7 +187,7 @@ def test_no_window_not_vgg():
 
 
 def test_sim_tool_gui_default_true():
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+    from zeno.vcli.tools.sim_tool import SimStartTool
     tool = SimStartTool()
     gui_prop = tool.input_schema["properties"]["gui"]
     assert gui_prop["default"] is True
@@ -195,14 +195,14 @@ def test_sim_tool_gui_default_true():
 
 def test_viewer_available_non_macos():
     """On non-macOS (or when mocked), _viewer_available returns True."""
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+    from zeno.vcli.tools.sim_tool import SimStartTool
     with patch("sys.platform", "linux"):
         assert SimStartTool._viewer_available() is True
 
 
 def test_viewer_available_macos_no_mjpython():
     """On macOS without mjpython, _viewer_available returns False."""
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+    from zeno.vcli.tools.sim_tool import SimStartTool
 
     class _FakeMjViewer:
         _MJPYTHON = None
@@ -219,7 +219,7 @@ def test_viewer_available_macos_with_mjpython():
     module object (works even when the real module is cached in sys.modules).
     """
     import mujoco.viewer as _real_mjv
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+    from zeno.vcli.tools.sim_tool import SimStartTool
 
     original = getattr(_real_mjv, "_MJPYTHON", None)
     try:

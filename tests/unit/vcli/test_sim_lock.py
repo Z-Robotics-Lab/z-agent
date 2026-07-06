@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from vector_os_nano.acceptance import sim_lock
+from zeno.acceptance import sim_lock
 
 
 def test_flock_mutual_exclusion_then_releases(tmp_path):
@@ -137,10 +137,10 @@ def test_sim_patterns_target_sims_not_idle_repl():
     def matches(cmdline: str) -> bool:
         return any(re.search(p, cmdline) for p in sim_lock._SIM_PATTERNS)
 
-    assert matches("python -m vector_os_nano.vcli.cli -p x --sim-go2 --headless")  # loop sim
+    assert matches("python -m zeno.vcli.cli -p x --sim-go2 --headless")  # loop sim
     assert matches("/opt/mujoco/bin/mujoco_viewer")                                # mujoco proc
     assert matches("bash scripts/launch_explore.sh")                               # explore
-    assert not matches("python -m vector_os_nano.vcli.cli")                        # idle REPL (no sim)
+    assert not matches("python -m zeno.vcli.cli")                        # idle REPL (no sim)
     assert not matches("vector-cli")                                              # idle REPL
 
 

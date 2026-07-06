@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import stat
 
-from vector_os_nano.vcli.tools.sim_tool import locate_mjpython
+from zeno.vcli.tools.sim_tool import locate_mjpython
 
 
 def _make_fake_mjpython(bindir) -> str:

@@ -26,11 +26,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
-from vector_os_nano.vcli.engine import VectorEngine
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-from vector_os_nano.vcli.worlds.robot import RobotWorld
+from zeno.vcli.cognitive.types import GoalTree, SubGoal
+from zeno.vcli.engine import VectorEngine
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.tools.base import CategorizedToolRegistry
+from zeno.vcli.worlds.robot import RobotWorld
 
 
 # ---------------------------------------------------------------------------

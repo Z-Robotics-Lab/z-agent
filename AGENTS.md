@@ -46,7 +46,7 @@ new external dependency · hardware interfaces · security policy · release to 
 
 ## Upstream cherry-pick policy
 Watch upstream for honest-verify-spine fixes only (vcli/cognitive, verdict, verifier).
-`git fetch upstream && git log upstream/arch/plug-and-play --oneline -- vector_os_nano/vcli/cognitive`
+`git fetch upstream && git log upstream/arch/plug-and-play --oneline -- zeno/vcli/cognitive`
 Port surgically; everything else has diverged by design.
 
 ## Hard habits

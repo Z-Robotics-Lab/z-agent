@@ -67,7 +67,7 @@ def budget_timeout(default, now, deadline_epoch, *, margin=_BUDGET_MARGIN_S,
     return int(min(int(default), budget))
 
 # Signature is UNIQUE to the perception VLM: ``OpenRouter API client error <4xx>`` is raised
-# ONLY by vector_os_nano/perception/vlm_go2.py:_call_vlm on a non-retried 4xx. The planner
+# ONLY by zeno/perception/vlm_go2.py:_call_vlm on a non-retried 4xx. The planner
 # brain's own 402 uses a different string ("402 balance cap") and RECOVERS by downshifting
 # max_tokens — it must never trip this. Any 4xx here is the same silent-spin confound.
 _PERCEPTION_4XX_RE = re.compile(r"OpenRouter API client error 4\d\d")
@@ -174,9 +174,9 @@ def resolve_judge_env(environ, ollama_probe=ollama_up) -> dict[str, str]:
 
 # The bare-REPL invocation the acceptance driver spawns. --native-loop only (the acceptance
 # face is bare cli + NL: NO -p / --sim-go2). --verbose is a LOGGING-only flag (cli._setup_logging):
-# it restores vector_os_nano.skills / .perception loggers to full output WITHOUT changing any
+# it restores zeno.skills / .perception loggers to full output WITHOUT changing any
 # behaviour (planner, perception, verify all run identically), so the face stays intact.
-_BASE_REPL_ARGV: tuple[str, ...] = ("-m", "vector_os_nano.vcli.cli", "--native-loop")
+_BASE_REPL_ARGV: tuple[str, ...] = ("-m", "zeno.vcli.cli", "--native-loop")
 TRACE_ENV_VAR: str = "VECTOR_ACCEPT_VERBOSE"
 
 
@@ -185,7 +185,7 @@ def repl_cli_argv(environ) -> list[str]:
 
     R232/E54: R231's warehouse run read ``closest seen inf`` (perception found nothing at ALL
     scan headings) but the raw log carried ZERO ``[PGRASP]`` lines — the per-scan-heading
-    detection trace is ``logger.info`` under ``vector_os_nano.skills`` / ``.perception``, which
+    detection trace is ``logger.info`` under ``zeno.skills`` / ``.perception``, which
     the non-verbose REPL pins to ERROR (cli._QUIET_LOGGERS). Setting this env makes a DEBUG round's
     single warehouse sim run DECISIVE: it captures arrival pose + per-heading detection counts, so
     we can tell framing (dog elsewhere) from detection (dog faces green, still None). Default off →

@@ -3,7 +3,7 @@
 #
 # Unitree Go2 quadruped — embodiment manifest (Stage 1 data only).
 # Faithfully captures the constants CURRENTLY hardcoded in
-# vector_os_nano/hardware/sim/mujoco_go2.py. Not yet wired into the driver
+# zeno/hardware/sim/mujoco_go2.py. Not yet wired into the driver
 # (that is Stage 2). Values must stay ACCURATE to today's driver.
 
 id: go2
@@ -11,8 +11,8 @@ display_name: "Unitree Go2 (quadruped)"
 
 model:
   # Bare-Go2 room scene model (mujoco_go2._MJCF_DIR / go2.xml).
-  path: vector_os_nano/hardware/sim/mjcf/go2/go2.xml
-  meshes_dir: vector_os_nano/hardware/sim/mjcf/go2/assets
+  path: zeno/hardware/sim/mjcf/go2/go2.xml
+  meshes_dir: zeno/hardware/sim/mjcf/go2/assets
   root_body: base_link            # _Go2Model.base_bid = mj_name2id(..., "base_link")
 
 spawn:

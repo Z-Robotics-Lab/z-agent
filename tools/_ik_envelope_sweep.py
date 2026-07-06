@@ -15,8 +15,8 @@ os.environ["VECTOR_SIM_WITH_ARM"] = "1"
 
 import mujoco as mj  # noqa: E402
 
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
+from zeno.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
 
 import time as _time  # noqa: E402
 

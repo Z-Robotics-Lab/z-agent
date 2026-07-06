@@ -26,7 +26,7 @@ import math
 
 import pytest
 
-from vector_os_nano.hardware.sim import g1_vgraph as vg
+from zeno.hardware.sim import g1_vgraph as vg
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ class TestObstaclesFromModel:
     def tiny_result(self):
         """Build the tiny model once and run obstacles_from_model."""
         import mujoco
-        from vector_os_nano.hardware.sim.mujoco_g1 import obstacles_from_model
+        from zeno.hardware.sim.mujoco_g1 import obstacles_from_model
 
         model, data = _build_tiny_model()
         # Build robot_geom_ids for g1_pelvis
@@ -307,7 +307,7 @@ class TestObstaclesFromModel:
 
 def test_obstacles_from_model_no_robot_ids() -> None:
     """obstacles_from_model works without robot_geom_ids (falls back to g1_ prefix)."""
-    from vector_os_nano.hardware.sim.mujoco_g1 import obstacles_from_model
+    from zeno.hardware.sim.mujoco_g1 import obstacles_from_model
 
     model, data = _build_tiny_model()
     polys = obstacles_from_model(model, data, robot_geom_ids=None)
@@ -323,7 +323,7 @@ def test_obstacles_from_model_no_robot_ids() -> None:
 def test_navigate_to_signature_intact() -> None:
     """navigate_to signature matches the base contract (no sim instantiation)."""
     import inspect
-    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
+    from zeno.hardware.sim.mujoco_g1 import MuJoCoG1
 
     sig = inspect.signature(MuJoCoG1.navigate_to)
     params = list(sig.parameters)
@@ -336,7 +336,7 @@ def test_navigate_to_signature_intact() -> None:
 
 def test_g1nav_result_bool_semantics() -> None:
     """_G1NavResult truthiness reflects reached; dict accessors work."""
-    from vector_os_nano.hardware.sim.mujoco_g1 import _G1NavResult
+    from zeno.hardware.sim.mujoco_g1 import _G1NavResult
 
     r_reached = _G1NavResult({"reached": True, "moved_m": 2.0, "reason": "arrived"})
     r_fell = _G1NavResult({"reached": False, "moved_m": 0.5, "reason": "fell"})
@@ -357,7 +357,7 @@ def test_g1nav_result_bool_semantics() -> None:
 
 def test_last_nav_plan_attribute_exists() -> None:
     """MuJoCoG1 has a _last_nav_plan attribute initialised to None."""
-    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
+    from zeno.hardware.sim.mujoco_g1 import MuJoCoG1
 
     g1 = MuJoCoG1.__new__(MuJoCoG1)
     g1.__init__(gui=False, room=False)  # type: ignore[call-arg]
@@ -373,7 +373,7 @@ def test_last_nav_plan_attribute_exists() -> None:
 def test_g1_vgraph_no_mujoco_import() -> None:
     """g1_vgraph.py must never import mujoco (stays pure-geometry)."""
     import pathlib
-    import vector_os_nano.hardware.sim.g1_vgraph as m
+    import zeno.hardware.sim.g1_vgraph as m
 
     src = pathlib.Path(m.__file__).read_text()
     assert "import mujoco" not in src, "g1_vgraph.py must not import mujoco"
@@ -386,7 +386,7 @@ def test_g1_vgraph_no_mujoco_import() -> None:
 
 def test_g1_body_radius_constant() -> None:
     """_G1_BODY_RADIUS must exist and be a positive float."""
-    from vector_os_nano.hardware.sim.mujoco_g1 import _G1_BODY_RADIUS
+    from zeno.hardware.sim.mujoco_g1 import _G1_BODY_RADIUS
 
     assert isinstance(_G1_BODY_RADIUS, float)
     assert _G1_BODY_RADIUS > 0.0

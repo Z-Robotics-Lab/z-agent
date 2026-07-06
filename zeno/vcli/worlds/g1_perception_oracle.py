@@ -146,7 +146,7 @@ def _red_geom_seg_centroid(base: Any, token: str) -> tuple[float, float, int] | 
         data = base._data
         cam_name = getattr(
             __import__(
-                "vector_os_nano.hardware.sim.mujoco_g1", fromlist=["_SCENE_CAM_NAME"]
+                "zeno.hardware.sim.mujoco_g1", fromlist=["_SCENE_CAM_NAME"]
             ),
             "_SCENE_CAM_NAME",
         )
@@ -207,7 +207,7 @@ def _detector_boxes(agent: Any, base: Any, query: str) -> list[tuple[float, floa
     if rgb is None:
         return []
     try:
-        from vector_os_nano.perception.grounding_dino import get_shared_detector
+        from zeno.perception.grounding_dino import get_shared_detector
 
         detector = get_shared_detector()
         detections = detector.detect(rgb, query)

@@ -59,10 +59,10 @@ vector> explore            # TARE autonomous exploration, verified by explored-v
 
 ## Architecture (the parts that matter)
 
-- **Honest-verify spine** (`vector_os_nano/vcli/cognitive/`): evidence classifier +
+- **Honest-verify spine** (`zeno/vcli/cognitive/`): evidence classifier +
   actor-causation grading + goal verifier. A step counts only if its predicate reads
   world ground truth AND the robot actually caused the change.
-- **World Protocol** (`vector_os_nano/vcli/worlds/`): a robot is a plugin + manifest —
+- **World Protocol** (`zeno/vcli/worlds/`): a robot is a plugin + manifest —
   tools, verify predicates, persona, vocab. No kernel edits to bring a robot.
 - **Robot backend contract**: a small HTTP bridge (pose / waypoint / ground-truth / health)
   is the seam between the runtime and any backend — Isaac Sim today, the real Go2W next,

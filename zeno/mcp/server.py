@@ -7,8 +7,8 @@ Exposes robot skills as MCP tools and world/camera state as MCP resources.
 Primary transport: stdio (for Claude Code integration).
 
 Usage:
-    python -m vector_os_nano.mcp --sim          # MuJoCo simulation with viewer
-    python -m vector_os_nano.mcp --sim-headless  # Headless simulation (default for Claude Code)
+    python -m zeno.mcp --sim          # MuJoCo simulation with viewer
+    python -m zeno.mcp --sim-headless  # Headless simulation (default for Claude Code)
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from mcp.server import Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 import mcp.types as types
 
-from vector_os_nano.core.agent import Agent
+from zeno.core.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,8 @@ class VectorMCPServer:
 
     def _register_handlers(self) -> None:
         """Register MCP tool and resource handlers on the underlying Server."""
-        from vector_os_nano.mcp.tools import skills_to_mcp_tools, handle_tool_call
-        from vector_os_nano.mcp.resources import get_resource_definitions, read_resource
+        from zeno.mcp.tools import skills_to_mcp_tools, handle_tool_call
+        from zeno.mcp.resources import get_resource_definitions, read_resource
 
         server = self._server
         agent = self._agent
@@ -143,7 +143,7 @@ class VectorMCPServer:
         """Run the server with SSE transport over HTTP.
 
         Start manually in a terminal, then connect Claude Code to it:
-            python -m vector_os_nano.mcp --sim --port 8100
+            python -m zeno.mcp --sim --port 8100
             # In Claude Code: /mcp add url http://localhost:8100/sse
         """
         from mcp.server.sse import SseServerTransport  # noqa: PLC0415
@@ -194,14 +194,14 @@ def _build_engine(agent: Agent) -> tuple[Any, Any]:
     Returns:
         (engine, session) tuple ready for VectorMCPServer.
     """
-    from vector_os_nano.vcli.config import resolve_credentials  # noqa: PLC0415
-    from vector_os_nano.vcli.backends import create_backend  # noqa: PLC0415
-    from vector_os_nano.vcli.tools import CategorizedToolRegistry, discover_categorized_tools  # noqa: PLC0415
-    from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills  # noqa: PLC0415
-    from vector_os_nano.vcli.prompt import build_system_prompt  # noqa: PLC0415
-    from vector_os_nano.vcli.engine import VectorEngine  # noqa: PLC0415
-    from vector_os_nano.vcli.session import create_session  # noqa: PLC0415
-    from vector_os_nano.vcli.worlds import resolve_world  # noqa: PLC0415
+    from zeno.vcli.config import resolve_credentials  # noqa: PLC0415
+    from zeno.vcli.backends import create_backend  # noqa: PLC0415
+    from zeno.vcli.tools import CategorizedToolRegistry, discover_categorized_tools  # noqa: PLC0415
+    from zeno.vcli.tools.skill_wrapper import wrap_skills  # noqa: PLC0415
+    from zeno.vcli.prompt import build_system_prompt  # noqa: PLC0415
+    from zeno.vcli.engine import VectorEngine  # noqa: PLC0415
+    from zeno.vcli.session import create_session  # noqa: PLC0415
+    from zeno.vcli.worlds import resolve_world  # noqa: PLC0415
 
     # 1. Resolve credentials (Claude OAuth > env > config)
     api_key, provider, model, base_url = resolve_credentials()
@@ -361,11 +361,11 @@ def create_sim_stack(headless: bool = True) -> Agent:
     Returns:
         A fully connected Agent ready for VectorEngine use.
     """
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm  # noqa: PLC0415
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper  # noqa: PLC0415
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception  # noqa: PLC0415
-    from vector_os_nano.perception.calibration import Calibration  # noqa: PLC0415
-    from vector_os_nano.skills.pick import SIM_PICK_CONFIG  # noqa: PLC0415
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm  # noqa: PLC0415
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper  # noqa: PLC0415
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception  # noqa: PLC0415
+    from zeno.perception.calibration import Calibration  # noqa: PLC0415
+    from zeno.skills.pick import SIM_PICK_CONFIG  # noqa: PLC0415
 
     _log(f"[MCP] Starting MuJoCo simulation (headless={headless})...")
 
@@ -435,7 +435,7 @@ def create_hardware_stack() -> Agent:
     arm = None
     gripper = None
     try:
-        from vector_os_nano.hardware.so101 import SO101Arm, SO101Gripper  # noqa: PLC0415
+        from zeno.hardware.so101 import SO101Arm, SO101Gripper  # noqa: PLC0415
         port = cfg.get("arm", {}).get("port", "/dev/ttyACM0")
         _log(f"[MCP] Connecting arm on {port}...")
         arm = SO101Arm(port=port)
@@ -449,10 +449,10 @@ def create_hardware_stack() -> Agent:
     # --- Perception (camera + VLM + tracker) ---
     perception = None
     try:
-        from vector_os_nano.perception.realsense import RealSenseCamera  # noqa: PLC0415
-        from vector_os_nano.perception.vlm import VLMDetector  # noqa: PLC0415
-        from vector_os_nano.perception.tracker import EdgeTAMTracker  # noqa: PLC0415
-        from vector_os_nano.perception.pipeline import PerceptionPipeline  # noqa: PLC0415
+        from zeno.perception.realsense import RealSenseCamera  # noqa: PLC0415
+        from zeno.perception.vlm import VLMDetector  # noqa: PLC0415
+        from zeno.perception.tracker import EdgeTAMTracker  # noqa: PLC0415
+        from zeno.perception.pipeline import PerceptionPipeline  # noqa: PLC0415
 
         _log("[MCP] Connecting camera (RealSense D405)...")
         camera = RealSenseCamera()
@@ -488,7 +488,7 @@ def create_hardware_stack() -> Agent:
                 # Use the same YAML loader from run.py
                 import yaml  # noqa: PLC0415
                 import numpy as np  # noqa: PLC0415
-                from vector_os_nano.perception.calibration import Calibration  # noqa: PLC0415
+                from zeno.perception.calibration import Calibration  # noqa: PLC0415
                 with open(cal_file, "r", encoding="utf-8") as fh:
                     data = yaml.safe_load(fh)
                 if isinstance(data, dict):
@@ -500,7 +500,7 @@ def create_hardware_stack() -> Agent:
                             calibration._matrix = matrix
                     _log(f"[MCP] Calibration loaded from {cal_file}")
             else:
-                from vector_os_nano.perception.calibration import Calibration  # noqa: PLC0415
+                from zeno.perception.calibration import Calibration  # noqa: PLC0415
                 calibration = Calibration.load(cal_file)
                 _log(f"[MCP] Calibration loaded from {cal_file}")
         else:
@@ -541,7 +541,7 @@ def create_hardware_agent() -> Agent:
 
 def _load_config_with_fallback() -> dict:
     """Load config, trying user.yaml then defaults."""
-    from vector_os_nano.core.config import load_config  # noqa: PLC0415
+    from zeno.core.config import load_config  # noqa: PLC0415
 
     for candidate in [
         "config/user.yaml",
@@ -568,10 +568,10 @@ async def main() -> None:
         description="Vector OS Nano MCP Server",
         epilog=(
             "examples:\n"
-            "  python -m vector_os_nano.mcp --sim            # sim + viewer + SSE on :8100\n"
-            "  python -m vector_os_nano.mcp --sim-headless   # sim headless + SSE\n"
-            "  python -m vector_os_nano.mcp --hardware       # real arm + SSE\n"
-            "  python -m vector_os_nano.mcp --sim --stdio    # sim + stdio (for .mcp.json)\n"
+            "  python -m zeno.mcp --sim            # sim + viewer + SSE on :8100\n"
+            "  python -m zeno.mcp --sim-headless   # sim headless + SSE\n"
+            "  python -m zeno.mcp --hardware       # real arm + SSE\n"
+            "  python -m zeno.mcp --sim --stdio    # sim + stdio (for .mcp.json)\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

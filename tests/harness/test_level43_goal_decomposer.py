@@ -21,8 +21,8 @@ import pytest
 # Imports under test — will FAIL until implementation exists
 # ---------------------------------------------------------------------------
 
-from vector_os_nano.vcli.cognitive.types import SubGoal, GoalTree  # noqa: E402
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer  # noqa: E402
+from zeno.vcli.cognitive.types import SubGoal, GoalTree  # noqa: E402
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

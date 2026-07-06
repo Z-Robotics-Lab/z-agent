@@ -112,7 +112,7 @@ class MockAgent:
 
 
 def _build(**kwargs: Any) -> list[dict]:
-    from vector_os_nano.vcli.prompt import build_system_prompt
+    from zeno.vcli.prompt import build_system_prompt
 
     return build_system_prompt(**kwargs)
 
@@ -408,7 +408,7 @@ class TestByoPersonaFallback:
         """The swallowed BYO persona failure must be logged (never silent)."""
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+        with caplog.at_level(logging.WARNING, logger="zeno.vcli.prompt"):
             _build(world=_RaisingPersonaWorld())
         assert any(
             "persona" in r.getMessage().lower() for r in caplog.records
@@ -418,7 +418,7 @@ class TestByoPersonaFallback:
         """A world returning falsy persona blocks -> default + a WARNING log."""
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+        with caplog.at_level(logging.WARNING, logger="zeno.vcli.prompt"):
             result = _build(world=_EmptyPersonaWorld())
         assert "verified coding and automation agent" in result[0]["text"]
         assert any("persona" in r.getMessage().lower() for r in caplog.records)
@@ -427,7 +427,7 @@ class TestByoPersonaFallback:
         """A world returning a wrong-shape tuple -> default + a WARNING log."""
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+        with caplog.at_level(logging.WARNING, logger="zeno.vcli.prompt"):
             result = _build(world=_BadAritysWorld())
         assert "verified coding and automation agent" in result[0]["text"]
         assert any("persona" in r.getMessage().lower() for r in caplog.records)
@@ -436,7 +436,7 @@ class TestByoPersonaFallback:
         """A well-formed BYO persona is used verbatim and logs NOTHING."""
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="vector_os_nano.vcli.prompt"):
+        with caplog.at_level(logging.WARNING, logger="zeno.vcli.prompt"):
             result = _build(world=_GoodPersonaWorld())
         combined = " ".join(b["text"] for b in result)
         assert "BYO-ROLE-SENTINEL" in combined

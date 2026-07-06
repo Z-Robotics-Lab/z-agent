@@ -27,10 +27,10 @@ import time  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
-from vector_os_nano.core.agent import Agent  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
-from vector_os_nano.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
+from zeno.core.agent import Agent  # noqa: E402
+from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2  # noqa: E402
+from zeno.hardware.sim.mujoco_piper import MuJoCoPiper  # noqa: E402
+from zeno.hardware.sim.mujoco_piper_gripper import (  # noqa: E402
     MuJoCoPiperGripper,
 )
 

@@ -12,8 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vector_os_nano.core.scene_graph import ObjectNode, RoomNode, SceneGraph
-from vector_os_nano.vcli.tools.base import ToolContext
+from zeno.core.scene_graph import ObjectNode, RoomNode, SceneGraph
+from zeno.vcli.tools.base import ToolContext
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ def _make_context(sg: SceneGraph | None) -> MagicMock:
 
 @pytest.fixture()
 def tool():
-    from vector_os_nano.vcli.tools.scene_graph_tool import SceneGraphQueryTool
+    from zeno.vcli.tools.scene_graph_tool import SceneGraphQueryTool
     return SceneGraphQueryTool()
 
 

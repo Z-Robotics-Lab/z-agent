@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Protocol, runtime_checkable
 
-from vector_os_nano.vcli.backends.types import LLMResponse, LLMToolCall
+from zeno.vcli.backends.types import LLMResponse, LLMToolCall
 
 __all__ = [
     "LLMBackend",
@@ -82,12 +82,12 @@ def create_backend(
         An LLMBackend instance ready to call().
     """
     if provider == "anthropic":
-        from vector_os_nano.vcli.backends.anthropic import AnthropicBackend
+        from zeno.vcli.backends.anthropic import AnthropicBackend
 
         return AnthropicBackend(api_key=api_key, model=model, base_url=base_url)
 
     # openrouter, openai_compat, local — all use OpenAI-compatible API
-    from vector_os_nano.vcli.backends.openai_compat import OpenAICompatBackend
+    from zeno.vcli.backends.openai_compat import OpenAICompatBackend
 
     return OpenAICompatBackend(
         api_key=api_key,

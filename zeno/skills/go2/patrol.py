@@ -23,8 +23,8 @@ import logging
 import time
 from typing import Any
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def _resolve_look_skill(context: SkillContext) -> Any | None:
 
     # Last resort: direct import
     try:
-        from vector_os_nano.skills.describe import DescribeSkill
+        from zeno.skills.describe import DescribeSkill
         return DescribeSkill()
     except ImportError:
         return None
@@ -75,7 +75,7 @@ def _resolve_navigate_skill(context: SkillContext) -> Any | None:
         return nav
 
     try:
-        from vector_os_nano.skills.navigate import NavigateSkill
+        from zeno.skills.navigate import NavigateSkill
         return NavigateSkill()
     except ImportError:
         return None

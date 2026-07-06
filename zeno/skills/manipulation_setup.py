@@ -43,10 +43,10 @@ def register_manipulation_skills(agent: Any, base: Any, *, enable_env: bool = Tr
         logger.info("[manip] VECTOR_ENABLE_MANIPULATION=0 — manipulation skills skipped")
         return False
 
-    from vector_os_nano.skills.pick_top_down import PickTopDownSkill
-    from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
-    from vector_os_nano.skills.mobile_pick import MobilePickSkill
-    from vector_os_nano.skills.mobile_place import MobilePlaceSkill
+    from zeno.skills.pick_top_down import PickTopDownSkill
+    from zeno.skills.place_top_down import PlaceTopDownSkill
+    from zeno.skills.mobile_pick import MobilePickSkill
+    from zeno.skills.mobile_place import MobilePlaceSkill
 
     agent._skill_registry.register(PickTopDownSkill())
     agent._skill_registry.register(PlaceTopDownSkill())
@@ -56,12 +56,12 @@ def register_manipulation_skills(agent: Any, base: Any, *, enable_env: bool = Tr
     # Perception-driven grasp (the honest North-Star path): real RGB-D from the
     # go2 head camera -> VLM/colour resolve -> EdgeTAM mask -> rendered-depth
     # pointcloud -> 3D grasp point (NEVER ground truth) -> IK -> weld.
-    from vector_os_nano.perception.go2_grasp_perception import (
+    from zeno.perception.go2_grasp_perception import (
         GO2_HEAD_CAM_HEIGHT,
         GO2_HEAD_CAM_WIDTH,
         Go2GraspPerception,
     )
-    from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+    from zeno.skills.perception_grasp import PerceptionGraspSkill
 
     # The go2 head camera / bridge publishes the single-sourced head-cam
     # resolution; intrinsics must match it (guarded in test_go2_perception_wiring).

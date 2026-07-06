@@ -21,10 +21,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.core.world_model import ObjectState, WorldModel
-from vector_os_nano.skills.pick import PickSkill
+from zeno.core.skill import SkillContext
+from zeno.core.types import SkillResult
+from zeno.core.world_model import ObjectState, WorldModel
+from zeno.skills.pick import PickSkill
 
 
 # ---------------------------------------------------------------------------

@@ -69,7 +69,7 @@ def sim_cleanup():
     try:
         subprocess.run(
             ["git", "checkout",
-             "vector_os_nano/hardware/sim/mjcf/go2/scene_room_piper.xml"],
+             "zeno/hardware/sim/mjcf/go2/scene_room_piper.xml"],
             timeout=20, capture_output=True,
         )
     except Exception:  # noqa: BLE001

@@ -14,12 +14,12 @@ import logging
 import pytest
 
 _RCLPY_PRESENT = importlib.util.find_spec("rclpy") is not None
-_PROXY_LOGGER = "vector_os_nano.hardware.sim.go2_ros2_proxy"
+_PROXY_LOGGER = "zeno.hardware.sim.go2_ros2_proxy"
 
 
 @pytest.mark.skipif(_RCLPY_PRESENT, reason="tests the rclpy-absent fallback path")
 def test_ros2_proxy_unavailable_logs_debug_not_error(caplog):
-    from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+    from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
 
     proxy = Go2ROS2Proxy()
     with caplog.at_level(logging.DEBUG, logger=_PROXY_LOGGER):

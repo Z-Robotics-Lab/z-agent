@@ -13,9 +13,9 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.core.scene_graph import ObjectNode, SceneGraph
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.skills.navigate_to_object import (
+from zeno.core.scene_graph import ObjectNode, SceneGraph
+from zeno.core.skill import SkillContext
+from zeno.skills.navigate_to_object import (
     NavigateToObjectSkill,
     _VICINITY_CLEARANCE_M,
 )

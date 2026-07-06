@@ -25,8 +25,8 @@ import inspect
 
 import pytest
 
-from vector_os_nano.vcli import verdict as verdict_mod
-from vector_os_nano.vcli.verdict import StepVerdict, VerdictReport
+from zeno.vcli import verdict as verdict_mod
+from zeno.vcli.verdict import StepVerdict, VerdictReport
 
 
 def _verdict_module_dataclasses() -> list[type]:

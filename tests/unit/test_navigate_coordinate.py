@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.skills.navigate import NavigateSkill
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import WorldModel
+from zeno.skills.navigate import NavigateSkill
 
 
 def _ctx(arrived=True, pos=(10.75, 3.05, 0.35)):

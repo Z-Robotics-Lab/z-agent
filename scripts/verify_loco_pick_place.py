@@ -84,11 +84,11 @@ def _dry_run(args: argparse.Namespace) -> int:
     errors: list[str] = []
 
     imports = [
-        ("MobilePickSkill", "vector_os_nano.skills.mobile_pick", "MobilePickSkill"),
-        ("MobilePlaceSkill", "vector_os_nano.skills.mobile_place", "MobilePlaceSkill"),
-        ("Go2ROS2Proxy", "vector_os_nano.hardware.sim.go2_ros2_proxy", "Go2ROS2Proxy"),
-        ("PiperROS2Proxy", "vector_os_nano.hardware.sim.piper_ros2_proxy", "PiperROS2Proxy"),
-        ("PiperGripperROS2Proxy", "vector_os_nano.hardware.sim.piper_ros2_proxy", "PiperGripperROS2Proxy"),
+        ("MobilePickSkill", "zeno.skills.mobile_pick", "MobilePickSkill"),
+        ("MobilePlaceSkill", "zeno.skills.mobile_place", "MobilePlaceSkill"),
+        ("Go2ROS2Proxy", "zeno.hardware.sim.go2_ros2_proxy", "Go2ROS2Proxy"),
+        ("PiperROS2Proxy", "zeno.hardware.sim.piper_ros2_proxy", "PiperROS2Proxy"),
+        ("PiperGripperROS2Proxy", "zeno.hardware.sim.piper_ros2_proxy", "PiperGripperROS2Proxy"),
     ]
 
     for label, module_path, attr in imports:
@@ -103,8 +103,8 @@ def _dry_run(args: argparse.Namespace) -> int:
 
     # Instantiate skills (no hardware needed — skill __init__ is lightweight).
     skill_checks = [
-        ("MobilePickSkill()", "vector_os_nano.skills.mobile_pick", "MobilePickSkill"),
-        ("MobilePlaceSkill()", "vector_os_nano.skills.mobile_place", "MobilePlaceSkill"),
+        ("MobilePickSkill()", "zeno.skills.mobile_pick", "MobilePickSkill"),
+        ("MobilePlaceSkill()", "zeno.skills.mobile_place", "MobilePlaceSkill"),
     ]
     for label, module_path, attr in skill_checks:
         try:
@@ -234,9 +234,9 @@ def _connect_proxies():
 
     Returns (base, arm, gripper) or raises on failure.
     """
-    from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy  # noqa: PLC0415
-    from vector_os_nano.hardware.sim.mujoco_go2 import _build_room_scene_xml  # noqa: PLC0415
-    from vector_os_nano.hardware.sim.piper_ros2_proxy import (  # noqa: PLC0415
+    from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy  # noqa: PLC0415
+    from zeno.hardware.sim.mujoco_go2 import _build_room_scene_xml  # noqa: PLC0415
+    from zeno.hardware.sim.piper_ros2_proxy import (  # noqa: PLC0415
         PiperGripperROS2Proxy,
         PiperROS2Proxy,
     )
@@ -267,9 +267,9 @@ def _disconnect_proxies(base, arm, gripper) -> None:
 
 def _build_world_model():
     """Build and populate WorldModel from the with_arm MJCF."""
-    from vector_os_nano.core.world_model import WorldModel  # noqa: PLC0415
-    from vector_os_nano.hardware.sim.mujoco_go2 import _build_room_scene_xml  # noqa: PLC0415
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool  # noqa: PLC0415
+    from zeno.core.world_model import WorldModel  # noqa: PLC0415
+    from zeno.hardware.sim.mujoco_go2 import _build_room_scene_xml  # noqa: PLC0415
+    from zeno.vcli.tools.sim_tool import SimStartTool  # noqa: PLC0415
 
     scene_xml = str(_build_room_scene_xml(with_arm=True))
     wm = WorldModel()
@@ -325,7 +325,7 @@ def _run_one_attempt(
         time.sleep(_DOG_SETTLE_SLEEP)
 
         # 6. Build SkillContext
-        from vector_os_nano.core.skill import SkillContext  # noqa: PLC0415
+        from zeno.core.skill import SkillContext  # noqa: PLC0415
 
         context = SkillContext(
             base=base,
@@ -336,7 +336,7 @@ def _run_one_attempt(
         )
 
         # 7. Execute MobilePickSkill
-        mobile_pick_mod = importlib.import_module("vector_os_nano.skills.mobile_pick")
+        mobile_pick_mod = importlib.import_module("zeno.skills.mobile_pick")
         mobile_pick = mobile_pick_mod.MobilePickSkill()
         pick_result = mobile_pick.execute({"object_label": object_label}, context)
 
@@ -360,7 +360,7 @@ def _run_one_attempt(
 
         # 8. pick_and_place mode: also execute MobilePlaceSkill
         if mode == "pick_and_place":
-            mobile_place_mod = importlib.import_module("vector_os_nano.skills.mobile_place")
+            mobile_place_mod = importlib.import_module("zeno.skills.mobile_place")
             mobile_place = mobile_place_mod.MobilePlaceSkill()
             place_params = {
                 "target_xyz": list(_PLACE_TARGET_XYZ),

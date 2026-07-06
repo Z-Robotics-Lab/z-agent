@@ -23,9 +23,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from vector_os_nano.vcli import cli
-from vector_os_nano.vcli.cognitive.actor_causation import ActorCaused
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli import cli
+from zeno.vcli.cognitive.actor_causation import ActorCaused
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
@@ -131,7 +131,7 @@ class _FakeEngine:
 
 def _stub_oracle(monkeypatch) -> None:
     monkeypatch.setattr(
-        "vector_os_nano.vcli.cognitive.trace_store.verify_oracle_names",
+        "zeno.vcli.cognitive.trace_store.verify_oracle_names",
         lambda agent, engine: frozenset({"at_position"}),
     )
 

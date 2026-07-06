@@ -31,7 +31,7 @@ import time
 
 import pexpect
 
-ROOT = "/home/yusen/Desktop/vector_os_nano"
+ROOT = "/home/yusen/Desktop/zeno"
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 # Perception-VLM billing-confound guards (R231/E54): default the local Ollama route +
@@ -255,7 +255,7 @@ def _judge_frame(out: str, tag: str) -> None:
         return  # judge unrouted (Ollama down / caller opted out) — eyes stay self-read
     try:
         sys.path.insert(0, ROOT)
-        from vector_os_nano.acceptance import vision_judge  # noqa: PLC0415
+        from zeno.acceptance import vision_judge  # noqa: PLC0415
         v = vision_judge.judge(out)
     except Exception as exc:  # noqa: BLE001 — never let the witness break a real acceptance run
         print(f"[driver] eyes vlm-judge {tag}: ERROR {exc} (recorded ABSTAIN, self-read stands)",
@@ -300,7 +300,7 @@ def _llm_preflight() -> None:
     means that provider is down (Yusen-only fix) — pick another provider (VECTOR_PROVIDER=…)."""
     sys.path.insert(0, ROOT)
     try:
-        from vector_os_nano.vcli.config import resolve_credentials  # noqa: PLC0415
+        from zeno.vcli.config import resolve_credentials  # noqa: PLC0415
         key, provider, model, base_url = resolve_credentials()
     except Exception as e:  # noqa: BLE001
         print(f"[driver] PREFLIGHT: resolve_credentials failed ({e}); proceeding blind.", flush=True)

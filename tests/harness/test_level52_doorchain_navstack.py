@@ -23,9 +23,9 @@ import pytest
 _REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO))
 
-import vector_os_nano.skills.navigate as navigate_module
-from vector_os_nano.core.scene_graph import SceneGraph
-from vector_os_nano.skills.navigate import (
+import zeno.skills.navigate as navigate_module
+from zeno.core.scene_graph import SceneGraph
+from zeno.skills.navigate import (
     NavigateSkill,
     _navigate_to_waypoint,
 )

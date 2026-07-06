@@ -17,8 +17,8 @@ the same bus used by SO101Arm).
 import logging
 import time
 
-from vector_os_nano.hardware.so101.joint_config import JOINT_CONFIG, enc_to_rad
-from vector_os_nano.hardware.so101.serial_bus import SerialBus
+from zeno.hardware.so101.joint_config import JOINT_CONFIG, enc_to_rad
+from zeno.hardware.so101.serial_bus import SerialBus
 
 logger = logging.getLogger(__name__)
 

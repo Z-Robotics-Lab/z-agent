@@ -34,23 +34,23 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vector_os_nano.playground import PlaygroundWorld
-from vector_os_nano.playground.verify.arm_predicates import _HOME_JOINTS
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.observation import (
+from zeno.playground import PlaygroundWorld
+from zeno.playground.verify.arm_predicates import _HOME_JOINTS
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.observation import (
     render_run_snapshot,
     render_step_view,
     run_snapshot,
 )
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.engine import VectorEngine
+from zeno.vcli.engine import VectorEngine
 
 _EE = [0.20, 0.10, 0.25]
 _REGION = (0.0, 0.0, 0.5, 0.5)

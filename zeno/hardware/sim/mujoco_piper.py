@@ -35,10 +35,10 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from vector_os_nano.hardware.arm import ensure_finite_joint_targets
+from zeno.hardware.arm import ensure_finite_joint_targets
 
 if TYPE_CHECKING:  # pragma: no cover
-    from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+    from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +262,7 @@ class MuJoCoPiper:
         if scene_path is None:
             # Fallback: reconstruct via the builder helper. This keeps us safe
             # even if MuJoCoGo2 ever stops exposing the attribute.
-            from vector_os_nano.hardware.sim.mujoco_go2 import _build_room_scene_xml
+            from zeno.hardware.sim.mujoco_go2 import _build_room_scene_xml
             scene_path = str(_build_room_scene_xml(with_arm=True))
 
         self._ik_model = mj.MjModel.from_xml_path(str(scene_path))

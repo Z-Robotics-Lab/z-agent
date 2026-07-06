@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 
-from vector_os_nano.acceptance import motion_check as mc
+from zeno.acceptance import motion_check as mc
 
 
 def test_path_length_planar():

@@ -28,13 +28,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vector_os_nano.core.skill import SkillRegistry
-from vector_os_nano.skills.detect import DetectSkill
-from vector_os_nano.skills.home import HomeSkill
-from vector_os_nano.skills.pick import PickSkill
-from vector_os_nano.skills.place import PlaceSkill
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.vocab_from_registry import build_decompose_vocab
+from zeno.core.skill import SkillRegistry
+from zeno.skills.detect import DetectSkill
+from zeno.skills.home import HomeSkill
+from zeno.skills.pick import PickSkill
+from zeno.skills.place import PlaceSkill
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.vocab_from_registry import build_decompose_vocab
 
 # The arm verify namespace contributed by RobotWorld/Playground Step 2. The vocab
 # allowlist is single-sourced from these (keys), so verify_hint predicates must

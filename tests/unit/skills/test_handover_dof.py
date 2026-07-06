@@ -11,8 +11,8 @@ Ported from the same D96 fix already applied to skills/home.py.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.skills.handover import HandoverSkill, _DEFAULT_HOME_JOINTS
+from zeno.core.skill import SkillContext
+from zeno.skills.handover import HandoverSkill, _DEFAULT_HOME_JOINTS
 
 
 class _Arm6Dof:

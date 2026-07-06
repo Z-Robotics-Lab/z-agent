@@ -7,7 +7,7 @@ legitimate predicates GROUNDED. A regression here means the verify moat is foola
 """
 import pytest
 
-from vector_os_nano.vcli.cognitive.evidence_classifier import classify_verify_expr
+from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
 
 # Stand-in for the live verify namespace (predicate + state oracle names).
 ORACLES = frozenset(

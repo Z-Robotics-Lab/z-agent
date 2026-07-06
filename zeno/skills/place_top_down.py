@@ -49,8 +49,8 @@ import logging
 import math
 import time
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_os_nano.vcli.tools.base import ToolContext
+from zeno.vcli.tools.base import ToolContext
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ def _ss_output_empty() -> MagicMock:
 
 class TestFoxgloveStatus:
     def test_status_not_running(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
 
         tool = FoxgloveTool()
         ctx = _make_context()
@@ -57,7 +57,7 @@ class TestFoxgloveStatus:
             assert "not running" in result.content
 
     def test_status_running(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
 
         tool = FoxgloveTool()
         ctx = _make_context()
@@ -75,13 +75,13 @@ class TestFoxgloveStatus:
 
 class TestFoxgloveStart:
     def test_start_already_running(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
 
         tool = FoxgloveTool()
         ctx = _make_context()
 
         with patch(
-            "vector_os_nano.vcli.tools.viz_tool._is_bridge_running",
+            "zeno.vcli.tools.viz_tool._is_bridge_running",
             return_value=True,
         ):
             result = tool.execute({"action": "start"}, ctx)
@@ -89,14 +89,14 @@ class TestFoxgloveStart:
             assert not result.is_error
 
     def test_start_no_ros2(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
 
         tool = FoxgloveTool()
         ctx = _make_context()
 
         with (
             patch(
-                "vector_os_nano.vcli.tools.viz_tool._is_bridge_running",
+                "zeno.vcli.tools.viz_tool._is_bridge_running",
                 return_value=False,
             ),
             patch("shutil.which", return_value=None),
@@ -106,8 +106,8 @@ class TestFoxgloveStart:
             assert "ros2 not found" in result.content
 
     def test_start_success(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool, _foxglove_proc
-        import vector_os_nano.vcli.tools.viz_tool as viz_mod
+        from zeno.vcli.tools.viz_tool import FoxgloveTool, _foxglove_proc
+        import zeno.vcli.tools.viz_tool as viz_mod
 
         tool = FoxgloveTool()
         ctx = _make_context()
@@ -117,7 +117,7 @@ class TestFoxgloveStart:
 
         with (
             patch(
-                "vector_os_nano.vcli.tools.viz_tool._is_bridge_running",
+                "zeno.vcli.tools.viz_tool._is_bridge_running",
                 return_value=False,
             ),
             patch("shutil.which", return_value="/usr/bin/ros2"),
@@ -133,8 +133,8 @@ class TestFoxgloveStart:
         viz_mod._foxglove_proc = None
 
     def test_start_exits_immediately(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
-        import vector_os_nano.vcli.tools.viz_tool as viz_mod
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
+        import zeno.vcli.tools.viz_tool as viz_mod
 
         tool = FoxgloveTool()
         ctx = _make_context()
@@ -144,7 +144,7 @@ class TestFoxgloveStart:
 
         with (
             patch(
-                "vector_os_nano.vcli.tools.viz_tool._is_bridge_running",
+                "zeno.vcli.tools.viz_tool._is_bridge_running",
                 return_value=False,
             ),
             patch("shutil.which", return_value="/usr/bin/ros2"),
@@ -164,23 +164,23 @@ class TestFoxgloveStart:
 
 class TestFoxgloveStop:
     def test_stop_no_process(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
-        import vector_os_nano.vcli.tools.viz_tool as viz_mod
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
+        import zeno.vcli.tools.viz_tool as viz_mod
 
         viz_mod._foxglove_proc = None
         tool = FoxgloveTool()
         ctx = _make_context()
 
         with patch(
-            "vector_os_nano.vcli.tools.viz_tool._is_bridge_running",
+            "zeno.vcli.tools.viz_tool._is_bridge_running",
             return_value=False,
         ):
             result = tool.execute({"action": "stop"}, ctx)
             assert "not running" in result.content
 
     def test_stop_with_process(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
-        import vector_os_nano.vcli.tools.viz_tool as viz_mod
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
+        import zeno.vcli.tools.viz_tool as viz_mod
 
         mock_proc = MagicMock()
         mock_proc.wait.return_value = 0
@@ -195,8 +195,8 @@ class TestFoxgloveStop:
         assert viz_mod._foxglove_proc is None
 
     def test_stop_port_kill_fallback(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
-        import vector_os_nano.vcli.tools.viz_tool as viz_mod
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
+        import zeno.vcli.tools.viz_tool as viz_mod
 
         viz_mod._foxglove_proc = None
         tool = FoxgloveTool()
@@ -204,7 +204,7 @@ class TestFoxgloveStop:
 
         with (
             patch(
-                "vector_os_nano.vcli.tools.viz_tool._is_bridge_running",
+                "zeno.vcli.tools.viz_tool._is_bridge_running",
                 return_value=True,
             ),
             patch("subprocess.run") as mock_run,
@@ -221,20 +221,20 @@ class TestFoxgloveStop:
 
 class TestFoxgloveDefaults:
     def test_default_action_is_start(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
 
         tool = FoxgloveTool()
         ctx = _make_context()
 
         with patch(
-            "vector_os_nano.vcli.tools.viz_tool._is_bridge_running",
+            "zeno.vcli.tools.viz_tool._is_bridge_running",
             return_value=True,
         ):
             result = tool.execute({}, ctx)
             assert "already running" in result.content
 
     def test_tool_metadata(self):
-        from vector_os_nano.vcli.tools.viz_tool import FoxgloveTool
+        from zeno.vcli.tools.viz_tool import FoxgloveTool
 
         tool = FoxgloveTool()
         assert tool.name == "open_foxglove"

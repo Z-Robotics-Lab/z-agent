@@ -30,7 +30,7 @@ from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import String
 
-from vector_os_nano.perception.pipeline import PerceptionPipeline
+from zeno.perception.pipeline import PerceptionPipeline
 
 logger = logging.getLogger(__name__)
 

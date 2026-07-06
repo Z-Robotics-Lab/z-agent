@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from vector_os_nano.core.types import Pose3D
+from zeno.core.types import Pose3D
 
 
 def select_nearest_cluster(

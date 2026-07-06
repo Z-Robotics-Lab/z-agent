@@ -6,7 +6,7 @@ Every prior fetch harness builds ``VectorEngine`` / the go2+Piper rig IN-PROCESS
 calls ``run_turn_native`` directly — internal, never the product. THIS harness drives
 the ACTUAL entrypoint:
 
-    python -m vector_os_nano.vcli.cli -p "把绿色瓶子拿过来" --sim-go2 --headless --native-loop
+    python -m zeno.vcli.cli -p "把绿色瓶子拿过来" --sim-go2 --headless --native-loop
 
 through a real PTY with the REAL model (repo-root .env DeepSeek), so the MODEL ALONE
 must route the full agent-adaptive fetch on a fresh, EMPTY scene graph:
@@ -98,10 +98,10 @@ def _nuke() -> None:
     # Target ONLY a leaked cli worker, never "mujoco": an autonomous round runs as
     # `claude -p "<loop prompt>"` whose cmdline literally contains "mujoco", so
     # `pkill -f mujoco` SIGKILLs the round itself (self-destruct → zero commits).
-    # The in-process sim lives inside the `python -m vector_os_nano.vcli.cli`
+    # The in-process sim lives inside the `python -m zeno.vcli.cli`
     # worker, so match that exact module path (absent from the round's cmdline).
     subprocess.run(
-        "pkill -9 -f 'vector_os_nano.vcli.cli' 2>/dev/null || true", shell=True
+        "pkill -9 -f 'zeno.vcli.cli' 2>/dev/null || true", shell=True
     )
 
 

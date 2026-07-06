@@ -28,15 +28,15 @@ from typing import Optional
 
 import numpy as np
 
-from vector_os_nano.core.types import (
+from zeno.core.types import (
     BBox3D,
     CameraIntrinsics,
     Detection,
     Pose3D,
     TrackedObject,
 )
-from vector_os_nano.perception.base import PerceptionProtocol
-from vector_os_nano.perception.pointcloud import (
+from zeno.perception.base import PerceptionProtocol
+from zeno.perception.pointcloud import (
     pointcloud_to_bbox3d_fast,
     rgbd_to_pointcloud_fast,
 )

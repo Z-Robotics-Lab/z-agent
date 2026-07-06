@@ -11,7 +11,7 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
-from vector_os_nano.core.types import CameraIntrinsics, Detection, TrackedObject
+from zeno.core.types import CameraIntrinsics, Detection, TrackedObject
 
 
 @runtime_checkable

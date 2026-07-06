@@ -23,7 +23,7 @@ pybullet = pytest.importorskip("pybullet")
 @pytest.fixture
 def sim_arm():
     """Connected SimulatedArm in DIRECT mode. Disconnects after test."""
-    from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+    from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
     arm = SimulatedArm(gui=False)
     arm.connect()
@@ -34,7 +34,7 @@ def sim_arm():
 @pytest.fixture
 def sim_gripper(sim_arm):
     """SimulatedGripper backed by a connected sim_arm."""
-    from vector_os_nano.hardware.sim.pybullet_gripper import SimulatedGripper
+    from zeno.hardware.sim.pybullet_gripper import SimulatedGripper
 
     return SimulatedGripper(sim_arm)
 
@@ -46,7 +46,7 @@ def sim_gripper(sim_arm):
 
 class TestConnectDisconnect:
     def test_connect_sets_connected_flag(self) -> None:
-        from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+        from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
         arm = SimulatedArm(gui=False)
         arm.connect()
@@ -56,7 +56,7 @@ class TestConnectDisconnect:
             arm.disconnect()
 
     def test_connect_assigns_physics_client(self) -> None:
-        from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+        from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
         arm = SimulatedArm(gui=False)
         arm.connect()
@@ -66,7 +66,7 @@ class TestConnectDisconnect:
             arm.disconnect()
 
     def test_connect_assigns_robot_id(self) -> None:
-        from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+        from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
         arm = SimulatedArm(gui=False)
         arm.connect()
@@ -76,7 +76,7 @@ class TestConnectDisconnect:
             arm.disconnect()
 
     def test_connect_populates_arm_joint_indices(self) -> None:
-        from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+        from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
         arm = SimulatedArm(gui=False)
         arm.connect()
@@ -86,7 +86,7 @@ class TestConnectDisconnect:
             arm.disconnect()
 
     def test_disconnect_clears_connected_flag(self) -> None:
-        from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+        from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
         arm = SimulatedArm(gui=False)
         arm.connect()
@@ -94,7 +94,7 @@ class TestConnectDisconnect:
         assert arm._connected is False
 
     def test_disconnect_clears_physics_client(self) -> None:
-        from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+        from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
         arm = SimulatedArm(gui=False)
         arm.connect()
@@ -103,7 +103,7 @@ class TestConnectDisconnect:
 
     def test_disconnect_idempotent(self) -> None:
         """Second disconnect() must not raise."""
-        from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+        from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
         arm = SimulatedArm(gui=False)
         arm.connect()

@@ -40,7 +40,7 @@ import logging
 import time
 from typing import Any
 
-from vector_os_nano.hardware.base import ensure_finite_nav_goal
+from zeno.hardware.base import ensure_finite_nav_goal
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,7 @@ class NavStackClient:
         Topic is /state_estimation (CMU) or /odom (Nav2) depending on mode.
         """
         try:
-            from vector_os_nano.core.types import Odometry
+            from zeno.core.types import Odometry
 
             p = msg.pose.pose.position
             o = msg.pose.pose.orientation

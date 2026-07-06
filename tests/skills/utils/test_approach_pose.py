@@ -10,7 +10,7 @@ import math
 
 import pytest
 
-from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
+from zeno.skills.utils.approach_pose import compute_approach_pose
 
 
 # ---------------------------------------------------------------------------

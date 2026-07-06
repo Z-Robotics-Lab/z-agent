@@ -11,7 +11,7 @@ Tests are headless (MUJOCO_GL=egl) and cover:
   5. walk() produces forward displacement (2 s cmd → base x >0.3 m, base z >0.5).
 
 Run:
-    cd /home/yusen/Desktop/vector_os_nano
+    cd /home/yusen/Desktop/zeno
     PATH=/usr/bin:$PATH MUJOCO_GL=egl .venv/bin/python -m pytest tests/unit/hardware/sim/test_g1_room.py -q
 """
 from __future__ import annotations
@@ -29,13 +29,13 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 # ---------------------------------------------------------------------------
 
 _G1_SCENE_XML = Path(
-    "/home/yusen/Desktop/vector_os_nano/vector_os_nano/hardware/sim/mjcf/g1/scene_g1_12dof_room.xml"
+    "/home/yusen/Desktop/zeno/zeno/hardware/sim/mjcf/g1/scene_g1_12dof_room.xml"
 )
 
 
 def _ensure_scene() -> Path:
     """Build the scene if not already built (idempotent, fast on cache hit)."""
-    from vector_os_nano.hardware.sim.mujoco_g1 import _build_g1_room_scene_xml
+    from zeno.hardware.sim.mujoco_g1 import _build_g1_room_scene_xml
     return _build_g1_room_scene_xml()
 
 
@@ -101,7 +101,7 @@ def test_g1_head_camera_in_compiled_model() -> None:
 def test_g1_self_geom_set_nonempty() -> None:
     """_build_robot_geom_set must find at least one g1_* body geom."""
     import mujoco
-    from vector_os_nano.hardware.sim.mujoco_g1 import (
+    from zeno.hardware.sim.mujoco_g1 import (
         _build_g1_room_scene_xml,
         _build_robot_geom_set,
     )
@@ -127,7 +127,7 @@ def test_g1_self_geom_set_nonempty() -> None:
 
 def test_start_g1_wired_in_sim_tool() -> None:
     """SimStartTool must have _start_g1 method and 'g1' in the schema enum."""
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool
+    from zeno.vcli.tools.sim_tool import SimStartTool
 
     assert hasattr(SimStartTool, "_start_g1"), (
         "SimStartTool._start_g1 not found — dispatch not wired"
@@ -153,7 +153,7 @@ def test_walk_forward_displacement() -> None:
     This is the key R2 correctness test: verifies the policy gait works in the
     combined room scene with correct qpos/qvel/ctrl offsets.
     """
-    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
+    from zeno.hardware.sim.mujoco_g1 import MuJoCoG1
 
     g1 = MuJoCoG1(gui=False, room=True)
     try:
@@ -207,7 +207,7 @@ def test_g1_nav_result_contract() -> None:
     """_G1NavResult truthiness reflects 'reached'; .get() still works."""
     import inspect
 
-    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1, _G1NavResult
+    from zeno.hardware.sim.mujoco_g1 import MuJoCoG1, _G1NavResult
 
     # (a) bool reflects 'reached'
     r_false = _G1NavResult({"reached": False, "moved_m": 1.5, "reason": "timeout"})

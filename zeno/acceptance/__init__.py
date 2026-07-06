@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
-"""vector_os_nano.acceptance — the in-product visual-acceptance subsystem (ADR-002).
+"""zeno.acceptance — the in-product visual-acceptance subsystem (ADR-002).
 
 The "eyes": same-process render capture for the honest visual second witness. Kept as a
 LIGHT package (no eager MuJoCo import — cv2/mujoco load lazily inside ``capture.snapshot``)

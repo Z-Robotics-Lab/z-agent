@@ -35,9 +35,9 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.vcli.cognitive import goal_decomposer as gd
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer, _loads_finite
-from vector_os_nano.vcli.cognitive.types import GoalTree
+from zeno.vcli.cognitive import goal_decomposer as gd
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer, _loads_finite
+from zeno.vcli.cognitive.types import GoalTree
 
 
 # ---------------------------------------------------------------------------

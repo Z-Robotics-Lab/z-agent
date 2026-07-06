@@ -17,7 +17,7 @@ discipline enforceable:
 capability claim cannot quietly regress to a bypass script. The PTY harness tests
 (the acceptance instrument itself) carry both markers.
 
-Also ensures the repo root is on ``sys.path`` so ``import vector_os_nano`` /
+Also ensures the repo root is on ``sys.path`` so ``import zeno`` /
 ``import tests`` resolve when pytest is invoked from anywhere.
 """
 from __future__ import annotations

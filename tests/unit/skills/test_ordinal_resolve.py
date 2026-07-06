@@ -17,8 +17,8 @@ WHICH detection to grasp, so the verify oracle stays untouched.
 """
 from __future__ import annotations
 
-from vector_os_nano.perception.depth_projection import mujoco_intrinsics
-from vector_os_nano.skills.perception_grasp import (
+from zeno.perception.depth_projection import mujoco_intrinsics
+from zeno.skills.perception_grasp import (
     _ordinal_detections_from_catalog,
     _parse_ordinal,
     _resolve_ordinal_target,

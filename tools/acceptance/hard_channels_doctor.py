@@ -156,10 +156,10 @@ def diagnose() -> dict[str, Any]:
     sigs = hard_channels.verify_signatures()
 
     # Read the REAL kernel seam, read-only. Any import failure is itself a RED finding.
-    from vector_os_nano.core.types import Odometry
-    from vector_os_nano.hardware.base import BaseProtocol
-    from vector_os_nano.vcli.cognitive.evidence_classifier import _PREDICATE_ORACLES
-    from vector_os_nano.vcli.worlds import go2_sim_oracle
+    from zeno.core.types import Odometry
+    from zeno.hardware.base import BaseProtocol
+    from zeno.vcli.cognitive.evidence_classifier import _PREDICATE_ORACLES
+    from zeno.vcli.worlds import go2_sim_oracle
 
     base_methods = {m for m in REQUIRED_BASE_METHODS if hasattr(BaseProtocol, m)}
     odom_fields = {f.name for f in dataclasses.fields(Odometry)}

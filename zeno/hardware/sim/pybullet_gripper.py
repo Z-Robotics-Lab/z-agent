@@ -15,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from vector_os_nano.hardware.sim.pybullet_arm import SimulatedArm
+    from zeno.hardware.sim.pybullet_arm import SimulatedArm
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class SimulatedGripper:
 
         # Check contact points on the gripper body
         try:
-            from vector_os_nano.hardware.sim.pybullet_arm import _get_pybullet  # noqa: PLC0415
+            from zeno.hardware.sim.pybullet_arm import _get_pybullet  # noqa: PLC0415
 
             p = _get_pybullet()
             contacts = p.getContactPoints(
@@ -131,7 +131,7 @@ class SimulatedGripper:
             return
 
         try:
-            from vector_os_nano.hardware.sim.pybullet_arm import _get_pybullet  # noqa: PLC0415
+            from zeno.hardware.sim.pybullet_arm import _get_pybullet  # noqa: PLC0415
 
             p = _get_pybullet()
             p.setJointMotorControl2(

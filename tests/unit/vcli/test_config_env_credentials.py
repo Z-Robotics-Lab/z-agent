@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli import config as cfg
-from vector_os_nano.vcli import oauth as oauth_mod
+from zeno.vcli import config as cfg
+from zeno.vcli import oauth as oauth_mod
 
 _CRED_ENV = (
     "DEEPSEEK_API_KEY",

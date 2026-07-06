@@ -200,9 +200,9 @@ def _run_frame() -> dict:
     stool); the nav demonstrates the RL gait separately. Each box is red-teamed for
     a GENUINE (tight, centred) localization vs a spurious full-frame box."""
     from PIL import Image, ImageDraw
-    from vector_os_nano.hardware.sim.mujoco_g1 import MuJoCoG1
-    from vector_os_nano.perception.g1_head_perception import G1HeadPerception
-    from vector_os_nano.perception.grounding_dino import get_shared_detector
+    from zeno.hardware.sim.mujoco_g1 import MuJoCoG1
+    from zeno.perception.g1_head_perception import G1HeadPerception
+    from zeno.perception.grounding_dino import get_shared_detector
 
     print(f"[capstone] FRAME: detect {_QUERY_DETECT!r} at the framed vantage, then navigate to {_TARGET}")
     g1 = MuJoCoG1(gui=False, room=True)

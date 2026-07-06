@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,

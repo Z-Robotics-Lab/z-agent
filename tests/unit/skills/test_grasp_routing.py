@@ -10,9 +10,9 @@ map is last-write-wins per alias). This pins that precedence.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.skill import SkillRegistry
-from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
-from vector_os_nano.skills.pick_top_down import PickTopDownSkill
+from zeno.core.skill import SkillRegistry
+from zeno.skills.perception_grasp import PerceptionGraspSkill
+from zeno.skills.pick_top_down import PickTopDownSkill
 
 
 def _registry_in_sim_order() -> SkillRegistry:

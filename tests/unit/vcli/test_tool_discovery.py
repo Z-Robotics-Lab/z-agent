@@ -15,14 +15,14 @@ class TestDiscoverAllTools:
 
     def test_discover_all_tools_count(self) -> None:
         """discover_all_tools() must return at least 10 tools (existing + new)."""
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         tools = discover_all_tools()
         assert len(tools) >= 10
 
     def test_discover_all_tools_includes_new(self) -> None:
         """New Wave 1-2 tools must appear in the flat list by name."""
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         tools = discover_all_tools()
         names = {t.name for t in tools}
@@ -40,7 +40,7 @@ class TestDiscoverAllTools:
 
     def test_backward_compat_returns_flat_list(self) -> None:
         """discover_all_tools() must still return a plain list (backward compat)."""
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         result = discover_all_tools()
         assert isinstance(result, list)
@@ -51,7 +51,7 @@ class TestDiscoverCategorizedTools:
 
     def test_discover_categorized_tools_signature(self) -> None:
         """discover_categorized_tools() must return a 2-tuple."""
-        from vector_os_nano.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools import discover_categorized_tools
 
         result = discover_categorized_tools()
         assert isinstance(result, tuple)
@@ -59,7 +59,7 @@ class TestDiscoverCategorizedTools:
 
     def test_discover_categorized_tools_structure(self) -> None:
         """First element is list of tools, second is dict of categories."""
-        from vector_os_nano.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools import discover_categorized_tools
 
         tools_list, categories_dict = discover_categorized_tools()
         assert isinstance(tools_list, list)
@@ -67,7 +67,7 @@ class TestDiscoverCategorizedTools:
 
     def test_categories_code(self) -> None:
         """'code' category contains file_read, file_write, file_edit, bash, glob, grep."""
-        from vector_os_nano.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools import discover_categorized_tools
 
         _, categories = discover_categorized_tools()
         assert "code" in categories
@@ -78,7 +78,7 @@ class TestDiscoverCategorizedTools:
 
     def test_categories_diag(self) -> None:
         """'diag' category contains ros2_topics, ros2_nodes, ros2_log, nav_state, terrain_status."""
-        from vector_os_nano.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools import discover_categorized_tools
 
         _, categories = discover_categorized_tools()
         assert "diag" in categories
@@ -89,7 +89,7 @@ class TestDiscoverCategorizedTools:
 
     def test_categories_system(self) -> None:
         """'system' holds robot infra; sim lifecycle lives in its own 'sim' category."""
-        from vector_os_nano.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools import discover_categorized_tools
 
         _, categories = discover_categorized_tools()
         assert "system" in categories
@@ -104,7 +104,7 @@ class TestDiscoverCategorizedTools:
 
     def test_categories_general(self) -> None:
         """'general' is the domain-general bucket and holds web_fetch (moved out of 'system')."""
-        from vector_os_nano.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools import discover_categorized_tools
 
         _, categories = discover_categorized_tools()
         assert "general" in categories
@@ -114,7 +114,7 @@ class TestDiscoverCategorizedTools:
 
     def test_categories_robot(self) -> None:
         """'robot' category contains scene_graph_query (world_query may also be here)."""
-        from vector_os_nano.vcli.tools import discover_categorized_tools
+        from zeno.vcli.tools import discover_categorized_tools
 
         _, categories = discover_categorized_tools()
         assert "robot" in categories

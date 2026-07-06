@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.vcli.worlds import go2w as go2w_mod
+from zeno.vcli.worlds import go2w as go2w_mod
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ def fake_bridge(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 def test_go2w_is_a_builtin_world_id() -> None:
     """``go2w`` and its alias are registered built-ins (no plugin env required)."""
-    from vector_os_nano.vcli.worlds import get_world_registry
+    from zeno.vcli.worlds import get_world_registry
 
     names = get_world_registry().names()
     assert "go2w" in names, "go2w must be a first-class built-in world id"
@@ -87,7 +87,7 @@ def test_go2w_is_a_builtin_world_id() -> None:
 
 def test_world_flag_go2w_resolves_isaac_world() -> None:
     """``--world go2w`` resolves an ``IsaacGo2WWorld`` through the CLI resolver."""
-    from vector_os_nano.vcli.cli import _resolve_active_world
+    from zeno.vcli.cli import _resolve_active_world
 
     args = SimpleNamespace(world="go2w", scenario=None)
     world = _resolve_active_world(args, agent=None)
@@ -97,7 +97,7 @@ def test_world_flag_go2w_resolves_isaac_world() -> None:
 
 def test_world_flag_isaac_go2w_alias_resolves_same_world() -> None:
     """The back-compat ``isaac-go2w`` alias resolves the same world class."""
-    from vector_os_nano.vcli.cli import _resolve_active_world
+    from zeno.vcli.cli import _resolve_active_world
 
     args = SimpleNamespace(world="isaac-go2w", scenario=None)
     world = _resolve_active_world(args, agent=None)
@@ -111,9 +111,9 @@ def test_world_flag_isaac_go2w_alias_resolves_same_world() -> None:
 
 def test_register_tools_adds_go2w_nav_tools_under_go2w_category() -> None:
     """After ``register_tools`` the CLI tool table carries both go2w tools."""
-    from vector_os_nano.vcli.cli import _register_world_tools
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.worlds import resolve_world_named
+    from zeno.vcli.cli import _register_world_tools
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.worlds import resolve_world_named
 
     world = resolve_world_named("go2w")
     registry = CategorizedToolRegistry()
@@ -148,7 +148,7 @@ def test_build_embodiment_returns_agent_with_base_and_skill_registry() -> None:
     the navigate skill the MOTION path routes to. No network — construction never
     touches the bridge.
     """
-    from vector_os_nano.vcli.worlds import resolve_world_named
+    from zeno.vcli.worlds import resolve_world_named
 
     world = resolve_world_named("go2w")
     embodiment = world.build_embodiment()
@@ -161,7 +161,7 @@ def test_build_embodiment_returns_agent_with_base_and_skill_registry() -> None:
 
 def test_init_agent_uses_go2w_embodiment_without_sim() -> None:
     """``_init_agent`` with ``--world go2w`` and NO ``--sim`` yields the embodiment."""
-    from vector_os_nano.vcli.cli import _init_agent
+    from zeno.vcli.cli import _init_agent
 
     args = SimpleNamespace(sim=False, sim_go2=False, world="go2w", scenario=None)
     agent = _init_agent(args)
@@ -177,7 +177,7 @@ def test_init_agent_uses_go2w_embodiment_without_sim() -> None:
 
 def test_go2w_at_is_exposed_via_build_verify_namespace() -> None:
     """The world's ``build_verify_namespace`` contributes the ``go2w_at`` predicate."""
-    from vector_os_nano.vcli.worlds import resolve_world_named
+    from zeno.vcli.worlds import resolve_world_named
 
     world = resolve_world_named("go2w")
     ns = world.build_verify_namespace(agent=None)
@@ -190,7 +190,7 @@ def test_go2w_at_reads_ground_truth_from_the_bridge(fake_bridge: dict[str, Any])
     gt == pose (zero offset), so the target grades purely on distance: the robot
     IS at (1, 2) within tolerance, and is NOT at (5, 5).
     """
-    from vector_os_nano.vcli.worlds import resolve_world_named
+    from zeno.vcli.worlds import resolve_world_named
 
     world = resolve_world_named("go2w")
     at = world.build_verify_namespace(agent=None)["go2w_at"]
@@ -210,9 +210,9 @@ def test_go2w_at_reaches_the_verifier_through_the_real_engine_seam() -> None:
     dict contains the name. Offline: ``VectorEngine.__init__`` never calls the
     backend, and reaching the oracle NAMES needs no bridge call.
     """
-    from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.worlds import resolve_world_named
+    from zeno.vcli.cognitive.trace_store import verify_oracle_names
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.worlds import resolve_world_named
 
     engine = VectorEngine(backend=SimpleNamespace())
     engine._world = resolve_world_named("go2w")

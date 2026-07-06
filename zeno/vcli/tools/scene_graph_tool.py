@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import (
+from zeno.vcli.tools.base import (
     ToolContext,
     ToolResult,
     tool,
@@ -236,7 +236,7 @@ class SceneGraphQueryTool:
 
         # Include live explore status so LLM knows if exploration is in progress
         try:
-            from vector_os_nano.skills.go2.explore import is_exploring, get_explore_status
+            from zeno.skills.go2.explore import is_exploring, get_explore_status
             if is_exploring():
                 status = get_explore_status()
                 data["explore_in_progress"] = True

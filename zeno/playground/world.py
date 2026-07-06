@@ -24,25 +24,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.playground.catalog import TABLETOP
-from vector_os_nano.playground.scenario import Scenario
-from vector_os_nano.playground.verify.arm_predicates import (
+from zeno.playground.catalog import TABLETOP
+from zeno.playground.scenario import Scenario
+from zeno.playground.verify.arm_predicates import (
     make_arm_at_home,
     make_holding_object,
     make_placed_count,
 )
-from vector_os_nano.playground.verify.base_predicates import (
+from zeno.playground.verify.base_predicates import (
     make_at_position,
     make_facing,
     make_rooms_producer,
     make_visited,
 )
-from vector_os_nano.playground.verify.scene_predicates import (
+from zeno.playground.verify.scene_predicates import (
     make_detect_objects,
     make_detect_producer,
     make_describe_scene,
 )
-from vector_os_nano.vcli.prompt import ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTIONS
+from zeno.vcli.prompt import ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTIONS
 
 
 class PlaygroundWorld:

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.types import SubGoal
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector, StrategyResult
+from zeno.vcli.cognitive.types import SubGoal
+from zeno.vcli.cognitive.strategy_selector import StrategySelector, StrategyResult
 
 
 # ---------------------------------------------------------------------------

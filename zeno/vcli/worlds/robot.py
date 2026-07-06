@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from vector_os_nano.vcli.prompt import ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTIONS
+from zeno.vcli.prompt import ROBOT_ROLE_PROMPT, ROBOT_TOOL_INSTRUCTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def _agent_has_camera(agent: Any) -> bool:
     ``get_color_frame()`` OR a base/arm exposing ``get_camera_frame()``), so the
     behavior is byte-identical; fails safe to False (no-agent / sensorless).
     """
-    from vector_os_nano.embodiments.capability_profile import resolve_capability_profile
+    from zeno.embodiments.capability_profile import resolve_capability_profile
 
     return resolve_capability_profile(agent).camera
 
@@ -133,7 +133,7 @@ class RobotWorld:
 
         arm = getattr(agent, "_arm", None)
         if arm is not None and hasattr(arm, "get_object_positions"):
-            from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+            from zeno.vcli.worlds.arm_sim_oracle import (
                 make_arm_at_home,
                 make_describe_scene,
                 make_detect_objects,
@@ -156,7 +156,7 @@ class RobotWorld:
             # model-path PLACE is graded by the moat-proven oracle.
             rcp = _place_receptacle_extent(agent)
             if rcp is not None:
-                from vector_os_nano.vcli.worlds.arm_sim_oracle import (
+                from zeno.vcli.worlds.arm_sim_oracle import (
                     make_resting_on_receptacle,
                 )
                 region, rest_z = rcp
@@ -184,7 +184,7 @@ class RobotWorld:
             # robot world has no Scenario, so ``visited`` (which needs a named-room
             # set) is left to the playground; ``at_position`` / ``facing`` need
             # only the live base and replace the engine stubs.
-            from vector_os_nano.vcli.worlds.go2_sim_oracle import (
+            from zeno.vcli.worlds.go2_sim_oracle import (
                 make_at_position,
                 make_facing,
             )
@@ -224,7 +224,7 @@ class RobotWorld:
             and getattr(base, "_model", None) is not None
             and getattr(base, "_data", None) is not None
         ):
-            from vector_os_nano.vcli.worlds.g1_perception_oracle import (
+            from zeno.vcli.worlds.g1_perception_oracle import (
                 make_detection_matches_gt,
             )
             ns["detection_matches_gt"] = make_detection_matches_gt(agent)
@@ -257,7 +257,7 @@ class RobotWorld:
                 "not registered (path stays detector-free)"
             )
             return None
-        from vector_os_nano.perception.detector_capability import DetectorCapability
+        from zeno.perception.detector_capability import DetectorCapability
 
         # Bind the agent's live RGB source so a PRODUCER-routed ``detect`` sub-goal
         # can perceive on the capability-dispatch path. The kernel builds a

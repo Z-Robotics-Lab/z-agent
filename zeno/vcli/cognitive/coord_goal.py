@@ -49,7 +49,7 @@ def _at_position_tol() -> float:
     Re-read, never re-authored, so the check can never disagree with the oracle.
     """
     try:
-        from vector_os_nano.vcli.worlds.go2_sim_oracle import _AT_POSITION_TOL_M
+        from zeno.vcli.worlds.go2_sim_oracle import _AT_POSITION_TOL_M
 
         return float(_AT_POSITION_TOL_M)
     except Exception:  # noqa: BLE001

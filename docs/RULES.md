@@ -14,9 +14,9 @@ Serialize & tear down (hard rules):
 - BEFORE launch: `pgrep -f "mujoco|vcli"` + `free -g`; sim live or RAM tight → WAIT.
 - AFTER every run: `./scripts/sim-teardown` (uses `rosm nuke --yes` when installed — rosm is
   a sibling-repo sim process manager, optional on a fresh clone; else repo-scoped
-  `pkill -u $USER -f 'vector_os_nano\.vcli|launch_explore'`). NEVER `pkill mujoco` — bare
+  `pkill -u $USER -f 'zeno\.vcli|launch_explore'`). NEVER `pkill mujoco` — bare
   pkill corrupts sim state and races other sessions.
-- Inline sim `bash -c` must NOT pre-`pkill 'vector_os_nano.vcli.cli'` — it self-kills the shell.
+- Inline sim `bash -c` must NOT pre-`pkill 'zeno.vcli.cli'` — it self-kills the shell.
 - rc=137 == kernel OOM-kill → a sim leaked or two ran; tear down, re-check `free -g`.
 
 NEVER-KILL-INFRA (hard rule): never kill the loop supervisor, its timeout wrapper, a sibling

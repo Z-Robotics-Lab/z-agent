@@ -11,8 +11,8 @@ import os
 import cv2
 import numpy as np
 
-from vector_os_nano.acceptance import capture
-from vector_os_nano.acceptance import vision_judge as vj
+from zeno.acceptance import capture
+from zeno.acceptance import vision_judge as vj
 
 
 class _NoBase:

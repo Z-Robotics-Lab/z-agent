@@ -32,9 +32,9 @@ from typing import Optional
 
 import numpy as np
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.calibration import camera_to_base, load_calibration
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.skills.calibration import camera_to_base, load_calibration
 
 logger = logging.getLogger(__name__)
 
@@ -779,7 +779,7 @@ def _get_calibration_matrix(context: SkillContext) -> np.ndarray:
         return np.array(cal["transform_matrix"], dtype=np.float64)
     if isinstance(cal, str):
         return load_calibration(cal)
-    # Handle Calibration object (from vector_os_nano.perception.calibration)
+    # Handle Calibration object (from zeno.perception.calibration)
     if hasattr(cal, '_matrix') and cal._matrix is not None:
         return np.array(cal._matrix, dtype=np.float64)
     if hasattr(cal, 'camera_to_base'):

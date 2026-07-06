@@ -24,7 +24,7 @@ import math
 import re
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
+from zeno.vcli.cognitive.types import ForEachSpec, GoalTree, SubGoal
 
 _LOG = logging.getLogger(__name__)
 

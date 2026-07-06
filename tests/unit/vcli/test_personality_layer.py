@@ -10,7 +10,7 @@ identity/voice across every world. It sits below the system/developer prompt
 """
 from __future__ import annotations
 
-import vector_os_nano.vcli.prompt as prompt
+import zeno.vcli.prompt as prompt
 
 
 def test_personality_block_present_after_persona(tmp_path):

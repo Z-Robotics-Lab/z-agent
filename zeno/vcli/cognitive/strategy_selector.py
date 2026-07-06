@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.types import SubGoal
+from zeno.vcli.cognitive.types import SubGoal
 
 
 def _word_match(keywords: tuple[str, ...], text: str) -> bool:
@@ -217,7 +217,7 @@ class StrategySelector:
             return result
 
         try:
-            from vector_os_nano.vcli.cognitive.strategy_stats import StrategyStats
+            from zeno.vcli.cognitive.strategy_stats import StrategyStats
             pattern = StrategyStats.extract_pattern(sub_goal.name)
             rankings = self._stats.get_rankings(pattern)
         except Exception:  # noqa: BLE001

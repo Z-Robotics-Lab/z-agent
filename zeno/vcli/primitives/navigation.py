@@ -12,8 +12,8 @@ import math
 import time
 from typing import TYPE_CHECKING
 
-from vector_os_nano.hardware.base import ensure_finite_nav_goal
-from vector_os_nano.vcli.primitives import PrimitiveContext
+from zeno.hardware.base import ensure_finite_nav_goal
+from zeno.vcli.primitives import PrimitiveContext
 
 if TYPE_CHECKING:
     pass
@@ -44,7 +44,7 @@ def nearest_room() -> str | None:
     Raises:
         RuntimeError: If no SceneGraph is connected.
     """
-    from vector_os_nano.vcli.primitives import locomotion
+    from zeno.vcli.primitives import locomotion
     sg = _require_scene_graph()
     pos = locomotion.get_position()
     return sg.nearest_room(pos[0], pos[1])
@@ -106,7 +106,7 @@ def wait_until_near(
     Returns:
         True if position reached within timeout, False on timeout.
     """
-    from vector_os_nano.vcli.primitives import locomotion
+    from zeno.vcli.primitives import locomotion
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         pos = locomotion.get_position()
@@ -174,7 +174,7 @@ def navigate_to_room(room: str) -> bool:
 
         if skill is not None:
             try:
-                from vector_os_nano.core.skill import SkillContext
+                from zeno.core.skill import SkillContext
                 ctx_obj = SkillContext(
                     base=_ctx.base,
                     scene_graph=_ctx.scene_graph,

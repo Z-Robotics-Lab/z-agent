@@ -30,7 +30,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.trace_store import (
+from zeno.vcli.cognitive.trace_store import (
     classify_step_evidence,
     evidence_passed,
 )

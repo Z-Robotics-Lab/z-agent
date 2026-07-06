@@ -17,8 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vector_os_nano.vcli.intent_router import IntentRouter
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.intent_router import IntentRouter
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
@@ -32,8 +32,8 @@ from vector_os_nano.vcli.cognitive.types import (
 
 
 def _make_mock_backend() -> MagicMock:
-    from vector_os_nano.vcli.backends.types import LLMResponse
-    from vector_os_nano.vcli.session import TokenUsage
+    from zeno.vcli.backends.types import LLMResponse
+    from zeno.vcli.session import TokenUsage
 
     backend = MagicMock()
     backend.call.return_value = LLMResponse(
@@ -81,7 +81,7 @@ def _make_engine_with_vgg_mocked(
     complex_response: bool = True,
 ) -> Any:
     """Return a VectorEngine with VGG internals fully mocked."""
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     backend = _make_mock_backend()
     router = IntentRouter()
@@ -202,7 +202,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_vgg_decompose_returns_goal_tree_for_complex(self) -> None:
         """vgg_decompose on a complex message returns a GoalTree."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         router = IntentRouter()
@@ -227,7 +227,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_vgg_decompose_returns_none_for_conversation(self) -> None:
         """vgg_decompose on pure conversation returns None."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         router = IntentRouter()
@@ -243,7 +243,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_vgg_decompose_returns_none_when_disabled(self) -> None:
         """vgg_decompose returns None when VGG is disabled."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)
@@ -254,7 +254,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_vgg_decompose_returns_none_without_router(self) -> None:
         """vgg_decompose returns None when no intent_router is set."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)  # no router
@@ -266,7 +266,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_vgg_decompose_exception_returns_none(self) -> None:
         """vgg_decompose returns None when decomposer raises an exception."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         router = IntentRouter()
@@ -283,7 +283,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_vgg_execute_returns_execution_trace(self) -> None:
         """vgg_execute on a GoalTree returns an ExecutionTrace."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)
@@ -303,7 +303,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_vgg_execute_passes_on_step_callback(self) -> None:
         """vgg_execute passes _on_vgg_step to the executor."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         engine = VectorEngine(backend=backend)
@@ -324,7 +324,7 @@ class TestVggDecomposeExecuteSplit:
 
     def test_decompose_then_execute_full_flow(self) -> None:
         """Full flow: decompose → execute returns consistent GoalTree and trace."""
-        from vector_os_nano.vcli.engine import VectorEngine
+        from zeno.vcli.engine import VectorEngine
 
         backend = _make_mock_backend()
         router = IntentRouter()

@@ -16,13 +16,13 @@ import pytest
 # Skip the entire module if mujoco is not installed.
 pytest.importorskip("mujoco", reason="mujoco not installed")
 
-from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-from vector_os_nano.core.agent import Agent
-from vector_os_nano.skills import get_default_skills
-from vector_os_nano.skills.pick import SIM_PICK_CONFIG
-from vector_os_nano.vcli.worlds.arm_sim_oracle import make_holding_object
+from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+from zeno.core.agent import Agent
+from zeno.skills import get_default_skills
+from zeno.skills.pick import SIM_PICK_CONFIG
+from zeno.vcli.worlds.arm_sim_oracle import make_holding_object
 
 
 # ---------------------------------------------------------------------------
@@ -65,18 +65,18 @@ class TestSimPickConfig:
 
     def test_importable_from_cli(self):
         """cli.py can import SIM_PICK_CONFIG without error."""
-        from vector_os_nano.skills.pick import SIM_PICK_CONFIG as _cfg  # noqa: F401
+        from zeno.skills.pick import SIM_PICK_CONFIG as _cfg  # noqa: F401
         assert _cfg is not None
 
     def test_importable_from_sim_tool(self):
         """sim_tool.py import path doesn't break at import time."""
         # We just verify the import resolves; the actual usage is at runtime.
-        from vector_os_nano.skills.pick import SIM_PICK_CONFIG as _cfg  # noqa: F401
+        from zeno.skills.pick import SIM_PICK_CONFIG as _cfg  # noqa: F401
         assert _cfg is not None
 
     def test_importable_from_mcp_server(self):
         """mcp/server.py import path resolves (mcp package may not be installed)."""
-        from vector_os_nano.skills.pick import SIM_PICK_CONFIG as _cfg  # noqa: F401
+        from zeno.skills.pick import SIM_PICK_CONFIG as _cfg  # noqa: F401
         assert _cfg is not None
 
 

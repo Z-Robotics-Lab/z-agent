@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from vector_os_nano.vcli.worlds import (
+from zeno.vcli.worlds import (
     DevWorld,
     RobotWorld,
     WorldRegistry,
@@ -25,7 +25,7 @@ from vector_os_nano.vcli.worlds import (
     resolve_world,
     resolve_world_named,
 )
-from vector_os_nano.vcli.worlds.registry import DEV_WORLD, ROBOT_WORLD
+from zeno.vcli.worlds.registry import DEV_WORLD, ROBOT_WORLD
 
 
 # ---------------------------------------------------------------------------

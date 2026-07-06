@@ -20,12 +20,12 @@ pytest.importorskip("mujoco", reason="mujoco not installed")
 import mujoco as mj  # noqa: E402
 import numpy as np  # noqa: E402
 
-from vector_os_nano.hardware.sim.scene_builder import (  # noqa: E402
+from zeno.hardware.sim.scene_builder import (  # noqa: E402
     build_room_scene,
     normalize_attach_defaults,
 )
 
-_SIM = Path("vector_os_nano/hardware/sim").resolve()
+_SIM = Path("zeno/hardware/sim").resolve()
 _MJCF = _SIM / "mjcf" / "go2"
 _ROOM = _SIM / "go2_room.xml"
 _GO2_ASSETS = (_MJCF / "assets").resolve()
@@ -247,7 +247,7 @@ def test_build_room_scene_g1_byte_identical():
 # ---------------------------------------------------------------------------
 
 def test_go2_builder_file_reloads():
-    from vector_os_nano.hardware.sim.mujoco_go2 import _build_room_scene_xml
+    from zeno.hardware.sim.mujoco_go2 import _build_room_scene_xml
 
     for with_arm in (True, False):
         path = _build_room_scene_xml(with_arm=with_arm)

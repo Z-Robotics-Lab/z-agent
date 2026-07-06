@@ -227,7 +227,7 @@ class TestClearMemoryTerrain:
     def test_clear_memory_deletes_terrain(self):
         """CLI /clear_memory handler should delete terrain_map.npz."""
         cli_path = os.path.join(
-            _REPO, "vector_os_nano", "vcli", "cli.py"
+            _REPO, "zeno", "vcli", "cli.py"
         )
         with open(cli_path) as f:
             src = f.read()

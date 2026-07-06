@@ -2,7 +2,7 @@
 # Copyright (c) 2024-2026 Vector Robotics
 
 """Tests for IntentRouter — keyword-based tool category routing."""
-from vector_os_nano.vcli.intent_router import IntentRouter
+from zeno.vcli.intent_router import IntentRouter
 
 
 class TestIntentRouter:
@@ -71,7 +71,7 @@ class TestAnnotationsResolvable:
         import inspect
         import typing
 
-        from vector_os_nano.vcli import intent_router as mod
+        from zeno.vcli import intent_router as mod
 
         unresolved = []
         members = [(mod.__name__, mod)]

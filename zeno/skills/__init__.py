@@ -4,15 +4,15 @@
 """Built-in robot skills — all use @skill decorator for routing metadata."""
 from __future__ import annotations
 
-from vector_os_nano.skills.describe import DescribeSkill
-from vector_os_nano.skills.detect import DetectSkill
-from vector_os_nano.skills.gripper import GripperCloseSkill, GripperOpenSkill
-from vector_os_nano.skills.handover import HandoverSkill
-from vector_os_nano.skills.home import HomeSkill
-from vector_os_nano.skills.pick import PickSkill
-from vector_os_nano.skills.place import PlaceSkill
-from vector_os_nano.skills.scan import ScanSkill
-from vector_os_nano.skills.wave import WaveSkill
+from zeno.skills.describe import DescribeSkill
+from zeno.skills.detect import DetectSkill
+from zeno.skills.gripper import GripperCloseSkill, GripperOpenSkill
+from zeno.skills.handover import HandoverSkill
+from zeno.skills.home import HomeSkill
+from zeno.skills.pick import PickSkill
+from zeno.skills.place import PlaceSkill
+from zeno.skills.scan import ScanSkill
+from zeno.skills.wave import WaveSkill
 
 __all__ = [
     "DescribeSkill",

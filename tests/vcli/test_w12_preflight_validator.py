@@ -28,7 +28,7 @@ import pytest
 
 
 def _make_engine():
-    from vector_os_nano.vcli.engine import VectorEngine
+    from zeno.vcli.engine import VectorEngine
 
     return VectorEngine(backend=MagicMock(), intent_router=MagicMock())
 
@@ -38,7 +38,7 @@ def _make_selector(registered_names=None, has_base=False, capability_names=None)
 
     ``registered_names``: frozenset of skill names (None => undeterminable).
     """
-    from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
+    from zeno.vcli.cognitive.strategy_selector import StrategySelector
 
     if registered_names is None:
         # No registry injected -> _registered_skill_names() returns None.
@@ -80,7 +80,7 @@ class TestRealWorldsBootClean:
     """The three production worlds must never raise during init_vgg."""
 
     def test_dev_world_init_vgg_does_not_raise(self) -> None:
-        from vector_os_nano.vcli.worlds import DevWorld
+        from zeno.vcli.worlds import DevWorld
 
         eng = _make_engine()
         # Must not raise — if it does, it's a false positive.
@@ -88,14 +88,14 @@ class TestRealWorldsBootClean:
         assert eng._vgg_enabled is True
 
     def test_robot_world_init_vgg_does_not_raise(self) -> None:
-        from vector_os_nano.vcli.worlds import RobotWorld
+        from zeno.vcli.worlds import RobotWorld
 
         eng = _make_engine()
         eng.init_vgg(agent=None, skill_registry=None, world=RobotWorld())
         assert eng._vgg_enabled is True
 
     def test_playground_world_init_vgg_does_not_raise(self) -> None:
-        from vector_os_nano.playground import PlaygroundWorld
+        from zeno.playground import PlaygroundWorld
 
         eng = _make_engine()
         eng.init_vgg(agent=None, skill_registry=None, world=PlaygroundWorld())

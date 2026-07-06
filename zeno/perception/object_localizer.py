@@ -85,7 +85,7 @@ def localize_objects_3d(
         )
         return []
 
-    from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
+    from zeno.perception.grasp_point import grasp_point_from_rgbd
 
     # Capture frames + camera geometry once (reuse across all queries).
     try:

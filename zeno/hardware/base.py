@@ -191,7 +191,7 @@ class BaseProtocol(Protocol):
         """Full odometry snapshot.
 
         Returns:
-            Odometry dataclass (vector_os_nano.core.types.Odometry).
+            Odometry dataclass (zeno.core.types.Odometry).
 
         Raises:
             RuntimeError: If not connected.

@@ -16,7 +16,7 @@
 set -e
 
 NAV_STACK="/home/yusen/Desktop/vector_navigation_stack"
-REPO="/home/yusen/Desktop/vector_os_nano"
+REPO="/home/yusen/Desktop/zeno"
 
 source /opt/ros/jazzy/setup.bash
 source "$NAV_STACK/install/setup.bash"

@@ -23,9 +23,9 @@ import logging
 import math
 import time
 
-from vector_os_nano.core.skill import SkillContext, skill
-from vector_os_nano.core.types import SkillResult
-from vector_os_nano.skills.utils.approach_pose import compute_approach_pose
+from zeno.core.skill import SkillContext, skill
+from zeno.core.types import SkillResult
+from zeno.skills.utils.approach_pose import compute_approach_pose
 
 logger = logging.getLogger(__name__)
 
@@ -411,7 +411,7 @@ class MobilePlaceSkill:
     verify_hint: str = "resting_on_receptacle() >= 1"
 
     def __init__(self) -> None:
-        from vector_os_nano.skills.place_top_down import PlaceTopDownSkill
+        from zeno.skills.place_top_down import PlaceTopDownSkill
         self._place = PlaceTopDownSkill()
 
     # ------------------------------------------------------------------
@@ -536,7 +536,7 @@ class MobilePlaceSkill:
         # already docked. Only then is the top-down release within reach.
         if not skip_navigate:
             try:
-                from vector_os_nano.skills.perception_grasp import (
+                from zeno.skills.perception_grasp import (
                     _approach_object,
                     _face_object,
                     _grasp_ready_repose,

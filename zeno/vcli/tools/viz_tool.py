@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import ToolContext, ToolResult, tool
+from zeno.vcli.tools.base import ToolContext, ToolResult, tool
 
 # Module-level process tracking (survives across tool calls)
 _foxglove_proc: subprocess.Popen | None = None

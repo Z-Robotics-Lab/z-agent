@@ -16,22 +16,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.trace_store import (
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.trace_store import (
     evidence_passed,
     load_trace,
     replay,
     save_trace,
     step_evidence_ok,
 )
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.eval_runner import EvalRunner, main as eval_main
-from vector_os_nano.vcli.worlds.dev import dev_verify_namespace
+from zeno.vcli.eval_runner import EvalRunner, main as eval_main
+from zeno.vcli.worlds.dev import dev_verify_namespace
 
 
 # The live verify-namespace callable names a dev+robot world exposes, passed to
@@ -108,7 +108,7 @@ def test_save_default_path_under_dot_vector(tmp_path: Path, monkeypatch) -> None
     # re-evaluate the module default by writing with path=None
     import importlib
 
-    import vector_os_nano.vcli.cognitive.trace_store as ts
+    import zeno.vcli.cognitive.trace_store as ts
 
     importlib.reload(ts)
     path = ts.save_trace(_trace())
@@ -243,7 +243,7 @@ def test_eval_main_exit_code(tmp_path: Path, monkeypatch, capsys) -> None:
     (tmp_path / "a.txt").write_text("hi")
 
     # Inject a fake engine so main() does no network / no real backend.
-    import vector_os_nano.vcli.eval_runner as er
+    import zeno.vcli.eval_runner as er
 
     monkeypatch.setattr(er, "build_dev_engine", lambda allow_ask=False: object())
     monkeypatch.setattr(
@@ -351,7 +351,7 @@ class _CapturingStats:
 
 
 def _executor(*, stats):
-    from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
+    from zeno.vcli.cognitive.goal_executor import GoalExecutor
 
     # GoalExecutor no longer takes is_robot (R1). With verifier=None there is no
     # live verify namespace, so _verify_oracle_names() is the empty set (fail

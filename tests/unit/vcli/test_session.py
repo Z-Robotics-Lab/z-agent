@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from vector_os_nano.vcli.session import (
+from zeno.vcli.session import (
     DEFAULT_SESSION_DIR,
     Session,
     SessionSummary,

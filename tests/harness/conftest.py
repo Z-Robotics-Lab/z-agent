@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-# Ensure repo root is on sys.path so vector_os_nano is importable
+# Ensure repo root is on sys.path so zeno is importable
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -47,7 +47,7 @@ def harness_config() -> dict[str, Any]:
 
 
 def _import_mujoco_go2():
-    """Import MuJoCoGo2 by file path to avoid vector_os_nano/__init__.py cascade.
+    """Import MuJoCoGo2 by file path to avoid zeno/__init__.py cascade.
 
     The package __init__.py imports httpx and other optional dependencies that
     may not be installed in the harness environment. Loading the sim module
@@ -57,24 +57,24 @@ def _import_mujoco_go2():
 
     _MODULE_PATH = (
         _REPO_ROOT
-        / "vector_os_nano" / "hardware" / "sim" / "mujoco_go2.py"
+        / "zeno" / "hardware" / "sim" / "mujoco_go2.py"
     )
     # core/types.py is required by mujoco_go2 (_update_odometry, _update_lidar)
     # Load it first so the relative import inside mujoco_go2.py works.
-    _types_path = _REPO_ROOT / "vector_os_nano" / "core" / "types.py"
+    _types_path = _REPO_ROOT / "zeno" / "core" / "types.py"
     types_spec = importlib.util.spec_from_file_location(
-        "vector_os_nano.core.types", str(_types_path)
+        "zeno.core.types", str(_types_path)
     )
     types_mod = importlib.util.module_from_spec(types_spec)  # type: ignore[arg-type]
     import sys as _sys
-    _sys.modules.setdefault("vector_os_nano.core.types", types_mod)
+    _sys.modules.setdefault("zeno.core.types", types_mod)
     types_spec.loader.exec_module(types_mod)  # type: ignore[union-attr]
 
     spec = importlib.util.spec_from_file_location(
-        "vector_os_nano.hardware.sim.mujoco_go2", str(_MODULE_PATH)
+        "zeno.hardware.sim.mujoco_go2", str(_MODULE_PATH)
     )
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    _sys.modules["vector_os_nano.hardware.sim.mujoco_go2"] = mod
+    _sys.modules["zeno.hardware.sim.mujoco_go2"] = mod
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod.MuJoCoGo2
 

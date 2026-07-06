@@ -7,8 +7,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vector_os_nano.perception.base import PerceptionProtocol
-from vector_os_nano.core.types import CameraIntrinsics, Detection, TrackedObject
+from zeno.perception.base import PerceptionProtocol
+from zeno.core.types import CameraIntrinsics, Detection, TrackedObject
 
 
 # ---------------------------------------------------------------------------

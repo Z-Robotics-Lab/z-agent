@@ -29,7 +29,7 @@ from typing import Any
 
 import numpy as np
 
-from vector_os_nano.core.types import Detection
+from zeno.core.types import Detection
 
 logger = logging.getLogger(__name__)
 

@@ -21,8 +21,8 @@ from typing import Any
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.types import GoalTree, SubGoal
 
 
 # ---------------------------------------------------------------------------
@@ -270,16 +270,16 @@ class TestEffectiveTimeoutHelper:
 
 
 @pytest.mark.parametrize("import_path,class_name,expected", [
-    ("vector_os_nano.skills.pick", "PickSkill", 45.0),
-    ("vector_os_nano.skills.place", "PlaceSkill", 45.0),
-    ("vector_os_nano.skills.home", "HomeSkill", 12.0),
-    ("vector_os_nano.skills.scan", "ScanSkill", 15.0),
-    ("vector_os_nano.skills.wave", "WaveSkill", 15.0),
-    ("vector_os_nano.skills.handover", "HandoverSkill", 25.0),
-    ("vector_os_nano.skills.go2.walk", "WalkSkill", 30.0),
-    ("vector_os_nano.skills.go2.patrol", "PatrolSkill", 90.0),
-    ("vector_os_nano.skills.go2.explore", "ExploreSkill", 150.0),
-    ("vector_os_nano.skills.go2.turn", "TurnSkill", 10.0),
+    ("zeno.skills.pick", "PickSkill", 45.0),
+    ("zeno.skills.place", "PlaceSkill", 45.0),
+    ("zeno.skills.home", "HomeSkill", 12.0),
+    ("zeno.skills.scan", "ScanSkill", 15.0),
+    ("zeno.skills.wave", "WaveSkill", 15.0),
+    ("zeno.skills.handover", "HandoverSkill", 25.0),
+    ("zeno.skills.go2.walk", "WalkSkill", 30.0),
+    ("zeno.skills.go2.patrol", "PatrolSkill", 90.0),
+    ("zeno.skills.go2.explore", "ExploreSkill", 150.0),
+    ("zeno.skills.go2.turn", "TurnSkill", 10.0),
 ])
 def test_motor_skill_typical_duration_sec(
     import_path: str, class_name: str, expected: float,
@@ -296,12 +296,12 @@ def test_motor_skill_typical_duration_sec(
 
 
 @pytest.mark.parametrize("import_path,class_name", [
-    ("vector_os_nano.skills.pick", "PickSkill"),
-    ("vector_os_nano.skills.place", "PlaceSkill"),
-    ("vector_os_nano.skills.home", "HomeSkill"),
-    ("vector_os_nano.skills.scan", "ScanSkill"),
-    ("vector_os_nano.skills.wave", "WaveSkill"),
-    ("vector_os_nano.skills.handover", "HandoverSkill"),
+    ("zeno.skills.pick", "PickSkill"),
+    ("zeno.skills.place", "PlaceSkill"),
+    ("zeno.skills.home", "HomeSkill"),
+    ("zeno.skills.scan", "ScanSkill"),
+    ("zeno.skills.wave", "WaveSkill"),
+    ("zeno.skills.handover", "HandoverSkill"),
 ])
 def test_motor_skill_to_schemas_still_works(import_path: str, class_name: str) -> None:
     """Adding typical_duration_sec must not break to_schemas() on the registry.
@@ -312,7 +312,7 @@ def test_motor_skill_to_schemas_still_works(import_path: str, class_name: str) -
     """
     import importlib
 
-    from vector_os_nano.core.skill import SkillRegistry
+    from zeno.core.skill import SkillRegistry
 
     mod = importlib.import_module(import_path)
     cls = getattr(mod, class_name)
@@ -339,7 +339,7 @@ def test_foreach_example_body_timeout_is_45() -> None:
     The 15→45 bump (R2-2 secondary) ensures the LLM learns to emit generous
     timeouts for motor-action loop bodies, not copy a 15s template.
     """
-    from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
+    from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
 
     example = GoalDecomposer._FOREACH_EXAMPLE
     # Extract the JSON object from the example (it contains a JSON block)

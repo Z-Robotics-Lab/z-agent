@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vector_os_nano.vcli.cognitive.predict import (
+from zeno.vcli.cognitive.predict import (
     predict_exploration_value,
     predict_navigation,
     predict_room_after_door,

@@ -23,8 +23,8 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO))
 
-from vector_os_nano.acceptance import capture  # noqa: E402
-from vector_os_nano.acceptance import vision_judge as vj  # noqa: E402
+from zeno.acceptance import capture  # noqa: E402
+from zeno.acceptance import vision_judge as vj  # noqa: E402
 
 
 def _consent(explicit: bool | None) -> bool:

@@ -26,7 +26,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
-from vector_os_nano.core.world_model import ObjectState, WorldModel
+from zeno.core.world_model import ObjectState, WorldModel
 
 logger = logging.getLogger(__name__)
 

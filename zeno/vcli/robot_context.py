@@ -77,7 +77,7 @@ class RobotContextProvider:
         # arm-only sim, so don't inject quadruped fields into an arm prompt.
         if self._base is not None:
             try:
-                from vector_os_nano.skills.go2.explore import is_exploring, is_nav_stack_running
+                from zeno.skills.go2.explore import is_exploring, is_nav_stack_running
                 lines.append(f"Exploring: {'yes' if is_exploring() else 'no'}")
                 lines.append(f"Nav stack: {'running' if is_nav_stack_running() else 'stopped'}")
             except ImportError:

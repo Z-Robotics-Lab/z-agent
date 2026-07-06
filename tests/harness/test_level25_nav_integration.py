@@ -24,7 +24,7 @@ import types
 def _load_proxy() -> type:
     """Import and return the Go2ROS2Proxy class."""
     mod = importlib.import_module(
-        "vector_os_nano.hardware.sim.go2_ros2_proxy"
+        "zeno.hardware.sim.go2_ros2_proxy"
     )
     return mod.Go2ROS2Proxy
 
@@ -32,20 +32,20 @@ def _load_proxy() -> type:
 def _proxy_source() -> str:
     """Return full source text of go2_ros2_proxy.py."""
     mod = importlib.import_module(
-        "vector_os_nano.hardware.sim.go2_ros2_proxy"
+        "zeno.hardware.sim.go2_ros2_proxy"
     )
     return inspect.getsource(mod)
 
 
 def _navigate_skill_source() -> str:
     """Return full source text of skills/navigate.py."""
-    mod = importlib.import_module("vector_os_nano.skills.navigate")
+    mod = importlib.import_module("zeno.skills.navigate")
     return inspect.getsource(mod)
 
 
 def _navigate_module():
     """Return the skills/navigate module."""
-    return importlib.import_module("vector_os_nano.skills.navigate")
+    return importlib.import_module("zeno.skills.navigate")
 
 
 # ---------------------------------------------------------------------------
@@ -309,13 +309,13 @@ def test_navigate_skill_ensures_nav_flag() -> None:
 
 def _explore_source() -> str:
     """Return full source text of skills/go2/explore.py."""
-    mod = importlib.import_module("vector_os_nano.skills.go2.explore")
+    mod = importlib.import_module("zeno.skills.go2.explore")
     return inspect.getsource(mod)
 
 
 def _explore_module():
     """Return the skills/go2/explore module."""
-    return importlib.import_module("vector_os_nano.skills.go2.explore")
+    return importlib.import_module("zeno.skills.go2.explore")
 
 
 def test_stop_tare_only_exists() -> None:
@@ -391,7 +391,7 @@ def test_scene_graph_has_room_positions() -> None:
     NavigateSkill uses _get_room_center_from_memory() to prefer these
     explored positions over hardcoded _ROOM_CENTERS values.
     """
-    from vector_os_nano.core.scene_graph import SceneGraph
+    from zeno.core.scene_graph import SceneGraph
 
     sg = SceneGraph()
     sg.visit("kitchen", 16.5, 2.8)

@@ -27,21 +27,21 @@ from typing import Any
 
 class TestToolResult:
     def test_tool_result_frozen(self) -> None:
-        from vector_os_nano.vcli.tools.base import ToolResult
+        from zeno.vcli.tools.base import ToolResult
 
         r = ToolResult(content="ok")
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             r.content = "mutated"  # type: ignore[misc]
 
     def test_tool_result_defaults(self) -> None:
-        from vector_os_nano.vcli.tools.base import ToolResult
+        from zeno.vcli.tools.base import ToolResult
 
         r = ToolResult(content="hello")
         assert r.is_error is False
         assert r.metadata == {}
 
     def test_tool_result_error_flag(self) -> None:
-        from vector_os_nano.vcli.tools.base import ToolResult
+        from zeno.vcli.tools.base import ToolResult
 
         r = ToolResult(content="fail", is_error=True)
         assert r.is_error is True
@@ -54,7 +54,7 @@ class TestToolResult:
 
 class TestToolContext:
     def test_tool_context_fields(self) -> None:
-        from vector_os_nano.vcli.tools.base import ToolContext
+        from zeno.vcli.tools.base import ToolContext
 
         event = threading.Event()
         ctx = ToolContext(
@@ -69,7 +69,7 @@ class TestToolContext:
         assert ctx.abort is event
 
     def test_tool_context_agent_any(self) -> None:
-        from vector_os_nano.vcli.tools.base import ToolContext
+        from zeno.vcli.tools.base import ToolContext
 
         sentinel = object()
         ctx = ToolContext(
@@ -89,13 +89,13 @@ class TestToolContext:
 
 class TestToolProtocol:
     def test_tool_protocol_runtime_checkable(self) -> None:
-        from vector_os_nano.vcli.tools.base import Tool
+        from zeno.vcli.tools.base import Tool
 
         # A plain object with no relevant attributes is NOT a Tool
         assert not isinstance(object(), Tool)
 
     def test_tool_protocol_satisfied_by_impl(self) -> None:
-        from vector_os_nano.vcli.tools.base import Tool, ToolResult, ToolContext, PermissionResult
+        from zeno.vcli.tools.base import Tool, ToolResult, ToolContext, PermissionResult
 
         class MyTool:
             name = "my_tool"
@@ -126,7 +126,7 @@ class TestToolProtocol:
 
 class TestToolDecorator:
     def test_tool_decorator_registers_metadata(self) -> None:
-        from vector_os_nano.vcli.tools.base import tool
+        from zeno.vcli.tools.base import tool
 
         @tool(
             name="test_cmd",
@@ -145,7 +145,7 @@ class TestToolDecorator:
         assert "type" in TestCmd.__tool_input_schema__
 
     def test_tool_decorator_no_args_uses_class_defaults(self) -> None:
-        from vector_os_nano.vcli.tools.base import tool
+        from zeno.vcli.tools.base import tool
 
         @tool()
         class NoArgsTool:
@@ -157,7 +157,7 @@ class TestToolDecorator:
         assert NoArgsTool.__tool_description__ == "Default description"
 
     def test_tool_decorator_default_read_only_false(self) -> None:
-        from vector_os_nano.vcli.tools.base import tool
+        from zeno.vcli.tools.base import tool
 
         @tool(name="cmd", description="desc")
         class Cmd:
@@ -166,7 +166,7 @@ class TestToolDecorator:
         assert Cmd.__tool_read_only__ is False
 
     def test_tool_decorator_default_permission_allow(self) -> None:
-        from vector_os_nano.vcli.tools.base import tool
+        from zeno.vcli.tools.base import tool
 
         @tool(name="cmd2", description="desc2")
         class Cmd2:
@@ -176,7 +176,7 @@ class TestToolDecorator:
 
     def test_tool_is_read_only_default(self) -> None:
         """Decorated class instance.is_read_only() returns False by default."""
-        from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+        from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
         @tool(name="ro_default", description="desc")
         class RoDefault:
@@ -188,7 +188,7 @@ class TestToolDecorator:
 
     def test_tool_is_concurrency_safe_default(self) -> None:
         """Decorated class instance.is_concurrency_safe() returns False by default."""
-        from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+        from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
         @tool(name="cs_default", description="desc")
         class CsDefault:
@@ -206,7 +206,7 @@ class TestToolDecorator:
 
 class TestToolRegistry:
     def _make_tool_class(self, name: str, description: str = "desc"):
-        from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+        from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
         @tool(name=name, description=description)
         class _T:
@@ -217,7 +217,7 @@ class TestToolRegistry:
         return _T
 
     def test_tool_registry_register_and_list(self) -> None:
-        from vector_os_nano.vcli.tools import ToolRegistry
+        from zeno.vcli.tools import ToolRegistry
 
         registry = ToolRegistry()
         ToolA = self._make_tool_class("tool_a")
@@ -229,7 +229,7 @@ class TestToolRegistry:
         assert "tool_b" in names
 
     def test_tool_registry_get_by_name(self) -> None:
-        from vector_os_nano.vcli.tools import ToolRegistry
+        from zeno.vcli.tools import ToolRegistry
 
         registry = ToolRegistry()
         ToolX = self._make_tool_class("tool_x", "X tool")
@@ -239,14 +239,14 @@ class TestToolRegistry:
         assert retrieved is instance
 
     def test_tool_registry_get_missing_returns_none(self) -> None:
-        from vector_os_nano.vcli.tools import ToolRegistry
+        from zeno.vcli.tools import ToolRegistry
 
         registry = ToolRegistry()
         assert registry.get("nonexistent") is None
 
     def test_tool_registry_to_anthropic_schemas(self) -> None:
-        from vector_os_nano.vcli.tools import ToolRegistry
-        from vector_os_nano.vcli.tools.base import tool, ToolResult, ToolContext
+        from zeno.vcli.tools import ToolRegistry
+        from zeno.vcli.tools.base import tool, ToolResult, ToolContext
 
         @tool(
             name="schema_tool",
@@ -268,7 +268,7 @@ class TestToolRegistry:
         assert schema["input_schema"]["type"] == "object"
 
     def test_tool_registry_to_anthropic_schemas_required_keys(self) -> None:
-        from vector_os_nano.vcli.tools import ToolRegistry
+        from zeno.vcli.tools import ToolRegistry
 
         registry = ToolRegistry()
         ToolC = self._make_tool_class("tool_c", "C desc")
@@ -286,14 +286,14 @@ class TestToolRegistry:
 
 class TestPermissionResult:
     def test_permission_result_frozen(self) -> None:
-        from vector_os_nano.vcli.tools.base import PermissionResult
+        from zeno.vcli.tools.base import PermissionResult
 
         pr = PermissionResult(behavior="allow")
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             pr.behavior = "deny"  # type: ignore[misc]
 
     def test_permission_result_default_reason(self) -> None:
-        from vector_os_nano.vcli.tools.base import PermissionResult
+        from zeno.vcli.tools.base import PermissionResult
 
         pr = PermissionResult(behavior="ask")
         assert pr.reason == ""
@@ -307,7 +307,7 @@ class TestPermissionResult:
 
 class TestVcliExports:
     def test_vcli_init_exports(self) -> None:
-        import vector_os_nano.vcli as vcli
+        import zeno.vcli as vcli
 
         # These names must be importable from the package
         assert hasattr(vcli, "ToolRegistry")
@@ -323,21 +323,21 @@ class TestVcliExports:
 class TestDiscoverAllTools:
     def test_returns_list(self) -> None:
         """discover_all_tools() returns a plain list, not a ToolRegistry."""
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         result = discover_all_tools()
         assert isinstance(result, list)
 
     def test_returns_at_least_eight_tools(self) -> None:
         """discover_all_tools() returns at least 8 tool instances."""
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         result = discover_all_tools()
         assert len(result) >= 8
 
     def test_each_item_has_required_attributes(self) -> None:
         """Each tool instance has name, description, input_schema, and execute."""
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         for tool_instance in discover_all_tools():
             assert hasattr(tool_instance, "name"), f"Missing name on {tool_instance!r}"
@@ -347,7 +347,7 @@ class TestDiscoverAllTools:
 
     def test_known_tool_names_present(self) -> None:
         """All eight canonical tool names are present in the returned list."""
-        from vector_os_nano.vcli.tools import discover_all_tools
+        from zeno.vcli.tools import discover_all_tools
 
         expected_names = {
             "file_read",

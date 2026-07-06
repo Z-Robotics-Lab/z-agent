@@ -46,7 +46,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vector_os_nano.embodiments.config import CapabilityProfile, EmbodimentConfig
+from zeno.embodiments.config import CapabilityProfile, EmbodimentConfig
 
 
 def _has_member(agent: Any, name: str) -> bool:

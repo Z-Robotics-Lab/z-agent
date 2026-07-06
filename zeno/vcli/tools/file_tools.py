@@ -14,7 +14,7 @@ import difflib
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.tools.base import PermissionResult, ToolContext, ToolResult, tool
+from zeno.vcli.tools.base import PermissionResult, ToolContext, ToolResult, tool
 
 # ---------------------------------------------------------------------------
 # Security constants

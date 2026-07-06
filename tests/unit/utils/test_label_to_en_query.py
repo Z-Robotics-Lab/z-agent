@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.skills.utils import label_to_en_query
+from zeno.skills.utils import label_to_en_query
 
 
 # ---------------------------------------------------------------------------

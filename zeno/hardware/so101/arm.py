@@ -17,15 +17,15 @@ import logging
 import time
 from typing import Any, Optional
 
-from vector_os_nano.hardware.so101.joint_config import (
+from zeno.hardware.so101.joint_config import (
     ALL_JOINT_NAMES,
     ARM_JOINT_NAMES,
     JOINT_CONFIG,
     enc_to_rad,
     rad_to_enc,
 )
-from vector_os_nano.hardware.so101.serial_bus import SerialBus
-from vector_os_nano.hardware.arm import ensure_finite_joint_targets
+from zeno.hardware.so101.serial_bus import SerialBus
+from zeno.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 

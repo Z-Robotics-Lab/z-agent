@@ -32,7 +32,7 @@ import time
 from typing import Any
 
 import numpy as np
-from vector_os_nano.hardware.arm import ensure_finite_joint_targets
+from zeno.hardware.arm import ensure_finite_joint_targets
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,7 @@ class PiperROS2Proxy:
         # Route to shared executor or legacy per-proxy spin.
         import os as _os
         if _os.environ.get("VECTOR_SHARED_EXECUTOR", "1") == "1":
-            from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+            from zeno.hardware.ros2.runtime import get_ros2_runtime
             get_ros2_runtime().add_node(self._node)
             self._shared_runtime_used = True
         else:
@@ -249,7 +249,7 @@ class PiperROS2Proxy:
         self._connected = False
         if self._shared_runtime_used and self._node is not None:
             try:
-                from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+                from zeno.hardware.ros2.runtime import get_ros2_runtime
                 get_ros2_runtime().remove_node(self._node)
             except Exception:
                 pass  # best effort — don't block teardown
@@ -611,7 +611,7 @@ class PiperGripperROS2Proxy:
         # Route to shared executor or legacy per-proxy spin.
         import os as _os
         if _os.environ.get("VECTOR_SHARED_EXECUTOR", "1") == "1":
-            from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+            from zeno.hardware.ros2.runtime import get_ros2_runtime
             get_ros2_runtime().add_node(self._node)
             self._shared_runtime_used = True
         else:
@@ -629,7 +629,7 @@ class PiperGripperROS2Proxy:
         self._connected = False
         if self._shared_runtime_used and self._node is not None:
             try:
-                from vector_os_nano.hardware.ros2.runtime import get_ros2_runtime
+                from zeno.hardware.ros2.runtime import get_ros2_runtime
                 get_ros2_runtime().remove_node(self._node)
             except Exception:
                 pass  # best effort — don't block teardown

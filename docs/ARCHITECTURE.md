@@ -237,7 +237,7 @@ invariants:
 ## 7. Conceptual module map
 
 One terse line per package. No line numbers (they rot — read the file). Paths relative to
-`vector_os_nano/`.
+`zeno/`.
 
 - `vcli/engine.py` + `vcli/backends/` — VectorEngine (tool-use loop, dispatch, VGG entry
   points, per-world verify-namespace binding) and the model adapters behind a common type.

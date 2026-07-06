@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_os_nano.acceptance import gate
+from zeno.acceptance import gate
 
 
 def test_gt_pass_vision_pass_accepts():

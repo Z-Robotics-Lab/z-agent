@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-from vector_os_nano.vcli.cognitive.capabilities.types import CapabilityResult
+from zeno.vcli.cognitive.capabilities.types import CapabilityResult
 
 
 class DetectorCapability:
@@ -95,7 +95,7 @@ class DetectorCapability:
 
     def _get_detector(self) -> Any:
         if self._detector is None:
-            from vector_os_nano.perception.grounding_dino import get_shared_detector
+            from zeno.perception.grounding_dino import get_shared_detector
             self._detector = get_shared_detector()
         return self._detector
 

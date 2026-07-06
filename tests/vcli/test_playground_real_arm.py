@@ -44,9 +44,9 @@ import pytest
 # Skip the whole module cleanly when the mujoco wheel is absent.
 pytest.importorskip("mujoco", reason="mujoco not installed")
 
-from vector_os_nano.playground import PlaygroundWorld
-from vector_os_nano.playground.catalog import TABLETOP
-from vector_os_nano.skills.home import _DEFAULT_HOME_JOINTS
+from zeno.playground import PlaygroundWorld
+from zeno.playground.catalog import TABLETOP
+from zeno.skills.home import _DEFAULT_HOME_JOINTS
 
 
 @contextmanager
@@ -73,7 +73,7 @@ def _mujoco_gl_disabled() -> Iterator[None]:
 @pytest.fixture
 def real_arm() -> Iterator[Any]:
     """A connected, headless real MuJoCoArm on the tabletop scene (pollution-safe)."""
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
 
     with _mujoco_gl_disabled():
         arm = MuJoCoArm(gui=False)

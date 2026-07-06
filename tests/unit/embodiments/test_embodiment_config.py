@@ -13,8 +13,8 @@ import math
 
 import pytest
 
-from vector_os_nano.embodiments import EmbodimentConfig, load_embodiment_config
-from vector_os_nano.embodiments.config import (
+from zeno.embodiments import EmbodimentConfig, load_embodiment_config
+from zeno.embodiments.config import (
     EmbodimentConfigError,
     parse_embodiment_config,
 )

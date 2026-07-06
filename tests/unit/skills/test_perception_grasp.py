@@ -17,12 +17,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.types import Detection
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.perception.depth_projection import mujoco_intrinsics
-from vector_os_nano.perception.grasp_point import grasp_point_from_rgbd
-from vector_os_nano.skills.perception_grasp import PerceptionGraspSkill
+from zeno.core.skill import SkillContext
+from zeno.core.types import Detection
+from zeno.core.world_model import WorldModel
+from zeno.perception.depth_projection import mujoco_intrinsics
+from zeno.perception.grasp_point import grasp_point_from_rgbd
+from zeno.skills.perception_grasp import PerceptionGraspSkill
 
 _W, _H = 64, 48
 _INTR = mujoco_intrinsics(_W, _H, vfov_deg=42.0)
@@ -293,7 +293,7 @@ class _FakeBase:
 def test_approach_object_converges_with_position_feedback():
     """The scripted forward-walk approach closes the gap to within reach via feedback
     despite gait under-shoot (D27: non-gated, the base walk primitive not FAR)."""
-    from vector_os_nano.skills.perception_grasp import _approach_object, _GRASP_REACH_M
+    from zeno.skills.perception_grasp import _approach_object, _GRASP_REACH_M
     base = _FakeBase(x=10.0, y=3.0)
     ok = _approach_object(base, (11.0, 3.0))  # object 1.0m ahead, out of ~0.34m reach
     assert ok
@@ -302,7 +302,7 @@ def test_approach_object_converges_with_position_feedback():
 
 
 def test_approach_noop_when_already_in_reach():
-    from vector_os_nano.skills.perception_grasp import _approach_object
+    from zeno.skills.perception_grasp import _approach_object
     base = _FakeBase(x=10.97, y=3.0)  # already 0.03m from the object -> within reach_m=0.05
     ok = _approach_object(base, (11.0, 3.0))
     assert ok
@@ -497,15 +497,15 @@ def test_low_z_grasp_point_fails_loud():
     Simulated by monkeypatching grasp_point_from_rgbd to return a floor-level z.
     """
     import unittest.mock as mock
-    from vector_os_nano.core.types import Pose3D
-    from vector_os_nano.skills.perception_grasp import _MIN_GRASP_Z
+    from zeno.core.types import Pose3D
+    from zeno.skills.perception_grasp import _MIN_GRASP_Z
 
     floor_pose = Pose3D(x=10.5, y=3.0, z=0.039)  # the R39 t3 bad value
     perc = FrontPerception()
     arm = FakeArm()
 
     with mock.patch(
-        "vector_os_nano.skills.perception_grasp.grasp_point_from_rgbd",
+        "zeno.skills.perception_grasp.grasp_point_from_rgbd",
         return_value=floor_pose,
     ):
         res = PerceptionGraspSkill().execute({"query": "前面的东西"}, _ctx(perc, arm=arm))
@@ -520,14 +520,14 @@ def test_low_z_grasp_point_fails_loud():
 def test_normal_z_grasp_point_passes():
     """A back-projected grasp point with z≈0.32 (real can top) must NOT be rejected."""
     import unittest.mock as mock
-    from vector_os_nano.core.types import Pose3D
+    from zeno.core.types import Pose3D
 
     can_pose = Pose3D(x=10.5, y=3.0, z=0.32)  # typical can top height
     perc = FrontPerception()
     arm = FakeArm()
 
     with mock.patch(
-        "vector_os_nano.skills.perception_grasp.grasp_point_from_rgbd",
+        "zeno.skills.perception_grasp.grasp_point_from_rgbd",
         return_value=can_pose,
     ):
         res = PerceptionGraspSkill().execute({"query": "前面的东西"}, _ctx(perc, arm=arm))
@@ -540,15 +540,15 @@ def test_normal_z_grasp_point_passes():
 def test_low_z_passed_box_fails_loud():
     """CHANGE 2 (R40): the low-z guard also fires for the passed-box (consumed) path."""
     import unittest.mock as mock
-    from vector_os_nano.core.types import Pose3D
-    from vector_os_nano.skills.perception_grasp import _MIN_GRASP_Z
+    from zeno.core.types import Pose3D
+    from zeno.skills.perception_grasp import _MIN_GRASP_Z
 
     floor_pose = Pose3D(x=10.5, y=3.0, z=0.039)
     perc = FrontPerception()
     arm = FakeArm()
 
     with mock.patch(
-        "vector_os_nano.skills.perception_grasp.grasp_point_from_rgbd",
+        "zeno.skills.perception_grasp.grasp_point_from_rgbd",
         return_value=floor_pose,
     ):
         res = PerceptionGraspSkill().execute(
@@ -626,7 +626,7 @@ class _NthAttemptGripper(FakeGripper):
 def test_grasp_retries_until_weld_forms():
     """A grasp that misses the weld on the first attempt but would weld on the
     second is RECOVERED by the retry loop -> weld_formed True, no ran_no_weld."""
-    from vector_os_nano.skills import perception_grasp as pg
+    from zeno.skills import perception_grasp as pg
 
     perc = FakePerception()
     gripper = _NthAttemptGripper(weld_on_attempt=2)
@@ -643,7 +643,7 @@ def test_grasp_retries_until_weld_forms():
 def test_grasp_retry_loop_is_bounded_and_stays_honest():
     """A grasp that NEVER welds is retried up to the bound, then RANs honestly
     (weld_formed False, ran_no_weld) — the loop never fakes a weld."""
-    from vector_os_nano.skills import perception_grasp as pg
+    from zeno.skills import perception_grasp as pg
 
     perc = FakePerception()
     gripper = _NthAttemptGripper(weld_on_attempt=999)  # never welds

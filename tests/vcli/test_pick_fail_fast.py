@@ -16,10 +16,10 @@ mujoco = pytest.importorskip("mujoco")  # headless sim oracle; skip if unavailab
 
 
 def _agent(max_retries: int):
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.core.agent import Agent
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
 
     arm = MuJoCoArm(gui=False)
     arm.connect()
@@ -34,7 +34,7 @@ def _agent(max_retries: int):
 
 def test_absent_target_fails_after_one_attempt_not_max_retries():
     """An object not in the scene must fail FAST (1 attempt), not exhaust max_retries=3."""
-    from vector_os_nano.skills.pick import PickSkill
+    from zeno.skills.pick import PickSkill
 
     agent, arm = _agent(max_retries=3)
     try:
@@ -52,7 +52,7 @@ def test_absent_target_fails_after_one_attempt_not_max_retries():
 
 def test_present_target_still_succeeds():
     """Sanity: the fail-fast change does not affect a normal, present target."""
-    from vector_os_nano.skills.pick import PickSkill
+    from zeno.skills.pick import PickSkill
 
     agent, arm = _agent(max_retries=2)
     try:

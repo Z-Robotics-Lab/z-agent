@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import subprocess
 
-from vector_os_nano.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
+from zeno.hardware.sim.go2_ros2_proxy import Go2ROS2Proxy
 
 logger = logging.getLogger(__name__)
 

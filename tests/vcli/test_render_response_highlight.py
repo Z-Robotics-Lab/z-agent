@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from rich.console import Console
 
-from vector_os_nano.vcli.cli import render_response
+from zeno.vcli.cli import render_response
 
 
 def _capture(panel, *, styles: bool, width: int = 80) -> str:

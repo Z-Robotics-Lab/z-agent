@@ -17,9 +17,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.vcli.tools import ToolContext, ToolResult, discover_all_tools
-from vector_os_nano.vcli.tools.sysnav_sim_tool import SysnavSimTool
+from zeno.core.world_model import WorldModel
+from zeno.vcli.tools import ToolContext, ToolResult, discover_all_tools
+from zeno.vcli.tools.sysnav_sim_tool import SysnavSimTool
 
 
 def _ctx(agent: object) -> ToolContext:
@@ -223,7 +223,7 @@ def test_tool_paused_not_registered_in_init() -> None:
     names = {getattr(t, "name") for t in tools}
     assert "start_sysnav_sim" not in names
     # Code retained, not deleted — class still importable.
-    from vector_os_nano.vcli.tools.sysnav_sim_tool import SysnavSimTool
+    from zeno.vcli.tools.sysnav_sim_tool import SysnavSimTool
 
     assert SysnavSimTool.__name__ == "SysnavSimTool"
 

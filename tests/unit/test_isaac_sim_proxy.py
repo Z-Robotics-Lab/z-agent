@@ -24,7 +24,7 @@ import pytest
 
 def _make_proxy() -> Any:
     """Create IsaacSimProxy with all external dependencies mocked."""
-    from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+    from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
     return IsaacSimProxy()
 
 
@@ -115,7 +115,7 @@ class TestIsaacSimProxyProtocolCompliance:
     """IsaacSimProxy must satisfy BaseProtocol structural typing."""
 
     def test_isinstance_base_protocol(self) -> None:
-        from vector_os_nano.hardware.base import BaseProtocol
+        from zeno.hardware.base import BaseProtocol
         # Runtime isinstance on @runtime_checkable Protocol checks structural typing.
         # Go2ROS2Proxy does not implement all BaseProtocol methods (stop, get_velocity,
         # get_lidar_scan, supports_holonomic) — those are work-in-progress.
@@ -151,7 +151,7 @@ class TestIsaacSimProxyProtocolCompliance:
         # We test the attribute is accessible (may not be declared explicitly)
 
     def test_node_name_class_attribute(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         assert IsaacSimProxy._NODE_NAME == "isaac_sim_proxy"
 
     def test_name_overrides_parent(self) -> None:
@@ -189,7 +189,7 @@ class TestIsaacSimProxyProtocolCompliance:
         assert callable(getattr(proxy, "get_odometry", None))
 
     def test_has_is_isaac_sim_running_static_method(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
         assert callable(getattr(IsaacSimProxy, "is_isaac_sim_running", None))
 
 
@@ -202,7 +202,7 @@ class TestIsaacSimRunningCheck:
     """is_isaac_sim_running() must detect container state without side effects."""
 
     def test_returns_true_when_container_found(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
 
         mock_result = MagicMock()
         mock_result.stdout = "vector-isaac-sim\n"
@@ -211,7 +211,7 @@ class TestIsaacSimRunningCheck:
             assert IsaacSimProxy.is_isaac_sim_running() is True
 
     def test_returns_false_when_no_container(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
 
         mock_result = MagicMock()
         mock_result.stdout = ""
@@ -220,25 +220,25 @@ class TestIsaacSimRunningCheck:
             assert IsaacSimProxy.is_isaac_sim_running() is False
 
     def test_returns_false_when_docker_not_installed(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
 
         with patch("subprocess.run", side_effect=FileNotFoundError("docker not found")):
             assert IsaacSimProxy.is_isaac_sim_running() is False
 
     def test_returns_false_on_timeout(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
 
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("docker", 5)):
             assert IsaacSimProxy.is_isaac_sim_running() is False
 
     def test_returns_false_on_other_exception(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
 
         with patch("subprocess.run", side_effect=OSError("permission denied")):
             assert IsaacSimProxy.is_isaac_sim_running() is False
 
     def test_calls_docker_ps_with_correct_container_name(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy, _ISAAC_CONTAINER_NAME
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy, _ISAAC_CONTAINER_NAME
 
         mock_result = MagicMock()
         mock_result.stdout = ""
@@ -250,7 +250,7 @@ class TestIsaacSimRunningCheck:
             assert any(_ISAAC_CONTAINER_NAME in arg for arg in call_args)
 
     def test_uses_timeout_in_subprocess_call(self) -> None:
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy
 
         mock_result = MagicMock()
         mock_result.stdout = ""
@@ -263,7 +263,7 @@ class TestIsaacSimRunningCheck:
 
     def test_partial_name_match_is_accepted_by_string_in(self) -> None:
         """The 'in' check means 'vector-isaac-sim-old' also matches — document this."""
-        from vector_os_nano.hardware.sim.isaac_sim_proxy import IsaacSimProxy, _ISAAC_CONTAINER_NAME
+        from zeno.hardware.sim.isaac_sim_proxy import IsaacSimProxy, _ISAAC_CONTAINER_NAME
 
         # The current implementation uses `_ISAAC_CONTAINER_NAME in result.stdout`
         # so any output containing the container name substring will match.
@@ -450,13 +450,13 @@ class TestIsaacSimProxyStateQueries:
         assert proxy.get_heading() == pytest.approx(0.0, abs=1e-6)
 
     def test_get_odometry_returns_odometry_dataclass(self) -> None:
-        from vector_os_nano.core.types import Odometry
+        from zeno.core.types import Odometry
         proxy = _make_proxy()
         odom = proxy.get_odometry()
         assert isinstance(odom, Odometry)
 
     def test_get_odometry_position_matches_last_known(self) -> None:
-        from vector_os_nano.core.types import Odometry
+        from zeno.core.types import Odometry
         proxy = _make_proxy()
         msg = _make_odom_msg(x=1.5, y=2.5, z=0.3)
         proxy._odom_cb(msg)
@@ -527,7 +527,7 @@ class TestIsaacSimProxyMotion:
 
     def test_set_velocity_calls_publisher(self) -> None:
         proxy = self._connected_proxy()
-        with patch("vector_os_nano.hardware.sim.go2_ros2_proxy.Twist", create=True):
+        with patch("zeno.hardware.sim.go2_ros2_proxy.Twist", create=True):
             # Patch the Twist import inside set_velocity
             from geometry_msgs.msg import Twist as _Twist  # may not exist
         try:
@@ -536,7 +536,7 @@ class TestIsaacSimProxyMotion:
         except ImportError:
             # geometry_msgs not installed — test the logic path
             with patch(
-                "vector_os_nano.hardware.sim.go2_ros2_proxy.Twist",
+                "zeno.hardware.sim.go2_ros2_proxy.Twist",
                 create=True,
                 new=MagicMock,
             ):
@@ -630,7 +630,7 @@ class TestIsaacSimProxyNavigation:
         # _nav MUST be stubbed: with builtins.open mocked, its yaml.safe_load
         # would read a MagicMock stream forever (the actual E18 memory bomb).
         with _fake_time(), \
-             patch("vector_os_nano.hardware.sim.go2_ros2_proxy._nav",
+             patch("zeno.hardware.sim.go2_ros2_proxy._nav",
                    new=lambda key, default: default), \
              patch.dict("sys.modules", _fake_geometry_msgs()), \
              patch("os.path.exists", return_value=True), \
@@ -657,7 +657,7 @@ class TestIsaacSimProxyNavigation:
             return path == "/tmp/vector_nav_active"
 
         with _fake_time(clock), \
-             patch("vector_os_nano.hardware.sim.go2_ros2_proxy._nav",
+             patch("zeno.hardware.sim.go2_ros2_proxy._nav",
                    new=lambda key, default: default), \
              patch.dict("sys.modules", _fake_geometry_msgs()), \
              patch("os.path.exists", side_effect=nav_flag_only), \

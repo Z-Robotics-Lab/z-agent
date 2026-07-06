@@ -42,17 +42,17 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from vector_os_nano.vcli.backends.types import LLMResponse
-from vector_os_nano.vcli.cognitive import actor_causation
-from vector_os_nano.vcli.cognitive.trace_store import verify_oracle_names
-from vector_os_nano.vcli.cognitive.types import (
+from zeno.vcli.backends.types import LLMResponse
+from zeno.vcli.cognitive import actor_causation
+from zeno.vcli.cognitive.trace_store import verify_oracle_names
+from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
     StepRecord,
     SubGoal,
 )
-from vector_os_nano.vcli.tools.base import ToolContext, ToolResult
-from vector_os_nano.vcli.tools.skill_wrapper import wrap_skills
+from zeno.vcli.tools.base import ToolContext, ToolResult
+from zeno.vcli.tools.skill_wrapper import wrap_skills
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,7 @@ def _skill_needs_arm(skill_tool: Any) -> bool:
 # a safe fallback so this module never hard-depends on the oracle's private const.
 def _at_position_tol() -> float:
     try:
-        from vector_os_nano.vcli.worlds.go2_sim_oracle import _AT_POSITION_TOL_M
+        from zeno.vcli.worlds.go2_sim_oracle import _AT_POSITION_TOL_M
         return float(_AT_POSITION_TOL_M)
     except Exception:  # noqa: BLE001
         return 0.5
@@ -754,7 +754,7 @@ class NativeStepRunner:
         # PNG + base pose for the strip. Renders on THIS (the producer) thread from an isolated qpos
         # copy; a failure is swallowed so it can NEVER affect the StepRecord / verdict just built.
         try:
-            from vector_os_nano.acceptance.capture import capture_strip_frame
+            from zeno.acceptance.capture import capture_strip_frame
 
             capture_strip_frame(self._agent, self._step_idx - 1)
         except Exception:  # noqa: BLE001 — a strip frame must never touch grading
@@ -1078,7 +1078,7 @@ def _build_verifier(engine: Any, agent: Any) -> Any:
     to the one the spine uses. Reuses the already-wired GoalVerifier on the engine's
     goal executor when present (same namespace), else constructs a fresh one.
     """
-    from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
+    from zeno.vcli.cognitive.goal_verifier import GoalVerifier
 
     executor = getattr(engine, "_goal_executor", None)
     live = getattr(executor, "_verifier", None)
@@ -1134,7 +1134,7 @@ def _build_motor_tools(agent: Any, engine: Any) -> dict[str, Any]:
     # sourced (Rule 11) onto the capability resolver — byte-identical to the prior
     # ``agent is not None and agent._base is not None`` (resolver -> has_base False for
     # a None agent), so the navigate/base/camera gates can never drift apart.
-    from vector_os_nano.embodiments.capability_profile import resolve_capability_profile
+    from zeno.embodiments.capability_profile import resolve_capability_profile
 
     if resolve_capability_profile(agent).has_base:
         tools["navigate"] = _NativeBaseNavigateTool()

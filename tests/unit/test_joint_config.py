@@ -13,7 +13,7 @@ import math
 
 import pytest
 
-from vector_os_nano.hardware.so101.joint_config import (
+from zeno.hardware.so101.joint_config import (
     ALL_JOINT_NAMES,
     ARM_JOINT_NAMES,
     JOINT_CONFIG,

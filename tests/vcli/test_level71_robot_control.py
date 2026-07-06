@@ -34,7 +34,7 @@ import pytest
 
 
 def test_robot_context_arm_only_reports_connected():
-    from vector_os_nano.vcli.robot_context import RobotContextProvider
+    from zeno.vcli.robot_context import RobotContextProvider
 
     class _FakeArm:
         name = "TestArm"
@@ -52,14 +52,14 @@ def test_robot_context_arm_only_reports_connected():
 
 
 def test_robot_context_no_hardware_still_disconnected():
-    from vector_os_nano.vcli.robot_context import RobotContextProvider
+    from zeno.vcli.robot_context import RobotContextProvider
 
     block = RobotContextProvider().get_context_block()
     assert block["text"] == "[Robot State]\nNo hardware connected."
 
 
 def test_start_simulation_in_sim_category():
-    from vector_os_nano.vcli.tools import discover_categorized_tools
+    from zeno.vcli.tools import discover_categorized_tools
 
     _, cat_map = discover_categorized_tools()
     assert "start_simulation" in cat_map.get("sim", [])
@@ -68,8 +68,8 @@ def test_start_simulation_in_sim_category():
 
 
 def test_start_simulation_visible_in_dev_world():
-    from vector_os_nano.vcli.tools import discover_categorized_tools
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.tools import discover_categorized_tools
+    from zeno.vcli.tools.base import CategorizedToolRegistry
 
     reg = CategorizedToolRegistry()
     tools, cat_map = discover_categorized_tools()
@@ -89,9 +89,9 @@ def test_sim_start_reachable_via_router_in_dev_world():
     """'start arm sim' must route to a still-enabled category in the dev world,
     or the routed tool_use path starves on zero tools and the LLM cannot start a
     sim conversationally."""
-    from vector_os_nano.vcli.tools import discover_categorized_tools
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.vcli.tools import discover_categorized_tools
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.intent_router import IntentRouter
 
     reg = CategorizedToolRegistry()
     tools, cat_map = discover_categorized_tools()
@@ -108,7 +108,7 @@ def test_sim_start_reachable_via_router_in_dev_world():
 
 
 def test_model_flag_no_sentinel():
-    from vector_os_nano.vcli.cli import parse_args
+    from zeno.vcli.cli import parse_args
 
     assert parse_args([]).model is None
     # explicit override is preserved (not collapsed to None by a sentinel)
@@ -117,9 +117,9 @@ def test_model_flag_no_sentinel():
 
 
 def test_wave_scan_classified_motor():
-    from vector_os_nano.skills.wave import WaveSkill
-    from vector_os_nano.skills.scan import ScanSkill
-    from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
+    from zeno.skills.wave import WaveSkill
+    from zeno.skills.scan import ScanSkill
+    from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
 
     for skill_cls in (WaveSkill, ScanSkill):
         wrapper = SkillWrapperTool(skill_cls(), None)
@@ -135,7 +135,7 @@ def test_wave_scan_classified_motor():
 @pytest.fixture
 def arm():
     pytest.importorskip("mujoco")
-    from vector_os_nano.hardware.sim.mujoco_arm import MuJoCoArm
+    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
 
     a = MuJoCoArm(gui=False)
     a.connect()
@@ -148,9 +148,9 @@ def arm():
 
 def test_sim_agent_has_gripper_and_perception():
     pytest.importorskip("mujoco")
-    from vector_os_nano.vcli import cli
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.vcli import cli
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
 
     ns = argparse.Namespace(sim=True, sim_go2=False, gui=False, api_key=None)
     agent = cli._init_agent(ns)
@@ -160,11 +160,11 @@ def test_sim_agent_has_gripper_and_perception():
 
 
 def test_vgg_gate_admits_arm_only(arm):
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.intent_router import IntentRouter
-    from vector_os_nano.vcli.worlds import resolve_world
+    from zeno.core.agent import Agent
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.intent_router import IntentRouter
+    from zeno.vcli.worlds import resolve_world
 
     agent = Agent(arm=arm)
     eng = VectorEngine(backend=None, registry=CategorizedToolRegistry(), system_prompt=[],
@@ -175,10 +175,10 @@ def test_vgg_gate_admits_arm_only(arm):
 
 
 def test_vgg_gate_blocks_disconnected():
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.intent_router import IntentRouter
+    from zeno.core.agent import Agent
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.intent_router import IntentRouter
 
     # a fully-disconnected agent (no base, no arm) stays gated
     agent = Agent.__new__(Agent)
@@ -198,7 +198,7 @@ def test_vgg_gate_blocks_disconnected():
 
 
 def test_perception_detect_word_boundary(arm):
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
 
     p = MuJoCoPerception(arm)
     assert p.detect("red ball") == []   # 'all' must not fire on 'ball'
@@ -208,8 +208,8 @@ def test_perception_detect_word_boundary(arm):
 
 
 def test_perception_caption_and_describe(arm):
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-    from vector_os_nano.core.agent import Agent
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.core.agent import Agent
 
     p = MuJoCoPerception(arm)
     cap = p.caption()
@@ -219,11 +219,11 @@ def test_perception_caption_and_describe(arm):
 
 
 def test_skill_wrapper_pick_honors_auto_steps(arm, monkeypatch):
-    from vector_os_nano.hardware.sim.mujoco_gripper import MuJoCoGripper
-    from vector_os_nano.hardware.sim.mujoco_perception import MuJoCoPerception
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.vcli.tools.skill_wrapper import SkillWrapperTool
-    from vector_os_nano.vcli.tools.base import ToolContext
+    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
+    from zeno.hardware.sim.mujoco_perception import MuJoCoPerception
+    from zeno.core.agent import Agent
+    from zeno.vcli.tools.skill_wrapper import SkillWrapperTool
+    from zeno.vcli.tools.base import ToolContext
 
     agent = Agent(arm=arm, gripper=MuJoCoGripper(arm), perception=MuJoCoPerception(arm),
                   config={"skills": {"pick": {"hardware_offsets": False}}})
@@ -250,10 +250,10 @@ def test_skill_wrapper_pick_honors_auto_steps(arm, monkeypatch):
 
 def test_sim_tool_lifecycle_dev_to_arm_to_dev():
     pytest.importorskip("mujoco")
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry, ToolContext
-    from vector_os_nano.vcli.tools import discover_categorized_tools
-    from vector_os_nano.vcli.tools.sim_tool import SimStartTool, SimStopTool
-    from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
+    from zeno.vcli.tools.base import CategorizedToolRegistry, ToolContext
+    from zeno.vcli.tools import discover_categorized_tools
+    from zeno.vcli.tools.sim_tool import SimStartTool, SimStopTool
+    from zeno.vcli.dynamic_prompt import DynamicSystemPrompt
 
     class _FakeEngine:
         def __init__(self):
@@ -304,11 +304,11 @@ def test_dynamic_prompt_no_corruption_across_turns(arm):
     tool-instructions block (which itself contains the '[Robot State]'
     substring). Regression guard for the DynamicSystemPrompt.__init__ scan.
     """
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.vcli.prompt import build_system_prompt
-    from vector_os_nano.vcli.dynamic_prompt import DynamicSystemPrompt
-    from vector_os_nano.vcli.robot_context import RobotContextProvider
-    from vector_os_nano.vcli.worlds import resolve_world
+    from zeno.core.agent import Agent
+    from zeno.vcli.prompt import build_system_prompt
+    from zeno.vcli.dynamic_prompt import DynamicSystemPrompt
+    from zeno.vcli.robot_context import RobotContextProvider
+    from zeno.vcli.worlds import resolve_world
 
     agent = Agent(arm=arm)
     prov = RobotContextProvider(arm=arm)

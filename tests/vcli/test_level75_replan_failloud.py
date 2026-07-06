@@ -29,13 +29,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.goal_decomposer import GoalDecomposer
-from vector_os_nano.vcli.cognitive.goal_executor import GoalExecutor
-from vector_os_nano.vcli.cognitive.goal_verifier import GoalVerifier
-from vector_os_nano.vcli.cognitive.strategy_selector import StrategySelector
-from vector_os_nano.vcli.cognitive.types import GoalTree, SubGoal
-from vector_os_nano.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
-from vector_os_nano.vcli.cognitive.vocab_from_registry import build_decompose_vocab
+from zeno.vcli.cognitive.goal_decomposer import GoalDecomposer
+from zeno.vcli.cognitive.goal_executor import GoalExecutor
+from zeno.vcli.cognitive.goal_verifier import GoalVerifier
+from zeno.vcli.cognitive.strategy_selector import StrategySelector
+from zeno.vcli.cognitive.types import GoalTree, SubGoal
+from zeno.vcli.cognitive.vgg_harness import HarnessConfig, VGGHarness
+from zeno.vcli.cognitive.vocab_from_registry import build_decompose_vocab
 
 
 # ---------------------------------------------------------------------------

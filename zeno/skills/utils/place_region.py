@@ -11,7 +11,7 @@ PLACE step with a grounded predicate:
 
 Usage example::
 
-    from vector_os_nano.skills.utils.place_region import region_around
+    from zeno.skills.utils.place_region import region_around
     region = region_around((10.60, 2.70))
     # -> (10.45, 2.55, 10.75, 2.85)
 

@@ -38,11 +38,11 @@ CRITICAL_IMPORTS = [
     ("transformers", "HuggingFace transformers"),
 
     # Project modules
-    ("vector_os_nano.core.types", "Core types"),
-    ("vector_os_nano.core.scene_graph", "SceneGraph"),
-    ("vector_os_nano.core.skill", "Skill framework"),
-    ("vector_os_nano.perception.vlm_go2", "VLM perception"),
-    ("vector_os_nano.perception.depth_projection", "Depth projection"),
+    ("zeno.core.types", "Core types"),
+    ("zeno.core.scene_graph", "SceneGraph"),
+    ("zeno.core.skill", "Skill framework"),
+    ("zeno.perception.vlm_go2", "VLM perception"),
+    ("zeno.perception.depth_projection", "Depth projection"),
 ]
 
 def main():

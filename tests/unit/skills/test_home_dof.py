@@ -12,8 +12,8 @@ the planner/executor calls `home` on the go2+Piper arm, which raised.
 """
 from __future__ import annotations
 
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.skills.home import HomeSkill, _DEFAULT_HOME_JOINTS
+from zeno.core.skill import SkillContext
+from zeno.skills.home import HomeSkill, _DEFAULT_HOME_JOINTS
 
 
 class _ArmWithDof:  # Piper-like: 6-DoF, exposes .dof + rejects a wrong-length move

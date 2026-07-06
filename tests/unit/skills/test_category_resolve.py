@@ -15,7 +15,7 @@ object to grasp.
 """
 from __future__ import annotations
 
-from vector_os_nano.skills.perception_grasp import _resolve_unique_category
+from zeno.skills.perception_grasp import _resolve_unique_category
 
 _SCENE = ("pickable_bottle_blue", "pickable_bottle_green", "pickable_can_red")
 

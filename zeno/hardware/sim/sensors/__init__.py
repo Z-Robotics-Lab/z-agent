@@ -17,20 +17,20 @@ Public surface:
 """
 from __future__ import annotations
 
-from vector_os_nano.hardware.sim.sensors.g1_lidar import g1_lidar_scan
-from vector_os_nano.hardware.sim.sensors.gt_odom import (
+from zeno.hardware.sim.sensors.g1_lidar import g1_lidar_scan
+from zeno.hardware.sim.sensors.gt_odom import (
     GroundTruthOdomPublisher,
     OdomSample,
 )
-from vector_os_nano.hardware.sim.sensors.lidar_raycast import (
+from zeno.hardware.sim.sensors.lidar_raycast import (
     RaycastResult,
     raycast_lidar,
 )
-from vector_os_nano.hardware.sim.sensors.lidar360 import (
+from zeno.hardware.sim.sensors.lidar360 import (
     LidarSample,
     MuJoCoLivox360,
 )
-from vector_os_nano.hardware.sim.sensors.pano360 import (
+from zeno.hardware.sim.sensors.pano360 import (
     MuJoCoPano360,
     PanoSample,
 )

@@ -4,9 +4,9 @@
 """Tests for Go2 quadruped skills."""
 import pytest
 from unittest.mock import MagicMock
-from vector_os_nano.core.skill import SkillContext
-from vector_os_nano.core.world_model import WorldModel
-from vector_os_nano.core.types import SkillResult
+from zeno.core.skill import SkillContext
+from zeno.core.world_model import WorldModel
+from zeno.core.types import SkillResult
 
 
 def _make_go2_context():
@@ -30,7 +30,7 @@ def _make_go2_context():
 
 class TestWalkSkill:
     def test_walk_forward(self):
-        from vector_os_nano.skills.go2.walk import WalkSkill
+        from zeno.skills.go2.walk import WalkSkill
         ctx = _make_go2_context()
         skill = WalkSkill()
         result = skill.execute({"direction": "forward", "distance": 1.0, "speed": 0.3}, ctx)
@@ -43,7 +43,7 @@ class TestWalkSkill:
         assert abs(args[0][2]) < 0.01  # vyaw ~0
 
     def test_walk_backward(self):
-        from vector_os_nano.skills.go2.walk import WalkSkill
+        from zeno.skills.go2.walk import WalkSkill
         ctx = _make_go2_context()
         skill = WalkSkill()
         result = skill.execute({"direction": "backward", "distance": 0.5}, ctx)
@@ -52,7 +52,7 @@ class TestWalkSkill:
         assert args[0][0] < 0  # vx negative
 
     def test_walk_no_base(self):
-        from vector_os_nano.skills.go2.walk import WalkSkill
+        from zeno.skills.go2.walk import WalkSkill
         ctx = _make_go2_context()
         ctx.base = None
         skill = WalkSkill()
@@ -61,7 +61,7 @@ class TestWalkSkill:
         assert "no_base" in result.diagnosis_code
 
     def test_walk_skill_metadata(self):
-        from vector_os_nano.skills.go2.walk import WalkSkill
+        from zeno.skills.go2.walk import WalkSkill
         skill = WalkSkill()
         assert skill.name == "walk"
         assert "walk" in skill.__class__.__skill_aliases__
@@ -70,7 +70,7 @@ class TestWalkSkill:
 
 class TestTurnSkill:
     def test_turn_left(self):
-        from vector_os_nano.skills.go2.turn import TurnSkill
+        from zeno.skills.go2.turn import TurnSkill
         ctx = _make_go2_context()
         skill = TurnSkill()
         result = skill.execute({"direction": "left", "angle": 90}, ctx)
@@ -81,7 +81,7 @@ class TestTurnSkill:
         assert args[0][2] > 0  # vyaw positive (left turn)
 
     def test_turn_right(self):
-        from vector_os_nano.skills.go2.turn import TurnSkill
+        from zeno.skills.go2.turn import TurnSkill
         ctx = _make_go2_context()
         skill = TurnSkill()
         result = skill.execute({"direction": "right", "angle": 45}, ctx)
@@ -90,7 +90,7 @@ class TestTurnSkill:
         assert args[0][2] < 0  # vyaw negative (right turn)
 
     def test_turn_skill_metadata(self):
-        from vector_os_nano.skills.go2.turn import TurnSkill
+        from zeno.skills.go2.turn import TurnSkill
         skill = TurnSkill()
         assert skill.name == "turn"
         assert "转" in skill.__class__.__skill_aliases__
@@ -98,7 +98,7 @@ class TestTurnSkill:
 
 class TestStanceSkills:
     def test_stand(self):
-        from vector_os_nano.skills.go2.stance import StandSkill
+        from zeno.skills.go2.stance import StandSkill
         ctx = _make_go2_context()
         skill = StandSkill()
         assert skill.__class__.__skill_direct__  # direct skill
@@ -107,7 +107,7 @@ class TestStanceSkills:
         ctx.base.stand.assert_called_once()
 
     def test_sit(self):
-        from vector_os_nano.skills.go2.stance import SitSkill
+        from zeno.skills.go2.stance import SitSkill
         ctx = _make_go2_context()
         skill = SitSkill()
         assert skill.__class__.__skill_direct__
@@ -116,7 +116,7 @@ class TestStanceSkills:
         ctx.base.sit.assert_called_once()
 
     def test_lie_down(self):
-        from vector_os_nano.skills.go2.stance import LieDownSkill
+        from zeno.skills.go2.stance import LieDownSkill
         ctx = _make_go2_context()
         skill = LieDownSkill()
         assert skill.__class__.__skill_direct__
@@ -125,7 +125,7 @@ class TestStanceSkills:
         ctx.base.lie_down.assert_called_once()
 
     def test_stance_no_base(self):
-        from vector_os_nano.skills.go2.stance import StandSkill
+        from zeno.skills.go2.stance import StandSkill
         ctx = _make_go2_context()
         ctx.base = None
         skill = StandSkill()
@@ -135,7 +135,7 @@ class TestStanceSkills:
 
 class TestSkillRegistration:
     def test_get_go2_skills(self):
-        from vector_os_nano.skills.go2 import get_go2_skills
+        from zeno.skills.go2 import get_go2_skills
         skills = get_go2_skills()
         assert len(skills) == 12
         names = {s.name for s in skills}

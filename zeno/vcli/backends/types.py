@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from vector_os_nano.vcli.session import TokenUsage
+from zeno.vcli.session import TokenUsage
 
 
 @dataclass(frozen=True)

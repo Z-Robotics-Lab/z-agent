@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from vector_os_nano.vcli.cognitive.trace_store import evidence_passed
+from zeno.vcli.cognitive.trace_store import evidence_passed
 
 # Live verify-namespace callable names for the R1 evidence gate (replaces is_robot).
 ORACLES = frozenset({
@@ -27,11 +27,11 @@ ORACLES = frozenset({
     "describe_scene", "detect_objects", "placed_count", "nearest_room",
     "objects_in_room", "find_object", "room_coverage",
 })
-from vector_os_nano.vcli.engine import VectorEngine
-from vector_os_nano.vcli.permissions import PermissionContext
-from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-from vector_os_nano.vcli.tools.file_tools import FileWriteTool
-from vector_os_nano.vcli.worlds import DevWorld
+from zeno.vcli.engine import VectorEngine
+from zeno.vcli.permissions import PermissionContext
+from zeno.vcli.tools.base import CategorizedToolRegistry
+from zeno.vcli.tools.file_tools import FileWriteTool
+from zeno.vcli.worlds import DevWorld
 
 
 def _goal_tree_json(file_path: str, content: str, verify: str) -> str:

@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Entry point: python -m vector_os_nano.mcp
+"""Entry point: python -m zeno.mcp
 
 Runs the MCP server with stdio transport so Claude Code can communicate
 with the Vector OS Nano simulated robot.
 
 Examples:
-    python -m vector_os_nano.mcp                 # headless sim (default)
-    python -m vector_os_nano.mcp --sim            # sim with viewer
-    python -m vector_os_nano.mcp --sim-headless   # headless sim (explicit)
+    python -m zeno.mcp                 # headless sim (default)
+    python -m zeno.mcp --sim            # sim with viewer
+    python -m zeno.mcp --sim-headless   # headless sim (explicit)
 """
 
 import asyncio
 
-from vector_os_nano.mcp.server import main
+from zeno.mcp.server import main
 
 asyncio.run(main())

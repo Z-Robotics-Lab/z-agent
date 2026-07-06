@@ -28,13 +28,13 @@ class _CountingBackend:
 
 
 def _run(tool_script, on_progress=None, skill=None):
-    from vector_os_nano.core.agent import Agent
-    from vector_os_nano.core.types import SkillResult
-    from vector_os_nano.vcli.engine import VectorEngine
-    from vector_os_nano.vcli.permissions import PermissionContext
-    from vector_os_nano.vcli.session import Session
-    from vector_os_nano.vcli.tools.base import CategorizedToolRegistry
-    from vector_os_nano.vcli.worlds.dev import DevWorld
+    from zeno.core.agent import Agent
+    from zeno.core.types import SkillResult
+    from zeno.vcli.engine import VectorEngine
+    from zeno.vcli.permissions import PermissionContext
+    from zeno.vcli.session import Session
+    from zeno.vcli.tools.base import CategorizedToolRegistry
+    from zeno.vcli.worlds.dev import DevWorld
     from tests.harness.fake_backend import FakeToolScriptBackend
 
     class _WriteFileSkill:
@@ -160,7 +160,7 @@ def test_recover_after_failed_verify_records_fail_then_pass():
     via the all-GROUNDED gate — never a false green). Real-LLM confirmed (R9): haiku
     re-acts after FAIL until PASS; this guards the path with a scripted retry."""
     from pathlib import Path as _P
-    from vector_os_nano.core.types import SkillResult
+    from zeno.core.types import SkillResult
     from tests.harness.fake_backend import tool_turn
 
     class _FlakyWrite:
@@ -200,7 +200,7 @@ def test_finish_on_failed_verify_is_blocked_until_pass():
     gate the FALSE-then-finish would end the turn with a single [False] step (the
     obj-2-abandon flake); with it the trace records [False, True] (recovered)."""
     from pathlib import Path as _P
-    from vector_os_nano.core.types import SkillResult
+    from zeno.core.types import SkillResult
     from tests.harness.fake_backend import tool_turn
 
     class _FlakyWrite:

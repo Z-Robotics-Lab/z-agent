@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from vector_os_nano.core.types import Detection
-from vector_os_nano.perception.detector_capability import DetectorCapability
-from vector_os_nano.vcli.cognitive.capabilities.types import (
+from zeno.core.types import Detection
+from zeno.perception.detector_capability import DetectorCapability
+from zeno.vcli.cognitive.capabilities.types import (
     Capability,
     CapabilityResult,
 )
@@ -242,7 +242,7 @@ def test_detector_signature_reads_only_rgb_and_query():
     """Structural moat: the detector contract takes ONLY (rgb, query) — no GT pose."""
     import inspect
 
-    from vector_os_nano.perception.grounding_dino import GroundingDinoDetector
+    from zeno.perception.grounding_dino import GroundingDinoDetector
 
     params = list(inspect.signature(GroundingDinoDetector.detect).parameters)
     assert params == ["self", "rgb", "query"]

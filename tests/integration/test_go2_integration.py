@@ -10,9 +10,9 @@ pytest.importorskip("convex_mpc")
 class TestGo2AgentIntegration:
     def test_agent_registers_go2_skills(self):
         """Agent with Go2 base should be able to register Go2 skills."""
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-        from vector_os_nano.core.agent import Agent
-        from vector_os_nano.skills.go2 import get_go2_skills
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.core.agent import Agent
+        from zeno.skills.go2 import get_go2_skills
 
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
@@ -32,7 +32,7 @@ class TestGo2AgentIntegration:
 
     def test_walk_turn_sit_sequence(self):
         """Full sequence: stand -> walk -> turn -> sit without crash."""
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
 
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
@@ -57,9 +57,9 @@ class TestGo2AgentIntegration:
 
     def test_world_model_syncs_base_state(self):
         """Agent._sync_robot_state should populate base position/heading."""
-        from vector_os_nano.hardware.sim.mujoco_go2 import MuJoCoGo2
-        from vector_os_nano.core.agent import Agent
-        from vector_os_nano.skills.go2 import get_go2_skills
+        from zeno.hardware.sim.mujoco_go2 import MuJoCoGo2
+        from zeno.core.agent import Agent
+        from zeno.skills.go2 import get_go2_skills
 
         go2 = MuJoCoGo2(gui=False)
         go2.connect()
