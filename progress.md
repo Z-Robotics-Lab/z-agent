@@ -45,6 +45,9 @@
 - 环境固化：constraints.txt = 上游 venv 逐版本镜像（207 包）；venv 重建命令见下。
 
 ## Failed / 教训
+- go2 复合指令（"左转90度再前进一米"，2026-07-06 实测）：转向腿 GROUNDED，但第二腿模型
+  用只读 where_am_i + 自洽 at_position 冒充行走 → actor-causation 判 RAN（moat 正确拒绝，
+  无假绿）。简单显式行走 2/2 GROUNDED。producer 教学缺口（compound 两动作），非运动学问题。
 - 新 venv 装最新版二进制（pin 4.x 最新/coal/numpy 组合）→ pinocchio 段错误；
   必须 `uv pip install -r constraints.txt` 镜像上游版本 + 另装本地包
   `-e ~/Desktop/go2-convex-mpc --no-deps`（PEP610 direct install，不在 PyPI）。
