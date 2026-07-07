@@ -897,6 +897,21 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
         # phantom skill (base world) or the opaque ``unmatched`` fallback (baseless
         # world). This applies on EVERY decompose, including replan, because the
         # harness re-decomposes through this same validator.
+        # Normalize a bare skill-name strategy to its ``<name>_skill`` form when
+        # THAT form is what this world's vocabulary teaches. Live 2026-07-06
+        # (go2w): the model emitted bare 'navigate' — the executor's own failure
+        # message lists BARE registry names as "valid", actively teaching that
+        # form on replan — and the old path cleared it into the self-
+        # contradictory "strategy 'navigate' is not a skill in this world
+        # (valid: [... 'navigate' ...])". A name whose suffixed form is a known
+        # strategy is not a hallucination; re-suffix it instead of clearing.
+        if (
+            strategy
+            and strategy not in self.KNOWN_STRATEGIES
+            and f"{strategy}_skill" in self.KNOWN_STRATEGIES
+        ):
+            strategy = f"{strategy}_skill"
+
         cleared_strategy = ""
         if strategy and strategy != "answer" and strategy not in self.KNOWN_STRATEGIES:
             _LOG.warning(

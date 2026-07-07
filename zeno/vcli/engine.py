@@ -785,9 +785,13 @@ class ZenoEngine:
           skipped: the runtime won't produce ``executor_type="invalid"`` for them.
         """
         # --- collect the static vocab surfaces ---
+        # BOTH declared surfaces: the ``strategies`` allowlist (what the
+        # validator accepts) and the ``strategy_descriptions`` keys (what the
+        # prompt advertises). Checking only the latter let a vocab with empty
+        # descriptions but drifted strategies through (go2w, 2026-07-06).
         strategy_names: frozenset[str] = frozenset(
             vocab_kwargs.get("strategy_descriptions", {}).keys()
-        )
+        ) | frozenset(vocab_kwargs.get("strategies", frozenset()) or frozenset())
         verify_fn_names: frozenset[str] = frozenset(
             vocab_kwargs.get("verify_functions", frozenset())
         )
@@ -820,6 +824,20 @@ class ZenoEngine:
                 world_name,
             )
         else:
+            # Tripwire (warning, not drift): a world that DID inject a vocab but
+            # teaches ZERO strategies while real skills are registered leaves the
+            # planner improvising names that all fail validation (go2w live,
+            # 2026-07-06). Worlds with no vocab at all (class defaults / registry
+            # derivation) are exempt — their strategy set is single-sourced.
+            if vocab_kwargs and registered_names and not strategy_names:
+                logger.warning(
+                    "VGG preflight: world %r — vocab teaches NO strategies while "
+                    "%d skills are registered (%s); the planner will improvise "
+                    "strategy names and every plan step will fail validation",
+                    world_name,
+                    len(registered_names),
+                    ", ".join(sorted(registered_names)),
+                )
             for name in sorted(strategy_names):
                 # Always-valid built-in routes.
                 if name in self._ALWAYS_VALID_STRATEGIES:
