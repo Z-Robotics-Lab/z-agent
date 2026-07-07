@@ -144,9 +144,19 @@ class Go2WBringupTool:
                 f"go2W_Sim checkout"), is_error=True)
         action = (params or {}).get("action", "up")
         if action == "teardown":
+            # teardown 脚本的退出码是合同：0=拆净、非零=残留（宿主仍有 kit-python
+            # 或 navstack 未拆）。旧版忽略 returncode/不设 is_error → 脚本失败也报
+            # 成功，正是 CEO 抱怨的"工具说关了实际没关"。这里如实转达：非零 →
+            # is_error=True，并保留脚本尾部（含残留进程表）供模型/用户判读。
             r = subprocess.run(["bash", script, "teardown"], capture_output=True,
                                text=True, timeout=180)
-            return ToolResult(content=(r.stdout + r.stderr)[-800:])
+            out = (r.stdout + r.stderr)[-800:]
+            if r.returncode != 0:
+                return ToolResult(
+                    content=(f"teardown FAILED (exit={r.returncode}); stack may still "
+                             f"be up. Residuals below — re-run teardown or escalate.\n{out}"),
+                    is_error=True)
+            return ToolResult(content=out)
         # up：幂等短路探测走 status.sh（快）；未 green 则后台拉起（2-6 分钟），
         # 立即返回让模型轮询 go2w_status——工具不阻塞回合。
         st = subprocess.run(["bash", os.path.join(repo, "scripts", "nav", "status.sh")],

@@ -398,3 +398,87 @@ def test_go2w_bridge_env_overrides_default_endpoint(
     assert go2w_mod._bridge() == "http://127.0.0.1:8042"
     monkeypatch.setenv("GO2W_BRIDGE", "http://10.0.0.5:9000")
     assert go2w_mod._bridge() == "http://10.0.0.5:9000"
+
+
+# ---------------------------------------------------------------------------
+# Teardown fidelity — the tool must NOT report success when the script fails.
+# Regression for the 2026-07-06 "Isaac 杀不死" complaint: the teardown branch
+# ignored the script's exit code, so a teardown that left kit-python alive still
+# read as success to the model ("工具说关了实际没关"). These pin: non-zero exit
+# => is_error=True + residuals surfaced; zero exit => plain success.
+# Offline & LLM-free: subprocess.run is monkeypatched; no bash/docker/sim runs.
+# ---------------------------------------------------------------------------
+
+
+class _FakeCompleted:
+    """Stand-in for subprocess.CompletedProcess."""
+
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _bringup_ctx() -> Any:
+    """Minimal ToolContext — the bringup tool's teardown branch reads none of it."""
+    import threading
+    from pathlib import Path
+
+    from zeno.vcli.tools.base import ToolContext
+
+    return ToolContext(agent=None, cwd=Path("/tmp"), session=None,
+                       permissions=None, abort=threading.Event())
+
+
+def _patch_teardown_subprocess(
+    monkeypatch: pytest.MonkeyPatch, result: _FakeCompleted
+) -> dict[str, Any]:
+    """Make the bringup tool see a valid script and a scripted subprocess result."""
+    calls: dict[str, Any] = {}
+
+    def _run(cmd: Any, *a: Any, **k: Any) -> _FakeCompleted:
+        calls["cmd"] = cmd
+        return result
+
+    # The tool checks os.path.isfile(script) before running; force it True.
+    monkeypatch.setattr(go2w_mod.os.path, "isfile", lambda _p: True)
+    import subprocess as _sp
+
+    monkeypatch.setattr(_sp, "run", _run)
+    return calls
+
+
+def test_teardown_reports_error_when_script_exits_nonzero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-zero teardown exit (residual kit-python) => is_error=True.
+
+    This is the exact fidelity gap behind the CEO complaint: the tool must not
+    claim the stack is down when the scoped teardown could not verify it.
+    """
+    residual = ("[teardown] FAILED: 拆链未达判据 — residual_pids='82059' l0='true'\n"
+                "[teardown] 宿主侧 pgrep: 82059 /isaac-sim/kit/python/bin/python3 ...")
+    _patch_teardown_subprocess(
+        monkeypatch, _FakeCompleted(returncode=1, stdout="", stderr=residual))
+
+    tool = go2w_mod.Go2WBringupTool()
+    res = tool.execute({"action": "teardown"}, _bringup_ctx())
+
+    assert res.is_error is True, "non-zero teardown must surface as is_error=True"
+    assert "82059" in res.content, "the residual process table must reach the model"
+    assert "FAILED" in res.content or "exit=1" in res.content
+
+
+def test_teardown_reports_success_when_script_exits_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A clean teardown (exit 0) stays a non-error success."""
+    ok = "[teardown] SUCCESS: kit-python 已灭（宿主 pgrep 空）且 l0=false"
+    _patch_teardown_subprocess(
+        monkeypatch, _FakeCompleted(returncode=0, stdout=ok, stderr=""))
+
+    tool = go2w_mod.Go2WBringupTool()
+    res = tool.execute({"action": "teardown"}, _bringup_ctx())
+
+    assert not res.is_error, "a clean teardown must not be flagged as an error"
+    assert "SUCCESS" in res.content
