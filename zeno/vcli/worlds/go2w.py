@@ -241,6 +241,31 @@ from zeno.core.skill import SkillRegistry, skill
 from zeno.core.types import SkillResult
 
 
+def _drive_and_hold(x: float, y: float, timeout_s: float = 300.0):
+    """阻塞开到 SLAM 系 (x, y)：发 waypoint 轮询直到到达冻结或超时。
+
+    到达（0.45m）后冻结：waypoint 改发当前位置让 pathFollower 停追，
+    停稳复核（0.7m）后返回——verify（0.8m）才有余量且不再漂移触发重试。
+    返回 (ok, last_pose)。navigate 与 move_relative 共用这一个循环。
+    """
+    import sys
+    _post("waypoint", {"x": x, "y": y})
+    t0 = _time.time()
+    while _time.time() - t0 < timeout_s:
+        _time.sleep(5)
+        _post("waypoint", {"x": x, "y": y})  # 周期重发（栈只认最新）
+        p = _get("pose")
+        if math.hypot(p["x"] - x, p["y"] - y) < 0.45:
+            _post("waypoint", {"x": p["x"], "y": p["y"]})
+            _time.sleep(6)
+            p = _get("pose")
+            d2 = math.hypot(p["x"] - x, p["y"] - y)
+            print(f"[SKILL] held check d={d2:.2f} at ({p['x']:.2f},{p['y']:.2f})",
+                  file=sys.stderr, flush=True)
+            return d2 < 0.7, p
+    return False, _get("pose")
+
+
 @skill(aliases=["navigate", "nav_to_pos", "nav", "go to", "导航", "去", "开到", "走到"])
 class Go2WNavigateSkill:
     """阻塞式导航技能：发 waypoint 并轮询直到到达（SLAM 系）或超时。"""
@@ -249,8 +274,8 @@ class Go2WNavigateSkill:
     description = ("Navigate the Go2W robot to map coordinates (x, y). "
                    "Blocks until arrival (tolerance ~0.7m) or 300s timeout.")
 
-    def _target(self, context, kw):
-        for src in (kw, getattr(context, "params", None) or {},
+    def _target(self, params, context, kw):
+        for src in (params, kw, getattr(context, "params", None) or {},
                     getattr(context, "args", None) or {}):
             if isinstance(src, dict) and "x" in src and "y" in src:
                 return float(src["x"]), float(src["y"])
@@ -261,36 +286,138 @@ class Go2WNavigateSkill:
             return float(m.group(1)), float(m.group(2))
         raise ValueError(f"no (x, y) target in skill call: {text[:120]}")
 
-    def execute(self, context=None, **kw):
+    # 签名必须容内核双约定：GoalExecutor/_execute_skill 与 SkillWrapperTool 均按
+    # 位置调用 skill.execute(params, context)。旧签名 (context=None, **kw) 在该
+    # 路径上直接 TypeError（2026-07-06 排查确认，DEBUG.md H4）。
+    def execute(self, params=None, context=None, **kw):
         import sys
         try:
-            x, y = self._target(context, kw)
+            x, y = self._target(params, context, kw)
         except ValueError as e:
             print(f"[SKILL] target parse FAIL: {e}", file=sys.stderr, flush=True)
             return SkillResult(success=False, error_message=str(e))
-        print(f"[SKILL] navigate -> ({x},{y}) ctx={str(getattr(context,'params',None))[:80]} kw={str(kw)[:80]}",
+        print(f"[SKILL] navigate -> ({x},{y}) params={str(params)[:80]} kw={str(kw)[:80]}",
               file=sys.stderr, flush=True)
-        _post("waypoint", {"x": x, "y": y})
-        t0 = _time.time()
-        while _time.time() - t0 < 300:
-            _time.sleep(5)
-            _post("waypoint", {"x": x, "y": y})  # 周期重发（栈只认最新）
-            p = _get("pose")
-            # 到达（0.45m）后冻结：waypoint 改发当前位置让 pathFollower 停追，
-            # 停稳复核（0.7m）后返回——verify（0.8m）才有余量且不再漂移触发重试
-            if math.hypot(p["x"] - x, p["y"] - y) < 0.45:
-                _post("waypoint", {"x": p["x"], "y": p["y"]})
-                _time.sleep(6)
-                p = _get("pose")
-                d2 = math.hypot(p["x"] - x, p["y"] - y)
-                print(f"[SKILL] held check d={d2:.2f} at ({p['x']:.2f},{p['y']:.2f})",
-                      file=sys.stderr, flush=True)
-                if d2 < 0.7:
-                    return SkillResult(success=True, result_data={
-                        "message": f"arrived+held ({p['x']:.2f},{p['y']:.2f})"})
-        p = _get("pose")
+        ok, p = _drive_and_hold(x, y)
+        if ok:
+            return SkillResult(success=True, result_data={
+                "message": f"arrived+held ({p['x']:.2f},{p['y']:.2f})"})
         return SkillResult(success=False,
                            error_message=f"timeout at ({p['x']:.2f},{p['y']:.2f})")
+
+
+# 相对移动：方向词 -> 相对当前航向 yaw 的偏角（map 系目标 = pose + d·(cos, sin)(yaw+偏角)）
+_RELATIVE_DIRECTIONS: dict[str, float] = {
+    "forward": 0.0,
+    "backward": math.pi,
+    "left": math.pi / 2,
+    "right": -math.pi / 2,
+}
+# 中英同义词归一化（planner 用英文枚举；REPL 直呼可能给中文）
+_DIRECTION_SYNONYMS: dict[str, str] = {
+    "前": "forward", "前进": "forward", "向前": "forward", "往前": "forward",
+    "后": "backward", "后退": "backward", "向后": "backward", "往后": "backward",
+    "倒退": "backward", "back": "backward",
+    "左": "left", "向左": "left", "往左": "left",
+    "右": "right", "向右": "right", "往右": "right",
+}
+_DEFAULT_RELATIVE_DISTANCE_M = 2.0   # “走几米”这类模糊指令的保守默认
+_MAX_RELATIVE_DISTANCE_M = 50.0      # 仓库尺度上限——超出按输入错误拒绝
+
+
+# alias 只注册“向前”类词条：alias 前缀匹配拿不回方向语义，后退/左右若注册 alias
+# 会以默认方向(forward)执行——宁可让非前进指令走 LLM 结构化参数路径。
+@skill(aliases=["前进", "往前走", "向前走", "move forward", "walk forward"])
+class Go2WMoveRelativeSkill:
+    """相对移动技能：按当前位姿+航向把 (direction, distance) 换算成 map 系
+    waypoint，再复用 navigate 的阻塞循环。2026-07-06 实测缺口——“往前走几米”
+    在纯绝对坐标世界里无路可走（DEBUG.md H2）。"""
+
+    name = "move_relative"
+    description = (
+        "Move the Go2W RELATIVE to its current pose: direction "
+        "(forward/backward/left/right) + distance in meters. Reads the live "
+        "pose+yaw from the bridge, computes the map-frame waypoint itself, "
+        "then blocks like navigate. 相对移动（前进/后退/左移/右移 N 米）。")
+    parameters = {
+        "distance": {"type": "number", "default": _DEFAULT_RELATIVE_DISTANCE_M,
+                     "required": False,
+                     "description": "distance in meters (default 2.0)"},
+        "direction": {"type": "string", "default": "forward", "required": False,
+                      "description": "forward | backward | left | right"},
+    }
+    preconditions: list = []
+    effects = {"base_state": "moved"}   # 'base' 关键字 -> motor 技能（正确归类）
+
+    @staticmethod
+    def _parse_distance(sources: tuple, text: str) -> float:
+        for src in sources:
+            if not isinstance(src, dict):
+                continue
+            for key in ("distance", "distance_m", "meters"):
+                if key in src and src[key] is not None:
+                    return float(src[key])
+        import re
+        m = re.search(r"(-?\d+\.?\d*)\s*(?:米|m\b|meter)", text)
+        if m:
+            return float(m.group(1))
+        return _DEFAULT_RELATIVE_DISTANCE_M
+
+    @staticmethod
+    def _parse_direction(sources: tuple, text: str) -> str:
+        raw = ""
+        for src in sources:
+            if isinstance(src, dict) and src.get("direction"):
+                raw = str(src["direction"]).strip().lower()
+                break
+        if raw:
+            return _DIRECTION_SYNONYMS.get(raw, raw)
+        for cn, en in _DIRECTION_SYNONYMS.items():
+            if cn in text:
+                return en
+        return "forward"
+
+    def execute(self, params=None, context=None, **kw):
+        import sys
+        sources = (params if isinstance(params, dict) else {}, kw)
+        text = str(getattr(context, "instruction", "")
+                   or getattr(context, "text", "") or "")
+        try:
+            distance = self._parse_distance(sources, text)
+        except (TypeError, ValueError) as e:
+            return SkillResult(success=False,
+                               error_message=f"bad distance: {e}")
+        direction = self._parse_direction(sources, text)
+        if direction not in _RELATIVE_DIRECTIONS:
+            return SkillResult(success=False, error_message=(
+                f"unknown direction {direction!r} "
+                f"(valid: {sorted(_RELATIVE_DIRECTIONS)})"))
+        if not math.isfinite(distance) or not (
+                0.0 < distance <= _MAX_RELATIVE_DISTANCE_M):
+            return SkillResult(success=False, error_message=(
+                f"distance {distance!r} out of range "
+                f"(0, {_MAX_RELATIVE_DISTANCE_M}] m"))
+        try:
+            pose = _get("pose")
+            heading = float(pose.get("yaw", 0.0)) + _RELATIVE_DIRECTIONS[direction]
+            tx = float(pose["x"]) + distance * math.cos(heading)
+            ty = float(pose["y"]) + distance * math.sin(heading)
+        except Exception as e:  # noqa: BLE001 — 桥边界
+            return SkillResult(success=False,
+                               error_message=f"pose read failed: {e}")
+        print(f"[SKILL] move_relative {direction} {distance}m: "
+              f"({pose['x']:.2f},{pose['y']:.2f},yaw={pose.get('yaw', 0.0):.2f}) "
+              f"-> ({tx:.2f},{ty:.2f})", file=sys.stderr, flush=True)
+        ok, p = _drive_and_hold(tx, ty)
+        data = {"target_x": round(tx, 2), "target_y": round(ty, 2),
+                "direction": direction, "distance_m": distance}
+        if ok:
+            data["message"] = (
+                f"moved {direction} {distance}m to ({p['x']:.2f},{p['y']:.2f}); "
+                f"verify with go2w_at({tx:.2f}, {ty:.2f}, tol=1.0)")
+            return SkillResult(success=True, result_data=data)
+        return SkillResult(success=False, result_data=data, error_message=(
+            f"timeout at ({p['x']:.2f},{p['y']:.2f}) heading for ({tx:.2f},{ty:.2f})"))
 
 
 # ---- 抓取层（任务③）：臂/夹爪鸭子合同 + pick 技能 --------------------------------
@@ -521,6 +648,7 @@ class IsaacGo2WEmbodiment:
         self._gripper = Go2WGripper()
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(Go2WNavigateSkill())
+        self._skill_registry.register(Go2WMoveRelativeSkill())
         self._skill_registry.register(Go2WExploreSkill())
         self._skill_registry.register(Go2WPickSkill())
 
@@ -605,7 +733,13 @@ class IsaacGo2WWorld:
             "Use go2w_navigate(x, y) to send it somewhere; use go2w_where() to "
             "check progress. Navigation takes tens of seconds of sim time — "
             "poll go2w_where between checks. Verify arrival with "
-            "go2w_at(x, y) == True. To explore/map the environment autonomously, "
+            "go2w_at(x, y) == True. For RELATIVE movement ('往前走几米', 'move "
+            "forward 2 m', back up, sidestep) call the move_relative skill with "
+            "direction (forward/backward/left/right) and distance in meters — it "
+            "reads the live pose+yaw from the bridge and computes the map-frame "
+            "waypoint itself; its result reports the target, verify with "
+            "go2w_at(target_x, target_y, tol=1.0). "
+            "To explore/map the environment autonomously, "
             "call the explore skill (blocking; it reports explored_volume before/"
             "after); verify exploration progress with "
             "explored_volume() > <the before reading + ~60> using the numbers the "
@@ -678,13 +812,104 @@ class IsaacGo2WWorld:
         return IsaacGo2WEmbodiment()
 
     def decompose_vocab(self) -> DecomposeVocab | None:
+        # 完整词汇——2026-07-06 实测教训（DEBUG.md H1）：只填 planner_intro/
+        # verify_functions 的“半配置” vocab 会经 as_kwargs() 把 strategies=
+        # frozenset()（非 None）注入 GoalDecomposer，清空 KNOWN_STRATEGIES 与
+        # prompt 的策略/verify 清单，planner 只能瞎编裸名再被全部 clear。
+        # strategies 与 build_embodiment 的注册表一一对应（{skill}_skill）；
+        # 一致性由 tests/vcli/test_go2w_vocab_strategy_seam.py 钉死。不教
+        # walk_forward/turn/scan_360 基座原语——本 embodiment 没有这些方法。
         return DecomposeVocab(
             planner_intro=(
                 "Drive a Go2W robot dog in a warehouse. Navigation goals are "
                 "map-frame (x, y) positions; autonomous exploration is graded by "
-                "explored_volume() growth."
+                "explored_volume() growth. For RELATIVE motion commands "
+                "('往前走几米', 'move forward 3 m') use move_relative_skill — it "
+                "computes the map-frame target from the live pose+yaw at runtime. "
+                "For its verify, compute the expected target from the world "
+                "context's Position (x, y) and Heading h: forward d meters means "
+                "target = (x + d*cos(h), y + d*sin(h)); use a generous tolerance "
+                "go2w_at(tx, ty, tol=1.5)."
             ),
-            verify_functions=frozenset({"go2w_at", "explored_volume", "holding_object"}),
+            verify_functions=frozenset(
+                {"go2w_at", "explored_volume", "holding_object"}),
+            verify_fn_signatures={
+                "go2w_at": ("go2w_at(x: float, y: float, tol: float = 0.8) -> bool"
+                            "  # SIM ground truth: robot within tol meters of map-frame (x, y)"),
+                "explored_volume": ("explored_volume() -> float"
+                                    "  # explored volume in m³ (independent judge, grows only)"),
+                "holding_object": ("holding_object(target: str | None = None) -> bool"
+                                   "  # GT: gripper physically holding (e.g. holding_object('box'))"),
+            },
+            strategy_descriptions={
+                "navigate_skill": ("Drive to ABSOLUTE map coordinates (x, y); "
+                                   "blocks until arrival"),
+                "move_relative_skill": ("Move RELATIVE to the current pose "
+                                        "(forward/backward/left/right by N meters); "
+                                        "computes the map-frame target from live pose+yaw"),
+                "explore_skill": ("Autonomously explore and map (TARE planner); "
+                                  "graded by explored_volume() gain"),
+                "pick_skill": ("Drive near the box and grasp it with the arm; "
+                               "verify with holding_object('box')"),
+            },
+            strategies=frozenset({
+                "navigate_skill", "move_relative_skill",
+                "explore_skill", "pick_skill",
+            }),
+            strategy_params_help="""\
+  - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
+  - move_relative_skill: {"distance": <meters float>, "direction": "forward|backward|left|right"}
+  - explore_skill: {}  (optional: {"budget_s": <float>, "min_gain_m3": <float>})
+  - pick_skill: {"target": "box"}""",
+            examples="""\
+Task: "先自主探索一下，然后开到 (2.0, 3.0)"
+Response:
+{
+  "goal": "先自主探索一下，然后开到 (2.0, 3.0)",
+  "sub_goals": [
+    {
+      "name": "explore_warehouse",
+      "description": "自主探索建图",
+      "verify": "explored_volume() > 100",
+      "strategy": "explore_skill",
+      "timeout_sec": 320,
+      "depends_on": [],
+      "strategy_params": {},
+      "fail_action": ""
+    },
+    {
+      "name": "goto_target",
+      "description": "导航到 (2.0, 3.0)",
+      "verify": "go2w_at(2.0, 3.0)",
+      "strategy": "navigate_skill",
+      "timeout_sec": 320,
+      "depends_on": ["explore_warehouse"],
+      "strategy_params": {"x": 2.0, "y": 3.0},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}
+
+Task: "往前走2米"   (world context: "Position: (3.0, 2.0)\\nHeading: 1.6 rad")
+Target math: tx = 3.0 + 2*cos(1.6) ≈ 2.9, ty = 2.0 + 2*sin(1.6) ≈ 4.0.
+Response:
+{
+  "goal": "往前走2米",
+  "sub_goals": [
+    {
+      "name": "move_forward_2m",
+      "description": "往前走2米",
+      "verify": "go2w_at(2.9, 4.0, tol=1.5)",
+      "strategy": "move_relative_skill",
+      "timeout_sec": 320,
+      "depends_on": [],
+      "strategy_params": {"distance": 2.0, "direction": "forward"},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": "Position: (3.0, 2.0), Heading: 1.6 rad"
+}""",
         )
 
     def derive_vocab_from_registry(self) -> bool:
