@@ -13,21 +13,24 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from tests.unit.hardware.test_go2w_hw_overlay import FakePopenFactory
+from tests.unit.hardware.test_go2w_hw_overlay import FakePopenFactory, FakeProc
 
 
-def _tool():
+def _nav_sh(tmp_path: Path) -> str:
+    p = tmp_path / "nav.sh"
+    p.write_text("#!/usr/bin/env bash\n")
+    return str(p)
+
+
+def _tool(tmp_path: Path, factory: FakePopenFactory | None = None):
     from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool
-    return Go2WRealVizTool(popen_factory=FakePopenFactory())
-
-
-def _ctx():
-    return SimpleNamespace(agent=None)
+    return Go2WRealVizTool(
+        popen_factory=factory or FakePopenFactory(),
+        nav_sh=_nav_sh(tmp_path))
 
 
 def _run(tool, **params):
-    result = tool.execute(params, _ctx())
-    return result
+    return tool.execute(params, SimpleNamespace(agent=None))
 
 
 # ---------------------------------------------------------------------------
@@ -35,36 +38,42 @@ def _run(tool, **params):
 # ---------------------------------------------------------------------------
 
 
-def test_viz_open_launches_rviz_overlay_nonblocking():
-    tool = _tool()
+def test_viz_open_launches_rviz_overlay_nonblocking(tmp_path):
+    factory = FakePopenFactory()
+    tool = _tool(tmp_path, factory)
     result = _run(tool, action="open")
     assert not result.is_error
     assert "rviz" in result.content.lower()
-    # exactly one child spawned: bash <nav.sh> rviz
-    (spawn,) = tool._launchers["rviz"]._popen_factory.spawned  # noqa: SLF001
-    assert spawn.argv[0] == "bash"
-    assert spawn.argv[1].endswith("nav.sh")
-    assert spawn.argv[2] == "rviz"
+    (argv, _kwargs), = factory.calls
+    assert argv[0] == "bash"
+    assert argv[1].endswith("nav.sh")
+    assert argv[2] == "rviz"
 
 
-def test_viz_views_map_to_nav_sh_modes():
-    tool = _tool()
+def test_viz_views_map_to_nav_sh_modes(tmp_path):
+    factory = FakePopenFactory()
+    tool = _tool(tmp_path, factory)
     assert not _run(tool, action="open", view="explore").is_error
-    assert not _run(tool, action="open", view="route").is_error
-    modes = set(tool._launchers)  # noqa: SLF001
-    assert {"rviz-explore", "rviz-route"} <= modes
+    modes = [argv[2] for argv, _ in factory.calls]
+    assert modes == ["rviz-explore"]
+    # route view uses a fresh tool (FakePopenFactory shares one proc)
+    factory2 = FakePopenFactory()
+    tool2 = _tool(tmp_path, factory2)
+    assert not _run(tool2, action="open", view="route").is_error
+    assert [argv[2] for argv, _ in factory2.calls] == ["rviz-route"]
 
 
-def test_viz_double_open_reports_already_running():
-    tool = _tool()
+def test_viz_double_open_reports_already_running(tmp_path):
+    tool = _tool(tmp_path)
     _run(tool, action="open")
     result = _run(tool, action="open")
     assert not result.is_error
     assert "already" in result.content.lower()
 
 
-def test_viz_close_stops_children():
-    tool = _tool()
+def test_viz_close_stops_children(tmp_path):
+    factory = FakePopenFactory(FakeProc(exits_on_sigint=1))
+    tool = _tool(tmp_path, factory)
     _run(tool, action="open")
     result = _run(tool, action="close")
     assert not result.is_error
@@ -73,13 +82,13 @@ def test_viz_close_stops_children():
     assert not launcher.is_running()
 
 
-def test_viz_close_when_nothing_open_is_not_an_error():
-    result = _run(_tool(), action="close")
+def test_viz_close_when_nothing_open_is_not_an_error(tmp_path):
+    result = _run(_tool(tmp_path), action="close")
     assert not result.is_error
 
 
-def test_viz_unknown_action_errors():
-    assert _run(_tool(), action="teleport").is_error
+def test_viz_unknown_action_errors(tmp_path):
+    assert _run(_tool(tmp_path), action="teleport").is_error
 
 
 # ---------------------------------------------------------------------------

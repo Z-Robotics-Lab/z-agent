@@ -36,6 +36,7 @@ agents (route-mode etc.) — add lines above a marker, never edit existing ones.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from zeno.core.skill import SkillContext, SkillRegistry
@@ -59,6 +60,7 @@ from zeno.vcli.worlds.go2w_real_tools import (
     Go2WRealStopTool,
     Go2WRealWhereTool,
 )
+from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool
 from zeno.vcli.worlds.go2w_real_route_skills import (
     RealRouteViaSkill,
     RealStopRouteSkill,
@@ -74,6 +76,9 @@ from zeno.vcli.worlds.go2w_real_verify import (
 from zeno.vcli.worlds.go2w_real_vocab import REAL_DECOMPOSE_EXAMPLES
 
 logger = logging.getLogger(__name__)
+
+#: The agent's self-knowledge card (persona source) — editable without code.
+_CAPABILITIES_MD = Path(__file__).with_name("go2w_real_capabilities.md")
 
 
 # ---------------------------------------------------------------------------
@@ -163,38 +168,28 @@ class Go2WRealWorld:
         return True
 
     def persona_blocks(self) -> tuple[str, str]:
+        """Self-knowledge, loaded from ``go2w_real_capabilities.md``.
+
+        The md IS the agent's capability card (product doctrine, CEO
+        2026-07-10): editing it changes what the agent knows it can do, with
+        no code change. Falls back to a minimal safe persona if the file is
+        missing — never crashes the CLI.
+        """
+        try:
+            text = _CAPABILITIES_MD.read_text(encoding="utf-8")
+            head, tail = text.split("<!-- persona-split -->", 1)
+            if head.strip() and tail.strip():
+                return head.strip(), tail.strip()
+        except (OSError, ValueError) as exc:  # missing file / no marker
+            logging.getLogger(__name__).warning(
+                "go2w_real capabilities md unusable (%s) — minimal persona", exc)
         return (
             "You operate a REAL Unitree Go2W robot dog through its running "
-            "navigation stack on this machine. THIS IS PHYSICAL HARDWARE, not a "
-            "simulator: there is no reset and no undo — a bad command can hit a "
-            "wall, a person, or the robot itself, so act deliberately and keep the "
-            "hardware E-stop remote in reach. The stack lifecycle is managed by "
-            "go2w_real_bringup: if tools report no base / no data, FIRST call "
-            "go2w_real_bringup(action='start') — it returns after launching and "
-            "SLAM is ready in ~40-60s; poll go2w_real_bringup(action='status') "
-            "until the key topics show rates, then work. Stand the robot up with "
-            "go2w_real_bringup(action='up') before driving; lie it down with "
-            "action='down' when done. There is exactly one robot (Go2W) — never "
-            "ask the user to pick a model or gait.",
-            "go2w_real_bringup(action='status') is the ONLY source of truth for "
-            "whether the stack is up. Use go2w_real_navigate(x, y) to send the "
-            "robot to a map coordinate (it blocks until arrival) and go2w_real_where "
-            "to read the live pose. For RELATIVE movement ('往前走 2 米', 'move "
-            "forward', back up, sidestep) call the move_relative skill with "
-            "direction (forward/backward/left/right) + distance in meters — it "
-            "reads the live odometry pose+yaw and computes the map waypoint itself; "
-            "verify with at(target_x, target_y, tol=1.0) using the numbers it "
-            "returns. Verify any arrival with at(x, y) == True (reads "
-            "/state_estimation odometry, the ground truth). If ANYTHING looks "
-            "wrong, call go2w_real_stop immediately (E-stop + cancel goal), then "
-            "go2w_real_resume to re-enable. To hand control to the physical remote "
-            "use go2w_real_manual; go2w_real_resume returns to autonomy. For "
-            "AUTONOMOUS EXPLORATION ('探索', 'explore the room') use "
-            "go2w_real_explore(action='start') — it launches TARE and returns "
-            "immediately; poll action='status' (finished = TARE's own signal, "
-            "travel_m = odometry-measured progress) and stop with action='stop'. "
-            "Judge completion with explore_finished() AND explored_progress() — "
-            "finished with ~0 travel means it never actually explored.",
+            "navigation stack. THIS IS PHYSICAL HARDWARE — no reset, no undo; "
+            "keep the E-stop in reach and act deliberately.",
+            "Manage the stack with go2w_real_bringup (status is the source of "
+            "truth), drive with go2w_real_navigate(x, y), stop with "
+            "go2w_real_stop, verify arrivals with at(x, y).",
         )
 
     def register_tools(self, registry: Any, agent: Any) -> None:
@@ -206,6 +201,7 @@ class Go2WRealWorld:
         registry.register(Go2WRealResumeTool(), category="go2w_real")
         registry.register(Go2WRealExploreTool(), category="go2w_real")
         registry.register(Go2WRealRouteTool(), category="go2w_real")
+        registry.register(Go2WRealVizTool(), category="go2w_real")
         # v2-extension point: tools — feature agents APPEND
         # `registry.register(<Tool>(), category="go2w_real")` lines ABOVE this
         # marker (and add the tool name to _EXPECTED_TOOLS in
