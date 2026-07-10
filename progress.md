@@ -1,60 +1,55 @@
 # Zeno — progress
 
-更新：2026-07-06。fork 自 VectorRobotics/vector-os-nano @ R715 (12f3e15)，分支 main。
+更新：2026-07-10。fork 自 VectorRobotics/vector-os-nano @ R715 (12f3e15)。
+当前分支 **hw-go2w-real**（off main b6b94b9；未 push，未动 main）。
 
 ## Works（已验证）
-- **go2w 相对移动 + strategy↔skill 接缝修复（2026-07-06，aaa25ae）**：REPL 实测两缺口
-  （"往前走几米"→unmatched；"navigate is not a skill (valid 含 navigate)" 自相矛盾）。
-  根因=半配置 DecomposeVocab 把 strategies=frozenset()（非 None）注入 decomposer 清空
-  KNOWN_STRATEGIES+prompt 清单（DEBUG.md H1-H4 全 CONFIRMED，含潜伏 navigate execute
-  签名 TypeError）。修：go2w 完整 vocab（4 策略+params help+verify 签名+双示例）、新
-  move_relative 技能（pose+yaw 运行时换算 waypoint，与 navigate 共用 _drive_and_hold）、
-  decomposer 裸名归一化（X→X_skill，真幻觉仍 fail-loud）、preflight 扩校验 strategies 集
-  +零策略 warning。TDD 12 红→14 绿；回归 vcli/harness 子集 410 绿（2 r2b PTY 失败为存量）。
-- **verdict sentinel 身份切换（D184，7c61021）**：--json 双发 ZENO_VERDICT（主）+
-  VECTOR_VERDICT（legacy 别名）；pty_cli 双前缀兼容。正式移除 legacy = 另一 CEO 门。
-- **go2w 体验审计修复（2026-07-06，f4f7f1a/cca2d0b/2c3a862）**：8 findings 处置。#1 路由
-  挤掉 go2w 工具→IntentRouter essential_categories 钩子（内核不命名世界）；#2 world_query
-  fail-safe；#3-#6 go2w 禁 diag/system 类目（MuJoCo 时代/错误 ROS 域，零误伤；robot 类目
-  保留——navigate/explore/pick wrap 在内）。端到端四路由路径实测通过。
-- **go2_piper.xml 网格路径修复**：烘焙绝对路径改相对化（相对 go2/assets），双锚等价。
-- **F1+F2 合入 main（3ead15b）**：BYO 世界一等公民化（--world/build_embodiment/生命周期
-  钩子/go2w 内置）；E2E 锚：`--world go2w -p 导航…` → verdict GROUNDED EXIT 0。
-- F0 关门：全套基线 parity 达成 fork 零回归（残余失败均与上游一致：8 环境性 PTY、
-  level71 段错误、ik_solver 17 错=pinocchio 本机怪癖+仓库外绝对路径）。
-- 环境固化：constraints.txt = 上游 venv 逐版本镜像（207 包）。
+- **P5.4 真机世界 go2w_real（本轮，hw-go2w-real 3 提交）**：CEO 2026-07-10 裁定解锁
+  （本 NUC / 无 unitree_sdk2 / verify 真值=/state_estimation 里程计 / 只消费现有话题）。
+  - 驱动 zeno/hardware/ros2/go2w_hw.py::Go2WHardware（BaseProtocol 面）：navigate_to
+    发 /way_point 一次（栈锁存追踪）+ 轮询里程计（到达+停滞检测，超时/停滞经 /nav_cancel
+    撤销）；walk/set_velocity 发 /teleop_cmd_vel 钳到 0.6m/s，walk 5Hz 刷新（<0.4s 死人
+    开关）；Trigger 助手 standup/liedown/estop/estop_release(=resume)/manual/nav_cancel
+    （go2w_hw_services.py 混入）。rclpy 懒加载（导入不需 ROS 环境），复用 ensure_finite_*。
+  - 世界 zeno/vcli/worlds/go2w_real*.py::Go2WRealWorld（go2w 的真机孪生，同 CLI/工具/
+    技能/verify 接缝）：工具 go2w_real_{bringup,navigate,where,stop,manual,resume}
+    （bringup→nav.sh 子命令 start/stop/status/up/down，非零退出如实上抛）；技能
+    navigate/move_relative/standup/liedown/stop 经 Go2WHardware；verify 命名空间
+    at(x,y,tol=0.8)/moved(min_m) 只读 /state_estimation（Inv-1，真机无 /gt）无桥时
+    fail-safe False；persona=真机措辞（E-stop、无 reset）；essential 类目 {go2w_real}；
+    禁内核 sim/diag/system（真机上失真，零误伤）。registry.py 懒注册（Inv-4）。
+  - TDD 红→绿：42 新单测（20 驱动 + 22 世界）全绿；引擎接缝实证 at/moved 经真
+    VectorEngine 命名空间到达 verifier，--world go2w_real 解析出 Go2WRealEmbodiment+
+    Go2WHardware（离线未连）。相邻回归 go2w/nav_client/registry/boundary 100 绿。
+    每个新文件 <400 行（最大 388）。内核脊柱未动，无新依赖。
+- **go2w 相对移动 + strategy↔skill 接缝修复（aaa25ae）**：半配置 vocab 清空 KNOWN_
+  STRATEGIES 根因修复；move_relative 技能；裸名归一化；preflight 扩校验。
+- **F1+F2 合入 main（3ead15b）**：BYO 世界一等公民化；go2w 内置；E2E 锚 verdict GROUNDED。
 
 ## Failed / 教训
-- go2 复合指令（"左转90度再前进一米"）：第二腿模型用只读查询冒充行走→actor-causation
-  判 RAN（moat 正确拒绝）。producer 教学缺口，非运动学问题。简单行走 2/2 GROUNDED。
-- 半配置 DecomposeVocab 是 foot-gun：as_kwargs() 全字段无条件注入，空集≠None 会清掉
-  registry 推导；世界要么不注入 vocab（走推导），要么注入完整（接缝测试钉死一致性）。
-- 新 venv 装最新二进制→pinocchio 段错误；必须 constraints.txt 镜像 +
-  `-e ~/Desktop/go2-convex-mpc --no-deps`。
-- .env gitignored 不随 clone——PTY 测试要真 CLI，必须手动复制。
-- PTY/sim 测试对宿主负载敏感（Isaac 双容器在跑时稳定失败）——parity 对照比"绝对全绿"诚实。
+- **go2w.py（sim 世界）E190 缺口（既存，非本轮）**：IsaacGo2WEmbodiment.navigate_to
+  发桥 waypoint 未过 ensure_finite_nav_goal——NaN 目标可裸发。基线 b6b94b9 同红；已
+  spawn 独立任务修（本轮只修真机侧，同类守卫已补 Go2WRealEmbodiment.navigate_to）。
+- 半配置 DecomposeVocab 是 foot-gun：空集≠None 会清 registry 推导；要么不注入要么注入完整。
+- 新 venv 装最新二进制→pinocchio 段错误；须 constraints.txt 镜像。
+- .env gitignored 不随 clone；PTY/sim 测试对宿主负载敏感——parity 对照比"绝对全绿"诚实。
 
 ## 环境镜像清单（冷启动新机器必读）
-venv: uv pip install -r constraints.txt + clip@git(577b3cfa…d93eb3be) +
--e ~/Desktop/go2-convex-mpc --no-deps + -e . --no-deps。另从上游工作树同步 gitignored
-资产：hardware/sim/mjcf/{go2,g1}/scene_*.xml、assets/、config/{user.yaml,boundary.ply,
-workspace_calibration.yaml}、.env、robot_mode.txt。
-
-## CEO 方针（2026-07-06 裁定）
-轻量化点到为止：保留 MuJoCo sim 与全部核心代码（脊柱回归夹具与基座）；深度剥离与
-包改名（zeno → z_agent/za）推迟到后期架构重构一并做。
+本轮 .venv = python -m venv + `-c constraints.txt -e .[dev]`（systemd-run MemoryMax=9G）；
+足够跑纯单测（含 cli 导入）。完整跑（sim/perception）另需 `[all]` + clip@git +
+`-e ~/Desktop/go2-convex-mpc --no-deps`。gitignored 资产须从上游工作树同步：
+mjcf/{go2,g1}/scene_*.xml（缺失致 6 个 sim 测 FileNotFound，既存环境性）、assets/、
+config/{user.yaml,boundary.ply,workspace_calibration.yaml}、.env、robot_mode.txt。
 
 ## Next
-1. go2w 相对移动补实测：真 Isaac 栈起后 REPL 跑 "往前走几米"/复合指令，确认 GROUNDED
-   （本轮为离线单测绿，验收面=bare zeno REPL，Invariant 2）。
-2. task#12 Zeno 身份修复 workstream（Opus）：VectorEngine 改名、docs/reference.md+VERIFY.md
-   VECTOR_* 示例改 ZENO_ 主名；prompt.py:95 ROBOT_TOOL_INSTRUCTIONS 硬编码兄弟仓路径同归。
-3. P5.4 真机（等 CEO 三决策：verify 语义 / NUC vs Orin / unitree_sdk2 依赖）。
-4. 待 CEO RULING：docs/RULES.md loop 章节悬空指针修剪。
-5. 已知存量失败：r2b PTY 2 个（clean HEAD 同红）；test_native_first_covered_go2_routes_
-   to_native sim 动力学 flaky（基线同红）。
+1. **go2w_real 真机 E2E 验收（等 owner 在场）**：源 ros_env.sh → nav.sh start（40-60s）→
+   `zeno --world go2w_real` → "站起来，往前走 2 米" → verify at(tx,ty,tol=1.5) GROUNDED。
+   验收面=bare zeno REPL，Invariant 2；单测绿 ≠ 验收。E-stop 遥控在手。
+2. go2w.py sim 侧 E190 守卫补齐（已 spawn 任务）。
+3. task#12 Zeno 身份修复（VectorEngine 改名、docs VECTOR_*→ZENO_）。
+4. 待 CEO RULING：docs/RULES.md loop 章节悬空指针修剪；pyserial/scservo 依赖门。
 
 ## 关键背景
-- go2W_Sim 仓库 = 数字孪生（Isaac 资产/CMU navstack/桥）；z-agent 经 HTTP 桥
-  (127.0.0.1:8042) 控它；桥 API 是 sim/real 对称的合同面。
-- TARE 在栈内现成、/explored_volume 是独立探索裁判（四份调研报告见 go2W_Sim 会话档案）。
+- go2w=Isaac 数字孪生（HTTP 桥 127.0.0.1:8042）；go2w_real=真机（nav 栈 ROS_DOMAIN_ID=20
+  CycloneDDS，~/Z-Navigation-Stack via ~/go2w-nuc/scripts/nav.sh）。同 CLI，sim↔real 对称。
+- 真机 verify 唯一真值=/state_estimation 里程计（无 /gt）；栈健康唯一真值=nav.sh status。
