@@ -78,6 +78,7 @@ class StrategySelector:
         stats: Any = None,
         capability_names: "frozenset[str] | set[str] | None" = None,
         has_base: bool = True,
+        enable_go2_keyword_ladder: bool = True,
     ) -> None:
         self._skill_registry = skill_registry
         self._stats = stats
@@ -93,6 +94,17 @@ class StrategySelector:
         # resolution and the skill-registry alias match only. Defaults True so
         # go2/robot behaviour stays byte-identical.
         self._has_base = bool(has_base)
+        # The GO2 keyword ladder (below) encodes the robot / go2-SIM skill names
+        # and param SHAPES (navigate{room}, stand, walk_forward/turn primitives,
+        # look/detect). A BYO base world that owns DIFFERENT names/schemas
+        # (go2w_real: navigate{x,y}, standup, a stop SKILL, no look/detect) must
+        # NOT have those sim targets fabricated for an empty-strategy step — the
+        # {room} param can't be consumed, 'stand'/'look'/'detect'/'walk_forward'
+        # are phantoms there. When False, the ladder is skipped and routing falls
+        # through to the skill-registry alias match (the world's REAL names) or the
+        # loud fallback. Defaults True so robot/go2-sim stay byte-identical; the
+        # engine sets it False for a world that declares disable_keyword_ladder().
+        self._enable_go2_keyword_ladder = bool(enable_go2_keyword_ladder)
 
     # ------------------------------------------------------------------
     # Public API
@@ -147,8 +159,12 @@ class StrategySelector:
         # skills that call _require_base() on the executor side; on a baseless
         # world (an arm) they would raise, so the whole ladder is skipped and
         # routing goes through '<skill>_skill' resolution + the registry alias
-        # match only. Gated behind has_base so go2 stays byte-identical.
-        if self._has_base:
+        # match only. Gated behind has_base so go2 stays byte-identical. ALSO
+        # gated behind enable_go2_keyword_ladder: a BYO base world (go2w_real)
+        # whose names/param-shapes differ from the sim ladder opts out, so an
+        # empty-strategy step is never handed a fabricated sim target it can't
+        # serve — it routes by the world's OWN registry aliases instead.
+        if self._has_base and self._enable_go2_keyword_ladder:
             # Navigation
             if any(kw in combined for kw in ("reach", "navigate", "go_to", "到", "去")):
                 room = sub_goal.strategy_params.get("room", sub_goal.description)

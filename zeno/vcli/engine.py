@@ -478,6 +478,19 @@ class ZenoEngine:
             self._vgg_enabled = False
             return
 
+        # A BYO base world whose skill names/param-shapes differ from the go2-SIM
+        # keyword ladder opts out via disable_keyword_ladder() -> True (duck-typed;
+        # go2w_real). Absent/raising hook => ladder stays ON (robot/go2-sim
+        # byte-identical). Remove-only of a phantom route, so strictly stricter.
+        _enable_ladder = True
+        _ladder_hook = getattr(world, "disable_keyword_ladder", None) if world is not None else None
+        if callable(_ladder_hook):
+            try:
+                _enable_ladder = not bool(_ladder_hook())
+            except Exception as exc:  # noqa: BLE001 — a broken hook keeps the default
+                logger.debug("VGG: disable_keyword_ladder() raised: %s", exc)
+                _enable_ladder = True
+
         try:
             verifier = GoalVerifier(ns)
             selector = StrategySelector(
@@ -485,6 +498,7 @@ class ZenoEngine:
                 stats=stats,
                 capability_names=_capability_names,
                 has_base=_has_base,
+                enable_go2_keyword_ladder=_enable_ladder,
             )
         except ImportError as exc:
             logger.warning("VGG: cognitive layer not available: %s", exc)

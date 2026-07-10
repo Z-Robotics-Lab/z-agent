@@ -439,6 +439,20 @@ class Go2WRealWorld:
     def derive_vocab_from_registry(self) -> bool:
         return False
 
+    def disable_keyword_ladder(self) -> bool:
+        """True: opt OUT of the kernel's go2-SIM keyword ladder (StrategySelector).
+
+        The ladder encodes the robot / go2-SIM vocabulary — navigate with a {room}
+        param, a 'stand' skill, walk_forward/turn primitives, look/detect skills.
+        This world serves DIFFERENT names + param shapes (navigate{x,y}, standup, a
+        stop SKILL, no look/detect/walk_forward), so a fabricated ladder target for
+        an empty-strategy step would misdispatch or no-op. Opting out routes such
+        steps by THIS world's registry aliases (前进->move_relative, 站起来->standup,
+        去->navigate) or the loud fallback. Latent in practice (the DecomposeVocab
+        above fills explicit strategies) but strictly safer. Opt-OUT hook: a world
+        that omits it keeps the ladder ON (robot/go2-sim byte-identical)."""
+        return True
+
 
 # Canonical world id. Registered lazily in worlds/registry.py next to go2w.
 GO2W_REAL_WORLD = "go2w_real"
