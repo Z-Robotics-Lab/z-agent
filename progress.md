@@ -33,6 +33,15 @@
   get_position/get_heading——已核 world_context/actor_causation 直读 base 非 namespace）+抑制
   foreach 例。dev+go2w sim 逐字节不变（无钩子/无字段=原文；unit/vcli 1013 绿+vcli 870 绿仅既存失败）。
 
+- **sim→real 诚实性次级项（RED 28d23b6→GREEN a8b1920/15a8ba0/0a3b7ac，24 测绿）**：审计三处 SIM 假象，
+  全 ADDITIVE、dev/go2-sim 逐字节不变（无钩子/无字段=原样）。①恢复提示 no_base 曾点名 start_simulation
+  （真机无）→内核改中性 + SkillWrapperTool 经 agent.recovery_hints() 覆盖（抛异常吞掉走默认），
+  Go2WRealEmbodiment 指向 go2w_real_bringup+resume_skill。②/reset 曾写 SIM 桥旗标 /tmp/vector_reset_pose
+  （唯一消费者 go2_vnav_bridge.py）假绿→world.supports_pose_reset()==False 诚实拒绝不写旗标、指站起来/resume。
+  ③go2-SIM 关键词梯仅 has_base 门控、真机也有 base→空 strategy 步造 navigate{room}/stand/walk_forward/
+  look/detect 幻影→StrategySelector 增 enable_go2_keyword_ladder（默认 True），disable_keyword_ladder()==True
+  时改走本世界 registry 别名（前进→move_relative/站起来→standup/去→navigate 无 {room}）或响亮 fallback。
+
 ## Failed / 教训
 - **go2w_real 真机 E2E 未验收**：Inv-2 要求裸 zeno REPL+眼看硬件；本轮全为纯单测（rclpy/
   subprocess mock）。真机首验收待 owner 在场（见 Next 1）。
