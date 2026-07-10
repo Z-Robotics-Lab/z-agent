@@ -111,8 +111,6 @@ all = [
 # Development tools
 dev = [
     "pytest>=7.0",
-    "pytest-cov",
-    "lark",
 ]
 
 [project.scripts]
