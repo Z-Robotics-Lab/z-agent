@@ -70,7 +70,8 @@ _EXPECTED_TOOLS = {
     "go2w_real_manual",
     "go2w_real_resume",
     "go2w_real_explore",  # v2: TARE autonomous exploration (overlay lifecycle)
-    "go2w_real_route",    # v2: far_planner global route mode (overlay lifecycle)
+    "go2w_real_route",
+    "go2w_real_viz",    # v2: far_planner global route mode (overlay lifecycle)
 }
 
 
