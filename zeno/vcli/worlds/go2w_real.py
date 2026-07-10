@@ -22,9 +22,15 @@ essential router category — ZERO kernel edits. rclpy stays out of module impor
 
 This module is the slim world + embodiment; the skills, tools and verify
 predicates live in sibling files (repo rule: files under 400 lines):
-  - go2w_real_skills.py :: navigate / move_relative / stance / stop + RealNavConfig
-  - go2w_real_tools.py  :: bringup(nav.sh) / navigate / where / stop / manual / resume
-  - go2w_real_verify.py :: at / moved (the /state_estimation odometry oracle)
+  - go2w_real_skills.py :: navigate / move_relative / stance / stop / explore
+  - go2w_real_tools.py  :: bringup(nav.sh) / navigate / where / stop / manual /
+                           resume / explore (TARE overlay lifecycle)
+  - go2w_real_verify.py :: at / moved / explore_finished / explored_progress
+  - hardware seam       :: go2w_hw_explore.py (overlay manager + honest oracle)
+
+v2 EXTENSION SEAMS: the '# v2-extension point: {tools,skills,verify,vocab}'
+markers below are APPEND-ONLY registration sections for the parallel feature
+agents (route-mode etc.) — add lines above a marker, never edit existing ones.
 """
 
 from __future__ import annotations
@@ -36,21 +42,29 @@ from zeno.core.skill import SkillContext, SkillRegistry
 from zeno.hardware.base import ensure_finite_nav_goal
 from zeno.vcli.worlds.base import DecomposeVocab
 from zeno.vcli.worlds.go2w_real_skills import (
+    RealExploreSkill,
     RealLieDownSkill,
     RealMoveRelativeSkill,
     RealNavigateSkill,
     RealStandUpSkill,
+    RealStopExploreSkill,
     RealStopSkill,
 )
 from zeno.vcli.worlds.go2w_real_tools import (
     Go2WRealBringupTool,
+    Go2WRealExploreTool,
     Go2WRealManualTool,
     Go2WRealNavigateTool,
     Go2WRealResumeTool,
     Go2WRealStopTool,
     Go2WRealWhereTool,
 )
-from zeno.vcli.worlds.go2w_real_verify import make_at, make_moved
+from zeno.vcli.worlds.go2w_real_verify import (
+    make_at,
+    make_explore_finished,
+    make_explored_progress,
+    make_moved,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,18 +85,34 @@ class Go2WRealEmbodiment:
 
     def __init__(self) -> None:
         from zeno.hardware.ros2.go2w_hw import Go2WHardware
+        from zeno.hardware.ros2.go2w_hw_explore import Go2WExploreManager
 
         self._base = Go2WHardware()
+        # Overlay-session managers share the base driver (its node hosts the
+        # oracle subscriptions; its Trigger helpers do the safety teardown).
+        self._explore = Go2WExploreManager(self._base)
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(RealNavigateSkill())
         self._skill_registry.register(RealMoveRelativeSkill())
         self._skill_registry.register(RealStandUpSkill())
         self._skill_registry.register(RealLieDownSkill())
         self._skill_registry.register(RealStopSkill())
+        self._skill_registry.register(RealExploreSkill())
+        self._skill_registry.register(RealStopExploreSkill())
+        # v2-extension point: skills — feature agents APPEND
+        # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
+        # (one per line; never edit or reorder the existing registrations).
 
     def _build_context(self) -> SkillContext:
-        """SkillWrapperTool contract: execution context bound to this base."""
-        return SkillContext(bases={"go2w": self._base})
+        """SkillWrapperTool contract: execution context bound to this base.
+
+        ``services`` is the seam for session-scoped managers (explore today;
+        route next) — skills reach them via ``context.services[<name>]``.
+        """
+        return SkillContext(
+            bases={"go2w": self._base},
+            services={"explore": self._explore},
+        )
 
     def _sync_robot_state(self) -> None:
         """SkillWrapperTool contract: state is read live from odometry — no-op."""
@@ -147,7 +177,13 @@ class Go2WRealWorld:
             "/state_estimation odometry, the ground truth). If ANYTHING looks "
             "wrong, call go2w_real_stop immediately (E-stop + cancel goal), then "
             "go2w_real_resume to re-enable. To hand control to the physical remote "
-            "use go2w_real_manual; go2w_real_resume returns to autonomy.",
+            "use go2w_real_manual; go2w_real_resume returns to autonomy. For "
+            "AUTONOMOUS EXPLORATION ('探索', 'explore the room') use "
+            "go2w_real_explore(action='start') — it launches TARE and returns "
+            "immediately; poll action='status' (finished = TARE's own signal, "
+            "travel_m = odometry-measured progress) and stop with action='stop'. "
+            "Judge completion with explore_finished() AND explored_progress() — "
+            "finished with ~0 travel means it never actually explored.",
         )
 
     def register_tools(self, registry: Any, agent: Any) -> None:
@@ -157,6 +193,11 @@ class Go2WRealWorld:
         registry.register(Go2WRealStopTool(), category="go2w_real")
         registry.register(Go2WRealManualTool(), category="go2w_real")
         registry.register(Go2WRealResumeTool(), category="go2w_real")
+        registry.register(Go2WRealExploreTool(), category="go2w_real")
+        # v2-extension point: tools — feature agents APPEND
+        # `registry.register(<Tool>(), category="go2w_real")` lines ABOVE this
+        # marker (and add the tool name to _EXPECTED_TOOLS in
+        # tests/vcli/test_world_go2w_real.py — it pins the category by equality).
         # Disable kernel categories that are meaningless / misleading on this
         # hardware (mirrors go2w.py:759): 'sim' (MuJoCo start/stop would mis-route
         # 'start' away from the real stack); 'diag'/'system' read MuJoCo-era paths
@@ -174,8 +215,17 @@ class Go2WRealWorld:
         return frozenset({"go2w_real"})
 
     def build_verify_namespace(self, agent: Any) -> dict[str, Any]:
-        """Contribute the odometry-oracle predicates ``at`` and ``moved``."""
-        return {"at": make_at(agent), "moved": make_moved(agent)}
+        """Contribute the hardware oracle predicates (odometry + explore)."""
+        ns: dict[str, Any] = {
+            "at": make_at(agent),
+            "moved": make_moved(agent),
+            "explore_finished": make_explore_finished(agent),
+            "explored_progress": make_explored_progress(agent),
+        }
+        # v2-extension point: verify — feature agents APPEND
+        # `ns["<fn>"] = make_<fn>(agent)` lines ABOVE this marker (factories
+        # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
+        return ns
 
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
         return None
@@ -215,12 +265,24 @@ class Go2WRealWorld:
                 "y + d*sin(h)); verify with at(tx, ty, tol=1.5). This is HARDWARE: "
                 "no reset; if anything is wrong the stop_skill E-stops the robot."
             ),
-            verify_functions=frozenset({"at", "moved"}),
+            # v2-extension point: vocab — feature agents APPEND their strategy
+            # to strategy_descriptions AND strategies (the sets must stay equal,
+            # a test pins it), plus any new verify fn to verify_functions AND
+            # verify_fn_signatures, plus a strategy_params_help line.
+            verify_functions=frozenset({
+                "at", "moved", "explore_finished", "explored_progress",
+            }),
             verify_fn_signatures={
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
                        "  # /state_estimation odometry: robot within tol m of map (x, y)"),
                 "moved": ("moved(min_m: float = 0.1) -> bool"
                           "  # robot displaced >= min_m from the first sample (odometry)"),
+                "explore_finished": (
+                    "explore_finished() -> bool"
+                    "  # TARE's OWN finish signal (/exploration_finish latched True)"),
+                "explored_progress": (
+                    "explored_progress() -> float"
+                    "  # meters travelled during explore (odometry-integrated, monotone)"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "
@@ -231,17 +293,24 @@ class Go2WRealWorld:
                 "standup_skill": "Stand the robot up (BalanceStand)",
                 "liedown_skill": "Lie the robot down",
                 "stop_skill": "EMERGENCY STOP: E-stop + cancel the nav goal",
+                "explore_skill": ("Launch TARE autonomous exploration (non-blocking); "
+                                  "verify explore_finished() and explored_progress()"),
+                "stop_explore_skill": ("Stop the exploration overlay (SIGINT + "
+                                       "/nav_cancel; never touches the E-stop latch)"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
                 "standup_skill", "liedown_skill", "stop_skill",
+                "explore_skill", "stop_explore_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
   - move_relative_skill: {"distance": <meters float>, "direction": "forward|backward|left|right"}
   - standup_skill: {}
   - liedown_skill: {}
-  - stop_skill: {}""",
+  - stop_skill: {}
+  - explore_skill: {"scenario": "indoor_small|indoor_large|outdoor"}  (optional; default indoor_small)
+  - stop_explore_skill: {}""",
             examples="""\
 Task: "站起来然后开到 (2.0, 3.0)"
 Response:

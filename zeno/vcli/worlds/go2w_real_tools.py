@@ -173,6 +173,73 @@ class Go2WRealStopTool:
             f"Call go2w_real_resume to re-enable."), is_error=not estopped)
 
 
+def _explore_of(context: ToolContext) -> Any:
+    """Return the Go2WExploreManager from a tool's agent context (or None)."""
+    agent = getattr(context, "agent", None)
+    return getattr(agent, "_explore", None) if agent is not None else None
+
+
+@tool(
+    name="go2w_real_explore",
+    description=(
+        "TARE autonomous exploration on the REAL Go2W (overlay child of "
+        "nav.sh). action: start (launch, NON-blocking — poll status), status "
+        "(state/finished/travel_m/runtime_s — the honest oracle: finished "
+        "comes from TARE's own /exploration_finish, travel_m from odometry), "
+        "stop (SIGINT our overlay + /nav_cancel; NEVER releases a latched "
+        "E-stop — use go2w_real_resume explicitly). scenario: indoor_small "
+        "(default) | indoor_large | outdoor. 全自主探索(启动/状态/停止)。"),
+    read_only=False,
+    permission="allow",
+)
+class Go2WRealExploreTool:
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["start", "status", "stop"],
+                       "default": "status"},
+            # Mirrors ExploreConfig.scenarios (nav.sh scenario -> TARE yaml).
+            "scenario": {"type": "string",
+                         "enum": ["indoor_small", "indoor_large", "outdoor"],
+                         "default": "indoor_small"},
+            "resume": {"type": "boolean", "default": False,
+                       "description": ("on stop: release the estop/manual "
+                                       "latches afterwards (refused while an "
+                                       "E-stop is latched)")},
+        },
+    }
+
+    def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
+        mgr = _explore_of(context)
+        if mgr is None:
+            return ToolResult(content=(
+                "no explore manager on this session (go2w_real world only)"),
+                is_error=True)
+        action = (params or {}).get("action", "status")
+        try:
+            if action == "start":
+                ok, msg = mgr.start_explore((params or {}).get("scenario"))
+                return ToolResult(content=f"{msg}\n{self._status_json(mgr)}",
+                                  is_error=not ok)
+            if action == "status":
+                return ToolResult(content=self._status_json(mgr))
+            if action == "stop":
+                ok, msg = mgr.stop_explore(resume=bool((params or {}).get("resume")))
+                return ToolResult(content=f"{msg}\n{self._status_json(mgr)}",
+                                  is_error=not ok)
+        except Exception as e:  # noqa: BLE001 — manager boundary
+            return ToolResult(content=f"explore {action} error: {e}", is_error=True)
+        return ToolResult(content=(
+            f"unknown action {action!r}; valid: ['start', 'status', 'stop']"),
+            is_error=True)
+
+    @staticmethod
+    def _status_json(mgr: Any) -> str:
+        from dataclasses import asdict
+
+        return json.dumps(asdict(mgr.status()), ensure_ascii=False)
+
+
 @tool(
     name="go2w_real_manual",
     description=("Hand control to the hardware remote: silence the guard so the "

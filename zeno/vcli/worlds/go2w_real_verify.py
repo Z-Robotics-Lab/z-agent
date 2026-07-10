@@ -38,6 +38,50 @@ def make_at(agent: Any) -> Callable[..., bool]:
     return at
 
 
+def make_explore_finished(agent: Any) -> Callable[..., bool]:
+    """Bind ``explore_finished()`` to the agent's explore manager.
+
+    True iff TARE ITSELF published exploration_finish=True on
+    ``/exploration_finish`` during the current explore session — the planner's
+    own completion signal, not anything the actor authored. Combine with
+    ``explored_progress()`` to reject a 'finished' run that never left the
+    spawn. Fail-safe False when no manager is wired or it errors.
+    """
+
+    def explore_finished() -> bool:
+        mgr = getattr(agent, "_explore", None) if agent is not None else None
+        if mgr is None:
+            return False
+        try:
+            return bool(mgr.explore_finished())
+        except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
+            return False
+
+    return explore_finished
+
+
+def make_explored_progress(agent: Any) -> Callable[..., float]:
+    """Bind ``explored_progress()`` — meters travelled during the explore run.
+
+    The INDEPENDENT progress oracle: odometry travel distance integrated by
+    the explore manager (monotone within a session; frozen after stop). Lets
+    verify distinguish 'finished because done' from 'finished while parked'.
+    Fail-safe 0.0 when no manager is wired or it errors (a missing oracle
+    must never fake progress).
+    """
+
+    def explored_progress() -> float:
+        mgr = getattr(agent, "_explore", None) if agent is not None else None
+        if mgr is None:
+            return 0.0
+        try:
+            return float(mgr.explored_progress())
+        except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
+            return 0.0
+
+    return explored_progress
+
+
 def make_moved(agent: Any) -> Callable[..., bool]:
     """Bind a ``moved(min_m)`` predicate that captures a start pose on first call.
 

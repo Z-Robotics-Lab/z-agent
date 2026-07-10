@@ -36,6 +36,17 @@ class TriggerServiceMixin:
     _node: Any
     _clients: dict[str, Any]
 
+    # Driver-local E-stop latch mirror: True after a successful estop() until a
+    # successful estop_release(). Best-effort (an out-of-band `nav.sh estop`
+    # is invisible here) — consumed by the explore/route overlay stop path,
+    # which must never auto-release an E-stop it can see is latched.
+    _estop_latched: bool = False
+
+    @property
+    def estop_latched(self) -> bool:
+        """Whether THIS driver latched an E-stop that was not yet released."""
+        return self._estop_latched
+
     def standup(self) -> bool:
         """Stand up / BalanceStand (ready to walk). /standup."""
         return self._call_trigger("/standup")
@@ -46,11 +57,17 @@ class TriggerServiceMixin:
 
     def estop(self) -> bool:
         """Latched emergency stop: zero velocity locked until release. /estop."""
-        return self._call_trigger("/estop")
+        ok = self._call_trigger("/estop")
+        if ok:
+            self._estop_latched = True
+        return ok
 
     def estop_release(self) -> bool:
         """Release estop AND manual latches, resume autonomous arbitration."""
-        return self._call_trigger("/estop_release")
+        ok = self._call_trigger("/estop_release")
+        if ok:
+            self._estop_latched = False
+        return ok
 
     # resume is the operator-facing name for the same release (matches nav.sh).
     resume = estop_release

@@ -263,6 +263,84 @@ class RealLieDownSkill:
                            error_message="" if ok else "/liedown did not succeed")
 
 
+def _explore_mgr_of(context: Any) -> Any:
+    """Return the Go2WExploreManager from a SkillContext (or None).
+
+    The embodiment publishes it as the 'explore' service (context.services) —
+    the transport-agnostic seam, same idea as context.base for the driver.
+    """
+    if context is None:
+        return None
+    services = getattr(context, "services", None) or {}
+    return services.get("explore")
+
+
+@skill(aliases=["explore", "探索", "自主探索", "全自主探索", "去探索",
+                "autonomous exploration", "start exploration"], direct=True)
+class RealExploreSkill:
+    """Launch TARE autonomous exploration (non-blocking overlay launch).
+
+    Starts ``nav.sh explore [scenario]`` through the embodiment's explore
+    manager and returns immediately — exploration runs for minutes; progress
+    is polled via go2w_real_explore(action='status') and graded by the honest
+    oracle predicates ``explore_finished()`` / ``explored_progress()``.
+    """
+
+    name = "explore"
+    description = (
+        "Start TARE autonomous exploration on the REAL Go2W (non-blocking: "
+        "launches the overlay and returns). scenario: indoor_small (default) "
+        "| indoor_large | outdoor. Verify with explore_finished() and "
+        "explored_progress(). 启动全自主探索。")
+    parameters = {
+        "scenario": {"type": "string", "default": "indoor_small",
+                     "required": False,
+                     "description": "indoor_small | indoor_large | outdoor"},
+    }
+    preconditions: list = []
+    effects = {"base_state": "exploring"}
+
+    def execute(self, params=None, context=None, **kw):
+        mgr = _explore_mgr_of(context)
+        if mgr is None:
+            return SkillResult(success=False, diagnosis_code="no_explore_manager",
+                               error_message="No explore manager (go2w_real world only)")
+        scenario = "indoor_small"
+        for src in (params if isinstance(params, dict) else {}, kw):
+            if isinstance(src, dict) and src.get("scenario"):
+                scenario = str(src["scenario"])
+                break
+        ok, msg = mgr.start_explore(scenario)
+        data = {"scenario": scenario, "message": msg,
+                "verify_hint": "explore_finished() and explored_progress() > 1.0"}
+        return SkillResult(success=bool(ok), result_data=data,
+                           error_message="" if ok else msg)
+
+
+@skill(aliases=["stop explore", "stop exploration", "停止探索", "结束探索",
+                "别探索了"], direct=True)
+class RealStopExploreSkill:
+    """Stop the TARE overlay: SIGINT our child + /nav_cancel (latches untouched)."""
+
+    name = "stop_explore"
+    description = (
+        "Stop TARE autonomous exploration: SIGINT the overlay we launched, "
+        "then clear the latched waypoint (/nav_cancel). Never releases the "
+        "estop/manual latches. 停止全自主探索。")
+    parameters: dict = {}
+    preconditions: list = []
+    effects = {"base_state": "stopped"}
+
+    def execute(self, params=None, context=None, **kw):
+        mgr = _explore_mgr_of(context)
+        if mgr is None:
+            return SkillResult(success=False, diagnosis_code="no_explore_manager",
+                               error_message="No explore manager (go2w_real world only)")
+        ok, msg = mgr.stop_explore(resume=False)
+        return SkillResult(success=bool(ok), result_data={"message": msg},
+                           error_message="" if ok else msg)
+
+
 @skill(aliases=["stop", "停", "停下", "halt", "别动", "停止", "急停", "estop"], direct=True)
 class RealStopSkill:
     """Emergency stop: latched /estop + clear the latched waypoint (/nav_cancel)."""
