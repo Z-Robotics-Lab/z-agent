@@ -143,6 +143,27 @@ class Go2WRealEmbodiment:
         """SkillWrapperTool contract: state is read live from odometry — no-op."""
         return None
 
+    def recovery_hints(self) -> dict[str, str]:
+        """World-honest recovery hints (SkillWrapperTool override contract).
+
+        Merged OVER the kernel ``_RECOVERY_HINTS`` on a skill failure — so a
+        ``no_base`` failure on the real dog steers the model to go2w_real_bringup
+        (the real health/lifecycle source of truth) instead of the sim-era
+        ``start_simulation`` (a tool this world DISABLES). ``estop_latched`` names
+        the resume path required after stop_skill. Only the codes this world wants
+        to change are listed; every other code keeps its kernel default.
+        """
+        return {
+            "no_base": (
+                "No robot connected. Bring up the nav stack with "
+                "go2w_real_bringup(action='start') — status is the source of truth."
+            ),
+            "estop_latched": (
+                "E-stop/manual latch is engaged. Call resume_skill (解除急停) "
+                "before any motion; go2w_real_bringup does NOT clear it."
+            ),
+        }
+
     # native_loop base contract (blocking navigate through the driver).
     def navigate_to(self, x: float, y: float, timeout: float = 120.0) -> bool:
         # E190 goal boundary: reject NaN/inf here too (defense-in-depth — this

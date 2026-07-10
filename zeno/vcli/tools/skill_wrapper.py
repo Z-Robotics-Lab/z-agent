@@ -224,7 +224,7 @@ class SkillWrapperTool:
         diag = getattr(result, "diagnosis_code", None)
         if diag:
             error_msg += f" ({diag})"
-            hint = _RECOVERY_HINTS.get(diag)
+            hint = self._recovery_hint(agent, diag)
             if hint:
                 error_msg += f"\nSuggested: {hint}"
         if self._is_motor:
@@ -239,6 +239,31 @@ class SkillWrapperTool:
         if diag and not fail_meta.get("diagnosis"):
             fail_meta["diagnosis"] = diag
         return ToolResult(content=error_msg, is_error=True, metadata=fail_meta)
+
+    @staticmethod
+    def _recovery_hint(agent: Any, diag: str) -> str | None:
+        """Resolve the recovery hint for *diag*, honoring a world/agent override.
+
+        The kernel ``_RECOVERY_HINTS`` are the domain-general defaults. A world's
+        embodiment (the agent) MAY expose ``recovery_hints() -> dict[str, str]`` to
+        replace or EXTEND them with world-honest text — so go2w_real steers a
+        ``no_base`` failure to ``go2w_real_bringup`` instead of the sim-era
+        ``start_simulation`` (a tool that does not exist on hardware). The override
+        is merged OVER the kernel map, so a world only needs to name the codes it
+        wants to change. An agent WITHOUT the method is byte-identical (kernel
+        defaults only); a raising/malformed ``recovery_hints()`` is swallowed and
+        falls back to the kernel default — a broken hook never breaks the failure
+        path. Duck-typed on the agent (the wrapper imports no world, Inv-4).
+        """
+        override = getattr(agent, "recovery_hints", None)
+        if callable(override):
+            try:
+                world_hints = override()
+                if isinstance(world_hints, dict) and diag in world_hints:
+                    return world_hints[diag]
+            except Exception:  # noqa: BLE001 — a broken hook must not break failure
+                pass
+        return _RECOVERY_HINTS.get(diag)
 
     def _get_post_state(self, agent: Any) -> dict[str, Any] | None:
         """Snapshot robot state after skill execution."""
@@ -308,9 +333,15 @@ class SkillWrapperTool:
         return not self._is_motor
 
 
-# Recovery hints for known diagnosis codes (shown to LLM on failure)
+# Recovery hints for known diagnosis codes (shown to LLM on failure).
+# WORLD-NEUTRAL defaults — a world's embodiment overrides/extends these via
+# ``recovery_hints()`` (see SkillWrapperTool._recovery_hint). ``no_base`` must NOT
+# name a world-specific bring-up tool: ``start_simulation`` exists only on the sim
+# path (go2w_real disables sim/diag/system and brings up via go2w_real_bringup), so
+# the kernel default steers to "bring up the stack for this world" and each world
+# supplies the exact tool through its override.
 _RECOVERY_HINTS: dict[str, str] = {
-    "no_base": "No robot connected. Use start_simulation tool first.",
+    "no_base": "No robot connected. Bring up the robot/simulation stack for this world first.",
     "unknown_room": "Room not found. Use scene_graph_query(query_type='rooms') to list available rooms.",
     "room_not_explored": "Room not explored yet. Run the explore skill first.",
     "navigation_failed": "Navigation failed. Use nav_state tool to check if nav stack is running.",
