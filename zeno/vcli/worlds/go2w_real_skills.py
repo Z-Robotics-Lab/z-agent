@@ -76,6 +76,7 @@ _DIRECTION_SYNONYMS: dict[str, str] = {
 from zeno.vcli.worlds.go2w_real_diag import (  # noqa: E402
     _latched_hint,
     _stalled_hint,
+    oplog,
 )
 
 
@@ -138,11 +139,14 @@ class RealNavigateSkill:
             return SkillResult(success=False, error_message=str(e))
         hint = _latched_hint(base)
         if hint:
+            oplog("skill", "navigate", f"BLOCKED latched; goal=({x:.2f},{y:.2f})")
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
         start = base.get_position()
+        oplog("skill", "navigate", f"goal=({x:.2f},{y:.2f}) from=({start[0]:.2f},{start[1]:.2f})")
         ok = bool(base.navigate_to(x, y, timeout=CFG.nav_timeout_s))
         pos = base.get_position()
+        oplog("skill", "navigate", f"{'ARRIVED' if ok else 'FAILED'} at=({pos[0]:.2f},{pos[1]:.2f})")
         if ok:
             return SkillResult(success=True, result_data={
                 "message": f"arrived at ({pos[0]:.2f}, {pos[1]:.2f}); "
@@ -222,9 +226,12 @@ class RealMoveRelativeSkill:
 
         hint = _latched_hint(base)
         if hint:
+            oplog("skill", "move_relative", f"BLOCKED latched; {direction} {distance}m")
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
         pos = base.get_position()
+        oplog("skill", "move_relative",
+              f"{direction} {distance}m from=({pos[0]:.2f},{pos[1]:.2f})")
         heading = base.get_heading() + _RELATIVE_DIRECTIONS[direction]
         tx = float(pos[0]) + distance * math.cos(heading)
         ty = float(pos[1]) + distance * math.sin(heading)
@@ -257,6 +264,7 @@ class RealStandUpSkill:
         if base is None:
             return SkillResult(success=False, error_message="No Go2W hardware base",
                                diagnosis_code="no_base")
+        oplog("skill", "standup", "requested")
         ok = bool(base.standup())
         return SkillResult(success=ok, result_data={"stance": "standing"},
                            error_message="" if ok else "/standup did not succeed")

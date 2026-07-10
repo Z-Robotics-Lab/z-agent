@@ -136,3 +136,27 @@ Response:
   ],
   "context_snapshot": "rviz 由 go2w_real_viz 工具打开(工具,非策略)"
 }"""
+
+# Motion goes STRAIGHT to motion skills — never via bringup (field trace
+# 2026-07-10: '往前走3米' routed through bringup(start) and restarted the
+# live stack). bringup appears ONLY when the goal is about the stack itself.
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "往前走 3 米"
+Response:
+{
+  "goal": "往前走 3 米",
+  "sub_goals": [
+    {
+      "name": "walk_forward",
+      "description": "向前相对移动 3 米(栈已在跑,直接运动,无需 bringup)",
+      "verify": "moved(2.0)",
+      "strategy": "move_relative_skill",
+      "timeout_sec": 60,
+      "depends_on": [],
+      "strategy_params": {"direction": "forward", "distance": 3.0},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""

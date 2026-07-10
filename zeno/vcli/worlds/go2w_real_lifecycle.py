@@ -22,11 +22,12 @@ from typing import Any, Callable
 
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
+from zeno.vcli.worlds.go2w_real_diag import oplog
 from zeno.vcli.worlds.go2w_real_skills import nav_sh_path
 
 #: nav.sh subcommands this skill may run (lifecycle only — motion stays with
 #: the dedicated skills; explore/route overlays have their own managers).
-_ACTIONS: frozenset[str] = frozenset({"start", "stop"})
+_ACTIONS: frozenset[str] = frozenset({"start", "restart", "stop"})
 
 #: SLAM warmup budget: nav.sh start returns after launch; readiness follows
 #: in ~40-60s. The poller gets the remainder of this window.
@@ -35,6 +36,11 @@ _READY_TIMEOUT_S: float = 150.0
 
 def _default_runner(argv: list[str], timeout: float) -> Any:
     return subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+
+
+def _default_ready_probe(hw: Any) -> bool:
+    """Quick liveness probe: is the stack ALREADY up? (~5s budget, no side effects)."""
+    return _default_ready_poller(hw, timeout_s=5.0)
 
 
 def _default_ready_poller(hw: Any, timeout_s: float) -> bool:
@@ -67,18 +73,22 @@ class RealBringupSkill:
 
     name = "bringup"
     description = (
-        "Nav-stack lifecycle: action='start' launches the stack via nav.sh and "
-        "BLOCKS until odometry flows (SLAM ready, <=150s); action='stop' tears "
-        "it down. This is NOT standing up — use standup for posture. "
-        "启动/关闭导航栈(非起立)。")
+        "Nav-stack lifecycle. action='start' is IDEMPOTENT: if the stack is "
+        "already running it does NOTHING and reports so — it will never restart "
+        "a live stack (that wipes the SLAM map for ~60s). Only a cold stack is "
+        "launched (blocks until odometry flows, <=150s). action='restart' "
+        "forces a full stop+start; action='stop' tears down. NOT standing up — "
+        "use standup for posture. 启动(幂等)/重启/关闭导航栈(非起立)。")
     requires = ()
     preconditions: list = []
     effects = {"stack": "running"}
 
     def __init__(self, runner: Callable[..., Any] | None = None,
-                 ready_poller: Callable[[Any, float], bool] | None = None) -> None:
+                 ready_poller: Callable[[Any, float], bool] | None = None,
+                 ready_probe: Callable[[Any], bool] | None = None) -> None:
         self._runner = runner or _default_runner
         self._ready = ready_poller or _default_ready_poller
+        self._probe = ready_probe or _default_ready_probe
 
     def execute(self, params=None, context=None, **kw) -> SkillResult:
         action = "start"
@@ -91,9 +101,20 @@ class RealBringupSkill:
                 success=False, diagnosis_code="bad_action",
                 error_message=(f"unknown lifecycle action {action!r}; valid: "
                                f"{sorted(_ACTIONS)} (posture -> standup/liedown)"))
+        hw = getattr(context, "base", None) if context is not None else None
+        if action == "start" and self._probe(hw):
+            oplog("lifecycle", "bringup", "start requested — stack already "
+                  "running, NOT touched (idempotent)")
+            return SkillResult(success=True, result_data={
+                "action": "start",
+                "message": ("stack already running — not touched (use "
+                            "action='restart' to force a rebuild)"),
+                "verify_hint": "stack_ready()"})
+        nav_action = "start" if action == "restart" else action
         script = nav_sh_path()
+        oplog("lifecycle", "bringup", f"nav.sh {nav_action} launching...")
         try:
-            proc = self._runner(["bash", script, action], timeout=180.0)
+            proc = self._runner(["bash", script, nav_action], timeout=180.0)
         except Exception as exc:  # noqa: BLE001 — honest failure, never raise
             return SkillResult(success=False, diagnosis_code="nav_sh_failed",
                                error_message=f"nav.sh {action} failed: {exc}")
@@ -103,16 +124,18 @@ class RealBringupSkill:
                 error_message=(f"nav.sh {action} rc={proc.returncode}: "
                                f"{(getattr(proc, 'stderr', '') or '')[-200:]}"))
         if action == "stop":
+            oplog("lifecycle", "bringup", "stack stopped")
             return SkillResult(success=True, result_data={"action": "stop"})
-        hw = getattr(context, "base", None) if context is not None else None
         if not self._ready(hw, _READY_TIMEOUT_S):
+            oplog("lifecycle", "bringup", "launched but odometry never ready")
             return SkillResult(
                 success=False, diagnosis_code="stack_not_ready",
                 error_message=("stack launched but odometry never became ready "
                                f"within {_READY_TIMEOUT_S:.0f}s — check nav.sh "
                                "status / lidar power"))
+        oplog("lifecycle", "bringup", f"{action}: stack ready (odometry flowing)")
         return SkillResult(success=True, result_data={
-            "action": "start",
+            "action": action,
             "verify_hint": "stack_ready()",
         })
 
@@ -147,6 +170,8 @@ class RealResumeSkill:
         except Exception as exc:  # noqa: BLE001 — honest failure
             return SkillResult(success=False, diagnosis_code="resume_failed",
                                error_message=f"estop_release failed: {exc}")
+        oplog("lifecycle", "resume",
+              "guard released" if ok else "estop_release FAILED")
         return SkillResult(
             success=ok,
             result_data={"message": "guard released — motion enabled"},

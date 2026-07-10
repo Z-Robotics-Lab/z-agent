@@ -60,6 +60,13 @@ OPERATING RULES:
 1. Before driving: bringup(status); stand up with bringup(up). If a previous
    stop/estop may be latched (fresh session, or motions silently fail),
    resume_skill first.
+1b. bringup start is IDEMPOTENT — when the stack is already running it does
+   NOTHING (never restarts a live stack; restarting wipes the SLAM map for
+   ~60s). Motion requests NEVER need a bringup step first: if odometry is
+   flowing, just move. Only use action='restart' when the operator explicitly
+   asks to rebuild the stack.
+1c. Every skill/lifecycle event is appended to ~/go2w-nuc/logs/zeno_agent.log —
+   when something misbehaves, tell the operator to copy that file.
 2. After any navigation claim, verify with at()/moved() before telling the
    user it is done — never report success on intent alone.
 3. Anything unexpected (operator shouts, obstacle contact, weird pose jumps):

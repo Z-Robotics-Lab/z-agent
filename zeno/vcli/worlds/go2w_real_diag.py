@@ -33,3 +33,30 @@ def _stalled_hint(start_pos: Any, end_pos: Any) -> str:
     except Exception:  # noqa: BLE001
         pass
     return ""
+
+
+# ---------------------------------------------------------------------------
+# Operator-facing operation log (field request 2026-07-10: "输出更详细一点的
+# log我复制给你") — every skill/lifecycle event lands in one greppable file.
+# ---------------------------------------------------------------------------
+
+import datetime as _dt
+import os as _os
+
+_OPLOG_PATH = _os.path.expanduser("~/go2w-nuc/logs/zeno_agent.log")
+
+
+def set_oplog_path(path: str) -> None:
+    global _OPLOG_PATH
+    _OPLOG_PATH = path
+
+
+def oplog(kind: str, name: str, msg: str) -> None:
+    """Append one timestamped line; NEVER raises (best-effort diagnostics)."""
+    try:
+        line = (f"{_dt.datetime.now().strftime('%m-%d %H:%M:%S')} | "
+                f"{kind:<9}| {name:<14}| {msg}\n")
+        with open(_OPLOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:  # noqa: BLE001 — logging must never break a skill
+        pass

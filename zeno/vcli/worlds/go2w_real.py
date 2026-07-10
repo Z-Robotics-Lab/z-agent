@@ -352,7 +352,7 @@ class Go2WRealWorld:
   - stop_explore_skill: {}
   - route_via_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}  (FAR goal via far_planner)
   - stop_route_skill: {}
-  - bringup_skill: {"action": "start|stop"}  (导航栈生命周期; posture belongs to standup/liedown)
+  - bringup_skill: {"action": "start|restart|stop"}  (start=幂等,栈在跑则不动; restart=强制重建; posture belongs to standup/liedown)
   - resume_skill: {}  (解除急停;stop 之后、任何运动之前)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
         )
