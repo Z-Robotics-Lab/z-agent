@@ -15,6 +15,18 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _redirect_oplog(tmp_path):
+    """Unit tests must never pollute the operator's real zeno_agent.log."""
+    from zeno.vcli.worlds import go2w_real_diag as d
+    old = d._OPLOG_PATH
+    d.set_oplog_path(str(tmp_path / "test_agent.log"))
+    yield
+    d.set_oplog_path(old)
+
 
 class _FakeHW:
     def __init__(self) -> None:
@@ -96,11 +108,15 @@ def test_bringup_start_is_idempotent_when_stack_already_ready():
     assert "already" in str(result.result_data or {}).lower()
 
 
-def test_bringup_restart_forces_nav_sh_even_when_ready():
+def test_bringup_restart_is_refused_to_the_model():
+    # Field trace 2026-07-10 15:20: the model escalated past the idempotent
+    # start and used restart, tearing down a live stack mid-conversation.
+    # Destructive stack rebuilds are OPERATOR actions (nav.sh), not strategies.
     skill, calls = _bringup(already=True)
     result = skill.execute({"action": "restart"}, _ctx(base=_FakeHW()))
-    assert result.success
-    assert calls and calls[0][-1] == "start"  # nav.sh start IS the restart
+    assert not result.success
+    assert calls == []
+    assert "operator" in (result.error_message or "").lower()
 
 
 def test_bringup_start_fails_honestly_when_not_ready():
