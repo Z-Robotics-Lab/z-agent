@@ -17,7 +17,10 @@ set -a; source .env 2>/dev/null; set +a
 export ZENO_PROVIDER="\${ZENO_PROVIDER:-deepseek}"
 export DEEPSEEK_MODEL="\${DEEPSEEK_MODEL:-deepseek-v4-flash}"
 export GO2W_SIM_DIR="\${GO2W_SIM_DIR:-\$HOME/Desktop/go2w}"
-exec "$REPO/.venv/bin/python" -m zeno.vcli.cli --world go2w "\$@"
+# Real-robot NUC: ros_env.sh provides DDS isolation (domain 20 + CycloneDDS)
+# and may set ZENO_WORLD=go2w_real. Dev machines have neither — both guarded.
+[ -f "\$HOME/go2w-nuc/bringup/ros_env.sh" ] && source "\$HOME/go2w-nuc/bringup/ros_env.sh"
+exec "$REPO/.venv/bin/python" -m zeno.vcli.cli --world "\${ZENO_WORLD:-go2w}" "\$@"
 EOF
 chmod +x "$BIN/zeno"
 ln -sf "$BIN/zeno" "$BIN/za"
