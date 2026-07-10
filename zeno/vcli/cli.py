@@ -121,7 +121,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("compact", "Compress context window", False),
     ("clear", "Reset conversation", False),
     ("clear_memory", "Clear scene graph (forget all explored rooms/objects)", False),
-    ("reset", "Reset robot pose (stand up after tip-over, sim only)", False),
+    ("reset", "Reset robot pose after a tip-over (SIM only; real worlds refuse)", False),
     ("scenario", "Show or enter a playground scenario  (/scenario <id>)", True),
     ("permissions", "Show or switch approval mode  (/permissions auto|manual)", True),
     ("sessions", "List saved sessions", False),
@@ -1487,13 +1487,36 @@ def _handle_slash_command(
 
     elif cmd == "reset":
         import os as _os
-        # Signal bridge to reset robot pose via file flag
-        try:
-            with open("/tmp/vector_reset_pose", "w") as _f:
-                _f.write("1")
-            console.print(f"[dim]  Reset signal sent. Robot will stand up at current position.[/dim]")
-        except OSError as _exc:
-            console.print(f"[yellow]  Failed to send reset: {_exc}[/]")
+        # /reset writes the SIM vnav-bridge flag /tmp/vector_reset_pose (consumed
+        # only by scripts/go2_vnav_bridge.py -> MuJoCoGo2.reset_pose). On a world
+        # with no such consumer (go2w_real: the driver is ROS2/nav.sh) the write is
+        # a dead no-op — printing "Robot will stand up" would be a false-green
+        # tip-over recovery (safety-adjacent UX). A world OPTS OUT via the duck-typed
+        # supports_pose_reset()->False; absent hook (dev/sim) stays byte-identical.
+        _world = (app_state or {}).get("world")
+        _supports = getattr(_world, "supports_pose_reset", None)
+        _reset_ok = True
+        if callable(_supports):
+            try:
+                _reset_ok = bool(_supports())
+            except Exception:  # noqa: BLE001 — a broken hook must not break /reset
+                _reset_ok = True
+        if not _reset_ok:
+            console.print(
+                "[yellow]  /reset is a simulator-only pose flag — this world has no "
+                "consumer for it, so nothing would happen.[/]")
+            console.print(
+                "[dim]  On real hardware: say '站起来' / 'stand up' (standup_skill) to "
+                "recover posture, then 'resume' (resume_skill) to release the "
+                "E-stop/manual latch before moving.[/dim]")
+        else:
+            # Signal bridge to reset robot pose via file flag
+            try:
+                with open("/tmp/vector_reset_pose", "w") as _f:
+                    _f.write("1")
+                console.print(f"[dim]  Reset signal sent. Robot will stand up at current position.[/dim]")
+            except OSError as _exc:
+                console.print(f"[yellow]  Failed to send reset: {_exc}[/]")
 
     elif cmd == "model":
         if not args_rest:

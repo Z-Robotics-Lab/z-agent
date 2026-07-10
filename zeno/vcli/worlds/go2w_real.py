@@ -331,6 +331,19 @@ class Go2WRealWorld:
         """Nothing process-owned to release (the driver detaches via atexit)."""
         return None
 
+    def supports_pose_reset(self) -> bool:
+        """False: the REPL ``/reset`` sim pose-flag has NO consumer on hardware.
+
+        ``/reset`` writes ``/tmp/vector_reset_pose`` — read ONLY by the MuJoCo sim
+        vnav bridge (``scripts/go2_vnav_bridge.py`` -> ``MuJoCoGo2.reset_pose``).
+        The real driver is ROS2/nav.sh and never reads that flag, so on go2w_real
+        the command would be a dead no-op dressed up as a working tip-over recovery.
+        Declaring False makes ``/reset`` refuse honestly and point at the real
+        recovery path (standup_skill + resume_skill). Opt-OUT: a world that omits
+        this hook keeps the flag-writing behaviour byte-identical (dev/sim).
+        """
+        return False
+
     def decompose_vocab(self) -> DecomposeVocab | None:
         return DecomposeVocab(
             planner_intro=(
