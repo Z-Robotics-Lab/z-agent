@@ -54,7 +54,8 @@ _SIM_STUB_NAMES = frozenset(
 )
 
 _REAL_ORACLES = frozenset(
-    {"at", "moved", "explore_finished", "explored_progress", "route_reached", "stack_ready"}
+    {"at", "moved", "explore_finished", "explored_progress", "route_reached",
+     "stack_ready", "turned"}  # turned: v2 in-place rotation oracle
 )
 
 
