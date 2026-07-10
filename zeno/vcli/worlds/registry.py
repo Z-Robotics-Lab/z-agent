@@ -49,9 +49,16 @@ ROBOT_WORLD = "robot"
 # id. Each entry maps a resolvable id -> (module, class) imported on demand.
 GO2W_WORLD = "go2w"
 GO2W_WORLD_ALIAS = "isaac-go2w"
+# go2w_real is the REAL-hardware sibling of the go2w sim world (P5.4): same CLI /
+# tool / skill / verify seams, driven through the running nav stack on the NUC
+# (Go2WHardware) instead of the Isaac HTTP bridge. Registered lazily like go2w so
+# resolving/listing it never imports the concrete world (Invariant 4) and never
+# needs a sourced ROS env until it is actually built.
+GO2W_REAL_WORLD = "go2w_real"
 _LAZY_BUILTIN_WORLDS: dict[str, tuple[str, str]] = {
     GO2W_WORLD: ("zeno.vcli.worlds.go2w", "IsaacGo2WWorld"),
     GO2W_WORLD_ALIAS: ("zeno.vcli.worlds.go2w", "IsaacGo2WWorld"),
+    GO2W_REAL_WORLD: ("zeno.vcli.worlds.go2w_real", "Go2WRealWorld"),
 }
 
 

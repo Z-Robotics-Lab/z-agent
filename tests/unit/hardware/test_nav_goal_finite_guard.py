@@ -128,3 +128,26 @@ class TestPublishGoalRejectsBeforeDispatch:
                 navigation.publish_goal(0.0, float("inf"))
         finally:
             navigation._ctx = prev
+
+
+class TestGo2WSimWorldRejectsBeforeDispatch:
+    """Behavioral twin for the Isaac Go2W sim world (sim-real symmetry with
+    ``Go2WRealEmbodiment.navigate_to``): the embodiment sink and the shared
+    skill drive-loop must fail loud BEFORE a non-finite waypoint escapes onto
+    the HTTP bridge. The bridge is stubbed with a tripwire, so this needs no
+    sim and proves the guard actually gates, not merely that it is present."""
+
+    def test_nonfinite_goal_never_reaches_bridge(self, monkeypatch) -> None:
+        from zeno.vcli.worlds import go2w
+
+        def _tripwire(path: str, obj: dict) -> dict:
+            raise AssertionError(
+                f"non-finite goal escaped to the bridge: POST /{path} {obj}"
+            )
+
+        monkeypatch.setattr(go2w, "_post", _tripwire)
+        emb = go2w.IsaacGo2WEmbodiment()
+        with pytest.raises(ValueError, match="non-finite"):
+            emb.navigate_to(float("nan"), 0.0)
+        with pytest.raises(ValueError, match="non-finite"):
+            go2w._drive_and_hold(0.0, float("inf"))

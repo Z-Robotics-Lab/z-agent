@@ -24,6 +24,7 @@ import os
 import urllib.request
 from typing import Any
 
+from zeno.hardware.base import ensure_finite_nav_goal
 from zeno.vcli.tools.base import ToolContext, ToolResult, tool
 from zeno.vcli.worlds.base import DecomposeVocab
 
@@ -80,6 +81,8 @@ class Go2WNavigateTool:
 
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
         try:
+            # E190：LLM 直达的航点入口——json.loads 接受 NaN/Infinity 字面量
+            ensure_finite_nav_goal(params["x"], params["y"], "go2w_navigate tool")
             res = _post("waypoint", {"x": params["x"], "y": params["y"]})
             return ToolResult(content=json.dumps({"sent": res}))
         except Exception as e:  # noqa: BLE001 — 桥边界
@@ -248,6 +251,8 @@ def _drive_and_hold(x: float, y: float, timeout_s: float = 300.0):
     停稳复核（0.7m）后返回——verify（0.8m）才有余量且不再漂移触发重试。
     返回 (ok, last_pose)。navigate 与 move_relative 共用这一个循环。
     """
+    # E190：两个技能的 LLM 目标都汇到这里——NaN/inf 在逃逸到桥前拒绝
+    ensure_finite_nav_goal(x, y, "go2w._drive_and_hold")
     import sys
     _post("waypoint", {"x": x, "y": y})
     t0 = _time.time()
@@ -520,6 +525,8 @@ class Go2WPickSkill:
             ux, uy = (o["x"] - gt["x"]) / max(d, 1e-6), (o["y"] - gt["y"]) / max(d, 1e-6)
             sx = pose["x"] + (d - self._APPROACH_STANDOFF) * ux
             sy = pose["y"] + (d - self._APPROACH_STANDOFF) * uy
+            # E190：感知毒化防线——桥读数为 NaN 时落点非有限，拒绝而非追逐
+            ensure_finite_nav_goal(sx, sy, "Go2WPickSkill._approach")
             print(f"[SKILL] pick approach#{attempt+1}: d={d:.2f} -> waypoint ({sx:.2f},{sy:.2f})",
                   file=sys.stderr, flush=True)
             t0 = _time.time()
@@ -670,6 +677,9 @@ class IsaacGo2WEmbodiment:
         import sys
         import time as _t
         x, y = float(x), float(y)
+        # E190 目标边界：NaN/inf 在发布到桥/外部导航栈前拒绝
+        # （镜像 Go2WRealEmbodiment.navigate_to —— sim-real 对称）
+        ensure_finite_nav_goal(x, y, "IsaacGo2WEmbodiment.navigate_to")
         # 慢动作 sim（约 0.3-0.5x 实时）里导航需 100-300s 墙钟；调用方的 60s 默认
         # 超时会制造假失败步毒化判决——基座最了解自身动力学，下限钳 240s
         timeout = max(float(timeout), 240.0)
