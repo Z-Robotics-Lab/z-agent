@@ -41,8 +41,8 @@
   劫持断言。config.py/oauth.py 与基线逐字节一致，route/camera 未碰。教训：测须 delenv 全部
   凭据源，不止 monkeypatch load_config。（冷启动环境镜像：constraints.txt 镜像防 pinocchio
   段错误；.env gitignored 不随 clone；半配置 DecomposeVocab 空集会清 registry 推导——见 memory。）
-
 - **产品面收口(RED 00dbbee→GREEN f2a3158+d9029df)**:persona 改由 go2w_real_capabilities.md 加载(agent 能力说明书,改 md 即改自知,缺文件安全回退);新工具 go2w_real_viz(open/close,view=main|explore|route)经 OverlayLauncher 非阻塞拉 RViz(nav.sh rviz* 已加 DISPLAY :0 兜底);launcher 尊重 ZENO_WORLD+条件 source NUC ros_env——本 NUC 裸 `zeno` 即真机世界(离线冒烟过:persona 843+2834 字加载成功)。
+- **首触修复(RED→GREEN 同日)**:bringup_skill(启动导航栈≠站立,阻塞到里程计就绪,verify stack_ready())+ 中文 few-shot 消歧;explore/route 管理器经 driver 兜底(VGG 上下文无 world services——引擎属内核,世界侧走 base 属性)。真机 REPL 复测待跑。
 ## Next
 1. **go2w_real 真机 E2E 验收（等 owner 在场，E-stop 遥控在手）**：源 ros_env.sh → nav.sh
    start（40-60s）→ `zeno --world go2w_real` →「站起来，往前走 2 米」→ at(tx,ty,tol=1.5)
