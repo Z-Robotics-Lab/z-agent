@@ -63,8 +63,7 @@ OPERATING RULES:
 1b. bringup start is IDEMPOTENT — when the stack is already running it does
    NOTHING (never restarts a live stack; restarting wipes the SLAM map for
    ~60s). Motion requests NEVER need a bringup step first: if odometry is
-   flowing, just move. Only use action='restart' when the operator explicitly
-   asks to rebuild the stack.
+   flowing, just move. There is NO restart action: stack rebuilds are OPERATOR-only (terminal). bringup(stop) likewise only on an explicit operator command.
 1c. Every skill/lifecycle event is appended to ~/go2w-nuc/logs/zeno_agent.log —
    when something misbehaves, tell the operator to copy that file.
 2. After any navigation claim, verify with at()/moved() before telling the

@@ -27,7 +27,7 @@ from zeno.vcli.worlds.go2w_real_skills import nav_sh_path
 
 #: nav.sh subcommands this skill may run (lifecycle only — motion stays with
 #: the dedicated skills; explore/route overlays have their own managers).
-_ACTIONS: frozenset[str] = frozenset({"start", "restart", "stop"})
+_ACTIONS: frozenset[str] = frozenset({"start", "stop"})
 
 #: SLAM warmup budget: nav.sh start returns after launch; readiness follows
 #: in ~40-60s. The poller gets the remainder of this window.
@@ -44,17 +44,29 @@ def _default_ready_probe(hw: Any) -> bool:
 
 
 def _default_ready_poller(hw: Any, timeout_s: float) -> bool:
-    """True once the driver sees fresh odometry (stack truly up)."""
+    """True once the driver sees fresh odometry (stack truly up).
+
+    A dying stack keeps publishing for a few seconds after nav.sh stops it —
+    residue that fooled the 15:20 restart into "ready in 3s". Cold starts
+    therefore wait a QUIET period first, then demand freshness TWICE 3s apart.
+    """
     if hw is None:
         return False
+    time.sleep(8.0)  # let any dying publisher actually die
     deadline = time.monotonic() + timeout_s
+    fresh_streak = 0
     while time.monotonic() < deadline:
         try:
             if not getattr(hw, "is_connected", False):
                 hw.connect()
             age = hw.odom_age_s() if hasattr(hw, "odom_age_s") else None
             if age is not None and age < 2.0:
-                return True
+                fresh_streak += 1
+                if fresh_streak >= 2:
+                    return True
+                time.sleep(3.0)
+                continue
+            fresh_streak = 0
             if age is None and getattr(hw, "is_connected", False):
                 # driver without an age probe: fresh position readable = up
                 pos = hw.get_position()
@@ -74,11 +86,11 @@ class RealBringupSkill:
     name = "bringup"
     description = (
         "Nav-stack lifecycle. action='start' is IDEMPOTENT: if the stack is "
-        "already running it does NOTHING and reports so — it will never restart "
-        "a live stack (that wipes the SLAM map for ~60s). Only a cold stack is "
-        "launched (blocks until odometry flows, <=150s). action='restart' "
-        "forces a full stop+start; action='stop' tears down. NOT standing up — "
-        "use standup for posture. 启动(幂等)/重启/关闭导航栈(非起立)。")
+        "already running it does NOTHING — it can never rebuild a live stack. "
+        "Only a cold stack is launched (blocks until odometry flows, <=150s). "
+        "action='stop' tears down (ONLY on explicit operator command). There "
+        "is NO restart — stack rebuilds are operator-only. NOT standing up — "
+        "use standup for posture. 启动(幂等)/关闭导航栈(非起立;无重启)。")
     requires = ()
     preconditions: list = []
     effects = {"stack": "running"}
@@ -96,6 +108,16 @@ class RealBringupSkill:
             if isinstance(src, dict) and src.get("action"):
                 action = str(src["action"]).lower()
                 break
+        if action == "restart":
+            # Field trace 2026-07-10 15:20: the model restarted a HEALTHY
+            # stack mid-conversation; the walk then ran on a 1-minute-old
+            # SLAM map. Destructive rebuilds are operator actions.
+            oplog("lifecycle", "bringup", "restart REFUSED (operator-only)")
+            return SkillResult(
+                success=False, diagnosis_code="restart_refused",
+                error_message=("restart is OPERATOR-only (nav.sh start in a "
+                               "terminal). If the stack is truly wedged, tell "
+                               "the operator — do not rebuild it yourself."))
         if action not in _ACTIONS:
             return SkillResult(
                 success=False, diagnosis_code="bad_action",

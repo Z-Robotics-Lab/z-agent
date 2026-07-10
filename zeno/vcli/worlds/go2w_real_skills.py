@@ -266,6 +266,7 @@ class RealStandUpSkill:
                                diagnosis_code="no_base")
         oplog("skill", "standup", "requested")
         ok = bool(base.standup())
+        oplog("skill", "standup", "OK" if ok else "FAILED (/standup refused — stack down or dog error)")
         return SkillResult(success=ok, result_data={"stance": "standing"},
                            error_message="" if ok else "/standup did not succeed")
 
@@ -286,6 +287,7 @@ class RealLieDownSkill:
             return SkillResult(success=False, error_message="No Go2W hardware base",
                                diagnosis_code="no_base")
         ok = bool(base.liedown())
+        oplog("skill", "liedown", "OK" if ok else "FAILED")
         return SkillResult(success=ok, result_data={"stance": "lying"},
                            error_message="" if ok else "/liedown did not succeed")
 

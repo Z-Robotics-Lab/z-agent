@@ -260,11 +260,20 @@ class Go2WRealWorld:
         A missing ROS env / down stack leaves the driver disconnected (tools then
         report 'no base' and steer the user to go2w_real_bringup) — never a crash.
         """
+        import os
+
+        from zeno.vcli.worlds.go2w_real_diag import oplog
+        oplog("env", "session", (
+            f"domain={os.environ.get('ROS_DOMAIN_ID', 'UNSET!')} "
+            f"rmw={os.environ.get('RMW_IMPLEMENTATION', 'UNSET!')} "
+            f"cyclonedds_uri={'set' if os.environ.get('CYCLONEDDS_URI') else 'UNSET!'}"))
         base = getattr(agent, "_base", None)
         if base is not None and hasattr(base, "connect"):
             try:
                 base.connect()
+                oplog("env", "session", "driver connected")
             except Exception as exc:  # noqa: BLE001 — setup must not block the REPL
+                oplog("env", "session", f"driver connect FAILED: {exc}")
                 logger.warning("go2w_real: hardware connect failed: %s", exc)
 
     def teardown(self) -> None:

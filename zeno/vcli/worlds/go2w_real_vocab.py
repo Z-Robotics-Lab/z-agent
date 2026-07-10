@@ -160,3 +160,26 @@ Response:
   ],
   "context_snapshot": ""
 }"""
+
+# Single-action commands are SINGLE steps (field trace 2026-07-10 15:19: the
+# planner gave 站起来 a 7-step plan including liedown-first and a restart).
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "站起来"
+Response:
+{
+  "goal": "站起来",
+  "sub_goals": [
+    {
+      "name": "stand_up",
+      "description": "起立(单步;不需要 liedown/bringup/其他前置)",
+      "verify": "True",
+      "strategy": "standup_skill",
+      "timeout_sec": 30,
+      "depends_on": [],
+      "strategy_params": {},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""
