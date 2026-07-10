@@ -1012,7 +1012,7 @@ class ZenoEngine:
                 return ns
         builder = getattr(world, "build_verify_namespace", None)
         if builder is None:
-            return ns
+            return self._apply_world_verify_deny(ns, world)
         try:
             world_ns = builder(agent)
         except Exception as exc:  # noqa: BLE001
@@ -1021,9 +1021,45 @@ class ZenoEngine:
                 getattr(world, "name", world),
                 exc,
             )
-            return ns
+            return self._apply_world_verify_deny(ns, world)
         if world_ns:
             ns.update(world_ns)
+        return self._apply_world_verify_deny(ns, world)
+
+    def _apply_world_verify_deny(
+        self, ns: dict[str, Any], world: Any
+    ) -> dict[str, Any]:
+        """Apply the world's OPTIONAL ``verify_namespace_deny()`` hook to *ns*.
+
+        Duck-typed opt-OUT seam (CEO-approved kernel change, 2026-07-10): the
+        engine seeds sim-ish perception/world stubs into the verifier namespace
+        BEFORE the world merge (``describe_scene`` -> '', ``detect_objects`` ->
+        [], ``certainty`` -> 0.0, ... plus ``get_position``/``get_heading`` when
+        a base exists). The merge is additive-only, so a hardware world that
+        serves NONE of these could never remove them — they leaked into
+        ``verify_oracle_names`` and were advertised/taught to the model as live
+        oracles that then evaluated stub-falsy (the go2w_real 'verdict 0/N
+        grounded' field failure). A world may now declare
+        ``verify_namespace_deny() -> Iterable[str]``; those names are POPPED
+        here, AFTER the world merge, so the hook can only REMOVE names —
+        strictly stricter, never looser (Invariant 1). A world without the hook
+        (dev, go2w sim, robot) leaves *ns* byte-identical. Fail-safe: a raising
+        hook is logged and ignored (namespace unchanged).
+        """
+        deny_hook = getattr(world, "verify_namespace_deny", None)
+        if not callable(deny_hook):
+            return ns
+        try:
+            denied = deny_hook()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "world %r verify_namespace_deny failed: %s",
+                getattr(world, "name", world),
+                exc,
+            )
+            return ns
+        for name in denied or ():
+            ns.pop(str(name), None)
         return ns
 
     def classify_intent(self, user_message: str) -> IntentDecision:

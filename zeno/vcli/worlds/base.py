@@ -40,6 +40,17 @@ class DecomposeVocab:
     strategy_params_help: str = ""
     examples: str = ""
     fallback_verify: str = "True"
+    # The '## Loop Example' (foreach) section of the decompose prompt — the ONE
+    # class-default block a world previously could NOT override, so its
+    # detect_objects() teaching leaked into every world's prompt (field
+    # forensics 2026-07-10, go2w_real). Additive field, LAST, defaulted (Inv-7):
+    #   None (default) -> keep the GoalDecomposer class default (byte-identical
+    #                     for every world that does not set it);
+    #   ""             -> SUPPRESS the section (a world with no list-producing
+    #                     step must not be taught a loop shape built on foreign
+    #                     predicates);
+    #   non-empty str  -> replace the example text with the world's own.
+    foreach_example: str | None = None
 
     def as_kwargs(self) -> dict[str, Any]:
         """Return GoalDecomposer keyword arguments for this vocabulary."""
@@ -52,6 +63,7 @@ class DecomposeVocab:
             "strategy_params_help": self.strategy_params_help,
             "examples": self.examples,
             "fallback_verify": self.fallback_verify,
+            "foreach_example": self.foreach_example,
         }
 
 
@@ -120,6 +132,18 @@ class World(Protocol):
         ...
 
     # ----- OPTIONAL hooks (duck-typed) --------------------------------------
+    # def verify_namespace_deny(self) -> "Iterable[str]":
+    #     """Names to REMOVE from the engine-built verifier namespace (opt-OUT).
+    #
+    #     Applied by ``engine._apply_world_verify_deny`` AFTER the world merge,
+    #     so it can only REMOVE names — strictly stricter, never looser (Inv-1).
+    #     Use it to strip the engine's sim-ish perception/world stubs
+    #     (describe_scene/detect_objects/certainty/...) on a world that does not
+    #     serve them, so ``verify_oracle_names`` never advertises a predicate
+    #     that would evaluate stub-falsy. Omit the hook for the exact current
+    #     namespace (dev/go2w-sim/robot are byte-identical without it).
+    #     """
+    #
     # The four hooks below are NOT part of the required Protocol surface: they
     # are looked up with ``getattr(world, "<hook>", None)`` by the CLI, so a world
     # that omits them is byte-identical to today. They let a *bring-your-own*

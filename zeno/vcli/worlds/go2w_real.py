@@ -246,6 +246,36 @@ class Go2WRealWorld:
         # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
         return ns
 
+    def verify_namespace_deny(self) -> frozenset[str]:
+        """Engine-stub names this HARDWARE world does not serve (opt-OUT, Inv-1).
+
+        Field forensics 2026-07-10 ('verdict 0/N grounded'): the engine seeds
+        these sim/perception names into the verifier namespace BEFORE the world
+        merge; the additive merge could never remove them, so they leaked into
+        ``verify_oracle_names`` and the model was TAUGHT phantom predicates that
+        evaluate stub-falsy on the real dog. Denying them (applied AFTER the
+        merge — remove-only, strictly stricter) makes the advertised verify
+        vocab exactly what this world serves: at/moved/explore_finished/
+        explored_progress/route_reached/stack_ready + the kernel dev predicates.
+
+        get_position/get_heading are denied ON PURPOSE (audited before denying):
+        the world-context display (engine._build_world_context), robot_context,
+        and actor_causation.capture all read the BASE OBJECT directly — never
+        the verifier namespace — so nothing load-bearing consumes these entries.
+        Their only namespace role was verify eval + the advertised oracle list,
+        where a raw-pose read invites the model to self-author uncalibrated
+        pose compares instead of the tol-calibrated at()/moved() odometry
+        oracles. at_position/facing are absent on this world today (they are
+        sim-world merges) — denied defensively so no future engine seeding can
+        resurrect them here.
+        """
+        return frozenset({
+            "describe_scene", "detect_objects", "certainty", "last_seen",
+            "objects_in_room", "find_object", "room_coverage",
+            "predict_navigation", "at_position", "facing",
+            "get_position", "get_heading",
+        })
+
     def register_capabilities(self, registry: Any, agent: Any, backend: Any) -> None:
         return None
 
@@ -364,6 +394,12 @@ class Go2WRealWorld:
   - bringup_skill: {"action": "start|restart|stop"}  (start=幂等,栈在跑则不动; restart=强制重建; posture belongs to standup/liedown)
   - resume_skill: {}  (解除急停;stop 之后、任何运动之前)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
+            # SUPPRESS the class-default '## Loop Example' (it teaches
+            # detect_objects(), a phantom here — field forensics 2026-07-10).
+            # This world has no list-producing detect step to loop over; if a
+            # v2 feature ever adds one, replace '' with an example built from
+            # THIS world's verify_functions.
+            foreach_example="",
         )
 
     def derive_vocab_from_registry(self) -> bool:

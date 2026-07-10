@@ -416,6 +416,7 @@ Loop example — "do <something> to every detected object, one by one":
         planner_intro: "str | None" = None,
         has_base: bool = True,
         decompose_max_tokens: "int | None" = None,
+        foreach_example: "str | None" = None,
     ) -> None:
         """Initialise with an LLMBackend (must implement .call()).
 
@@ -438,6 +439,12 @@ Loop example — "do <something> to every detected object, one by one":
             decompose_max_tokens: completion-token budget for the decompose LLM
                      call. Defaults to ``DEFAULT_DECOMPOSE_MAX_TOKENS`` (sized for a
                      reasoning model whose hidden reasoning trace shares the budget).
+            foreach_example: per-world override of the '## Loop Example' block
+                     (the one class-default section a world previously could not
+                     override — its ``detect_objects()`` teaching leaked into
+                     every prompt). None (default) keeps the world-neutral class
+                     default byte-identical; '' SUPPRESSES the section; a
+                     non-empty string replaces the example text.
         """
         self._backend = backend
         self._template_library = template_library
@@ -467,6 +474,10 @@ Loop example — "do <something> to every detected object, one by one":
             self._FALLBACK_VERIFY = fallback_verify
         if planner_intro is not None:
             self._PLANNER_INTRO = planner_intro
+        # foreach_example: None keeps the class default; '' suppresses the Loop
+        # Example section (see _build_system_prompt); non-empty replaces it.
+        if foreach_example is not None:
+            self._FOREACH_EXAMPLE = foreach_example
 
         # Strategies: explicit injection wins; else derive from skill registry;
         # else keep the robot defaults.
@@ -663,7 +674,14 @@ Respond with ONLY valid JSON matching this schema — no prose, no markdown fenc
 
 ## Example
 {self._EXAMPLE}
-
+"""
+        # The Loop Example is rendered ONLY when an example text exists: a world
+        # that injected foreach_example='' (e.g. go2w_real — no list-producing
+        # detect step to loop over) suppresses the section so no foreign
+        # predicate is taught. With the default (or any non-empty override) the
+        # concatenation below is byte-identical to the pre-fix single f-string.
+        if self._FOREACH_EXAMPLE:
+            text += f"""
 ## Loop Example
 {self._FOREACH_EXAMPLE}
 """

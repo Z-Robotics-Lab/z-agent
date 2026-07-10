@@ -1,7 +1,6 @@
 # Zeno — progress
 
-更新：2026-07-10。fork 自 VectorRobotics/vector-os-nano @ R715 (12f3e15)。
-当前分支 **hw-go2w-real**（off main b6b94b9；未 push，未动 main）。
+更新：2026-07-10。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
 
 ## Works（已验证）
 - **P5.4 真机世界 go2w_real（hw-go2w-real）**：CEO 2026-07-10 裁定解锁（本 NUC /
@@ -10,28 +9,29 @@
   0.6m/s+5Hz deadman；Trigger standup/liedown/estop/resume/manual/nav_cancel；rclpy
   懒加载）。世界 go2w_real*.py 同 CLI/工具/技能/verify 接缝；禁内核 sim/diag/system；
   registry 懒注册（Inv-4）。at/moved 只读 /state_estimation（Inv-1）fail-safe。
-- **P5.5 TARE 探索（RED 5306abc→GREEN e7935bc）**：go2w_hw_explore.py::Go2WExplore
-  Manager 管 `nav.sh explore` 子进程（idle→launching→exploring→finishing→stopped；
-  孤儿检测→后台 /nav_cancel 清死航点）。oracle=TARE 自发 /exploration_finish Bool（源码
-  核实）+里程计行程，双谓词防"原地宣告完成"。stop=SIGINT 自有子进程→/nav_cancel→resume
-  受 estop 闩锁守卫。OverlayLauncher+TravelTracker 供 route 复用；4 个 v2-extension 接缝。
-- **v2 route（RED c388cbf→GREEN 63de802）**：go2w_hw_route.py::Go2WRouteManager 复用
-  OverlayLauncher("route")=`nav.sh route`（far_planner 前台子进程，SIGINT 拆卸+孤儿检测+
-  estop 守卫 resume）。发 /goal_point(PointStamped, map 帧)一次；far_planner 自republish
-  /way_point（route 从不发 /way_point）。到达以里程计接近判定（Inv-1）；/far_reach_goal_
-  status 仅作 liveness，绝非唯一到达权威。工具 go2w_real_route + 技能 route_via/stop_route
-  + verify route_reached。RouteConfig/RouteStatus frozen（Inv-7）。
-- **v2 camera（RED 136aff9→GREEN adac419）**：go2w_hw_camera.py::Go2WCamera+CameraMixin 订
-  /camera/camera/color/image_raw（BEST_EFFORT depth1，骑现有节点，无新节点/spin/依赖）；手工
-  decode（np.frombuffer+step 步幅裁剪，无 cv_bridge），坏帧丢弃保上一好帧。消费接缝 get_camera_
-  frame(w,h)→(H,W,3)uint8（未流黑帧+1s staleness 警告，Go2ROS2Proxy 对齐）+has_camera()/get_
-  camera_image() liveness → capability_profile.camera 报 True，点亮 look/describe（look.py 端到
-  端绿，VLM mock）；未改 frozen capability 权威。
-- **集成核验（本轮 integrator，独立复跑）**：8 工具/9 技能/services{explore,route}/5 verify/9
-  strategies 集合相等（strategies==descriptions，每策略有同名注册技能，verify_functions==namespace），
-  离线 smoke 全绿（无 ROS/sim）。内核零改；全文件 <400（go2w_hw 398/route 397/go2w_real 357 顶格）；
-  无重复注册/冲突标记/硬编码密钥；4 接缝完好。实测 v2 世界+驱动 6 文件 97 绿；hardware ros2 全
-  surface 104 绿；vcli 833 绿。
+- **P5.5 TARE 探索（RED 5306abc→GREEN e7935bc）**：Go2WExploreManager 管 `nav.sh explore`
+  子进程（idle→…→stopped；孤儿检测→后台 /nav_cancel）。oracle=/exploration_finish（TARE 自
+  发，源码核实）+里程计行程双谓词防"原地宣告完成"。stop=SIGINT→/nav_cancel→resume 受 estop
+  闩锁守卫。OverlayLauncher+TravelTracker 供 route 复用；4 个 v2-extension 接缝。
+- **v2 route（RED c388cbf→GREEN 63de802）**：Go2WRouteManager 复用 OverlayLauncher("route")=
+  `nav.sh route`（far_planner 前台子进程，SIGINT 拆卸+孤儿检测+estop 守卫 resume）。发
+  /goal_point 一次；far_planner 自 republish /way_point。到达以里程计判定（Inv-1）；
+  /far_reach_goal_status 仅 liveness。工具 go2w_real_route+技能 route_via/stop_route+verify
+  route_reached。RouteConfig/RouteStatus frozen（Inv-7）。
+- **v2 camera（RED 136aff9→GREEN adac419）**：Go2WCamera+CameraMixin 订 /camera/.../image_raw
+  （BEST_EFFORT depth1 骑现有节点）；手工 decode 无 cv_bridge，坏帧丢弃保上一好帧。接缝
+  get_camera_frame(w,h)+has_camera() liveness → capability_profile.camera=True，点亮 look/
+  describe（look.py 端到端绿，VLM mock）；未改 frozen capability 权威。
+- **集成核验（integrator 独立复跑）**：8 工具/9 技能/5 verify/9 strategies 集合相等，离线
+  smoke 全绿；内核零改；无重复注册/硬编码密钥。v2 世界+驱动 97 绿；hardware ros2 104 绿。
+- **verify-vocab 完整性（CEO 特批内核改，RED 90f5b16→GREEN 本轮）**：真机取证=内核教幻影谓词
+  →'verdict 0/N grounded'。四改全 ADDITIVE：①_verify_tool_schema 只教在集谓词（at_position
+  在集=逐字节原文；at 在集教 at() tol 语义；例句必来自在集）；②native handle_verify 白名单=
+  与 schema 同源 oracle 集，界外调用→纠错 is_error（不评估/不记步/不算 spin 进展）；③engine
+  增 world.verify_namespace_deny() 钩子（world merge 后 remove-only，Inv-1）；④DecomposeVocab
+  增末位 foreach_example（None=原样/''=删节/文本=替换）。go2w_real deny 12 个 stub 名（含
+  get_position/get_heading——已核 world_context/actor_causation 直读 base 非 namespace）+抑制
+  foreach 例。dev+go2w sim 逐字节不变（无钩子/无字段=原文；unit/vcli 1013 绿+vcli 870 绿仅既存失败）。
 
 ## Failed / 教训
 - **go2w_real 真机 E2E 未验收**：Inv-2 要求裸 zeno REPL+眼看硬件；本轮全为纯单测（rclpy/

@@ -39,6 +39,7 @@ between-turn motion folds into the causation grade).
 """
 from __future__ import annotations
 
+import ast
 import logging
 from typing import Any, Callable
 
@@ -498,24 +499,60 @@ def _scene_object_names(agent: Any) -> tuple[str, ...]:
 # ---------------------------------------------------------------------------
 
 
+def _verify_teaching_tail(oracle_names: frozenset[str]) -> str:
+    """Predicate-specific teaching for the verify tool description — PRESENT names only.
+
+    Verify-vocab integrity (field forensics 2026-07-10): the kernel must never
+    name a predicate the connected world does not serve. The pre-fix description
+    hardcoded ``at_position(x, y, tol)`` teaching + example into EVERY world —
+    a phantom on go2w_real (arrival oracle ``at``), so the kernel itself taught
+    the model an oracle that resolves to nothing.
+
+    Branches (single-sourced from the LIVE oracle set passed in):
+      * ``at_position`` served (the sim worlds) -> the EXACT pre-fix teaching
+        text, byte-identical (CEO ruling 2026-07-10).
+      * ``at`` served (go2w_real's odometry arrival oracle) -> the same tol
+        semantics taught for ``at``, WITHOUT a hardcoded default — the tol
+        default lives in the world's oracle, which the kernel must not import
+        (Invariant 4).
+      * otherwise -> the example names a predicate from the live set (or no
+        example at all when the set is empty).
+    """
+    if "at_position" in oracle_names:
+        tol = _at_position_tol()
+        return (
+            f"at_position(x, y, tol={tol}) is True when the robot's planar position is "
+            f"within tol metres of (x, y) (tol defaults to {tol}). "
+            "Pass the FULL predicate as 'expr', e.g. at_position(2.0, 0.0)."
+        )
+    if "at" in oracle_names:
+        return (
+            "at(x, y, tol=...) is True when the robot's planar position is within "
+            "tol metres of map-frame (x, y); omit tol to use the world's arrival "
+            "tolerance. Pass the FULL predicate as 'expr', e.g. at(2.0, 0.0)."
+        )
+    if oracle_names:
+        return f"Pass the FULL predicate as 'expr', e.g. {sorted(oracle_names)[0]}(...)."
+    return "Pass the FULL predicate as 'expr'."
+
+
 def _verify_tool_schema(oracle_names: frozenset[str]) -> dict[str, Any]:
     """Anthropic-shaped schema for the synthetic ``verify(expr)`` tool.
 
     The description single-sources the registry-derived verify vocab (the live
-    oracle names + the ``at_position`` tol semantics) so the model's verify expr is
-    grounded in the SAME namespace ``verify_oracle_names`` reads (review fix 6).
+    oracle names + arrival-tol semantics for the arrival predicate ACTUALLY
+    served — see ``_verify_teaching_tail``) so the model's verify expr is
+    grounded in the SAME namespace ``verify_oracle_names`` reads (review fix 6),
+    and never names a predicate absent from it.
     """
     names = ", ".join(sorted(oracle_names)) if oracle_names else "(none)"
-    tol = _at_position_tol()
     desc = (
         "Check a deterministic post-condition predicate against real world state, "
         "then bind it as this step's verification. Call this AFTER the action skill(s) "
         "that should have achieved the goal. The predicate is evaluated by an "
         "independent verifier over real sensor/sim ground truth — it cannot be faked. "
         f"Available predicate oracles: {names}. "
-        f"at_position(x, y, tol={tol}) is True when the robot's planar position is "
-        f"within tol metres of (x, y) (tol defaults to {tol}). "
-        "Pass the FULL predicate as 'expr', e.g. at_position(2.0, 0.0)."
+        + _verify_teaching_tail(oracle_names)
     )
     return {
         "name": VERIFY_TOOL,
@@ -542,6 +579,55 @@ def _finish_tool_schema() -> dict[str, Any]:
         ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     }
+
+
+# ---------------------------------------------------------------------------
+# Verify-vocab allowlist helpers (field forensics 2026-07-10) — a foreign
+# predicate must be REJECTED with a corrective error, never silently evaluated
+# against a leftover engine stub (stub-falsy -> 'verdict 0/N grounded').
+# ---------------------------------------------------------------------------
+
+
+def _sandbox_builtin_names() -> frozenset[str]:
+    """The GoalVerifier sandbox's safe-builtin names (len/str/abs/...).
+
+    Single-sourced from the sandbox itself so the allowlist gate and the eval
+    can never drift; the defensive fallback mirrors the sandbox's shipped set
+    (only reachable if the spine import itself breaks).
+    """
+    try:
+        from zeno.vcli.cognitive.goal_verifier import _SAFE_BUILTINS
+
+        return frozenset(_SAFE_BUILTINS)
+    except Exception:  # noqa: BLE001 — gate must never crash a verify
+        return frozenset(
+            {"len", "str", "int", "float", "bool", "list", "tuple",
+             "abs", "min", "max", "isinstance", "any", "all",
+             "True", "False", "None"}
+        )
+
+
+def _called_root_names(expr: str) -> frozenset[str] | None:
+    """Root names of every function CALL in *expr*; None when unparseable.
+
+    Only CALL roots are collected (``at(1, 2)`` -> ``at``; ``a.b()`` -> ``a``) —
+    bare names, comparisons, and literals stay the sandbox's business. An
+    unparseable expr returns None so the existing GoalVerifier syntax handling
+    (False + warning) remains the single authority on malformed input.
+    """
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError:
+        return None
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            root: Any = node.func
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name):
+                names.add(root.id)
+    return frozenset(names)
 
 
 # ---------------------------------------------------------------------------
@@ -700,6 +786,11 @@ class NativeStepRunner:
         NEVER computes verified — the spine does, from this trace.
         """
         expr = (expr or "").strip()
+        # Verify-vocab allowlist (field forensics 2026-07-10): reject a foreign
+        # predicate BEFORE it can evaluate against a leftover engine stub.
+        rejection = self._reject_foreign_verify(expr)
+        if rejection is not None:
+            return rejection
         # Evaluate the predicate via the SAME GoalVerifier sandbox the spine uses.
         try:
             verify_result = bool(self._verifier.verify(expr))
@@ -773,6 +864,40 @@ class NativeStepRunner:
                 f"verify({expr}) -> {verify_word(verify_result)} "
                 f"(result={verify_result}, actor={actor_caused.value})"
             )
+        )
+
+    def _reject_foreign_verify(self, expr: str) -> ToolResult | None:
+        """Corrective rejection for an expr calling names OUTSIDE the live oracle set.
+
+        The allowlist is ``self._oracle_names`` — the SAME set
+        ``_verify_tool_schema`` advertised to the model (single source, rule 3;
+        post-deny via ``verify_oracle_names``). Pre-fix, a foreign predicate
+        (``at_position``/``describe_scene``/... on go2w_real) resolved to a
+        leftover engine stub, evaluated falsy, and minted an honest-LOOKING but
+        content-free FAIL step ('verdict 0/N grounded') with no signal that the
+        predicate was phantom. Now it returns a LOUD is_error ToolResult naming
+        the valid predicates so the model self-repairs, and records NO step —
+        strictly stricter, never looser (Inv-1).
+
+        Only function CALL roots are gated; the sandbox's safe builtins stay
+        allowed and a malformed expr returns None (the sandbox's SyntaxError
+        handling stays the single authority on garbage input).
+        """
+        called = _called_root_names(expr)
+        if called is None:
+            return None
+        foreign = called - self._oracle_names - _sandbox_builtin_names()
+        if not foreign:
+            return None
+        allowed = ", ".join(sorted(self._oracle_names)) or "(none)"
+        offenders = ", ".join(sorted(foreign))
+        return ToolResult(
+            content=(
+                f"verify REJECTED — {offenders} is not a verify predicate oracle in "
+                f"this world (no step was recorded). Re-issue verify using ONLY these "
+                f"predicate oracles: {allowed}."
+            ),
+            is_error=True,
         )
 
     def _grade(self, expr: str) -> "actor_causation.ActorCaused":
@@ -1026,8 +1151,17 @@ def run_turn_native(
                 # R279/E76 goal-aware reset: a verify is PROGRESS only if it measures a
                 # (normalized predicate, result) not seen before. Re-reading the same
                 # already-known outcome (the at_position-thrash) is not progress.
+                # A REJECTED verify (is_error: foreign predicate — nothing evaluated,
+                # no step) is NEVER progress: without this guard a stale non-None last
+                # result would mint a novel key per rejected spelling and pin the R274
+                # spin counter open. handle_verify never errors on an ACCEPTED verify,
+                # so accepted verifies are byte-identical. Strictly stricter (rule 5).
                 key = (" ".join(expr.split()), runner.last_verify_result)
-                if runner.last_verify_result is not None and key not in seen_verify_outcomes:
+                if (
+                    not res.is_error
+                    and runner.last_verify_result is not None
+                    and key not in seen_verify_outcomes
+                ):
                     seen_verify_outcomes.add(key)
                     progressed_this_turn = True
             else:

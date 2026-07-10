@@ -21,7 +21,7 @@ python -m zeno.vcli.cli -p "<prompt>" --json    # one turn, then exit
 | `success` | bool — steps succeeded (not necessarily grounded) |
 | `evidence` | `GROUNDED` \| `RAN` \| `FAILED` \| `NO_TRACE` (top evidence grade) |
 | `goal` / `n_steps` / `n_grounded` | turn goal · step count · grounded count |
-| `oracle_names` | the live verify namespace (same source as GoalVerifier) |
+| `oracle_names` | the live verify namespace (same source as GoalVerifier), AFTER the world's optional `verify_namespace_deny()` opt-out — a hardware world may REMOVE engine stub names (never add), so only predicates the world actually serves are advertised/taught/eval-able (native `verify` rejects out-of-vocab calls with a corrective error) |
 | `per_step` | `{name, strategy, success, verify, verify_result, evidence}` per step |
 | `error` | only on NO_TRACE/error |
 
