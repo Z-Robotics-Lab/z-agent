@@ -69,6 +69,7 @@ _EXPECTED_TOOLS = {
     "go2w_real_stop",
     "go2w_real_manual",
     "go2w_real_resume",
+    "go2w_real_explore",  # v2: TARE autonomous exploration (overlay lifecycle)
 }
 
 
