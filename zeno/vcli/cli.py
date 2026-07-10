@@ -123,6 +123,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("clear_memory", "Clear scene graph (forget all explored rooms/objects)", False),
     ("reset", "Reset robot pose (stand up after tip-over, sim only)", False),
     ("scenario", "Show or enter a playground scenario  (/scenario <id>)", True),
+    ("permissions", "Show or switch approval mode  (/permissions auto|manual)", True),
     ("sessions", "List saved sessions", False),
     ("quit", "Exit", False),
 ]
@@ -1365,6 +1366,23 @@ def _handle_slash_command(
         )
         console.print()
 
+    elif cmd == "permissions":
+        perms = (app_state or {}).get("permissions")
+        if perms is None:
+            console.print("[red]permission context unavailable in this mode[/red]")
+        else:
+            if args_rest and args_rest[0].lower() in ("auto", "manual"):
+                perms.no_permission = args_rest[0].lower() == "auto"
+            mode = "auto — tools run WITHOUT asking" if perms.no_permission \
+                else "manual — each risky tool asks y/n/a"
+            console.print(f"  Approval mode: [bold]{mode}[/bold]")
+            console.print("[dim]  switch: /permissions auto | /permissions manual[/dim]")
+            if perms.no_permission:
+                console.print(
+                    "[yellow]  ⚠ REAL ROBOT: motion tools execute immediately — "
+                    "keep the hardware E-stop remote in hand[/yellow]")
+        return True
+
     elif cmd == "sessions":
         sessions = list_sessions()
         if not sessions:
@@ -2007,10 +2025,19 @@ def _build_turn_context(
         "robot_ctx_provider": robot_ctx_provider,
         "world": world,
         "scenario": _active_scenario,
+        "permissions": permissions,
     }
-    app_state["tool_permission_resolver"] = tool_permission_resolver or (
-        lambda n, p: ask_permission(n, p)
-    )
+    def _default_tool_permission(n: str, prm: dict[str, Any]) -> str:
+        # Consult the session PermissionContext FIRST — /permissions auto
+        # (no_permission) and 'a'=always answers short-circuit the prompt.
+        if permissions.no_permission or n in permissions.session_allow:
+            return "y"
+        ans = ask_permission(n, prm)
+        if ans == "a":
+            permissions.session_allow.add(n)
+        return ans
+
+    app_state["tool_permission_resolver"] = tool_permission_resolver or _default_tool_permission
 
     # VGG cognitive layer (optional) — init through the SAME path as the REPL so
     # the verifier namespace / oracle set is identical whether interactive or not.
@@ -2426,6 +2453,7 @@ def main(argv: list[str] | None = None) -> None:
         "robot_ctx_provider": robot_ctx_provider,
         "world": world,
         "scenario": _active_scenario,
+        "permissions": permissions,
     }
 
     # VGG cognitive layer (optional)
@@ -2491,7 +2519,16 @@ def main(argv: list[str] | None = None) -> None:
     # Stored so a mid-session /scenario switch (enter_scenario) re-inits VGG with the
     # SAME interactive permission prompt the launch path uses — otherwise switching
     # from a dev world would silently lose the prompt.
-    app_state["tool_permission_resolver"] = lambda n, p: ask_permission(n, p)
+    def _gated_tool_permission(n: str, prm: dict[str, Any]) -> str:
+        # PermissionContext first: /permissions auto + 'a'=always short-circuit.
+        if permissions.no_permission or n in permissions.session_allow:
+            return "y"
+        ans = ask_permission(n, prm)
+        if ans == "a":
+            permissions.session_allow.add(n)
+        return ans
+
+    app_state["tool_permission_resolver"] = _gated_tool_permission
 
     try:
         engine.init_vgg(
@@ -2500,7 +2537,7 @@ def main(argv: list[str] | None = None) -> None:
             on_vgg_step=_vgg_step_display,
             on_vgg_step_view=_vgg_step_view_display,
             world=world,
-            tool_permission_resolver=lambda n, p: ask_permission(n, p),
+            tool_permission_resolver=_gated_tool_permission,
             # Learning tier (stats + templates) is dev-world only: keep the robot
             # decompose/execute path byte-identical and avoid cross-world stats
             # contamination (a dev 'tool_call' record must not promote onto a
