@@ -136,3 +136,85 @@ def test_stack_ready_predicate_is_fail_safe():
     from zeno.vcli.worlds.go2w_real_verify import make_stack_ready
     fn = make_stack_ready(SimpleNamespace(_base=None))
     assert fn() is False  # no driver -> False, never raises
+
+
+# ---------------------------------------------------------------------------
+# resume skill + estop-aware motion (field trace 2026-07-10: latched guard ->
+# 10s timeouts, wrong "blind spot" diagnosis, and no resume strategy at all)
+# ---------------------------------------------------------------------------
+
+
+class _MotionFakeHW:
+    def __init__(self, latched=False, moves=False):
+        self.estop_latched = latched
+        self._moves = moves
+        self.released = 0
+        self.nav_calls = 0
+        self._pos = (1.59, 0.14)
+
+    def estop_release(self):
+        self.released += 1
+        self.estop_latched = False
+        return True
+
+    def navigate_to(self, x, y, timeout=0):  # noqa: ARG002
+        self.nav_calls += 1
+        if self._moves:
+            self._pos = (x, y)
+        return self._moves
+
+    def get_position(self):
+        return self._pos
+
+    def get_heading(self):
+        return 0.0
+
+
+def test_resume_skill_releases_latch():
+    from zeno.vcli.worlds.go2w_real_lifecycle import RealResumeSkill
+    hw = _MotionFakeHW(latched=True)
+    result = RealResumeSkill().execute({}, _ctx(base=hw))
+    assert result.success and hw.released == 1
+
+
+def test_resume_skill_without_base_fails_honestly():
+    from zeno.vcli.worlds.go2w_real_lifecycle import RealResumeSkill
+    assert not RealResumeSkill().execute({}, _ctx(base=None)).success
+
+
+def test_vocab_has_resume_strategy():
+    from zeno.vcli.worlds import resolve_world_named
+    vocab = resolve_world_named("go2w_real").decompose_vocab()
+    assert "resume_skill" in vocab.strategies
+    assert "resume_skill" in vocab.strategy_descriptions
+
+
+def test_navigate_fails_fast_when_estop_latched():
+    from zeno.vcli.worlds.go2w_real_skills import RealNavigateSkill
+    hw = _MotionFakeHW(latched=True)
+    result = RealNavigateSkill().execute({"x": 0.8, "y": 0.8}, _ctx(base=hw))
+    assert not result.success
+    assert "resume" in (result.error_message or "").lower()
+    assert hw.nav_calls == 0  # fail fast — no 10s timeout against a latched guard
+
+
+def test_navigate_zero_displacement_hints_latched_guard():
+    from zeno.vcli.worlds.go2w_real_skills import RealNavigateSkill
+    hw = _MotionFakeHW(latched=False, moves=False)  # commands eaten silently
+    result = RealNavigateSkill().execute({"x": 0.8, "y": 0.8}, _ctx(base=hw))
+    assert not result.success
+    msg = (result.error_message or "").lower()
+    assert "zero displacement" in msg and "resume" in msg
+
+
+def test_capability_md_pairs_stop_with_resume_and_no_look_promise():
+    text = _md_path_lifecycle().read_text(encoding="utf-8")
+    low = text.lower()
+    assert "resume" in low.split("go2w_real_stop", 1)[1][:400]
+    assert "look skill" not in low  # vision not enabled on hardware yet
+
+
+def _md_path_lifecycle():
+    import zeno.vcli.worlds.go2w_real as w
+    from pathlib import Path
+    return Path(w.__file__).with_name("go2w_real_capabilities.md")
