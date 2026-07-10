@@ -102,6 +102,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self._position: tuple[float, float, float] = (0.0, 0.0, 0.0)
         self._heading: float = 0.0
         self._last_odom: Any = None
+        self._odom_arrival_mono: float | None = None
         self._moved_origin: tuple[float, float] | None = None
         # Eyes: the D435i RGB source (offline-safe; its Image subscription rides
         # this node + the shared runtime on connect, like _on_odom — no new node).
@@ -214,13 +215,28 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
 
     def _on_odom(self, msg: Any) -> None:
         """Cache pose + heading from a /state_estimation Odometry message."""
+        import time as _t
         self._last_odom = msg
+        self._odom_arrival_mono = _t.monotonic()
         p = msg.pose.pose.position
         self._position = (float(p.x), float(p.y), float(p.z))
         q = msg.pose.pose.orientation
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         self._heading = math.atan2(siny_cosp, cosy_cosp)
+
+    def odom_age_s(self) -> float | None:
+        """Seconds since the last odometry ARRIVED — None if never received.
+
+        THE liveness oracle. Field bug 2026-07-10: liveness checks that fell
+        back to get_position() were永真 (it returns default zeros before any
+        odometry), so a DOWN stack graded stack_ready()==True and misled the
+        planner away from bringup.
+        """
+        if self._odom_arrival_mono is None:
+            return None
+        import time as _t
+        return _t.monotonic() - self._odom_arrival_mono
 
     def get_position(self) -> list[float]:
         """Return [x, y, z] in the map frame from the latest odometry."""

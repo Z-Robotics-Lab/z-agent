@@ -66,12 +66,7 @@ def _default_ready_poller(hw: Any, timeout_s: float) -> bool:
                     return True
                 time.sleep(3.0)
                 continue
-            fresh_streak = 0
-            if age is None and getattr(hw, "is_connected", False):
-                # driver without an age probe: fresh position readable = up
-                pos = hw.get_position()
-                if pos is not None:
-                    return True
+            fresh_streak = 0  # no odometry or stale -> NOT ready (no fallbacks)
         except Exception:  # noqa: BLE001 — keep polling until deadline
             pass
         time.sleep(3.0)

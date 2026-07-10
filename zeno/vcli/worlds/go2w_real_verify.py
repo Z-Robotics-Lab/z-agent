@@ -124,10 +124,11 @@ def make_stack_ready(agent: Any) -> Callable[[], bool]:
         try:
             if not getattr(base, "is_connected", False):
                 return False
+            # Recency ONLY: get_position() returns default zeros before any
+            # odometry, so it is NOT a liveness signal (field bug 2026-07-10 —
+            # a down stack graded ready and the planner skipped bringup).
             age = base.odom_age_s() if hasattr(base, "odom_age_s") else None
-            if age is not None:
-                return float(age) < 3.0
-            return base.get_position() is not None
+            return age is not None and float(age) < 3.0
         except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
             return False
 
