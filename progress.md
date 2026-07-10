@@ -22,14 +22,17 @@
     VectorEngine 命名空间到达 verifier，--world go2w_real 解析出 Go2WRealEmbodiment+
     Go2WHardware（离线未连）。相邻回归 go2w/nav_client/registry/boundary 100 绿。
     每个新文件 <400 行（最大 388）。内核脊柱未动，无新依赖。
+- **go2w（sim 世界）E190 守卫补齐（本轮 0cce3a6+2f72679，opus 评审 APPROVE）**：
+  ensure_finite_nav_goal 进 4 个 LLM 可达 waypoint 落点（embodiment.navigate_to 镜像
+  真机侧、_drive_and_hold、go2w_navigate 工具、pick._approach）；tripwire 行为测试证明
+  拒绝先于发桥；守卫套件 20/20 + firstclass 17/17。冻结位姿回发免守卫成立（hypot 门拦 NaN）。
 - **go2w 相对移动 + strategy↔skill 接缝修复（aaa25ae）**：半配置 vocab 清空 KNOWN_
   STRATEGIES 根因修复；move_relative 技能；裸名归一化；preflight 扩校验。
 - **F1+F2 合入 main（3ead15b）**：BYO 世界一等公民化；go2w 内置；E2E 锚 verdict GROUNDED。
 
 ## Failed / 教训
-- **go2w.py（sim 世界）E190 缺口（既存，非本轮）**：IsaacGo2WEmbodiment.navigate_to
-  发桥 waypoint 未过 ensure_finite_nav_goal——NaN 目标可裸发。基线 b6b94b9 同红；已
-  spawn 独立任务修（本轮只修真机侧，同类守卫已补 Go2WRealEmbodiment.navigate_to）。
+- **go2w.py（sim 世界）E190 缺口（既存非本轮引入；已修，见 Works）**：navigate_to 曾裸发
+  NaN 到桥，基线 b6b94b9 同红——教训：新增 goal sink 必须过 E190 元测试（AST 扫全部源码）。
 - 半配置 DecomposeVocab 是 foot-gun：空集≠None 会清 registry 推导；要么不注入要么注入完整。
 - 新 venv 装最新二进制→pinocchio 段错误；须 constraints.txt 镜像。
 - .env gitignored 不随 clone；PTY/sim 测试对宿主负载敏感——parity 对照比"绝对全绿"诚实。
@@ -45,9 +48,8 @@ config/{user.yaml,boundary.ply,workspace_calibration.yaml}、.env、robot_mode.t
 1. **go2w_real 真机 E2E 验收（等 owner 在场）**：源 ros_env.sh → nav.sh start（40-60s）→
    `zeno --world go2w_real` → "站起来，往前走 2 米" → verify at(tx,ty,tol=1.5) GROUNDED。
    验收面=bare zeno REPL，Invariant 2；单测绿 ≠ 验收。E-stop 遥控在手。
-2. go2w.py sim 侧 E190 守卫补齐（已 spawn 任务）。
-3. task#12 Zeno 身份修复（VectorEngine 改名、docs VECTOR_*→ZENO_）。
-4. 待 CEO RULING：docs/RULES.md loop 章节悬空指针修剪；pyserial/scservo 依赖门。
+2. task#12 Zeno 身份修复（VectorEngine 改名、docs VECTOR_*→ZENO_）。
+3. 待 CEO RULING：docs/RULES.md loop 章节悬空指针修剪；pyserial/scservo 依赖门。
 
 ## 关键背景
 - go2w=Isaac 数字孪生（HTTP 桥 127.0.0.1:8042）；go2w_real=真机（nav 栈 ROS_DOMAIN_ID=20
