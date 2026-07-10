@@ -59,12 +59,19 @@ from zeno.vcli.worlds.go2w_real_tools import (
     Go2WRealStopTool,
     Go2WRealWhereTool,
 )
+from zeno.vcli.worlds.go2w_real_route_skills import (
+    RealRouteViaSkill,
+    RealStopRouteSkill,
+)
+from zeno.vcli.worlds.go2w_real_route_tools import Go2WRealRouteTool
+from zeno.vcli.worlds.go2w_real_route_verify import make_route_reached
 from zeno.vcli.worlds.go2w_real_verify import (
     make_at,
     make_explore_finished,
     make_explored_progress,
     make_moved,
 )
+from zeno.vcli.worlds.go2w_real_vocab import REAL_DECOMPOSE_EXAMPLES
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +93,13 @@ class Go2WRealEmbodiment:
     def __init__(self) -> None:
         from zeno.hardware.ros2.go2w_hw import Go2WHardware
         from zeno.hardware.ros2.go2w_hw_explore import Go2WExploreManager
+        from zeno.hardware.ros2.go2w_hw_route import Go2WRouteManager
 
         self._base = Go2WHardware()
         # Overlay-session managers share the base driver (its node hosts the
         # oracle subscriptions; its Trigger helpers do the safety teardown).
         self._explore = Go2WExploreManager(self._base)
+        self._route = Go2WRouteManager(self._base)
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(RealNavigateSkill())
         self._skill_registry.register(RealMoveRelativeSkill())
@@ -99,6 +108,8 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealStopSkill())
         self._skill_registry.register(RealExploreSkill())
         self._skill_registry.register(RealStopExploreSkill())
+        self._skill_registry.register(RealRouteViaSkill())
+        self._skill_registry.register(RealStopRouteSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -111,7 +122,7 @@ class Go2WRealEmbodiment:
         """
         return SkillContext(
             bases={"go2w": self._base},
-            services={"explore": self._explore},
+            services={"explore": self._explore, "route": self._route},
         )
 
     def _sync_robot_state(self) -> None:
@@ -194,6 +205,7 @@ class Go2WRealWorld:
         registry.register(Go2WRealManualTool(), category="go2w_real")
         registry.register(Go2WRealResumeTool(), category="go2w_real")
         registry.register(Go2WRealExploreTool(), category="go2w_real")
+        registry.register(Go2WRealRouteTool(), category="go2w_real")
         # v2-extension point: tools — feature agents APPEND
         # `registry.register(<Tool>(), category="go2w_real")` lines ABOVE this
         # marker (and add the tool name to _EXPECTED_TOOLS in
@@ -222,6 +234,7 @@ class Go2WRealWorld:
             "explore_finished": make_explore_finished(agent),
             "explored_progress": make_explored_progress(agent),
         }
+        ns["route_reached"] = make_route_reached(agent)
         # v2-extension point: verify — feature agents APPEND
         # `ns["<fn>"] = make_<fn>(agent)` lines ABOVE this marker (factories
         # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
@@ -271,6 +284,7 @@ class Go2WRealWorld:
             # verify_fn_signatures, plus a strategy_params_help line.
             verify_functions=frozenset({
                 "at", "moved", "explore_finished", "explored_progress",
+                "route_reached",  # v2 route mode (far_planner arrival oracle)
             }),
             verify_fn_signatures={
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
@@ -283,6 +297,9 @@ class Go2WRealWorld:
                 "explored_progress": (
                     "explored_progress() -> float"
                     "  # meters travelled during explore (odometry-integrated, monotone)"),
+                "route_reached": (
+                    "route_reached() -> bool"
+                    "  # far_planner route arrival: robot reached the goto goal (odometry)"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "
@@ -297,11 +314,17 @@ class Go2WRealWorld:
                                   "verify explore_finished() and explored_progress()"),
                 "stop_explore_skill": ("Stop the exploration overlay (SIGINT + "
                                        "/nav_cancel; never touches the E-stop latch)"),
+                "route_via_skill": ("Drive to a FAR map (x, y) via far_planner GLOBAL "
+                                    "route planning (routes around obstacles); blocks "
+                                    "until arrival, verify route_reached()"),
+                "stop_route_skill": ("Stop the far_planner route overlay (SIGINT + "
+                                     "/nav_cancel; never touches the E-stop latch)"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
                 "standup_skill", "liedown_skill", "stop_skill",
                 "explore_skill", "stop_explore_skill",
+                "route_via_skill", "stop_route_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -310,56 +333,10 @@ class Go2WRealWorld:
   - liedown_skill: {}
   - stop_skill: {}
   - explore_skill: {"scenario": "indoor_small|indoor_large|outdoor"}  (optional; default indoor_small)
-  - stop_explore_skill: {}""",
-            examples="""\
-Task: "站起来然后开到 (2.0, 3.0)"
-Response:
-{
-  "goal": "站起来然后开到 (2.0, 3.0)",
-  "sub_goals": [
-    {
-      "name": "stand_up",
-      "description": "起立",
-      "verify": "True",
-      "strategy": "standup_skill",
-      "timeout_sec": 30,
-      "depends_on": [],
-      "strategy_params": {},
-      "fail_action": ""
-    },
-    {
-      "name": "goto_target",
-      "description": "导航到 (2.0, 3.0)",
-      "verify": "at(2.0, 3.0)",
-      "strategy": "navigate_skill",
-      "timeout_sec": 180,
-      "depends_on": ["stand_up"],
-      "strategy_params": {"x": 2.0, "y": 3.0},
-      "fail_action": ""
-    }
-  ],
-  "context_snapshot": ""
-}
-
-Task: "往前走2米"   (world context: "Position: (3.0, 2.0)\\nHeading: 1.6 rad")
-Target math: tx = 3.0 + 2*cos(1.6) ≈ 2.9, ty = 2.0 + 2*sin(1.6) ≈ 4.0.
-Response:
-{
-  "goal": "往前走2米",
-  "sub_goals": [
-    {
-      "name": "move_forward_2m",
-      "description": "往前走2米",
-      "verify": "at(2.9, 4.0, tol=1.5)",
-      "strategy": "move_relative_skill",
-      "timeout_sec": 180,
-      "depends_on": [],
-      "strategy_params": {"distance": 2.0, "direction": "forward"},
-      "fail_action": ""
-    }
-  ],
-  "context_snapshot": "Position: (3.0, 2.0), Heading: 1.6 rad"
-}""",
+  - stop_explore_skill: {}
+  - route_via_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}  (FAR goal via far_planner)
+  - stop_route_skill: {}""",
+            examples=REAL_DECOMPOSE_EXAMPLES,
         )
 
     def derive_vocab_from_registry(self) -> bool:

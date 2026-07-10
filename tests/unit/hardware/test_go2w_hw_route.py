@@ -45,6 +45,14 @@ from tests.unit.hardware.test_go2w_hw_explore import (
 from tests.unit.hardware.test_go2w_hw_overlay import FakePopenFactory, FakeProc
 
 
+def _route_ros_stubs() -> dict[str, Any]:
+    """Explore's ROS module stubs + geometry_msgs (route publishes PointStamped)."""
+    stubs = _ros_module_stubs()
+    stubs["geometry_msgs"] = MagicMock()
+    stubs["geometry_msgs.msg"] = MagicMock()
+    return stubs
+
+
 # ---------------------------------------------------------------------------
 # Fixtures — a manager wired to a fake hw + fake child (mirrors _mgr/_started)
 # ---------------------------------------------------------------------------
@@ -66,7 +74,7 @@ def _rmgr(tmp_path: Path, hw: FakeHW | None = None, proc: FakeProc | None = None
 def _rstarted(tmp_path: Path, hw: FakeHW | None = None, proc: FakeProc | None = None):
     """A route manager already launched (inside the ROS stubs)."""
     mgr, hw, factory = _rmgr(tmp_path, hw=hw, proc=proc)
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok, msg = mgr.start_route()
     assert ok is True, msg
     return mgr, hw, factory
@@ -113,15 +121,19 @@ def test_goal_topic_is_far_planner_goal_point() -> None:
     assert mod.Go2WRouteManager.REACH_TOPIC == "/far_reach_goal_status"
 
 
-def test_route_mode_never_publishes_way_point() -> None:
+def test_route_mode_never_publishes_way_point(tmp_path: Path) -> None:
     """far_planner republishes /way_point ITSELF — route mode publishing it too
-    would fight the global planner. The goal publisher must be /goal_point."""
-    import inspect
+    would fight the global planner. Behavioural guard: the manager creates its
+    goal publisher on /goal_point and NEVER on /way_point (across start + goto)."""
+    mgr, hw, _factory = _rstarted(tmp_path)
+    on_odom = _route_sub_callback(hw, "/state_estimation")
+    on_odom(_odom_msg(0.0, 0.0))
+    with patch.dict("sys.modules", _route_ros_stubs()):
+        mgr.goto_via_route(1.0, 0.0, timeout=0.0)
 
-    from zeno.hardware.ros2 import go2w_hw_route as mod
-
-    src = inspect.getsource(mod)
-    assert "/way_point" not in src, "route mode must not publish /way_point"
+    pub_topics = {c.args[1] for c in hw._node.create_publisher.call_args_list}
+    assert "/goal_point" in pub_topics
+    assert "/way_point" not in pub_topics, "route mode must not publish /way_point"
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +147,7 @@ def test_start_requires_connected_driver_but_tries_to_heal(tmp_path: Path) -> No
     hw = FakeHW(connected=False, connect_heals=False)
     mgr, hw, factory = _rmgr(tmp_path, hw=hw)
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok, msg = mgr.start_route()
 
     assert ok is False
@@ -148,7 +160,7 @@ def test_start_heals_disconnected_driver_then_launches(tmp_path: Path) -> None:
     hw = FakeHW(connected=False, connect_heals=True)
     mgr, hw, factory = _rmgr(tmp_path, hw=hw)
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok, _ = mgr.start_route()
 
     assert ok is True
@@ -177,7 +189,7 @@ def test_start_launches_route_overlay_and_attaches(tmp_path: Path) -> None:
 def test_double_start_refused_while_active(tmp_path: Path) -> None:
     mgr, _hw, factory = _rstarted(tmp_path)
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok, msg = mgr.start_route()
 
     assert ok is False
@@ -209,7 +221,7 @@ def test_goto_publishes_goal_point_in_map_frame(tmp_path: Path) -> None:
 
     # timeout 0 so the poll loop returns immediately (did-not-arrive) — we only
     # assert the goal was published with the right shape here.
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         mgr.goto_via_route(5.0, 0.0, timeout=0.0)
 
     goal = _last_goal_msg(hw)
@@ -225,7 +237,7 @@ def test_goto_returns_true_on_odometry_arrival(tmp_path: Path) -> None:
     on_odom = _route_sub_callback(hw, "/state_estimation")
     on_odom(_odom_msg(2.0, 3.0))  # already within tol of the goal
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok = mgr.goto_via_route(2.0, 3.0, timeout=5.0)
 
     assert ok is True
@@ -240,7 +252,7 @@ def test_goto_returns_false_on_timeout_and_cancels(tmp_path: Path) -> None:
     on_odom = _route_sub_callback(hw, "/state_estimation")
     on_odom(_odom_msg(0.0, 0.0))  # far from the goal, never moves
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok = mgr.goto_via_route(9.0, 9.0, timeout=0.05)
 
     assert ok is False
@@ -253,7 +265,7 @@ def test_goto_refused_when_not_active(tmp_path: Path) -> None:
     to plan the route) and publishes no goal."""
     mgr, hw, _factory = _rmgr(tmp_path)
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok = mgr.goto_via_route(1.0, 1.0, timeout=1.0)
 
     assert ok is False
@@ -265,7 +277,7 @@ def test_goto_rejects_non_finite_goal(tmp_path: Path) -> None:
     never reaches far_planner."""
     mgr, hw, _factory = _rstarted(tmp_path)
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok = mgr.goto_via_route(float("nan"), 0.0, timeout=1.0)
 
     assert ok is False
@@ -398,7 +410,7 @@ def test_orphan_death_allows_restart(tmp_path: Path) -> None:
     assert mgr.state() == "stopped"
 
     factory.proc = FakeProc(pid=5002)
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         ok, _ = mgr.start_route()
 
     assert ok is True
@@ -423,7 +435,7 @@ def test_route_reached_latches_after_arrival(tmp_path: Path) -> None:
     on_odom = _route_sub_callback(hw, "/state_estimation")
     on_odom(_odom_msg(1.0, 1.0))
 
-    with patch.dict("sys.modules", _ros_module_stubs()):
+    with patch.dict("sys.modules", _route_ros_stubs()):
         mgr.goto_via_route(1.0, 1.0, timeout=5.0)
 
     assert mgr.route_reached() is True
