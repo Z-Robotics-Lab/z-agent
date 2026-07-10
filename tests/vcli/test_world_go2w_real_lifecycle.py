@@ -66,7 +66,7 @@ def test_embodiment_attaches_managers_to_driver():
 # ---------------------------------------------------------------------------
 
 
-def _bringup(runner_rc=0, ready=True):
+def _bringup(runner_rc=0, ready=True, already=False):
     from zeno.vcli.worlds.go2w_real_lifecycle import RealBringupSkill
     calls: list[list[str]] = []
 
@@ -74,19 +74,37 @@ def _bringup(runner_rc=0, ready=True):
         calls.append(list(argv))
         return SimpleNamespace(returncode=runner_rc, stdout="", stderr="")
 
-    skill = RealBringupSkill(runner=runner, ready_poller=lambda hw, t: ready)
+    skill = RealBringupSkill(runner=runner, ready_poller=lambda hw, t: ready,
+                             ready_probe=lambda hw: already)
     return skill, calls
 
 
 def test_bringup_start_runs_nav_sh_and_waits_ready():
-    skill, calls = _bringup()
+    skill, calls = _bringup(already=False)
     result = skill.execute({"action": "start"}, _ctx(base=_FakeHW()))
     assert result.success
     assert calls and calls[0][0] == "bash" and calls[0][-1] == "start"
 
 
+def test_bringup_start_is_idempotent_when_stack_already_ready():
+    # Field trace 2026-07-10: '往前走3米' made the model call bringup(start),
+    # which blindly ran nav.sh start and RESTARTED the live stack mid-session.
+    skill, calls = _bringup(already=True)
+    result = skill.execute({"action": "start"}, _ctx(base=_FakeHW()))
+    assert result.success
+    assert calls == []  # no nav.sh at all — the stack must NOT be touched
+    assert "already" in str(result.result_data or {}).lower()
+
+
+def test_bringup_restart_forces_nav_sh_even_when_ready():
+    skill, calls = _bringup(already=True)
+    result = skill.execute({"action": "restart"}, _ctx(base=_FakeHW()))
+    assert result.success
+    assert calls and calls[0][-1] == "start"  # nav.sh start IS the restart
+
+
 def test_bringup_start_fails_honestly_when_not_ready():
-    skill, _ = _bringup(ready=False)
+    skill, _ = _bringup(ready=False, already=False)
     result = skill.execute({"action": "start"}, _ctx(base=_FakeHW()))
     assert not result.success
     assert "ready" in (result.error_message or "").lower()
@@ -105,8 +123,25 @@ def test_bringup_rejects_unknown_action():
 
 
 def test_bringup_runner_failure_is_honest():
-    skill, _ = _bringup(runner_rc=1)
+    skill, _ = _bringup(runner_rc=1, already=False)
     assert not skill.execute({"action": "start"}, _ctx(base=_FakeHW())).success
+
+
+def test_forward_walk_example_has_no_bringup_step():
+    from zeno.vcli.worlds.go2w_real_vocab import REAL_DECOMPOSE_EXAMPLES
+    assert "往前走 3 米" in REAL_DECOMPOSE_EXAMPLES
+    seg = REAL_DECOMPOSE_EXAMPLES.split("往前走 3 米", 1)[1][:600]
+    assert "move_relative_skill" in seg and "bringup_skill" not in seg
+
+
+def test_oplog_writes_and_never_raises(tmp_path):
+    from zeno.vcli.worlds.go2w_real_diag import oplog, set_oplog_path
+    set_oplog_path(str(tmp_path / "agent.log"))
+    oplog("skill", "navigate", "start x=1 y=2")
+    text = (tmp_path / "agent.log").read_text(encoding="utf-8")
+    assert "navigate" in text and "x=1" in text
+    set_oplog_path("/nonexistent-dir-zzz/agent.log")
+    oplog("skill", "navigate", "must not raise")  # fail-safe
 
 
 # ---------------------------------------------------------------------------
