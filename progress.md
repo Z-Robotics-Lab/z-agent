@@ -6,26 +6,25 @@
 ## Works（已验证）
 - **P5.4 真机世界 go2w_real（本轮，hw-go2w-real 3 提交）**：CEO 2026-07-10 裁定解锁
   （本 NUC / 无 unitree_sdk2 / verify 真值=/state_estimation 里程计 / 只消费现有话题）。
-  - 驱动 zeno/hardware/ros2/go2w_hw.py::Go2WHardware（BaseProtocol 面）：navigate_to
-    发 /way_point 一次（栈锁存追踪）+ 轮询里程计（到达+停滞检测，超时/停滞经 /nav_cancel
-    撤销）；walk/set_velocity 发 /teleop_cmd_vel 钳到 0.6m/s，walk 5Hz 刷新（<0.4s 死人
-    开关）；Trigger 助手 standup/liedown/estop/estop_release(=resume)/manual/nav_cancel
-    （go2w_hw_services.py 混入）。rclpy 懒加载（导入不需 ROS 环境），复用 ensure_finite_*。
-  - 世界 zeno/vcli/worlds/go2w_real*.py::Go2WRealWorld（go2w 的真机孪生，同 CLI/工具/
-    技能/verify 接缝）：工具 go2w_real_{bringup,navigate,where,stop,manual,resume}
-    （bringup→nav.sh 子命令 start/stop/status/up/down，非零退出如实上抛）；技能
-    navigate/move_relative/standup/liedown/stop 经 Go2WHardware；verify 命名空间
-    at(x,y,tol=0.8)/moved(min_m) 只读 /state_estimation（Inv-1，真机无 /gt）无桥时
-    fail-safe False；persona=真机措辞（E-stop、无 reset）；essential 类目 {go2w_real}；
-    禁内核 sim/diag/system（真机上失真，零误伤）。registry.py 懒注册（Inv-4）。
-  - TDD 红→绿：42 新单测（20 驱动 + 22 世界）全绿；引擎接缝实证 at/moved 经真
-    VectorEngine 命名空间到达 verifier，--world go2w_real 解析出 Go2WRealEmbodiment+
-    Go2WHardware（离线未连）。相邻回归 go2w/nav_client/registry/boundary 100 绿。
-    每个新文件 <400 行（最大 388）。内核脊柱未动，无新依赖。
-- **go2w（sim 世界）E190 守卫补齐（本轮 0cce3a6+2f72679，opus 评审 APPROVE）**：
-  ensure_finite_nav_goal 进 4 个 LLM 可达 waypoint 落点（embodiment.navigate_to 镜像
-  真机侧、_drive_and_hold、go2w_navigate 工具、pick._approach）；tripwire 行为测试证明
-  拒绝先于发桥；守卫套件 20/20 + firstclass 17/17。冻结位姿回发免守卫成立（hypot 门拦 NaN）。
+  - 驱动 go2w_hw.py::Go2WHardware：navigate_to 发 /way_point 一次+轮询里程计（停滞/超时
+    →/nav_cancel）；/teleop_cmd_vel 钳 0.6m/s、walk 5Hz 刷新（<0.4s deadman）；Trigger
+    助手 standup/liedown/estop/estop_release(=resume)/manual/nav_cancel。rclpy 懒加载。
+  - 世界 go2w_real*.py::Go2WRealWorld（go2w 真机孪生，同 CLI/工具/技能/verify 接缝）：
+    工具 go2w_real_{bringup,navigate,where,stop,manual,resume}；技能 navigate/
+    move_relative/standup/liedown/stop；verify at/moved 只读 /state_estimation（Inv-1）
+    fail-safe；禁内核 sim/diag/system；registry.py 懒注册（Inv-4）。42 新单测全绿，
+    at/moved 经真 VectorEngine 到 verifier；文件 <400 行，内核未动，无新依赖。
+- **P5.5 TARE 全自主探索接入（本轮 RED aa26a39 → GREEN d292316）**：
+  go2w_hw_explore.py::Go2WExploreManager 管 `nav.sh explore` 子进程（idle→launching→
+  exploring→finishing→stopped；孤儿检测→stopped+原因+后台 /nav_cancel 清死 TARE 残留
+  航点）。诚实 oracle=TARE 自发 /exploration_finish Bool（源码核实）+ 里程计积分行程
+  （explore_finished()/explored_progress() 双谓词，防"原地宣告完成"）。stop=SIGINT 自有
+  子进程→/nav_cancel→resume 受 estop 闩锁守卫（绝不代放操作员急停）。OverlayLauncher+
+  TravelTracker（go2w_hw_overlay.py）供 route 复用；世界层 explore 工具/技能/verify/
+  vocab + 4 个 `# v2-extension point` 追加式接缝（并行 feature agent 插点）。
+  57 新测全绿；tests/unit/hardware+tests/vcli 失败集与基线逐字节一致。
+- **go2w（sim）E190 守卫补齐（0cce3a6+2f72679，opus APPROVE）**：ensure_finite_nav_goal
+  进 4 个 LLM 可达 waypoint 落点；tripwire 证明拒绝先于发桥；守卫套件 20/20。
 - **go2w 相对移动 + strategy↔skill 接缝修复（aaa25ae）**：半配置 vocab 清空 KNOWN_
   STRATEGIES 根因修复；move_relative 技能；裸名归一化；preflight 扩校验。
 - **F1+F2 合入 main（3ead15b）**：BYO 世界一等公民化；go2w 内置；E2E 锚 verdict GROUNDED。
@@ -46,10 +45,12 @@ config/{user.yaml,boundary.ply,workspace_calibration.yaml}、.env、robot_mode.t
 
 ## Next
 1. **go2w_real 真机 E2E 验收（等 owner 在场）**：源 ros_env.sh → nav.sh start（40-60s）→
-   `zeno --world go2w_real` → "站起来，往前走 2 米" → verify at(tx,ty,tol=1.5) GROUNDED。
-   验收面=bare zeno REPL，Invariant 2；单测绿 ≠ 验收。E-stop 遥控在手。
-2. task#12 Zeno 身份修复（VectorEngine 改名、docs VECTOR_*→ZENO_）。
-3. 待 CEO RULING：docs/RULES.md loop 章节悬空指针修剪；pyserial/scservo 依赖门。
+   `zeno --world go2w_real` → "站起来，往前走 2 米" → verify at(tx,ty,tol=1.5) GROUNDED；
+   再"探索"→ explore_finished() 且 explored_progress()>N。E-stop 遥控在手。
+2. 并行 feature agents 插 v2-extension point（route 复用 OverlayLauncher；工具名须加进
+   tests/vcli/test_world_go2w_real.py::_EXPECTED_TOOLS——类目按相等断言）。
+3. task#12 Zeno 身份修复（VectorEngine 改名、docs VECTOR_*→ZENO_）。
+4. 待 CEO RULING：docs/RULES.md loop 章节悬空指针修剪；pyserial/scservo 依赖门。
 
 ## 关键背景
 - go2w=Isaac 数字孪生（HTTP 桥 127.0.0.1:8042）；go2w_real=真机（nav 栈 ROS_DOMAIN_ID=20
