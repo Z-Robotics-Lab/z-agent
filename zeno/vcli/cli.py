@@ -546,7 +546,7 @@ def _repl_attempt_native(
             sys.stderr = open(os.devnull, "w")
         except OSError:
             pass
-        with console.status(f"[{TEAL}]native[/] working…", spinner="dots") as _status:
+        with console.status(f"[{TEAL}]native[/] working…  [dim](Ctrl+C 安全中断)[/dim]", spinner="dots") as _status:
             # Live progress (D9 #2 perceived latency): stream the model's thinking
             # tail + each tool call into the spinner so the multi-second LLM wait
             # shows activity instead of a frozen line. Best-effort, never fatal.
@@ -560,6 +560,9 @@ def _repl_attempt_native(
                     user_input, agent=agent, session=scratch, app_state=app_state,
                     on_progress=_on_progress,
                 )
+            except KeyboardInterrupt:
+                _operator_interrupt(app_state)
+                return True  # turn handled; REPL stays alive
             except ModelUnavailableError as exc:
                 # A BYO model that CANNOT run (out of credit / unknown id) is
                 # user-actionable — surface it clearly and OWN the turn instead of
@@ -722,6 +725,29 @@ def print_banner(
     console.print(f"[dim]  {' | '.join(info_parts)}[/]")
     console.print(f"[dim]  Type / for commands, quit to exit[/]")
     console.print()
+
+
+def _operator_interrupt(app_state: dict[str, Any] | None) -> None:
+    """Ctrl+C during a blocking turn = SAFE interrupt, not a crash.
+
+    Field trace 2026-07-10: during a 5 m walk the operator could not
+    interject and Ctrl+C killed the whole CLI mid-navigate. Route the
+    interrupt to the world (cancel motion, abort cognitive loops), report,
+    and keep the session alive. Never raises.
+    """
+    msg = "已中断本轮任务。"
+    try:
+        world = (app_state or {}).get("world")
+        agent = (app_state or {}).get("agent")
+        hook = getattr(world, "on_operator_interrupt", None)
+        if callable(hook):
+            msg = hook(agent) or msg
+        else:
+            from zeno.vcli.cognitive.abort import request_abort
+            request_abort()
+    except Exception:  # noqa: BLE001 — the interrupt path must never raise
+        pass
+    console.print(f"\n  [yellow]🛑 {msg}[/yellow]")
 
 
 def ask_permission(tool_name: str, params: dict[str, Any]) -> str:
@@ -3038,6 +3064,9 @@ def main(argv: list[str] | None = None) -> None:
                             app_state=app_state,
                             on_reasoning=on_reasoning,
                         )
+                except KeyboardInterrupt:
+                    _operator_interrupt(app_state)
+                    continue  # keep the REPL loop alive
                 finally:
                     # Stop/clear the single region BEFORE printing the final answer,
                     # so the box never stacks and the prompt is not duplicated.

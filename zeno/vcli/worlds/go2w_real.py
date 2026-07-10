@@ -327,6 +327,25 @@ class Go2WRealWorld:
                 oplog("env", "session", f"driver connect FAILED: {exc}")
                 logger.warning("go2w_real: hardware connect failed: %s", exc)
 
+    def on_operator_interrupt(self, agent: Any) -> str:
+        """Ctrl+C during a blocking turn: cancel motion, keep the session alive.
+
+        Deliberately NOT an E-stop (interrupt = "stop pursuing that goal",
+        the operator can still say stop for the latched zero). Never raises.
+        """
+        from zeno.vcli.worlds.go2w_real_diag import oplog
+        base = getattr(agent, "_base", None) if agent is not None else None
+        try:
+            if base is not None and hasattr(base, "cancel_navigation"):
+                base.cancel_navigation()
+            from zeno.vcli.cognitive.abort import request_abort
+            request_abort()
+        except Exception:  # noqa: BLE001 — interrupt path must never raise
+            pass
+        oplog("lifecycle", "interrupt", "operator Ctrl+C — goal cancelled")
+        return ("已中断:导航目标已取消,机器人将停止追踪。需要锁死急停请说 stop;"
+                "直接继续对话即可。")
+
     def teardown(self) -> None:
         """Nothing process-owned to release (the driver detaches via atexit)."""
         return None

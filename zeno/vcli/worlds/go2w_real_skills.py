@@ -396,6 +396,12 @@ class RealStopSkill:
             request_abort()
         except Exception:  # noqa: BLE001 — best-effort
             pass
+        # Unblock the driver's navigate poll loop immediately (Ctrl+C twin).
+        try:
+            if base is not None and hasattr(base, "cancel_navigation"):
+                base.cancel_navigation()
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
         if base is None:
             return SkillResult(success=False, error_message="No Go2W hardware base",
                                diagnosis_code="no_base")

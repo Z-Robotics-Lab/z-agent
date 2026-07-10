@@ -103,6 +103,9 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self._heading: float = 0.0
         self._last_odom: Any = None
         self._odom_arrival_mono: float | None = None
+        # Operator-interrupt seam: set by cancel_navigation() (Ctrl+C handler,
+        # stop skill); navigate_to's poll loop exits promptly when set.
+        self._nav_abort = __import__("threading").Event()
         self._moved_origin: tuple[float, float] | None = None
         # Eyes: the D435i RGB source (offline-safe; its Image subscription rides
         # this node + the shared runtime on connect, like _on_odom — no new node).
@@ -225,6 +228,20 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         self._heading = math.atan2(siny_cosp, cosy_cosp)
 
+    def cancel_navigation(self) -> None:
+        """Unblock a running navigate_to NOW and clear the latched goal.
+
+        Field trace 2026-07-10: the REPL sat inside the poll loop for a 5 m
+        walk with no way to interject; Ctrl+C killed the whole CLI. This is
+        the safe unwind: flag the loop, then /nav_cancel so the local planner
+        stops pursuing the abandoned waypoint.
+        """
+        self._nav_abort.set()
+        try:
+            self.nav_cancel()
+        except Exception:  # noqa: BLE001 — cancel must never raise
+            pass
+
     def odom_age_s(self) -> float | None:
         """Seconds since the last odometry ARRIVED — None if never received.
 
@@ -300,6 +317,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self._publish_waypoint(x, y)
         logger.info("Go2WHardware: /way_point -> (%.2f, %.2f), timeout=%.0fs", x, y, timeout)
 
+        self._nav_abort.clear()
         period = 1.0 / max(poll_hz, 1.0)
         stall_win = self.STALL_TIMEOUT_S if stall_timeout is None else stall_timeout
         start = time.monotonic()
@@ -308,6 +326,9 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         last_progress_cb = start
 
         while time.monotonic() - start < timeout:
+            if self._nav_abort.is_set():
+                logger.info("Go2WHardware: navigation cancelled by operator")
+                return False
             time.sleep(period)
             px, py, _ = self._position
             dist = math.hypot(px - x, py - y)
