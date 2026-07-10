@@ -60,6 +60,7 @@ from zeno.vcli.worlds.go2w_real_tools import (
     Go2WRealStopTool,
     Go2WRealWhereTool,
 )
+from zeno.vcli.worlds.go2w_real_lifecycle import RealBringupSkill
 from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool
 from zeno.vcli.worlds.go2w_real_route_skills import (
     RealRouteViaSkill,
@@ -72,6 +73,7 @@ from zeno.vcli.worlds.go2w_real_verify import (
     make_explore_finished,
     make_explored_progress,
     make_moved,
+    make_stack_ready,
 )
 from zeno.vcli.worlds.go2w_real_vocab import REAL_DECOMPOSE_EXAMPLES
 
@@ -105,6 +107,11 @@ class Go2WRealEmbodiment:
         # oracle subscriptions; its Trigger helpers do the safety teardown).
         self._explore = Go2WExploreManager(self._base)
         self._route = Go2WRouteManager(self._base)
+        # Managers ALSO ride the driver: the VGG GoalExecutor builds its own
+        # SkillContext (no world services) but always wires base — skills fall
+        # back to these attributes (first-REPL-contact fix, 2026-07-10).
+        self._base.explore_manager = self._explore
+        self._base.route_manager = self._route
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(RealNavigateSkill())
         self._skill_registry.register(RealMoveRelativeSkill())
@@ -115,6 +122,7 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealStopExploreSkill())
         self._skill_registry.register(RealRouteViaSkill())
         self._skill_registry.register(RealStopRouteSkill())
+        self._skill_registry.register(RealBringupSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -231,6 +239,7 @@ class Go2WRealWorld:
             "explored_progress": make_explored_progress(agent),
         }
         ns["route_reached"] = make_route_reached(agent)
+        ns["stack_ready"] = make_stack_ready(agent)
         # v2-extension point: verify — feature agents APPEND
         # `ns["<fn>"] = make_<fn>(agent)` lines ABOVE this marker (factories
         # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
@@ -281,6 +290,7 @@ class Go2WRealWorld:
             verify_functions=frozenset({
                 "at", "moved", "explore_finished", "explored_progress",
                 "route_reached",  # v2 route mode (far_planner arrival oracle)
+                "stack_ready",    # lifecycle: odometry flowing = stack truly up
             }),
             verify_fn_signatures={
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
@@ -296,6 +306,9 @@ class Go2WRealWorld:
                 "route_reached": (
                     "route_reached() -> bool"
                     "  # far_planner route arrival: robot reached the goto goal (odometry)"),
+                "stack_ready": (
+                    "stack_ready() -> bool"
+                    "  # nav stack up: fresh /state_estimation odometry within 3s"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "
@@ -315,12 +328,16 @@ class Go2WRealWorld:
                                     "until arrival, verify route_reached()"),
                 "stop_route_skill": ("Stop the far_planner route overlay (SIGINT + "
                                      "/nav_cancel; never touches the E-stop latch)"),
+                "bringup_skill": ("Nav-stack LIFECYCLE: start (launch + block "
+                                  "until SLAM-ready, verify stack_ready()) or "
+                                  "stop. 启动/关闭导航栈 — NOT standing up"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
                 "standup_skill", "liedown_skill", "stop_skill",
                 "explore_skill", "stop_explore_skill",
                 "route_via_skill", "stop_route_skill",
+                "bringup_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -331,7 +348,8 @@ class Go2WRealWorld:
   - explore_skill: {"scenario": "indoor_small|indoor_large|outdoor"}  (optional; default indoor_small)
   - stop_explore_skill: {}
   - route_via_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}  (FAR goal via far_planner)
-  - stop_route_skill: {}""",
+  - stop_route_skill: {}
+  - bringup_skill: {"action": "start|stop"}  (导航栈生命周期; posture belongs to standup/liedown)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
         )
 

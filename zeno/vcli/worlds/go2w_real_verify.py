@@ -107,3 +107,28 @@ def make_moved(agent: Any) -> Callable[..., bool]:
         return math.hypot(here[0] - sx, here[1] - sy) >= float(min_m)
 
     return moved
+
+
+def make_stack_ready(agent: Any) -> Callable[[], bool]:
+    """Bind ``stack_ready()`` — True iff fresh odometry is flowing (< 3 s old).
+
+    The honest lifecycle oracle: the nav stack is "up" exactly when the pose
+    stream everything else trusts is alive. Fail-safe False (no driver, not
+    connected, stale, or any error) — the verifier sandbox never sees a raise.
+    """
+
+    def stack_ready() -> bool:
+        base = getattr(agent, "_base", None) if agent is not None else None
+        if base is None:
+            return False
+        try:
+            if not getattr(base, "is_connected", False):
+                return False
+            age = base.odom_age_s() if hasattr(base, "odom_age_s") else None
+            if age is not None:
+                return float(age) < 3.0
+            return base.get_position() is not None
+        except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
+            return False
+
+    return stack_ready

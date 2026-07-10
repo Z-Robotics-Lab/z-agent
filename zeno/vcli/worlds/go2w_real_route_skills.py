@@ -32,7 +32,12 @@ def _route_mgr_of(context: Any) -> Any:
     if context is None:
         return None
     services = getattr(context, "services", None) or {}
-    return services.get("route")
+    mgr = services.get("route")
+    if mgr is not None:
+        return mgr
+    # VGG GoalExecutor contexts carry no world services — the manager also
+    # rides the driver (base.route_manager), which every path wires.
+    return getattr(getattr(context, "base", None), "route_manager", None)
 
 
 @skill(aliases=["route", "route_to", "far", "far_planner", "全局导航", "远程导航",

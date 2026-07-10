@@ -272,7 +272,13 @@ def _explore_mgr_of(context: Any) -> Any:
     if context is None:
         return None
     services = getattr(context, "services", None) or {}
-    return services.get("explore")
+    mgr = services.get("explore")
+    if mgr is not None:
+        return mgr
+    # VGG GoalExecutor contexts carry no world services — the manager also
+    # rides the driver (base.explore_manager), which every path wires
+    # (first-REPL-contact fix, 2026-07-10).
+    return getattr(getattr(context, "base", None), "explore_manager", None)
 
 
 @skill(aliases=["explore", "探索", "自主探索", "全自主探索", "去探索",

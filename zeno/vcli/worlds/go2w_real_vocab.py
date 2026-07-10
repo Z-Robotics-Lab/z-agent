@@ -83,3 +83,56 @@ Response:
   ],
   "context_snapshot": ""
 }"""
+
+# Lifecycle disambiguation (first-REPL-contact, 2026-07-10): "启动导航栈"
+# decomposed to standup_skill (启动≈站立). The bringup few-shot pins the
+# lifecycle strategy; posture stays with standup/liedown.
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "启动导航栈"
+Response:
+{
+  "goal": "启动导航栈",
+  "sub_goals": [
+    {
+      "name": "bringup_stack",
+      "description": "启动导航栈并等待 SLAM 就绪(这是栈的生命周期,不是站立)",
+      "verify": "stack_ready()",
+      "strategy": "bringup_skill",
+      "timeout_sec": 200,
+      "depends_on": [],
+      "strategy_params": {"action": "start"},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}
+
+Task: "启动导航栈,站起来,打开 rviz"
+Response:
+{
+  "goal": "启动导航栈,站起来,打开 rviz",
+  "sub_goals": [
+    {
+      "name": "bringup_stack",
+      "description": "启动导航栈并等待就绪",
+      "verify": "stack_ready()",
+      "strategy": "bringup_skill",
+      "timeout_sec": 200,
+      "depends_on": [],
+      "strategy_params": {"action": "start"},
+      "fail_action": ""
+    },
+    {
+      "name": "stand_up",
+      "description": "起立(姿态,非生命周期)",
+      "verify": "True",
+      "strategy": "standup_skill",
+      "timeout_sec": 30,
+      "depends_on": ["bringup_stack"],
+      "strategy_params": {},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": "rviz 由 go2w_real_viz 工具打开(工具,非策略)"
+}"""
