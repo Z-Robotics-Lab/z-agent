@@ -148,7 +148,7 @@ def _bringup_ctx() -> Any:
 @pytest.fixture
 def patch_navsh(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Capture the argv the bringup tool would hand to nav.sh (no bash runs)."""
-    from zeno.vcli.worlds import go2w_real as mod
+    from zeno.vcli.worlds import go2w_real_tools as mod
 
     calls: list[list[str]] = []
 
@@ -203,7 +203,7 @@ def test_bringup_surfaces_nonzero_exit_as_error(
 ) -> None:
     """A non-zero nav.sh exit is reported honestly (is_error=True), mirroring the
     go2w teardown-fidelity fix — the model must not read a failed start as up."""
-    from zeno.vcli.worlds import go2w_real as mod
+    from zeno.vcli.worlds import go2w_real_tools as mod
 
     def _run(cmd: Any, *a: Any, **k: Any) -> _FakeCompleted:
         return _FakeCompleted(returncode=1, stdout="", stderr="stack not running")

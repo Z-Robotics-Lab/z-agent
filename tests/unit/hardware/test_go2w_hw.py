@@ -245,8 +245,12 @@ def test_walk_refreshes_at_at_least_4hz(connected_hw) -> None:
     many commands land inside a 1.0 s walk — it must be >= 4 (>=4 Hz).
     """
     mod, hw, node, pubs, _clients = connected_hw
-    captured: list[Any] = []
-    pubs["/teleop_cmd_vel"].publish.side_effect = lambda m: captured.append(m)
+    # Record the (vx, vyaw) VALUES at publish time — the stubbed Twist() returns
+    # the same MagicMock instance each call, so we must snapshot, not keep refs.
+    captured: list[tuple[float, float]] = []
+    pubs["/teleop_cmd_vel"].publish.side_effect = (
+        lambda m: captured.append((m.linear.x, m.angular.z))
+    )
 
     # Deterministic fake clock: time advances only on sleep().
     clk = _FakeClock()
@@ -257,13 +261,12 @@ def test_walk_refreshes_at_at_least_4hz(connected_hw) -> None:
 
     assert ok is True
     # >= 4 refreshes during the 1 s walk (>=4 Hz cadence contract).
-    walking_cmds = [c for c in captured if c.linear.x == pytest.approx(0.3)]
+    walking_cmds = [vx for (vx, _yaw) in captured if vx == pytest.approx(0.3)]
     assert len(walking_cmds) >= 4, (
         f"walk must refresh >=4 Hz to beat the 0.4s deadman; got {len(walking_cmds)}"
     )
     # Final command is a zero stop (stop == stop publishing motion, last frame 0).
-    assert captured[-1].linear.x == pytest.approx(0.0)
-    assert captured[-1].angular.z == pytest.approx(0.0)
+    assert captured[-1] == (pytest.approx(0.0), pytest.approx(0.0))
 
 
 def test_cadence_faster_than_deadman() -> None:
