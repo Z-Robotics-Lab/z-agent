@@ -47,13 +47,14 @@ from zeno.hardware.base import (
     ensure_finite_base_velocity,
     ensure_finite_nav_goal,
 )
+from zeno.hardware.ros2.go2w_hw_camera import CameraMixin
 from zeno.hardware.ros2.go2w_hw_services import TriggerServiceMixin
 from zeno.hardware.ros2.runtime import get_ros2_runtime
 
 logger = logging.getLogger(__name__)
 
 
-class Go2WHardware(TriggerServiceMixin):
+class Go2WHardware(CameraMixin, TriggerServiceMixin):
     """Real Go2W base driver — everything through the running nav stack.
 
     Safe to construct with no ROS env (lazy imports). ``connect()`` wires the
@@ -89,6 +90,8 @@ class Go2WHardware(TriggerServiceMixin):
     )
 
     def __init__(self) -> None:
+        from zeno.hardware.ros2.go2w_hw_camera import Go2WCamera
+
         self._node: Any = None
         self._waypoint_pub: Any = None
         self._teleop_pub: Any = None
@@ -100,6 +103,9 @@ class Go2WHardware(TriggerServiceMixin):
         self._heading: float = 0.0
         self._last_odom: Any = None
         self._moved_origin: tuple[float, float] | None = None
+        # Eyes: the D435i RGB source (offline-safe; its Image subscription rides
+        # this node + the shared runtime on connect, like _on_odom — no new node).
+        self._camera = Go2WCamera()
 
     # ------------------------------------------------------------------
     # Identity / capabilities
@@ -122,7 +128,7 @@ class Go2WHardware(TriggerServiceMixin):
         return False  # lidar is consumed by the nav stack, not exposed here
 
     # ------------------------------------------------------------------
-    # Lifecycle
+    # Lifecycle  (camera accessors: CameraMixin / go2w_hw_camera.py)
     # ------------------------------------------------------------------
 
     def connect(self) -> None:
@@ -156,6 +162,9 @@ class Go2WHardware(TriggerServiceMixin):
                 self._clients[svc] = node.create_client(Trigger, svc)
 
             self._node = node
+            # Attach the D435i RGB sub onto this node (best-effort — a down camera
+            # leaves has_camera() False, never fails connect).
+            self._camera.attach(node)
             get_ros2_runtime().add_node(node)
             self._shared_runtime_used = True
             self._connected = True
@@ -196,6 +205,7 @@ class Go2WHardware(TriggerServiceMixin):
         node.create_subscription(None, self.ODOM_TOPIC, self._on_odom, 10)
         for svc in self._TRIGGER_SERVICES:
             self._clients[svc] = node.create_client(None, svc)
+        self._camera.attach_node_for_test(node)
         self._connected = True
 
     # ------------------------------------------------------------------

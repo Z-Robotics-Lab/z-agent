@@ -123,3 +123,74 @@ def test_agent_has_camera_true_for_go2w_real_base() -> None:
 
     agent = SimpleNamespace(_base=Go2WHardware(), _arm=None, _perception=None)
     assert _agent_has_camera(agent) is True
+
+
+# ---------------------------------------------------------------------------
+# Look skill enablement — the real driver + camera satisfy LookSkill's contract
+# ---------------------------------------------------------------------------
+#
+# The camera delivery ENABLES the look/describe path: LookSkill captures a frame
+# via ``context.base.get_camera_frame()`` and reads pose via get_position/
+# get_heading — the exact accessors Go2WHardware now exposes. Before this
+# delivery Go2WHardware had no camera and LookSkill would fail 'camera_failed';
+# these pin that a Go2WHardware base with a live frame drives LookSkill green
+# (VLM mocked — no network / GPU), so wiring it into a world enables 'look'.
+
+
+def _fake_vlm() -> Any:
+    """A minimal VLM stand-in returning duck-typed scene / room objects LookSkill
+    consumes (summary + objects[].name/.description/.confidence, room + confidence).
+
+    Deliberately does NOT import zeno.perception.vlm_go2 — that module hard-imports
+    PIL/httpx (optional runtime deps absent in CI), and this test is about the
+    CAMERA/base surface LookSkill reaches, not the VLM's concrete dataclasses.
+    """
+    obj = SimpleNamespace(name="chair", description="wooden chair", confidence=0.9)
+    scene = SimpleNamespace(
+        summary="a chair by a table", objects=[obj],
+        room_type="study", details="a study with a chair and desk",
+    )
+    room = SimpleNamespace(room="study", confidence=0.8, reasoning="desk + chair")
+
+    vlm = MagicMock()
+    vlm.describe_scene.return_value = scene
+    vlm.identify_room.return_value = room
+    return vlm
+
+
+def test_look_skill_captures_frame_from_go2w_hardware() -> None:
+    """LookSkill runs against a Go2WHardware base with a live D435i frame + a
+    mocked VLM: the camera the driver owns feeds describe_scene, no crash."""
+    from zeno.core.skill import SkillContext
+    from zeno.hardware.ros2.go2w_hw import Go2WHardware
+    from zeno.skills.go2.look import LookSkill
+
+    hw = Go2WHardware()
+    hw._camera._on_image(_image_msg(24, 32, encoding="rgb8"))  # type: ignore[attr-defined]
+
+    vlm = _fake_vlm()
+    ctx = SkillContext(bases={"go2w": hw}, services={"vlm": vlm})
+
+    result = LookSkill().execute({}, ctx)
+
+    assert result.success is True, result.error_message
+    # LookSkill calls get_camera_frame() with no size => driver default 320x240;
+    # the point is the VLM was handed a REAL (non-black) frame from the D435i,
+    # not the zeros an absent camera would yield.
+    frame_arg = vlm.describe_scene.call_args.args[0]
+    assert frame_arg.shape == (240, 320, 3)
+    assert frame_arg.dtype == np.uint8
+    assert int(frame_arg.sum()) > 0
+
+
+def test_look_skill_reports_camera_failed_when_absent() -> None:
+    """With no VLM the skill fails 'no_vlm'; the point is the base/camera surface
+    is what LookSkill reaches — an absent camera degrades, never crashes."""
+    from zeno.core.skill import SkillContext
+    from zeno.hardware.ros2.go2w_hw import Go2WHardware
+    from zeno.skills.go2.look import LookSkill
+
+    ctx = SkillContext(bases={"go2w": Go2WHardware()}, services={})
+    result = LookSkill().execute({}, ctx)
+    assert result.success is False
+    assert result.diagnosis_code == "no_vlm"
