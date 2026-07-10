@@ -115,3 +115,39 @@ class RealBringupSkill:
             "action": "start",
             "verify_hint": "stack_ready()",
         })
+
+
+@skill(aliases=["resume", "恢复", "解除急停", "release", "estop_release",
+                "恢复自主", "继续"], direct=True)
+class RealResumeSkill:
+    """Release the guard latches (E-stop / manual) so motion flows again.
+
+    Field trace (2026-07-10): after stop, every motion command was silently
+    eaten by the latched guard and the planner had NO resume strategy — it
+    could not even follow the operator's explicit "要 release" instruction.
+    Deliberately a HUMAN-VISIBLE step: the agent never auto-releases an
+    E-stop inside a motion skill; resuming is always its own planned action.
+    """
+
+    name = "resume"
+    description = ("Release the software E-stop / manual latch (estop_release) "
+                   "so autonomy can move again. REQUIRED after stop before any "
+                   "motion. 解除急停/遥控接管,恢复自主。")
+    requires = ()
+    preconditions: list = []
+    effects = {"base_state": "resumed"}
+
+    def execute(self, params=None, context=None, **kw) -> SkillResult:
+        base = getattr(context, "base", None) if context is not None else None
+        if base is None:
+            return SkillResult(success=False, diagnosis_code="no_base",
+                               error_message="No Go2W hardware base")
+        try:
+            ok = bool(base.estop_release())
+        except Exception as exc:  # noqa: BLE001 — honest failure
+            return SkillResult(success=False, diagnosis_code="resume_failed",
+                               error_message=f"estop_release failed: {exc}")
+        return SkillResult(
+            success=ok,
+            result_data={"message": "guard released — motion enabled"},
+            error_message="" if ok else "/estop_release did not succeed")

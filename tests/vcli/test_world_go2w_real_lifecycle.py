@@ -210,7 +210,8 @@ def test_navigate_zero_displacement_hints_latched_guard():
 def test_capability_md_pairs_stop_with_resume_and_no_look_promise():
     text = _md_path_lifecycle().read_text(encoding="utf-8")
     low = text.lower()
-    assert "resume" in low.split("go2w_real_stop", 1)[1][:400]
+    # stop must be documented as a persistent latch paired with resume
+    assert "latch" in low and "resume_skill" in low
     assert "look skill" not in low  # vision not enabled on hardware yet
 
 

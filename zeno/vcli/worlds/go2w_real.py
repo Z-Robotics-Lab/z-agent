@@ -60,7 +60,7 @@ from zeno.vcli.worlds.go2w_real_tools import (
     Go2WRealStopTool,
     Go2WRealWhereTool,
 )
-from zeno.vcli.worlds.go2w_real_lifecycle import RealBringupSkill
+from zeno.vcli.worlds.go2w_real_lifecycle import RealBringupSkill, RealResumeSkill
 from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool
 from zeno.vcli.worlds.go2w_real_route_skills import (
     RealRouteViaSkill,
@@ -123,6 +123,7 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealRouteViaSkill())
         self._skill_registry.register(RealStopRouteSkill())
         self._skill_registry.register(RealBringupSkill())
+        self._skill_registry.register(RealResumeSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -331,13 +332,15 @@ class Go2WRealWorld:
                 "bringup_skill": ("Nav-stack LIFECYCLE: start (launch + block "
                                   "until SLAM-ready, verify stack_ready()) or "
                                   "stop. 启动/关闭导航栈 — NOT standing up"),
+                "resume_skill": ("Release the E-stop/manual latch so motion works "
+                                 "again — REQUIRED after stop_skill. 解除急停/恢复自主"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
                 "standup_skill", "liedown_skill", "stop_skill",
                 "explore_skill", "stop_explore_skill",
                 "route_via_skill", "stop_route_skill",
-                "bringup_skill",
+                "bringup_skill", "resume_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -349,7 +352,8 @@ class Go2WRealWorld:
   - stop_explore_skill: {}
   - route_via_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}  (FAR goal via far_planner)
   - stop_route_skill: {}
-  - bringup_skill: {"action": "start|stop"}  (导航栈生命周期; posture belongs to standup/liedown)""",
+  - bringup_skill: {"action": "start|stop"}  (导航栈生命周期; posture belongs to standup/liedown)
+  - resume_skill: {}  (解除急停;stop 之后、任何运动之前)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
         )
 

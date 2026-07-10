@@ -73,11 +73,18 @@ _DIRECTION_SYNONYMS: dict[str, str] = {
 }
 
 
+from zeno.vcli.worlds.go2w_real_diag import (  # noqa: E402
+    _latched_hint,
+    _stalled_hint,
+)
+
+
 def _base_of(context: Any) -> Any:
     """Return the hardware base from a SkillContext (or None)."""
     if context is None:
         return None
     return getattr(context, "base", None)
+
 
 
 def _target_xy(params: Any, kw: dict, context: Any) -> tuple[float, float]:
@@ -129,6 +136,11 @@ class RealNavigateSkill:
             x, y = _target_xy(params, kw, context)
         except ValueError as e:
             return SkillResult(success=False, error_message=str(e))
+        hint = _latched_hint(base)
+        if hint:
+            return SkillResult(success=False, diagnosis_code="estop_latched",
+                               error_message=hint)
+        start = base.get_position()
         ok = bool(base.navigate_to(x, y, timeout=CFG.nav_timeout_s))
         pos = base.get_position()
         if ok:
@@ -136,8 +148,10 @@ class RealNavigateSkill:
                 "message": f"arrived at ({pos[0]:.2f}, {pos[1]:.2f}); "
                            f"verify with at({x:.2f}, {y:.2f})",
                 "x": round(x, 2), "y": round(y, 2)})
-        return SkillResult(success=False, result_data={"x": round(x, 2), "y": round(y, 2)},
-                           error_message=f"did not arrive; at ({pos[0]:.2f}, {pos[1]:.2f})")
+        return SkillResult(
+            success=False, result_data={"x": round(x, 2), "y": round(y, 2)},
+            error_message=(f"did not arrive; at ({pos[0]:.2f}, {pos[1]:.2f})"
+                           + _stalled_hint(start, pos)))
 
 
 @skill(aliases=["前进", "往前走", "向前走", "move forward", "walk forward"])
@@ -206,6 +220,10 @@ class RealMoveRelativeSkill:
             return SkillResult(success=False, error_message=(
                 f"distance {distance!r} out of range (0, {CFG.relative_max_m}] m"))
 
+        hint = _latched_hint(base)
+        if hint:
+            return SkillResult(success=False, diagnosis_code="estop_latched",
+                               error_message=hint)
         pos = base.get_position()
         heading = base.get_heading() + _RELATIVE_DIRECTIONS[direction]
         tx = float(pos[0]) + distance * math.cos(heading)
@@ -220,7 +238,8 @@ class RealMoveRelativeSkill:
                                f"verify with at({tx:.2f}, {ty:.2f}, tol=1.0)")
             return SkillResult(success=True, result_data=data)
         return SkillResult(success=False, result_data=data, error_message=(
-            f"did not reach ({tx:.2f}, {ty:.2f}); at ({p[0]:.2f}, {p[1]:.2f})"))
+            f"did not reach ({tx:.2f}, {ty:.2f}); at ({p[0]:.2f}, {p[1]:.2f})"
+            + _stalled_hint(pos, p)))
 
 
 @skill(aliases=["standup", "stand", "stand up", "起立", "站起来", "起来"], direct=True)
