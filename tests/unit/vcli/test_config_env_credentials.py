@@ -42,12 +42,17 @@ def isolated(monkeypatch):
 
 
 def test_deepseek_api_key_env_is_the_default(isolated):
-    """A DEEPSEEK_API_KEY in env/.env makes DeepSeek the CLI default."""
+    """A DEEPSEEK_API_KEY in env/.env makes DeepSeek the CLI default.
+
+    Default model = v4-pro (CEO 2026-07-13): v4-flash decomposition was too
+    sloppy live — hallucinated predicates, single-action commands inflated
+    into multi-step plans. World-side guard rails stay; the brain upgrades.
+    """
     isolated.setenv("DEEPSEEK_API_KEY", "ds-test-key")
     key, provider, model, base = cfg.resolve_credentials()
     assert key == "ds-test-key"
     assert provider == "openai_compat"
-    assert model == "deepseek-v4-flash"
+    assert model == "deepseek-v4-pro"
     assert base == "https://api.deepseek.com"
 
 
