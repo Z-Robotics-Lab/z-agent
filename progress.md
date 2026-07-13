@@ -27,17 +27,19 @@
   v2 标记点接线(namespace+vocab);set-equality 测试特意更新(_REAL_ORACLES/_ORACLES/_PRED_ROLES)。
 - **vocab+card**:方形 few-shot('前进2米,右转90度'→move+turn,verify turned(54) and course_locked()),
   5966/6000 预算;能力卡新增 course 条目(补偿、45° 规则、reset 语义)。
-- **测试**:test_world_go2w_real_course.py 36 测(money test:+12°漂移右转90→下发-102°;方形 2 移 2 转
-  终 course=-180°)。三套核对 0 新失败:tests/vcli 15F/1008P、unit/vcli 5F/1041P(+2 cv2 collect)、
-  unit/hardware 1F(=go2w_hw_interrupt 满载 flake,隔离通过)/174P。
+- **测试**:test_world_go2w_real_course.py 36 测全绿(money test:+10°漂移右转90→下发-100°;方形 2 移 2 转
+  终 course=-180°)。integrator 两套复核 0 新失败 vs baseline:tests/vcli 15F/1008P/33skip/1xfail
+  (全=playground×10/perception×2/level66/native-PTY/courtyard);unit/hardware 6F/276P/63err
+  (=g1_*×5 + go2w_hw_interrupt 满载 flake〔隔离 2P〕 + 63 sim-env collect-err)。offline smoke 三关全过。
 
 ## 路由取证（READ-ONLY,喂下一内核轮 — 坐下 未走 direct 短路）
 - direct=True 短路只在 legacy 快速路径;native ReAct 截获 action-shaped 意图,has_unverified_action
   门强制 verify → 姿态技能转圈。修点:native 放行 direct 姿态技能或内建 posture verify;'angle' 抽参。
 
 ## Next
-1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,owner+E-stop 在手）**:方形路径闭环(course 补偿现场验证,
-   看 oplog course/补偿行);插队+permissions 持久化;verdict N/N grounded 一并做。
+1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,owner+E-stop 在手）**:方形路径闭环——'前进2米,右转90,
+   前进2米,右转90'×2 => 回到起点闭合矩形;每个转向消息须显示航向补偿(航向补偿±N°,实际下发…°),
+   verify 用 turned(54) and course_locked();看 oplog course/补偿行。插队+permissions 持久化;verdict N/N 一并做。
 2. **内核轮（喂:路由取证）**:native direct 姿态技能放行/内建 posture verify;'angle' 抽参。
 3. camera 一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务。
 
