@@ -158,6 +158,40 @@ def make_turned(agent: Any) -> Callable[..., bool]:
     return predicate_oracle(turned)
 
 
+def make_course_locked(agent: Any) -> Callable[..., bool]:
+    """Bind ``course_locked(tol_deg=10)`` — is the heading ON the intended course?
+
+    Grades the |wrapped| delta between live odometry yaw and the DRIVER-riding
+    :class:`CourseTracker`'s ``course_yaw`` — the map-frame heading the
+    operator's relative plan intends (anchored/advanced by deterministic skill
+    code; field bug CEO 2026-07-13: planner drift skewed square paths). The
+    actor can trigger turns but cannot author either side of the compare
+    (Inv-1, same shape as turned()).
+
+    Fail-safe False: course unset (no relative plan in flight), no base, no
+    tracker (foreign/older driver), or any error — a missing oracle must never
+    fake-pass, and the verifier sandbox never sees a raise.
+    """
+    from zeno.vcli.worlds.go2w_real_diag import wrap_angle
+
+    def course_locked(tol_deg: float = 10.0) -> bool:
+        base = getattr(agent, "_base", None) if agent is not None else None
+        if base is None:
+            return False
+        try:
+            tracker = getattr(base, "course_tracker", None)
+            course = getattr(tracker, "course_yaw", None)
+            if course is None:
+                return False
+            yaw = float(base.get_heading())
+            delta = wrap_angle(yaw - float(course))
+            return abs(math.degrees(delta)) <= float(tol_deg)
+        except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
+            return False
+
+    return predicate_oracle(course_locked)
+
+
 def make_stack_ready(agent: Any) -> Callable[[], bool]:
     """Bind ``stack_ready()`` — True iff fresh odometry is flowing (< 3 s old).
 

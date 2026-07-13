@@ -10,6 +10,13 @@ This skill closes the gap: direction(left|right) + degrees (default 90;
 ``Go2WHardware.rotate`` (angular-only /teleop_cmd_vel at 5 Hz, wrap-aware
 odometry tracking, _nav_abort cancel seam). Grade with ``turned(min_deg)``.
 
+Course compensation (field bug, CEO 2026-07-13 evening): the commanded delta
+folds in the drift between the live heading and the INTENDED course tracked
+by ``CourseTracker`` (go2w_real_course.py) — a square path stays square even
+when the local planner nudged the heading during the straight legs. Beyond
+the 45° cap the course re-anchors (detour/manual takeover) and the plain
+request executes; both cases are reported honestly in the result.
+
 Split file per the repo rule (files < 400 lines); registered at the skills
 extension marker in ``go2w_real.py``; strategy name ``turn_skill``.
 """
@@ -21,6 +28,7 @@ import re
 
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
+from zeno.vcli.worlds.go2w_real_course import course_of
 from zeno.vcli.worlds.go2w_real_diag import _latched_hint, oplog, wrap_angle
 from zeno.vcli.worlds.go2w_real_skills import _base_of
 
@@ -126,31 +134,79 @@ class RealTurnSkill:
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
 
-        delta = math.radians(degrees) * _TURN_DIRECTIONS[direction]
+        requested = math.radians(degrees) * _TURN_DIRECTIONS[direction]
         start_yaw = float(base.get_heading())
+        # COURSE COMPENSATION (field bug, CEO 2026-07-13 evening): a relative
+        # turn is N° from the INTENDED course, not from the drifted heading —
+        # the local planner's avoidance/correction rotations during straight
+        # legs must not skew the plan. command = requested + drift, where
+        # drift = wrap(course - actual): this preserves the requested magnitude
+        # and direction for >180° asks (a shortest-path wrap would flip them)
+        # and equals wrap(target_course - actual) for the common <=180° case.
+        # resolve() applies the 45° cap (REANCHOR_LIMIT_DEG): a bigger
+        # deviation is a detour / manual takeover, so the course re-anchors to
+        # the actual heading and the PLAIN requested delta executes — never a
+        # silent surprise rotation.
+        tracker = course_of(context)
+        command = requested
+        target_course: float | None = None
+        comp_deg = 0.0
+        reanchored = False
+        if tracker is not None:
+            course, reanchored = tracker.resolve(start_yaw)
+            drift = wrap_angle(course - start_yaw)  # 0.0 when re-anchored
+            command = requested + drift
+            comp_deg = math.degrees(drift)
+            target_course = wrap_angle(course + requested)
+        command_deg = math.degrees(command)
         oplog("skill", "turn",
-              f"{direction} {degrees:g}deg from yaw={start_yaw:.2f}rad")
-        ok = bool(base.rotate(delta, yaw_rate=_YAW_RATE_RPS))
+              f"{direction} {degrees:g}deg from yaw={start_yaw:.2f}rad "
+              f"(course comp {comp_deg:+.1f}deg -> command {command_deg:+.1f}deg"
+              f"{', RE-ANCHORED' if reanchored else ''})")
+        ok = bool(base.rotate(command, yaw_rate=_YAW_RATE_RPS))
         end_yaw = float(base.get_heading())
         turned_deg = math.degrees(wrap_angle(end_yaw - start_yaw))
-        # Verify floor: 60% of the request (mirrors the moved(2.0)-for-3m vocab
-        # convention); wrapped deltas cap at 180°, so 掉头 verifies at 108°.
-        min_deg = round(degrees * 0.6)
+        # Verify floor: 60% of the COMMANDED delta (mirrors the moved(2.0)-for-3m
+        # vocab convention) — the robot must physically rotate the compensated
+        # amount; wrapped deltas cap at 180°, so 掉头 verifies at 108°.
+        min_deg = round(abs(command_deg) * 0.6)
         oplog("skill", "turn",
               f"{'DONE' if ok else 'FAILED'} turned={turned_deg:+.1f}deg "
               f"yaw={end_yaw:.2f}rad")
         data = {"direction": direction, "degrees": degrees,
                 "turned_deg": round(turned_deg, 1),
+                "command_deg": round(command_deg, 1),
+                "compensation_deg": round(comp_deg, 1),
+                "course_reanchored": reanchored,
                 "verify_hint": f"turned({min_deg:g})"}
+        if target_course is not None:
+            data["course_deg"] = round(math.degrees(target_course), 1)
+        # Honest course note for the operator: compensation and re-anchoring
+        # are never silent (e.g. '右转90°(航向补偿+12°,实际下发102°)').
+        course_note = ""
+        if reanchored:
+            course_note = ("(航向偏差超过45° — 大幅绕行/人工接管?已重新锚定"
+                           "预期航向到当前朝向,按原始请求执行)")
+        elif abs(comp_deg) >= 0.5:
+            course_note = (f"(航向补偿{comp_deg:+.0f}°,"
+                           f"实际下发{abs(command_deg):.0f}°)")
         if ok:
+            if tracker is not None:
+                # Intent advanced: the course IS the compensated target now.
+                tracker.set_course(target_course)
             data["message"] = (
-                f"turned {direction} {abs(turned_deg):.0f}° (asked {degrees:g}°); "
+                f"turned {direction} {abs(turned_deg):.0f}° "
+                f"(asked {degrees:g}°){course_note}; "
                 f"verify with turned({min_deg:g})")
             return SkillResult(success=True, result_data=data)
+        if tracker is not None:
+            # Failure/cancel leaves the heading — and the intent — unknown:
+            # reset rather than guess (the next command re-anchors honestly).
+            tracker.reset()
         stall = ""
         if abs(turned_deg) < 3.0:
             stall = (" — zero rotation while commanding: guard likely latched "
                      "(estop/manual). Try resume_skill, then retry")
         return SkillResult(success=False, result_data=data, error_message=(
             f"rotation did not complete (turned {turned_deg:+.1f}° of "
-            f"{direction} {degrees:g}°)" + stall))
+            f"{direction} {degrees:g}°{course_note})" + stall))

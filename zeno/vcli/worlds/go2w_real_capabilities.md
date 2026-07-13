@@ -37,6 +37,17 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   verifies True on the FIRST check — NEVER re-run a turn to make verify pass;
   a second run physically rotates the robot AGAIN. Zero rotation while
   commanding usually means the guard latch — resume first.
+- Course (heading intent) — multi-leg relative plans (前进3米,右转90度,… a
+  square path) track the INTENDED course (航向): turns execute relative to the
+  course, folding in any drift the local planner added during straight legs
+  (avoidance/corrections), and straight legs run parallel to the course. The
+  compensation is reported in the result (e.g. 右转90°,航向补偿+12°,实际下发
+  102°) — trust it, do not re-plan. If the heading deviates from the course by
+  MORE than 45° (big detour / manual takeover), the course re-anchors to the
+  actual heading and the plain requested turn executes — the result says so.
+  Free navigation (navigate/route/explore), stop/estop and operator interrupt
+  all reset the course; the next relative command re-anchors it. Grade course
+  alignment with course_locked(tol_deg=10).
 - Long-range goals — go2w_real_route(action=start) launches the far_planner
   overlay, then action=goto x y routes around obstacles/rooms globally;
   action=stop tears it down. Use for goals beyond line of sight.
@@ -64,8 +75,9 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
 
 VERIFY (ground truth = /state_estimation odometry; you cannot author it):
 at(x, y[, tol]) for arrivals, moved(min_m) for displacement, turned(min_deg)
-for in-place rotation, explore_finished() / explored_progress() for
-exploration, route_reached() for far-planner goals.
+for in-place rotation, course_locked([tol_deg]) for heading-vs-intended-course
+alignment (False when no relative plan is in flight), explore_finished() /
+explored_progress() for exploration, route_reached() for far-planner goals.
 moved() grades the LAST move command (driver-anchored, like turned()): a
 completed move verifies True on the FIRST check — NEVER re-run a move to
 make verify pass; a second run physically drives the robot AGAIN. Zero

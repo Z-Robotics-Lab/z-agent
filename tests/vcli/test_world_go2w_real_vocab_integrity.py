@@ -55,7 +55,8 @@ _SIM_STUB_NAMES = frozenset(
 
 _REAL_ORACLES = frozenset(
     {"at", "moved", "explore_finished", "explored_progress", "route_reached",
-     "stack_ready", "turned"}  # turned: v2 in-place rotation oracle
+     "stack_ready", "turned",  # turned: v2 in-place rotation oracle
+     "course_locked"}  # course_locked: heading-intent (course) alignment
 )
 
 

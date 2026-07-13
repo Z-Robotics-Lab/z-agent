@@ -47,10 +47,11 @@ from zeno.vcli.verdict import VerdictReport
 # (float) and must NOT get the predicate role.
 _ORACLES = frozenset({
     "at", "moved", "turned", "stack_ready", "route_reached",
-    "explore_finished", "explored_progress", "file_exists",
+    "explore_finished", "explored_progress", "file_exists", "course_locked",
 })
 _PRED_ROLES = frozenset({
     "at", "moved", "turned", "stack_ready", "route_reached", "explore_finished",
+    "course_locked",  # heading-intent (course) alignment — bool predicate
 })
 
 

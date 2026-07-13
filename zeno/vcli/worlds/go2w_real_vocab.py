@@ -268,3 +268,38 @@ Response:
   ],
   "context_snapshot": ""
 }"""
+
+# Multi-leg RELATIVE plans (square path — field bug 2026-07-13 evening): each
+# clause is its own move/turn step. turn_skill executes turns relative to the
+# INTENDED course (drift folded into the commanded delta; re-anchors past 45°),
+# so the plan stays square — grade the alignment with course_locked().
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "前进2米,右转90度"   (multi-leg relative plan — the turn is 90° off the INTENDED course; turn_skill compensates heading drift itself)
+Response:
+{
+  "goal": "前进2米,右转90度",
+  "sub_goals": [
+    {
+      "name": "leg_1",
+      "description": "沿预期航向前进2米",
+      "verify": "moved(1.2)",
+      "strategy": "move_relative_skill",
+      "timeout_sec": 60,
+      "depends_on": [],
+      "strategy_params": {"direction": "forward", "distance": 2.0},
+      "fail_action": ""
+    },
+    {
+      "name": "turn_1",
+      "description": "右转90度(相对预期航向,漂移自动补偿)",
+      "verify": "turned(54) and course_locked()",
+      "strategy": "turn_skill",
+      "timeout_sec": 30,
+      "depends_on": ["leg_1"],
+      "strategy_params": {"direction": "right", "degrees": 90},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""

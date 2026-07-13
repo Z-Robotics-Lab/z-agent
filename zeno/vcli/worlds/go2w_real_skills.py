@@ -73,6 +73,7 @@ _DIRECTION_SYNONYMS: dict[str, str] = {
 }
 
 
+from zeno.vcli.worlds.go2w_real_course import course_of, reset_course  # noqa: E402
 from zeno.vcli.worlds.go2w_real_diag import (  # noqa: E402
     _latched_hint,
     _stalled_hint,
@@ -142,6 +143,9 @@ class RealNavigateSkill:
             oplog("skill", "navigate", f"BLOCKED latched; goal=({x:.2f},{y:.2f})")
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
+        # Free navigation ends the relative-course intent (a square-path plan's
+        # heading bookkeeping means nothing after an absolute goal) — reset.
+        reset_course(context, "navigate")
         start = base.get_position()
         oplog("skill", "navigate", f"goal=({x:.2f},{y:.2f}) from=({start[0]:.2f},{start[1]:.2f})")
         ok = bool(base.navigate_to(x, y, timeout=CFG.nav_timeout_s))
@@ -230,9 +234,26 @@ class RealMoveRelativeSkill:
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
         pos = base.get_position()
+        # COURSE heading (field bug, CEO 2026-07-13 evening): straight legs run
+        # ALONG the plan's intended course when one is tracked — the legs of a
+        # square stay parallel to intent even after planner drift displaced the
+        # live heading. resolve() anchors an unset course to the live yaw
+        # (= today's behavior on the first leg) and applies the 45° re-anchor
+        # cap (a bigger deviation is a detour/manual takeover, not drift).
+        # Moves never CHANGE the course — only turns advance it.
+        live_yaw = float(base.get_heading())
+        tracker = course_of(context)
+        course_yaw = live_yaw
+        if tracker is not None:
+            course_yaw, reanchored = tracker.resolve(live_yaw)
+            if reanchored:
+                oplog("skill", "move_relative",
+                      "course re-anchored to live yaw (>45deg deviation)")
         oplog("skill", "move_relative",
-              f"{direction} {distance}m from=({pos[0]:.2f},{pos[1]:.2f})")
-        heading = base.get_heading() + _RELATIVE_DIRECTIONS[direction]
+              f"{direction} {distance}m from=({pos[0]:.2f},{pos[1]:.2f}) "
+              f"course={math.degrees(course_yaw):+.1f}deg "
+              f"yaw={math.degrees(live_yaw):+.1f}deg")
+        heading = course_yaw + _RELATIVE_DIRECTIONS[direction]
         tx = float(pos[0]) + distance * math.cos(heading)
         ty = float(pos[1]) + distance * math.sin(heading)
         ok = bool(base.navigate_to(tx, ty, timeout=CFG.nav_timeout_s))
@@ -349,6 +370,9 @@ class RealExploreSkill:
             if isinstance(src, dict) and src.get("scenario"):
                 scenario = str(src["scenario"])
                 break
+        # Autonomous exploration drives freely — the relative-course intent of
+        # any earlier plan is over; forget it (next relative command re-anchors).
+        reset_course(context, "explore")
         ok, msg = mgr.start_explore(scenario)
         data = {"scenario": scenario, "message": msg,
                 "verify_hint": "explore_finished() and explored_progress() > 1.0"}
@@ -394,6 +418,9 @@ class RealStopSkill:
 
     def execute(self, params=None, context=None, **kw):
         base = _base_of(context)
+        # E-stop = the plan is over and the heading intent is unknown — reset
+        # the course so a later relative command re-anchors honestly.
+        reset_course(context, "estop")
         # Signal the cognitive abort so a blocking navigate/VGG unwinds too.
         try:
             from zeno.vcli.cognitive.abort import request_abort

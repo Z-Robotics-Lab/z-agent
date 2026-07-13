@@ -20,6 +20,7 @@ from typing import Any
 
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
+from zeno.vcli.worlds.go2w_real_course import reset_course
 from zeno.vcli.worlds.go2w_real_skills import CFG, _target_xy
 
 
@@ -75,6 +76,9 @@ class RealRouteViaSkill:
             x, y = _target_xy(params, kw, context)
         except ValueError as e:
             return SkillResult(success=False, error_message=str(e))
+        # Global route planning is free navigation — the relative-course intent
+        # of any earlier plan is over; forget it (next command re-anchors).
+        reset_course(context, "route_via")
         # Idempotent: launches far_planner if it is not already up (a second call
         # while active is refused inside the manager and does not disturb it).
         started_ok, start_msg = mgr.start_route()

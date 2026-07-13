@@ -70,8 +70,10 @@ from zeno.vcli.worlds.go2w_real_route_skills import (
 )
 from zeno.vcli.worlds.go2w_real_route_tools import Go2WRealRouteTool
 from zeno.vcli.worlds.go2w_real_route_verify import make_route_reached
+from zeno.vcli.worlds.go2w_real_course import CourseTracker
 from zeno.vcli.worlds.go2w_real_verify import (
     make_at,
+    make_course_locked,
     make_explore_finished,
     make_explored_progress,
     make_moved,
@@ -113,12 +115,18 @@ class Go2WRealEmbodiment:
         # ONE viz overlay session shared by the go2w_real_viz TOOL and the
         # open_viz SKILL — the two faces can never double-launch RViz.
         self._viz = VizOverlaySession()
+        # Heading-INTENT (course) tracker: the map-frame heading a relative
+        # plan means right now (field bug CEO 2026-07-13: planner drift skewed
+        # square paths). Deterministic state shared by move_relative/turn and
+        # the course_locked() oracle. Session start = unset.
+        self._course = CourseTracker()
         # Managers ALSO ride the driver: the VGG GoalExecutor builds its own
         # SkillContext (no world services) but always wires base — skills fall
         # back to these attributes (first-REPL-contact fix, 2026-07-10).
         self._base.explore_manager = self._explore
         self._base.route_manager = self._route
         self._base.viz_manager = self._viz
+        self._base.course_tracker = self._course
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(RealNavigateSkill())
         self._skill_registry.register(RealMoveRelativeSkill())
@@ -147,7 +155,7 @@ class Go2WRealEmbodiment:
         return SkillContext(
             bases={"go2w": self._base},
             services={"explore": self._explore, "route": self._route,
-                      "viz": self._viz},
+                      "viz": self._viz, "course": self._course},
         )
 
     def _sync_robot_state(self) -> None:
@@ -274,6 +282,7 @@ class Go2WRealWorld:
         ns["route_reached"] = make_route_reached(agent)
         ns["stack_ready"] = make_stack_ready(agent)
         ns["turned"] = make_turned(agent)
+        ns["course_locked"] = make_course_locked(agent)
         # v2-extension point: verify — feature agents APPEND
         # `ns["<fn>"] = make_<fn>(agent)` lines ABOVE this marker (factories
         # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
@@ -350,6 +359,13 @@ class Go2WRealWorld:
         try:
             if base is not None and hasattr(base, "cancel_navigation"):
                 base.cancel_navigation()
+            # A cancelled motion leaves the heading intent unknown — reset the
+            # course so the next relative command re-anchors honestly (same
+            # rule as the stop skill; base.course_tracker is the driver-ride
+            # seam, so this works from any context).
+            tracker = getattr(base, "course_tracker", None)
+            if tracker is not None:
+                tracker.reset()
             from zeno.vcli.cognitive.abort import request_abort
             request_abort()
         except Exception:  # noqa: BLE001 — interrupt path must never raise
@@ -397,6 +413,7 @@ class Go2WRealWorld:
                 "route_reached",  # v2 route mode (far_planner arrival oracle)
                 "stack_ready",    # lifecycle: odometry flowing = stack truly up
                 "turned",         # v2 in-place rotation (odometry yaw, wrap-aware)
+                "course_locked",  # heading-intent tracking (drift-compensated turns)
             }),
             verify_fn_signatures={
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
@@ -420,6 +437,10 @@ class Go2WRealWorld:
                     "turned(min_deg: float = 30.0) -> bool"
                     "  # the LAST turn command rotated >= min_deg (odometry yaw "
                     "vs driver anchor; wrapped delta caps at 180)"),
+                "course_locked": (
+                    "course_locked(tol_deg: float = 10.0) -> bool"
+                    "  # heading within tol of the plan's INTENDED course "
+                    "(drift-compensated relative plans); False when no course"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "
