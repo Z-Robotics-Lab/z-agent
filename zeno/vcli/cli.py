@@ -540,6 +540,18 @@ def _repl_attempt_native(
     agent = getattr(engine, "_vgg_agent", None)
     scratch = create_session(metadata={"native_scratch": True})
 
+    # TYPED INTERJECT window (field ask 2026-07-11): the background stdin reader
+    # is ACTIVE ONLY while this blocking turn executes — opened here, closed in
+    # the finally below, so it can never fight the prompt_toolkit prompt. The
+    # kernel (native_loop) checks the queue at its safe boundaries via
+    # app_state["interject"].
+    _ij_reader = (app_state or {}).get("interject")
+    if _ij_reader is not None:
+        try:
+            _ij_reader.start()
+        except Exception:  # noqa: BLE001 — a broken reader must never block a turn
+            _ij_reader = None
+
     # Suppress ROS2/subprocess stderr noise during the turn (the REPL does the same
     # around its legacy turn); restore unconditionally.
     _saved_stderr = sys.stderr
@@ -577,6 +589,8 @@ def _repl_attempt_native(
             except Exception:  # noqa: BLE001 — native errored -> treat as no-action
                 trace = None
     finally:
+        if _ij_reader is not None:
+            _ij_reader.stop()  # window closes BEFORE anything else prints
         if sys.stderr is not _saved_stderr:
             try:
                 sys.stderr.close()
@@ -584,8 +598,24 @@ def _repl_attempt_native(
                 pass
         sys.stderr = _saved_stderr
 
+    # TYPED INTERJECT: a queued line means the operator overrode this turn. The
+    # kernel already cancelled motion + the remaining tool calls at its safe
+    # boundary; report it here and OWN the turn — falling through to legacy would
+    # re-run the OVERRIDDEN goal right after the operator cancelled it. The queued
+    # line stays pending: the REPL picks it up as the immediate next turn.
+    _interjected = False
+    if _ij_reader is not None:
+        try:
+            _interjected = bool(_ij_reader.has_pending())
+        except Exception:  # noqa: BLE001
+            _interjected = False
+    if _interjected:
+        console.print("  [yellow]⏸ 插队 — 已取消当前动作,剩余步骤不再执行[/]")
+
     if trace is None or not _native_trace_acted(trace):
-        return False  # native could not route -> caller falls back to legacy
+        # native could not route -> legacy fallback, EXCEPT on an interject (the
+        # overridden goal must not be re-run by another producer).
+        return True if _interjected else False
 
     sub_goals = list(getattr(trace.goal_tree, "sub_goals", ()) or ())
     steps = list(getattr(trace, "steps", ()) or ())
@@ -741,30 +771,92 @@ def _operator_interrupt(app_state: dict[str, Any] | None) -> None:
     interject and Ctrl+C killed the whole CLI mid-navigate. Route the
     interrupt to the world (cancel motion, abort cognitive loops), report,
     and keep the session alive. Never raises.
+
+    The cancel body now lives in ``interject.cancel_current_motion`` so the
+    TYPED interject (field ask 2026-07-11) cancels through the SAME world
+    ``on_operator_interrupt`` seam — this Ctrl+C handler's behaviour and
+    output are byte-identical to before the extraction.
     """
-    msg = "已中断本轮任务。"
-    try:
-        world = (app_state or {}).get("world")
-        agent = (app_state or {}).get("agent")
-        hook = getattr(world, "on_operator_interrupt", None)
-        if callable(hook):
-            msg = hook(agent) or msg
-        else:
-            from zeno.vcli.cognitive.abort import request_abort
-            request_abort()
-    except Exception:  # noqa: BLE001 — the interrupt path must never raise
-        pass
+    from zeno.vcli.interject import cancel_current_motion
+
+    msg = cancel_current_motion(app_state)
     console.print(f"\n  [yellow]🛑 {msg}[/yellow]")
 
 
 def ask_permission(tool_name: str, params: dict[str, Any]) -> str:
-    console.print(f"\n[yellow bold]Permission required:[/yellow bold]")
-    console.print(f"  Tool: [{TEAL}]{tool_name}[/]")
-    params_str = json.dumps(params, indent=2, ensure_ascii=False)
-    if len(params_str) > 200:
-        params_str = params_str[:200] + "..."
-    console.print(f"  Params: [dim]{params_str}[/dim]")
-    return Prompt.ask("  Allow? [y/n/a=always]", choices=["y", "n", "a"], default="y")
+    # STDIN COLLISION (typed interject, 2026-07-13): the interject reader must
+    # NOT consume the operator's y/n/a answer — suspend it for the whole prompt
+    # (prints included, so the prompt is never interleaved with a queued-line
+    # echo). No-op when no reader is registered (the -p path, tests).
+    from zeno.vcli.interject import reader_suspended
+
+    with reader_suspended():
+        console.print(f"\n[yellow bold]Permission required:[/yellow bold]")
+        console.print(f"  Tool: [{TEAL}]{tool_name}[/]")
+        params_str = json.dumps(params, indent=2, ensure_ascii=False)
+        if len(params_str) > 200:
+            params_str = params_str[:200] + "..."
+        console.print(f"  Params: [dim]{params_str}[/dim]")
+        return Prompt.ask("  Allow? [y/n/a=always]", choices=["y", "n", "a"], default="y")
+
+
+# ---------------------------------------------------------------------------
+# /permissions mode persistence (field ask 2026-07-13: the operator re-typed
+# /permissions auto every session on the real robot)
+# ---------------------------------------------------------------------------
+
+_APPROVAL_MODE_KEY = "approval_mode"  # config.yaml key: "auto" | "manual"
+
+_AUTO_MODE_WARNING = (
+    "[yellow]  ⚠ REAL ROBOT: /permissions auto — motion tools execute "
+    "immediately; keep the hardware E-stop remote in hand[/yellow]"
+)
+
+
+def _save_approval_mode(auto: bool) -> None:
+    """Persist the /permissions mode via the EXISTING zeno config mechanism.
+
+    Written into ~/.zeno/config.yaml alongside the /login keys (same
+    load_config/save_config path — no new persistence machinery). Best-effort:
+    a config write failure never breaks the running session.
+    """
+    try:
+        from zeno.vcli.config import load_config, save_config
+
+        cfg = load_config()
+        cfg[_APPROVAL_MODE_KEY] = "auto" if auto else "manual"
+        save_config(cfg)
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        pass
+
+
+def _apply_saved_approval_mode(args: Any, permissions: Any) -> None:
+    """Load the persisted /permissions mode at startup (saved 'auto' -> auto).
+
+    Precedence: an explicit ``--no-permission`` CLI flag ALWAYS wins — a saved
+    'manual' never downgrades it, and a saved 'auto' only upgrades the default.
+    Unknown/absent values are ignored (manual stays the shipped default).
+    """
+    if getattr(args, "no_permission", False):
+        return  # explicit flag wins; never downgraded by a saved mode
+    try:
+        from zeno.vcli.config import load_config
+
+        mode = str(load_config().get(_APPROVAL_MODE_KEY, "")).strip().lower()
+    except Exception:  # noqa: BLE001 — an unreadable config keeps the default
+        return
+    if mode == "auto":
+        permissions.no_permission = True
+
+
+def _warn_if_auto_mode(permissions: Any) -> None:
+    """Print the REAL-ROBOT warning when the session starts in auto mode.
+
+    Persisting auto across sessions must NOT hide the risk — the warning prints
+    EVERY session (same text the /permissions command shows on switch).
+    """
+    if getattr(permissions, "no_permission", False):
+        console.print(_AUTO_MODE_WARNING)
 
 
 # ---------------------------------------------------------------------------
@@ -1270,6 +1362,7 @@ def _handle_slash_command(
         console.print("[dim]  Tab        accept completion[/dim]")
         console.print("[dim]  Ctrl+R     search history[/dim]")
         console.print("[dim]  Ctrl+C     cancel current turn[/dim]")
+        console.print("[dim]  <文字>+Enter (任务执行中) 插队: 取消当前动作,你的新指令立即接管[/dim]")
         console.print("[dim]  Ctrl+D     exit[/dim]")
         console.print()
 
@@ -1406,6 +1499,10 @@ def _handle_slash_command(
         else:
             if args_rest and args_rest[0].lower() in ("auto", "manual"):
                 perms.no_permission = args_rest[0].lower() == "auto"
+                # Persist across sessions (field ask 2026-07-13) via the existing
+                # config mechanism; the REAL-ROBOT warning still prints every
+                # session that starts in auto (see _warn_if_auto_mode).
+                _save_approval_mode(perms.no_permission)
             mode = "auto — tools run WITHOUT asking" if perms.no_permission \
                 else "manual — each risky tool asks y/n/a"
             console.print(f"  Approval mode: [bold]{mode}[/bold]")
@@ -1987,8 +2084,10 @@ def _build_turn_context(
     # resolved + its tools registered. No-op for any world that omits the hook.
     _world_setup(world, agent)
 
-    # Permissions
+    # Permissions — the persisted /permissions mode (auto|manual) loads at
+    # startup; the explicit --no-permission flag always wins.
     permissions = PermissionContext(no_permission=args.no_permission)
+    _apply_saved_approval_mode(args, permissions)
 
     # Session
     session: Session
@@ -2420,8 +2519,11 @@ def main(argv: list[str] | None = None) -> None:
     # resolved + its tools registered. No-op for any world that omits the hook.
     _world_setup(world, agent)
 
-    # Permissions
+    # Permissions — the persisted /permissions mode (auto|manual) loads at
+    # startup (field ask 2026-07-13); the explicit --no-permission flag always
+    # wins. The REAL-ROBOT warning still prints below, every session, when auto.
     permissions = PermissionContext(no_permission=args.no_permission)
+    _apply_saved_approval_mode(args, permissions)
 
     # Session
     session: Session
@@ -2628,6 +2730,8 @@ def main(argv: list[str] | None = None) -> None:
         provider_display = "Anthropic"
     print_banner(model, provider_display, agent, scenario=_active_scenario)
     console.print(f"[dim]Session: {session.session_id}[/dim]\n")
+    # Persisted-auto safety surface: auto mode never starts silently.
+    _warn_if_auto_mode(permissions)
 
     # REPL setup
     history_dir = _persist_dir()  # ~/.zeno write root; legacy ~/.vector read fallback keeps old REPL history
@@ -2660,22 +2764,41 @@ def main(argv: list[str] | None = None) -> None:
     # a second consecutive ^C (at the prompt) exits cleanly. Reset on any input.
     interrupt_pending = False
 
+    # TYPED INTERJECT (field ask 2026-07-11): a background stdin reader ACTIVE
+    # ONLY while a blocking turn executes (each turn path opens/closes the
+    # window). Typed lines queue; the kernel checks the queue at safe boundaries
+    # (native-loop iteration top / per motor dispatch) and cancels via the SAME
+    # world seam Ctrl+C uses; the queued line runs as the immediate next turn
+    # (picked up below, before the prompt). Registered module-wide so
+    # ask_permission suspends it around the y/n/a prompt (stdin collision).
+    from zeno.vcli.interject import InterjectReader, set_current_reader
+    interject_reader = InterjectReader()
+    app_state["interject"] = interject_reader
+    set_current_reader(interject_reader)
+
     try:
         while True:
             # ---- Read input ----
-            try:
-                raw = pt_session.prompt(
-                    HTML(f'<style fg="{TEAL}" bold="true">zeno&gt;</style> '),
-                    bottom_toolbar=_get_toolbar,
-                )
-            except EOFError:
-                break
-            except KeyboardInterrupt:
-                if interrupt_pending:
-                    break  # second consecutive Ctrl-C -> exit cleanly
-                interrupt_pending = True
-                console.print("\n[dim]Press Ctrl-C again or type quit to exit.[/dim]")
-                continue
+            # An interjected line (typed mid-turn) runs as the IMMEDIATE next
+            # turn — echoed visibly so the operator sees what took over.
+            _queued = interject_reader.pop()
+            if _queued is not None:
+                console.print(f"  [yellow]⏸ 插队:[/] {_queued}")
+                raw = _queued
+            else:
+                try:
+                    raw = pt_session.prompt(
+                        HTML(f'<style fg="{TEAL}" bold="true">zeno&gt;</style> '),
+                        bottom_toolbar=_get_toolbar,
+                    )
+                except EOFError:
+                    break
+                except KeyboardInterrupt:
+                    if interrupt_pending:
+                        break  # second consecutive Ctrl-C -> exit cleanly
+                    interrupt_pending = True
+                    console.print("\n[dim]Press Ctrl-C again or type quit to exit.[/dim]")
+                    continue
 
             interrupt_pending = False  # any successful input clears the pending exit
             user_input = raw.strip()
@@ -3045,6 +3168,10 @@ def main(argv: list[str] | None = None) -> None:
                     sys.stderr = open(os.devnull, "w")
                 except OSError:
                     pass
+                # TYPED INTERJECT window around the blocking chat/tool turn: the
+                # run_turn loop has no kernel-side boundary check (chat rounds
+                # are short); a line typed here queues and runs as the NEXT turn.
+                interject_reader.start()
                 try:
                     status.start()  # one live region for the whole turn
                     if _legacy_turn:
@@ -3083,6 +3210,7 @@ def main(argv: list[str] | None = None) -> None:
                 finally:
                     # Stop/clear the single region BEFORE printing the final answer,
                     # so the box never stacks and the prompt is not duplicated.
+                    interject_reader.stop()  # window closes before any prompt
                     status.stop()
                     sys.stderr = _saved_stderr
 
@@ -3131,6 +3259,8 @@ def main(argv: list[str] | None = None) -> None:
                     traceback.print_exc()
 
     finally:
+        set_current_reader(None)
+        interject_reader.stop()
         session.save()
         console.print(f"[dim]Session saved: {session.session_id}[/dim]")
         # Persist scene graph if agent has one

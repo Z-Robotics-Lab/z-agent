@@ -46,6 +46,7 @@ from typing import Any, Callable
 from zeno.vcli.backends.types import LLMResponse
 from zeno.vcli.cognitive import actor_causation
 from zeno.vcli.cognitive.trace_store import verify_oracle_names
+from zeno.vcli.interject import cancel_current_motion, interject_pending
 from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
@@ -161,6 +162,15 @@ _UNPRODUCTIVE_SPIN_NUDGE = (
     "a place). Re-scanning / re-navigating / re-grasping without a verify makes no "
     "measurable progress. If the verify FAILS, take ONE corrective action then verify again; "
     "if it PASSES, call finish."
+)
+
+# TYPED INTERJECT (field ask 2026-07-11): the tool_result answered for every tool
+# call the operator's interject cancels — this call and all remaining calls in the
+# turn are NOT executed. The trace keeps only the steps that already ran, so the
+# verdict stays honest (nothing is graded that never happened).
+_CANCELLED_BY_OPERATOR = (
+    "cancelled-by-operator: a typed operator interject arrived — this and all "
+    "remaining actions in this turn are cancelled; a new instruction takes over."
 )
 
 # The registry category whose tools are the kernel's domain-general ACTION surface
@@ -1073,6 +1083,18 @@ def run_turn_native(
     unproductive_nudges = 0
     seen_verify_outcomes: set[tuple[str, bool]] = set()
     while turns < max_turns:
+        # TYPED INTERJECT SAFE BOUNDARY #1 (iteration top, field ask 2026-07-11):
+        # the operator typed a new instruction while this turn was executing. Stop
+        # BEFORE the next model round-trip: cancel in-flight motion via the SAME
+        # world on_operator_interrupt seam Ctrl+C uses, and return the trace of
+        # the steps that already ran (the verdict grades only what happened; the
+        # REPL runs the queued line as the immediate next turn). No reader in
+        # app_state (the -p path, tests) -> interject_pending is False and this
+        # loop is byte-identical to before.
+        if interject_pending(app_state):
+            _emit("操作员插队 — 取消剩余步骤")
+            cancel_current_motion(app_state)
+            break
         messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
         response: LLMResponse = backend.call(
@@ -1116,8 +1138,25 @@ def run_turn_native(
         # yields a (predicate, result) not seen before — a novel measurement. A re-read of
         # an already-known outcome leaves this False so the spin counter keeps climbing.
         progressed_this_turn = False
+        # TYPED INTERJECT SAFE BOUNDARY #2 (per motor dispatch): once an interject
+        # is seen, THIS and every remaining tool call in the turn is answered
+        # cancelled-by-operator instead of executed (motion cancel fires ONCE, via
+        # the same Ctrl+C seam). verify/finish are not gated on first detection —
+        # they are instant/read-only — but once interjected they cancel too.
+        interjected = False
         result_dicts: list[dict[str, Any]] = []
         for tc in tool_calls:
+            if interjected or (
+                tc.name not in (VERIFY_TOOL, FINISH_TOOL) and interject_pending(app_state)
+            ):
+                if not interjected:
+                    interjected = True
+                    _emit("操作员插队 — 取消剩余步骤")
+                    cancel_current_motion(app_state)
+                result_dicts.append(
+                    _tool_result_dict(tc.id, _CANCELLED_BY_OPERATOR, is_error=True)
+                )
+                continue
             if tc.name == FINISH_TOOL:
                 # D23: refuse a finish that rides on an unverified action — re-prompt
                 # for a model-authored verify first (bounded). Honest: a model that
@@ -1176,6 +1215,8 @@ def run_turn_native(
         turns += 1
         if finished:
             break
+        if interjected:
+            break  # remaining plan cancelled-by-operator; the queued line takes over
 
         # R274/E74 degenerate-spin guard (runs AFTER a non-empty tool-call turn that did
         # not finish). R279/E76: a NOVEL verify (new (predicate,result)) RESETS the counter
