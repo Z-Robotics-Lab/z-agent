@@ -159,6 +159,33 @@ def render_verdict_card(report: Any, trace: Any = None, *, max_verify_len: int =
     return lines
 
 
+def render_turn_footer(
+    *,
+    route: str,
+    model: str = "",
+    in_tokens: int = 0,
+    out_tokens: int = 0,
+    wall_sec: float = 0.0,
+) -> str:
+    """ONE footer grammar for every turn path (P2).
+
+    ``route=<r> · model=<m> · in=<i> out=<o> tok · <wall>`` — every unknown
+    part is OMITTED. Honest by construction: an unmeasured wall clock or a
+    zero token count never renders as a fabricated placeholder.
+    """
+    parts: list[str] = []
+    if route:
+        parts.append(f"route={route}")
+    if model:
+        parts.append(f"model={_escape_markup(model)}")
+    if in_tokens or out_tokens:
+        parts.append(f"in={int(in_tokens):,} out={int(out_tokens):,} tok")
+    dur = fmt_duration(wall_sec)
+    if dur != "—":
+        parts.append(dur)
+    return "  [dim]" + " · ".join(parts) + "[/]"
+
+
 def render_trace_detail(trace: Any) -> list[str]:
     """Full-detail view of ONE stored ExecutionTrace (P1.5 /trace replay).
 

@@ -58,6 +58,7 @@ from zeno.vcli.turn_render import (
     ChainView,
     fmt_duration,
     render_trace_detail,
+    render_turn_footer,
     render_verdict_card,
 )
 from zeno.vcli.turn_status import TurnStatus
@@ -675,26 +676,53 @@ def _repl_attempt_native(
 
     sub_goals = list(getattr(trace.goal_tree, "sub_goals", ()) or ())
     steps = list(getattr(trace, "steps", ()) or ())
+
+    # Honest verdict computed FIRST (single-sourced — the loop NEVER computes
+    # verified) so the step lines can carry per-step evidence marks; the
+    # transcript ORDER is unchanged: step lines → verdict line → card → footer.
+    # Predicate-role map (2026-07-13): both name sets come from the SAME live
+    # namespace, so a world-served predicate oracle (stack_ready/at/turned)
+    # grounds like a kernel one and an all-green turn reads N/N grounded.
+    report: Any = None
+    verified = False
+    _verdict_exc: Exception | None = None
+    try:
+        oracle_names = verify_oracle_names(agent, engine)
+        predicate_names = verify_predicate_names(agent, engine)
+        report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
+        verified = bool(report.verified)
+    except Exception as exc:  # noqa: BLE001 — fail closed (display only)
+        _verdict_exc = exc
+
     console.print()
     for i, s in enumerate(steps):
         verify_expr = sub_goals[i].verify if i < len(sub_goals) else ""
         chain = (getattr(s, "strategy", "") or "").strip() or "(no action)"
         ok = bool(getattr(s, "verify_result", False))
         actor = getattr(getattr(s, "actor_caused", None), "value", "?")
-        mark = "[green]✓[/]" if ok else "[yellow]·[/]"
+        # P2 single-meaning marks: ✓ is RESERVED for GROUNDED evidence; a
+        # passing-but-ungrounded check is ○; a false check is ✗. With no
+        # verdict available nothing can claim GROUNDED — passing checks
+        # degrade to ○ (never a false ✓).
+        evidence = (
+            report.per_step[i].evidence
+            if report is not None and i < len(report.per_step)
+            else None
+        )
+        if not ok:
+            mark = "[red]✗[/]"
+        elif evidence == "GROUNDED":
+            mark = "[green]✓[/]"
+        else:
+            mark = "[yellow]○[/]"
+        # P1.4 honest timing on the step line: measured only, never 0.0s.
+        dur = fmt_duration(getattr(s, "duration_sec", 0.0))
+        dur_part = f" [dim]{dur}[/]" if dur != "—" else ""
         console.print(
-            f"  [{TEAL}]▸[/] {chain} → verify {verify_expr} {mark} [dim](actor={actor})[/]"
+            f"  [{TEAL}]▸[/] {chain} → verify {verify_expr} {mark} [dim](actor={actor})[/]{dur_part}"
         )
 
-    verified = False
-    try:
-        # Predicate-role map (2026-07-13): both name sets come from the SAME live
-        # namespace, so a world-served predicate oracle (stack_ready/at/turned)
-        # grounds like a kernel one and an all-green turn reads N/N grounded.
-        oracle_names = verify_oracle_names(agent, engine)
-        predicate_names = verify_predicate_names(agent, engine)
-        report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
-        verified = bool(report.verified)
+    if report is not None:
         color = "green" if verified else "yellow"
         console.print(
             f"  [{TEAL}]verdict[/] {report.evidence} "
@@ -711,8 +739,28 @@ def _repl_attempt_native(
                 console.print(_card_line)
         except Exception:  # noqa: BLE001 — display only
             pass
-    except Exception as exc:  # noqa: BLE001 — fail closed (display only)
-        console.print(f"  [yellow]verdict unavailable:[/] {exc}")
+    else:
+        console.print(f"  [yellow]verdict unavailable:[/] {_verdict_exc}")
+
+    # P2 unified turn footer: route · model · tokens · wall-clock, all from
+    # the finish event / trace — unknown parts omitted, never fabricated.
+    try:
+        _fin = dict(getattr(chain_view, "finish_data", {}) or {})
+        console.print(
+            render_turn_footer(
+                route="native",
+                model=str((app_state or {}).get("model", "") or ""),
+                in_tokens=int(_fin.get("in_tokens", 0) or 0),
+                out_tokens=int(_fin.get("out_tokens", 0) or 0),
+                wall_sec=float(
+                    _fin.get("wall_sec", 0.0)
+                    or getattr(trace, "total_duration_sec", 0.0)
+                    or 0.0
+                ),
+            )
+        )
+    except Exception:  # noqa: BLE001 — display only
+        pass
 
     # ADR-002 visual acceptance: the SAME env-gated PNG snapshot the -p path fires (see
     # _emit). Inert by construction — handed ONLY the agent (never the report), never
@@ -3357,6 +3405,19 @@ def main(argv: list[str] | None = None) -> None:
                         except Exception:  # noqa: BLE001 — display only
                             pass
 
+                        # P2 unified turn footer (VGG path: tokens untracked ->
+                        # omitted; wall-clock from the trace, honest-only).
+                        try:
+                            console.print(
+                                render_turn_footer(
+                                    route="vgg",
+                                    model=str(app_state.get("model", "") or ""),
+                                    wall_sec=float(dur or 0.0),
+                                )
+                            )
+                        except Exception:  # noqa: BLE001 — display only
+                            pass
+
                         # Record in session
                         step_summary = "\n".join(
                             f"  {s.sub_goal_name}: {'ok' if s.success else 'FAILED'}"
@@ -3462,11 +3523,18 @@ def main(argv: list[str] | None = None) -> None:
                     before, after = session.compact(keep_recent=12)
                     console.print(f"[dim]  compacted {before} -> {after} entries (old context summarized)[/dim]")
 
-                # Token usage (show in/out breakdown)
-                if turn_result.usage:
-                    u = turn_result.usage
-                    if u.input_tokens or u.output_tokens:
-                        console.print(f"[dim]  in={u.input_tokens:,} out={u.output_tokens:,}[/]")
+                # P2 unified turn footer (route · model · tokens · wall-clock;
+                # unknown parts omitted — same grammar as the native/VGG paths).
+                _u = turn_result.usage
+                console.print(
+                    render_turn_footer(
+                        route="tool_use",
+                        model=str(app_state.get("model", "") or ""),
+                        in_tokens=getattr(_u, "input_tokens", 0) if _u else 0,
+                        out_tokens=getattr(_u, "output_tokens", 0) if _u else 0,
+                        wall_sec=time.monotonic() - _turn_started,
+                    )
+                )
                 console.print()
 
             except KeyboardInterrupt:
