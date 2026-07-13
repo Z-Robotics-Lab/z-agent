@@ -12,6 +12,7 @@ into an interactive agent loop with Zeno's personality.
 from __future__ import annotations
 
 import argparse
+from html import escape as escape_html
 import json
 import logging
 import os
@@ -529,6 +530,39 @@ def _cot_mode(app_state: dict[str, Any] | None) -> str:
     return mode if mode in ("off", "tail", "full") else "tail"
 
 
+def _live_status_for_display(app_state: dict[str, Any] | None) -> str | None:
+    """Read the active world's optional live-state line for UI projection.
+
+    This is deliberately display-only: it reads the SAME ``live_status_line``
+    world hook that the native loop injects into model context, flattens it for
+    one-line terminal surfaces, and never feeds the value back into routing,
+    execution, or verification.  Missing/empty/raising hooks render nothing;
+    callers therefore never retain a stale pose after a failed refresh.
+    """
+    state = app_state or {}
+    engine = state.get("engine")
+    world = getattr(engine, "_world", None) if engine is not None else None
+    if world is None:
+        world = state.get("world")
+    hook = getattr(world, "live_status_line", None) if world is not None else None
+    if not callable(hook):
+        return None
+    try:
+        line = hook(state.get("agent"))
+    except Exception:  # noqa: BLE001 — a display sensor read must never break input
+        return None
+    if not line:
+        return None
+    flat = " ".join(str(line).split())
+    return flat or None
+
+
+def _live_status_toolbar_fragment(app_state: dict[str, Any] | None) -> str:
+    """Prompt-toolkit-HTML-safe live status, or an empty toolbar fragment."""
+    line = _live_status_for_display(app_state)
+    return escape_html(line) if line else ""
+
+
 def _repl_attempt_native(
     engine: Any,
     user_input: str,
@@ -593,6 +627,7 @@ def _repl_attempt_native(
             renderable, console=console, refresh_per_second=8, transient=True
         ),
         show_reasoning_tail=_cot_mode(app_state) != "off",
+        status_provider=lambda: _live_status_for_display(app_state),
     )
     if app_state is not None:
         app_state["last_chain_view"] = chain_view  # /why reads the reasoning buffer
@@ -2997,6 +3032,11 @@ def main(argv: list[str] | None = None) -> None:
         agent_now = app_state.get("agent")
         current_model = app_state.get("model", "?")
         parts: list[str] = [f"<b>Zeno</b>"]
+        live_status = _live_status_toolbar_fragment(app_state)
+        if live_status:
+            # Keep live truth immediately after the brand so narrow terminals
+            # show pose/odom before lower-priority counters are clipped.
+            parts.append(live_status)
         arm_now = getattr(agent_now, "_arm", None) if agent_now else None
         base_now = getattr(agent_now, "_base", None) if agent_now else None
         if arm_now is not None:

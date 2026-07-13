@@ -276,6 +276,7 @@ class ChainView:
         reasoning_tail_chars: int = 160,
         max_nudges: int = 3,
         show_reasoning_tail: bool = True,
+        status_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self._live_factory = live_factory
         self._live: Any = None
@@ -289,6 +290,8 @@ class ChainView:
         self._reasoning_tail: str = ""
         self._reasoning_tail_chars = int(reasoning_tail_chars)
         self._show_reasoning_tail = bool(show_reasoning_tail)
+        self._status_provider = status_provider
+        self._live_status = ""
         self._nudges: deque[str] = deque(maxlen=max(1, int(max_nudges)))
         self._text_tail = ""
         self.finish_data: dict[str, Any] = {}
@@ -369,6 +372,7 @@ class ChainView:
         detail = str(getattr(event, "detail", "") or "")
         ok = getattr(event, "ok", None)
         if kind == "round":
+            self._refresh_live_status()
             self._round = label
         elif kind == "reasoning":
             self._reasoning.append(detail)
@@ -393,6 +397,17 @@ class ChainView:
             self._nudges.append("操作员插队 — 取消剩余步骤")
         elif kind == "finish":
             self.finish_data = dict(getattr(event, "data", None) or {})
+
+    def _refresh_live_status(self) -> None:
+        """Refresh the optional display-only status; failure clears stale text."""
+        if self._status_provider is None:
+            self._live_status = ""
+            return
+        try:
+            status = self._status_provider()
+        except Exception:  # noqa: BLE001 — display providers are best-effort
+            status = None
+        self._live_status = " ".join(str(status).split()) if status else ""
 
     # -- rendering ------------------------------------------------------
 
@@ -448,6 +463,8 @@ class ChainView:
         lines = [
             f"  [bold {_TEAL}]native[/] working…{round_part}  [dim](Ctrl+C 安全中断)[/dim]"
         ]
+        if self._live_status:
+            lines.append(f"  [dim]⌖ {_escape_markup(self._live_status)}[/]")
         if self._show_reasoning_tail and self._reasoning_tail:
             joined = self._reasoning_tail.replace("\n", " ")
             tail = joined[-self._reasoning_tail_chars :].strip()
