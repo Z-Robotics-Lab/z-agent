@@ -12,6 +12,7 @@ from zeno.vcli.banner import (
     WIDE_ZENO_LOGO,
     centered_logo_lines,
     logo_lines_for_width,
+    styled_logo_line,
 )
 
 
@@ -31,13 +32,25 @@ def test_wide_logo_matches_the_owner_supplied_terminal_wordmark() -> None:
     assert {len(line) for line in WIDE_ZENO_LOGO} == {38}
 
 
+def test_wide_logo_preserves_the_reference_light_and_graphite_layers() -> None:
+    rendered = styled_logo_line(WIDE_ZENO_LOGO[0], 0)
+
+    assert rendered.plain == WIDE_ZENO_LOGO[0]
+    assert rendered.style == "#5a5e65"
+    assert rendered.spans[0].start == 0
+    assert rendered.spans[0].end == 7
+    assert rendered.spans[0].style == "bold #e0eafc"
+
+
 def test_logo_switches_complete_variants_instead_of_slicing_art() -> None:
     assert logo_lines_for_width(60) == WIDE_ZENO_LOGO
-    assert logo_lines_for_width(40) == COMPACT_ZENO_LOGO
+    assert logo_lines_for_width(40) == WIDE_ZENO_LOGO
+    assert logo_lines_for_width(38) == WIDE_ZENO_LOGO
+    assert logo_lines_for_width(37) == COMPACT_ZENO_LOGO
     assert logo_lines_for_width(24) == COMPACT_ZENO_LOGO
     assert logo_lines_for_width(8) == ("ZENO",)
 
-    for width in (100, 60, 40, 24, 8, 4):
+    for width in (100, 60, 40, 38, 37, 24, 8, 4):
         rendered = centered_logo_lines(width)
         assert rendered
         assert max(map(len, rendered)) <= width

@@ -43,7 +43,11 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 
 from zeno.vcli.backends import create_backend
-from zeno.vcli.banner import centered_logo_lines, metadata_lines_for_width
+from zeno.vcli.banner import (
+    centered_logo_lines,
+    metadata_lines_for_width,
+    styled_logo_line,
+)
 from zeno.vcli.composer import ZenoComposer, render_submission
 from zeno.vcli.env import read_env
 from zeno.vcli import paths
@@ -895,8 +899,8 @@ def print_banner(
     logo_lines = centered_logo_lines(term_w)
 
     console.print()
-    for line in logo_lines:
-        console.print(Text(line, style=f"bold {TEAL}"), overflow="crop", no_wrap=True)
+    for row, line in enumerate(logo_lines):
+        console.print(styled_logo_line(line, row), overflow="crop", no_wrap=True)
 
     logo_end = max((len(line) for line in logo_lines), default=4)
     version = f"v{VERSION}"

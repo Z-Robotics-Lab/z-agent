@@ -5,8 +5,9 @@
 
 The old banner depended on an optional ``logo_braille.txt`` asset and degraded
 to a single ``Zeno`` word when that file was absent. The product entry now owns
-three complete variants in code so startup branding is deterministic in every
-checkout and no terminal width ever receives a sliced, illegible logo.
+the owner's six-line terminal wordmark plus complete narrow variants in code,
+so startup branding is deterministic in every checkout and no terminal width
+ever receives a sliced, illegible logo.
 
 This module is presentation-only. It imports no engine, world, hardware, or
 verification code.
@@ -14,15 +15,16 @@ verification code.
 from __future__ import annotations
 
 from rich.cells import cell_len
+from rich.text import Text
 
 
 WIDE_ZENO_LOGO: tuple[str, ...] = (
-    "ZZZZZZZZ  EEEEEEEE  NN     NN   OOOOOO",
-    "     ZZ   EE        NNN    NN  OO    OO",
-    "    ZZ    EEEEEE    NN N   NN  OO    OO",
-    "   ZZ     EE        NN  N  NN  OO    OO",
-    "  ZZ      EE        NN   N NN  OO    OO",
-    "ZZZZZZZZ  EEEEEEEE  NN    NNN   OOOOOO",
+    "███████╗ ███████╗ ███╗   ██╗  ██████╗ ",
+    "╚══███╔╝ ██╔════╝ ████╗  ██║ ██╔═══██╗",
+    "  ███╔╝  █████╗   ██╔██╗ ██║ ██║   ██║",
+    " ███╔╝   ██╔══╝   ██║╚██╗██║ ██║   ██║",
+    "███████╗ ███████╗ ██║ ╚████║ ╚██████╔╝",
+    "╚══════╝ ╚══════╝ ╚═╝  ╚═══╝  ╚═════╝ ",
 )
 
 COMPACT_ZENO_LOGO: tuple[str, ...] = (
@@ -34,8 +36,28 @@ COMPACT_ZENO_LOGO: tuple[str, ...] = (
 )
 
 _PLAIN_ZENO_LOGO = ("ZENO",)
-_HORIZONTAL_GUTTER = 4
+# The supplied mark already carries its own whitespace and is only 38 cells
+# wide. Keep it intact down to that exact width; centering adds room whenever
+# the terminal has any to spare.
+_HORIZONTAL_GUTTER = 0
 _MAX_BRAND_CANVAS = 80
+_TERMINAL_BRAND = "#00b4b4"
+_WIDE_PRIMARY = (
+    "#e0eafc",
+    "#dde8fa",
+    "#d9e5f8",
+    "#d6e3f7",
+    "#d2e0f5",
+    "#cfdcf3",
+)
+_WIDE_SECONDARY = (
+    "#5a5e65",
+    "#585d64",
+    "#575c63",
+    "#565b63",
+    "#545a62",
+    "#535961",
+)
 
 
 def _logo_width(lines: tuple[str, ...]) -> int:
@@ -62,6 +84,23 @@ def centered_logo_lines(terminal_width: int) -> tuple[str, ...]:
     canvas_width = min(width, _MAX_BRAND_CANVAS)
     indent = max(0, (canvas_width - _logo_width(logo)) // 2)
     return tuple((" " * indent) + line for line in logo)
+
+
+def styled_logo_line(line: str, row: int) -> Text:
+    """Recreate the supplied logo's light faces and graphite construction lines."""
+    if "█" not in line and not any(char in line for char in "╗╚═╔╝║"):
+        return Text(line, style=f"bold {_TERMINAL_BRAND}")
+
+    palette_row = max(0, min(int(row), len(_WIDE_SECONDARY) - 1))
+    text = Text(line, style=_WIDE_SECONDARY[palette_row])
+    start: int | None = None
+    for offset, char in enumerate(line + " "):
+        if char == "█" and start is None:
+            start = offset
+        elif char != "█" and start is not None:
+            text.stylize(f"bold {_WIDE_PRIMARY[palette_row]}", start, offset)
+            start = None
+    return text
 
 
 def metadata_lines_for_width(
