@@ -30,3 +30,11 @@ def test_both_vgg_display_callbacks_apply_the_answer_only_filter() -> None:
 
     assert "_is_answer_only_display_step(step)" in source
     assert "_is_answer_only_display_step(view)" in source
+
+
+def test_chat_footer_omits_context_already_visible_in_composer() -> None:
+    footer = cli.render_chat_footer(in_tokens=0, out_tokens=0, wall_sec=2.4)
+
+    assert "2.4s" in footer
+    assert "route=" not in footer
+    assert "model=" not in footer

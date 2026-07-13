@@ -238,9 +238,9 @@ PT_STYLE = PTStyle.from_dict({
 })
 
 
-# Zeno brand label — embedded as the title of every response Panel.
-# (Was the braille dot-art "V" glyph before the Zeno rename; the constant name
-# V_LABEL is kept so its 4 Panel-title call sites need no churn.)
+# Zeno brand label for the remaining informational panels. Conversational
+# replies use the quieter open-message marker rendered by ``render_response``.
+# (The constant name stays for rename compatibility.)
 V_LABEL = f"[bold {TEAL}] Zeno [/]"
 
 
@@ -253,13 +253,28 @@ _PATH_RE = re.compile(r"(?<!\w)(/[\w./\-_]+\.\w+)")
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 
 
-def render_response(text: str, width: int = 80) -> Panel:
-    """Render V's response with syntax-highlighted code blocks and paths.
+def _open_message_grid(marker: str, body: Any, *, width: int, style: str) -> Table:
+    """Two-column open message: marker + body, with aligned soft wrapping."""
+    grid = Table.grid(
+        padding=(0, 1),
+        pad_edge=False,
+    )
+    grid.width = max(8, int(width))
+    grid.add_column(width=1, no_wrap=True)
+    grid.add_column(ratio=1, overflow="fold")
+    grid.add_row(Text(marker, style=style), body)
+    return grid
+
+
+def render_response(text: str, width: int = 80) -> Table:
+    """Render Zeno's response as an open coding-agent message.
 
     Fenced blocks are rendered via ``rich.syntax.Syntax`` keyed on the block's
     language tag (```python / ```bash / ...) so the highlighting is REAL and
     language-driven; an unknown/absent tag degrades to plain text rather than
     crashing the REPL. Prose between blocks keeps path/inline-code colouring.
+    A narrow marker column replaces the old full Panel, so wrapped prose and
+    code align beneath the message body without turning every reply into a box.
     """
     parts = _CODE_BLOCK_RE.split(text)
 
@@ -288,14 +303,109 @@ def render_response(text: str, width: int = 80) -> Panel:
             _append_highlighted_text(prose, parts[i])
             i += 1
     renderables.append(prose)
-
-    return Panel(
-        Group(*renderables),
-        title=V_LABEL,
-        title_align="left",
-        border_style=TEAL,
-        padding=(0, 1),
+    body_parts = [
+        part
+        for part in renderables
+        if not isinstance(part, Text) or bool(part.plain)
+    ]
+    if not body_parts:
+        body: Any = Text("")
+    elif len(body_parts) == 1:
+        body = body_parts[0]
+    else:
+        body = Group(*body_parts)
+    return _open_message_grid(
+        "●",
+        body,
         width=width,
+        style=f"bold {TEAL}",
+    )
+
+
+def _normalize_reasoning(text: str) -> str:
+    """Turn provider whitespace into one calm, naturally wrapping paragraph."""
+    return " ".join(str(text or "").split())
+
+
+def render_reasoning(
+    text: str,
+    *,
+    width: int = 80,
+    title: str = "Thinking",
+) -> Table:
+    """Render requested/full reasoning as a labelled open block, never a box."""
+    grid = Table.grid(
+        padding=(0, 1),
+        pad_edge=False,
+    )
+    grid.width = max(8, int(width))
+    grid.add_column(width=1, no_wrap=True)
+    grid.add_column(ratio=1, overflow="fold")
+    grid.add_row(
+        Text("◌", style=f"bold {DIM_TEAL}"),
+        Text(title, style="dim"),
+    )
+    grid.add_row(
+        Text("┆", style=DIM_TEAL),
+        Text(_normalize_reasoning(text), style="dim italic", overflow="fold"),
+    )
+    return grid
+
+
+def render_live_thinking(
+    *,
+    elapsed: float,
+    reasoning_tail: str = "",
+    width: int = 80,
+) -> Table:
+    """Render transient thinking in one header row plus at most one tail row."""
+    label = "Thinking"
+    if elapsed >= 1:
+        label += f" · {elapsed:.0f}s"
+    grid = Table.grid(
+        padding=(0, 1),
+        pad_edge=False,
+    )
+    grid.width = max(8, int(width))
+    grid.add_column(width=1, no_wrap=True)
+    grid.add_column(ratio=1, overflow="ellipsis")
+    grid.add_row(
+        Text("◌", style=f"bold {DIM_TEAL}"),
+        Text(label, style="dim"),
+    )
+    tail = _normalize_reasoning(reasoning_tail)
+    if tail:
+        grid.add_row(
+            Text("┆", style=DIM_TEAL),
+            Text(tail, style="dim italic", overflow="ellipsis", no_wrap=True),
+        )
+    return grid
+
+
+def _is_answer_only_display_step(step: Any) -> bool:
+    """Hide unified-controller answer scaffolding that duplicates the reply."""
+    if isinstance(step, dict):
+        name = step.get("sub_goal_name", "")
+        strategy = step.get("strategy", "")
+    else:
+        name = getattr(step, "sub_goal_name", "")
+        strategy = getattr(step, "strategy", "")
+    return str(name).strip() == "answer" and str(strategy).strip() == "answer"
+
+
+def render_chat_footer(
+    *,
+    in_tokens: int = 0,
+    out_tokens: int = 0,
+    wall_sec: float = 0.0,
+) -> str:
+    """Compact chat metadata; route/model already live in the composer status."""
+    return render_turn_footer(
+        route="",
+        model="",
+        in_tokens=in_tokens,
+        out_tokens=out_tokens,
+        wall_sec=wall_sec,
     )
 
 
@@ -686,7 +796,13 @@ def _repl_attempt_native(
     if app_state is not None:
         app_state["last_reasoning"] = chain_view.reasoning_text
     if _cot_mode(app_state) == "full" and chain_view.reasoning_text.strip():
-        console.print(Text("┆ " + chain_view.reasoning_text.strip(), style="dim italic"))
+        console.print(
+            render_reasoning(
+                chain_view.reasoning_text,
+                width=min(int(getattr(console, "width", 80)), 80),
+                title="Thinking · full",
+            )
+        )
 
     # TYPED INTERJECT: a queued line means the operator overrode this turn. The
     # kernel already cancelled motion + the remaining tool calls at its safe
@@ -1750,7 +1866,13 @@ def _handle_slash_command(
         # that streamed no reasoning gets an honest fallback, never silence).
         reasoning = str((app_state or {}).get("last_reasoning", "") or "").strip()
         if reasoning:
-            console.print(Text("┆ " + reasoning, style="dim italic"))
+            console.print(
+                render_reasoning(
+                    reasoning,
+                    width=min(console.width, 80),
+                    title="Thinking · last turn",
+                )
+            )
         else:
             console.print("  [dim]上一回合无推理记录。[/dim]")
 
@@ -2917,6 +3039,8 @@ def main(argv: list[str] | None = None) -> None:
 
     def _vgg_step_display(step: Any) -> None:
         """Print VGG step progress to console — human-readable."""
+        if _is_answer_only_display_step(step):
+            return
         _vgg_step_idx[0] += 1
         idx = _vgg_step_idx[0]
         total = _vgg_total[0]
@@ -2955,6 +3079,8 @@ def main(argv: list[str] | None = None) -> None:
 
     def _vgg_step_view_display(view: dict[str, Any]) -> None:
         """Render one per-step EXPORT VIEW (sub-goal/strategy/verify/PASS-FAIL)."""
+        if _is_answer_only_display_step(view):
+            return
         try:
             from zeno.vcli.cognitive.observation import render_step_view
             verify = _vgg_verify_by_name.get(view.get("sub_goal_name"))
@@ -3171,46 +3297,29 @@ def main(argv: list[str] | None = None) -> None:
                 # model (DeepSeek) streams NO text for several seconds while it
                 # thinks; the region shows one calm "thinking…" status that resolves
                 # into the streamed answer — it is paused/cleared before any
-                # tool-execution line is printed so box frames never stack and the
+                # tool-execution line is printed so live regions never stack and the
                 # prompt is not duplicated.
                 _turn_started = time.monotonic()
                 # P1.2 CoT: the turn's reasoning chunks (DeepSeek-style
                 # reasoning models). DISPLAY BUFFER ONLY — rendered as a dim
-                # tail inside the thinking panel (mode 'tail'/'full'), recorded
+                # tail inside the open thinking block (mode 'tail'/'full'), recorded
                 # for /why, never appended to the session or the answer.
                 _turn_reasoning: list[str] = []
 
-                def _status_content(text: str, elapsed: float, is_thinking: bool) -> Panel:
+                def _status_content(text: str, elapsed: float, is_thinking: bool) -> Any:
+                    message_width = min(console.width, 80)
                     if is_thinking:
-                        dots = "." * (int(elapsed) % 4)
-                        label = f"thinking{dots}" + (
-                            f"  [dim]{elapsed:.0f}s[/]" if elapsed >= 1 else ""
-                        )
-                        body: Any = Text.from_markup(label, style="dim italic")
+                        tail = ""
                         if _turn_reasoning and _cot_mode(app_state) != "off":
                             tail = (
                                 "".join(_turn_reasoning)[-160:].replace("\n", " ").strip()
                             )
-                            if tail:
-                                body = Group(
-                                    body, Text("┆ " + tail, style="dim italic")
-                                )
-                        return Panel(
-                            body,
-                            title=V_LABEL,
-                            title_align="left",
-                            border_style=DIM_TEAL,
-                            padding=(0, 1),
-                            width=min(console.width, 80),
+                        return render_live_thinking(
+                            elapsed=elapsed,
+                            reasoning_tail=tail,
+                            width=message_width,
                         )
-                    return Panel(
-                        text,
-                        title=V_LABEL,
-                        title_align="left",
-                        border_style=TEAL,
-                        padding=(0, 1),
-                        width=min(console.width, 80),
-                    )
+                    return render_response(text, width=message_width)
 
                 status = TurnStatus(
                     content_factory=_status_content,
@@ -3226,7 +3335,7 @@ def main(argv: list[str] | None = None) -> None:
                     status.update_text(chunk)
 
                 def on_reasoning(_chunk: str) -> None:
-                    # P1.2: capture the reasoning chunk for the thinking-panel
+                    # P1.2: capture the reasoning chunk for the live thinking block
                     # tail + /why (display buffer only — never answer text),
                     # and keep the "thinking…" status alive with the timer.
                     if _chunk:
@@ -3507,7 +3616,7 @@ def main(argv: list[str] | None = None) -> None:
 
                 # --- Normal tool_use path ---
                 # Pause the live region around any interactive permission prompt so
-                # the prompt is not drawn into (and duplicated by) the live box.
+                # the prompt is not drawn into (and duplicated by) the live region.
                 def _ask_permission_paused(n: str, p: dict[str, Any]) -> str:
                     with status.paused():
                         return ask_permission(n, p)
@@ -3566,14 +3675,18 @@ def main(argv: list[str] | None = None) -> None:
 
                 # P1.2 CoT: record this turn's reasoning for /why; /cot full
                 # prints the whole block into the transcript (dim, before the
-                # answer panel). Display buffer only — never session content.
+                # answer). Display buffer only — never session content.
                 app_state["last_reasoning"] = "".join(_turn_reasoning)
                 if _cot_mode(app_state) == "full" and app_state["last_reasoning"].strip():
                     console.print(
-                        Text("┆ " + app_state["last_reasoning"].strip(), style="dim italic")
+                        render_reasoning(
+                            app_state["last_reasoning"],
+                            width=min(console.width, 80),
+                            title="Thinking · full",
+                        )
                     )
 
-                # Final response: highlighted panel with braille V title
+                # Final response: open coding-agent message (no repeated frame/title).
                 global _last_response
                 if turn_result.text:
                     _last_response = turn_result.text.strip()
@@ -3592,9 +3705,7 @@ def main(argv: list[str] | None = None) -> None:
                 # unknown parts omitted — same grammar as the native/VGG paths).
                 _u = turn_result.usage
                 console.print(
-                    render_turn_footer(
-                        route="tool_use",
-                        model=str(app_state.get("model", "") or ""),
+                    render_chat_footer(
                         in_tokens=getattr(_u, "input_tokens", 0) if _u else 0,
                         out_tokens=getattr(_u, "output_tokens", 0) if _u else 0,
                         wall_sec=time.monotonic() - _turn_started,

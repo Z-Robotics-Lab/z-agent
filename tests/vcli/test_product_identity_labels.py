@@ -4,7 +4,7 @@
 """User-visible product-identity labels must read 'Zeno', not the legacy 'V'.
 
 Covers the high-frequency REPL surfaces the audit flagged:
-- V_LABEL: the brand glyph reused as the title of every response Panel.
+- V_LABEL: the brand label retained by informational panels such as /agent.
 - The startup ASCII wordmark.
 - The /export markdown assistant-line prefix.
 - The /agent slash-command description shown in /help and the completer.
@@ -27,8 +27,8 @@ class _DummyRegistry:
         return None
 
 
-def test_response_panel_brand_label_is_zeno() -> None:
-    """V_LABEL titles every reply Panel — it must render Zeno, not the braille V."""
+def test_remaining_panel_brand_label_is_zeno() -> None:
+    """Informational panel titles must render Zeno, not the legacy braille V."""
     # The old value was the braille dot-art "V" (⠣⡠⠃).
     assert "⠣⡠⠃" not in cli.V_LABEL, cli.V_LABEL
     assert "Zeno" in cli.V_LABEL, cli.V_LABEL
