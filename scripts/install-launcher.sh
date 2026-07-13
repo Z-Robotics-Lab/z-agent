@@ -15,7 +15,8 @@ cat > "$BIN/zeno" <<EOF
 cd "$REPO" || exit 1
 set -a; source .env 2>/dev/null; set +a
 export ZENO_PROVIDER="\${ZENO_PROVIDER:-deepseek}"
-export DEEPSEEK_MODEL="\${DEEPSEEK_MODEL:-deepseek-v4-flash}"
+# v4-pro: flash 拆解太糙（幻觉谓词/单步膨胀成多步计划），CEO 2026-07-13 升级
+export DEEPSEEK_MODEL="\${DEEPSEEK_MODEL:-deepseek-v4-pro}"
 export GO2W_SIM_DIR="\${GO2W_SIM_DIR:-\$HOME/Desktop/go2w}"
 # Real-robot NUC: ros_env.sh provides DDS isolation (domain 20 + CycloneDDS)
 # and may set ZENO_WORLD=go2w_real. Dev machines have neither — both guarded.

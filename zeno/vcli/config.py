@@ -206,7 +206,9 @@ def resolve_credentials(
             cli_model
             or os.environ.get("DEEPSEEK_MODEL")
             or config.get("deepseek_model")
-            or "deepseek-v4-flash"
+            # v4-pro (CEO 2026-07-13): flash decomposition too sloppy live —
+            # hallucinated predicates, single actions inflated to multi-step.
+            or "deepseek-v4-pro"
         )
         ds_base = (
             cli_base_url
