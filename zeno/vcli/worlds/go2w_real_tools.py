@@ -17,6 +17,7 @@ import subprocess
 from typing import Any
 
 from zeno.vcli.tools.base import ToolContext, ToolResult, tool
+from zeno.vcli.worlds.go2w_real_diag import odom_fresh
 from zeno.vcli.worlds.go2w_real_skills import CFG, nav_sh_path
 
 # The lifecycle subcommands the bringup tool may invoke — the idempotent,
@@ -65,6 +66,10 @@ class Go2WRealBringupTool:
             return ToolResult(content=(
                 f"unknown action {action!r}; valid: {sorted(_BRINGUP_ACTIONS)}"),
                 is_error=True)
+        if subcmd == "status":
+            fast = self._fast_status(_hw_of(context))
+            if fast is not None:
+                return fast
         script = nav_sh_path()
         if not os.path.isfile(script):
             return ToolResult(content=(
@@ -89,6 +94,31 @@ class Go2WRealBringupTool:
                 "go2w_real_bringup(action='status') until topics show rates)"
                 if subcmd == "start" else "")
         return ToolResult(content=f"nav.sh {subcmd}:\n{out}{hint}")
+
+    @staticmethod
+    def _fast_status(base: Any) -> ToolResult | None:
+        """STATUS fast path from driver-known facts — <1s, no nav.sh.
+
+        Field trace 2026-07-10 evening: status blocked ~30s (nav.sh probes 6
+        topics x 8s) while the driver ALREADY saw fresh odometry. When the
+        driver knows the stack is alive, answer from what it knows; a stale /
+        absent / disconnected driver knows nothing useful -> None = fall back
+        to the honest nav.sh probe (cold/unknown stack).
+        """
+        if not odom_fresh(base):
+            return None
+        try:
+            age = float(base.odom_age_s())
+            latched = bool(getattr(base, "estop_latched", False))
+        except Exception:  # noqa: BLE001 — facts went away mid-read: slow path
+            return None
+        return ToolResult(content=(
+            f"stack READY (fast path — driver-known facts, no nav.sh probe):\n"
+            f"  odometry: flowing (odom age {age:.1f}s, /state_estimation)\n"
+            f"  driver: connected\n"
+            f"  estop latched: {'true' if latched else 'false'}"
+            + ("\n  NOTE: motion is blocked until resume (解除急停)." if latched
+               else "")))
 
 
 @tool(

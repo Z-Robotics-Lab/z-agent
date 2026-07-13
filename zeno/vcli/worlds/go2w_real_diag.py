@@ -22,6 +22,36 @@ def _latched_hint(base: Any) -> str | None:
     return None
 
 
+def wrap_angle(angle: float) -> float:
+    """Wrap an angle delta into (-pi, pi] — the shortest signed rotation.
+
+    Shared by the turn skill and the turned() verify oracle so both grade a
+    heading crossing ±pi identically (the driver keeps its own copy — hardware
+    modules never import vcli worlds).
+    """
+    return math.atan2(math.sin(angle), math.cos(angle))
+
+
+def odom_fresh(base: Any, max_age_s: float = 3.0) -> bool:
+    """Driver-known liveness: connected AND odometry younger than *max_age_s*.
+
+    THE fast-status fact (field trace 2026-07-10 evening: bringup status
+    blocked ~30s probing topics the driver already knew were flowing).
+    Fail-safe False: no driver, not connected, no odom_age_s(), never-received
+    or stale odometry, or any error — a missing oracle must never fake-pass.
+    """
+    if base is None:
+        return False
+    try:
+        if not getattr(base, "is_connected", False):
+            return False
+        age_fn = getattr(base, "odom_age_s", None)
+        age = age_fn() if callable(age_fn) else None
+        return age is not None and float(age) < float(max_age_s)
+    except Exception:  # noqa: BLE001 — liveness probe must never raise
+        return False
+
+
 def _stalled_hint(start_pos: Any, end_pos: Any) -> str:
     """Distinguish 'blocked path' from 'commands eaten by a latched guard'."""
     try:

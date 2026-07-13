@@ -414,6 +414,66 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self.set_velocity(0.0, 0.0, 0.0)
         return True
 
+    def rotate(self, delta_yaw_rad: float, yaw_rate: float = 0.5) -> bool:
+        """Rotate IN PLACE by *delta_yaw_rad* (signed: + = left/CCW, - = right/CW).
+
+        walk()-cadence template on the same guard contract: publish an
+        angular-ONLY Twist on /teleop_cmd_vel every TELEOP_PERIOD_S (5 Hz —
+        strictly beating the 0.4 s deadman) for |delta|/rate seconds, then stop
+        publishing (one final zero frame; the deadman is the real stop).
+
+        Progress is tracked on get_heading() odometry with wrap-around handling
+        (heading deltas wrapped into (-pi, pi] and accumulated), so the loop
+        stops EARLY the moment odometry says the turn is done. Honors the
+        _nav_abort seam — cancel_navigation() (stop skill / Ctrl+C twin)
+        unblocks a rotation exactly like a navigate — and fails fast when this
+        driver's own E-stop latch is set (the guard would silently eat the
+        commands; field trace 2026-07-10).
+
+        Returns False on not-connected / E-stop latch / operator cancel; True
+        when the command window completed. An open-loop completion with dead
+        odometry is NOT proof of rotation — grade with the turned() oracle.
+        """
+        if not (math.isfinite(delta_yaw_rad) and math.isfinite(yaw_rate)):
+            raise ValueError("Go2WHardware.rotate: non-finite rotation request")
+        if yaw_rate <= 0.0:
+            raise ValueError("Go2WHardware.rotate: yaw_rate must be > 0")
+        if self._node is None or self._teleop_pub is None:
+            logger.warning("Go2WHardware.rotate: not connected")
+            return False
+        if self.estop_latched:
+            logger.warning("Go2WHardware.rotate: E-stop latched — refusing motion")
+            return False
+        target = abs(float(delta_yaw_rad))
+        if target == 0.0:
+            return True
+        rate = min(float(yaw_rate), self.MAX_YAW_RPS)
+        sign = 1.0 if delta_yaw_rad > 0.0 else -1.0
+        duration = target / rate
+        logger.info("Go2WHardware: rotate %.1f deg @ %.2f rad/s (~%.1fs)",
+                    math.degrees(delta_yaw_rad), rate, duration)
+
+        self._nav_abort.clear()
+        prev = float(self.get_heading())
+        turned_rad = 0.0
+        deadline = time.monotonic() + duration
+        cancelled = False
+        while time.monotonic() < deadline:
+            if self._nav_abort.is_set():
+                logger.info("Go2WHardware: rotation cancelled by operator")
+                cancelled = True
+                break
+            self.set_velocity(0.0, 0.0, sign * rate)
+            time.sleep(self.TELEOP_PERIOD_S)
+            cur = float(self.get_heading())
+            turned_rad += _wrap_pi(cur - prev)
+            prev = cur
+            if abs(turned_rad) >= target:
+                break  # odometry-confirmed arrival — stop early
+        # Final zero frame, then silence: the robot-side deadman does the rest.
+        self.set_velocity(0.0, 0.0, 0.0)
+        return not cancelled
+
     def stop(self) -> None:
         """Emergency-safe stop: publish one zero Twist; never raise.
 
@@ -433,3 +493,8 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
 def _clamp(v: float, limit: float) -> float:
     """Clamp *v* into [-limit, +limit]. (Finite already ensured upstream.)"""
     return max(-limit, min(limit, float(v)))
+
+
+def _wrap_pi(angle: float) -> float:
+    """Wrap an angle delta into (-pi, pi] — the shortest signed rotation."""
+    return math.atan2(math.sin(angle), math.cos(angle))

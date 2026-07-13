@@ -22,7 +22,7 @@ from typing import Any, Callable
 
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
-from zeno.vcli.worlds.go2w_real_diag import oplog
+from zeno.vcli.worlds.go2w_real_diag import odom_fresh, oplog
 from zeno.vcli.worlds.go2w_real_skills import nav_sh_path
 
 #: nav.sh subcommands this skill may run (lifecycle only — motion stays with
@@ -39,7 +39,15 @@ def _default_runner(argv: list[str], timeout: float) -> Any:
 
 
 def _default_ready_probe(hw: Any) -> bool:
-    """Quick liveness probe: is the stack ALREADY up? (~5s budget, no side effects)."""
+    """Quick liveness probe: is the stack ALREADY up?
+
+    Fresh odometry answers True INSTANTLY (driver-known fact — no sleeping;
+    field trace 2026-07-10 evening: the old probe burned the 8s settle even
+    when the stack was obviously alive). Stale/unknown falls back to the slow
+    poller (~5s budget) whose quiet period guards against dying publishers.
+    """
+    if odom_fresh(hw):
+        return True
     return _default_ready_poller(hw, timeout_s=5.0)
 
 

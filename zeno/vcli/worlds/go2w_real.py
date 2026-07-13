@@ -61,7 +61,9 @@ from zeno.vcli.worlds.go2w_real_tools import (
     Go2WRealWhereTool,
 )
 from zeno.vcli.worlds.go2w_real_lifecycle import RealBringupSkill, RealResumeSkill
-from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool
+from zeno.vcli.worlds.go2w_real_ops_skills import RealVizSkill, RealWhereSkill
+from zeno.vcli.worlds.go2w_real_turn_skills import RealTurnSkill
+from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool, VizOverlaySession
 from zeno.vcli.worlds.go2w_real_route_skills import (
     RealRouteViaSkill,
     RealStopRouteSkill,
@@ -74,6 +76,7 @@ from zeno.vcli.worlds.go2w_real_verify import (
     make_explored_progress,
     make_moved,
     make_stack_ready,
+    make_turned,
 )
 from zeno.vcli.worlds.go2w_real_vocab import REAL_DECOMPOSE_EXAMPLES
 
@@ -107,11 +110,15 @@ class Go2WRealEmbodiment:
         # oracle subscriptions; its Trigger helpers do the safety teardown).
         self._explore = Go2WExploreManager(self._base)
         self._route = Go2WRouteManager(self._base)
+        # ONE viz overlay session shared by the go2w_real_viz TOOL and the
+        # open_viz SKILL — the two faces can never double-launch RViz.
+        self._viz = VizOverlaySession()
         # Managers ALSO ride the driver: the VGG GoalExecutor builds its own
         # SkillContext (no world services) but always wires base — skills fall
         # back to these attributes (first-REPL-contact fix, 2026-07-10).
         self._base.explore_manager = self._explore
         self._base.route_manager = self._route
+        self._base.viz_manager = self._viz
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(RealNavigateSkill())
         self._skill_registry.register(RealMoveRelativeSkill())
@@ -124,6 +131,9 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealStopRouteSkill())
         self._skill_registry.register(RealBringupSkill())
         self._skill_registry.register(RealResumeSkill())
+        self._skill_registry.register(RealTurnSkill())
+        self._skill_registry.register(RealVizSkill())
+        self._skill_registry.register(RealWhereSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -136,7 +146,8 @@ class Go2WRealEmbodiment:
         """
         return SkillContext(
             bases={"go2w": self._base},
-            services={"explore": self._explore, "route": self._route},
+            services={"explore": self._explore, "route": self._route,
+                      "viz": self._viz},
         )
 
     def _sync_robot_state(self) -> None:
@@ -262,6 +273,7 @@ class Go2WRealWorld:
         }
         ns["route_reached"] = make_route_reached(agent)
         ns["stack_ready"] = make_stack_ready(agent)
+        ns["turned"] = make_turned(agent)
         # v2-extension point: verify — feature agents APPEND
         # `ns["<fn>"] = make_<fn>(agent)` lines ABOVE this marker (factories
         # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
@@ -384,6 +396,7 @@ class Go2WRealWorld:
                 "at", "moved", "explore_finished", "explored_progress",
                 "route_reached",  # v2 route mode (far_planner arrival oracle)
                 "stack_ready",    # lifecycle: odometry flowing = stack truly up
+                "turned",         # v2 in-place rotation (odometry yaw, wrap-aware)
             }),
             verify_fn_signatures={
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
@@ -402,6 +415,10 @@ class Go2WRealWorld:
                 "stack_ready": (
                     "stack_ready() -> bool"
                     "  # nav stack up: fresh /state_estimation odometry within 3s"),
+                "turned": (
+                    "turned(min_deg: float = 30.0) -> bool"
+                    "  # |wrapped heading delta| since first call >= min_deg "
+                    "(odometry yaw; wrapped delta caps at 180)"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "
@@ -426,6 +443,14 @@ class Go2WRealWorld:
                                   "stop. 启动/关闭导航栈 — NOT standing up"),
                 "resume_skill": ("Release the E-stop/manual latch so motion works "
                                  "again — REQUIRED after stop_skill. 解除急停/恢复自主"),
+                "turn_skill": ("Turn IN PLACE by direction+degrees (左转/右转; "
+                               "掉头=180); verify turned(min_deg) — use ~60% of "
+                               "the request (wrapped delta caps at 180)"),
+                "open_viz_skill": ("Open RViz for the operator (view main|explore|"
+                                   "route — match the running planner); "
+                                   "already-open dedupes to ok. 打开可视化"),
+                "where_skill": ("Report the current map-frame pose {x, y, yaw} "
+                                "from live odometry. 查询当前位姿"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
@@ -433,6 +458,7 @@ class Go2WRealWorld:
                 "explore_skill", "stop_explore_skill",
                 "route_via_skill", "stop_route_skill",
                 "bringup_skill", "resume_skill",
+                "turn_skill", "open_viz_skill", "where_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -445,7 +471,10 @@ class Go2WRealWorld:
   - route_via_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}  (FAR goal via far_planner)
   - stop_route_skill: {}
   - bringup_skill: {"action": "start|restart|stop"}  (start=幂等,栈在跑则不动; restart=强制重建; posture belongs to standup/liedown)
-  - resume_skill: {}  (解除急停;stop 之后、任何运动之前)""",
+  - resume_skill: {}  (解除急停;stop 之后、任何运动之前)
+  - turn_skill: {"direction": "left|right", "degrees": <float, default 90>}  (掉头=180; verify turned(~0.6*degrees))
+  - open_viz_skill: {"view": "main|explore|route"}  (optional; default main — match the running planner)
+  - where_skill: {}""",
             examples=REAL_DECOMPOSE_EXAMPLES,
             # SUPPRESS the class-default '## Loop Example' (it teaches
             # detect_objects(), a phantom here — field forensics 2026-07-10).

@@ -109,6 +109,38 @@ def make_moved(agent: Any) -> Callable[..., bool]:
     return moved
 
 
+def make_turned(agent: Any) -> Callable[..., bool]:
+    """Bind ``turned(min_deg=30)`` — did the robot actually rotate in place?
+
+    The moved() pattern on odometry YAW: the first call captures the start
+    heading (and grades False); afterwards True once the |wrapped| heading
+    delta from that start is >= ``min_deg`` degrees. Wrap-aware: a heading
+    crossing ±pi (e.g. +3.04 -> -3.04 rad) grades as the ~11° turn it is,
+    never as ~349°. Note the wrapped delta can never exceed 180° — a 掉头
+    verifies with min_deg < 180 (e.g. turned(108) for a 180° request).
+    Fail-safe False when no base is wired or heading errors (Inv-1).
+    """
+    from zeno.vcli.worlds.go2w_real_diag import wrap_angle
+
+    origin: dict[str, float] = {}
+
+    def turned(min_deg: float = 30.0) -> bool:
+        base = getattr(agent, "_base", None) if agent is not None else None
+        if base is None:
+            return False
+        try:
+            yaw = float(base.get_heading())
+        except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
+            return False
+        if "start" not in origin:
+            origin["start"] = yaw
+            return False
+        delta = wrap_angle(yaw - origin["start"])
+        return abs(math.degrees(delta)) >= float(min_deg)
+
+    return turned
+
+
 def make_stack_ready(agent: Any) -> Callable[[], bool]:
     """Bind ``stack_ready()`` — True iff fresh odometry is flowing (< 3 s old).
 
