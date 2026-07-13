@@ -13,7 +13,28 @@ python -m zeno.vcli.cli -p "<prompt>" --json    # one turn, then exit
   last — D184 transition; scanners accept either); Rich/banner output goes to stderr.
 - The verdict is carried by frozen `VerdictReport` (vcli/verdict.py), built ONLY from the
   spine's `classify_step_evidence` / `evidence_passed` — never re-derived
-  (`VerdictReport.from_trace(trace, oracle).verified == evidence_passed(trace, oracle)`).
+  (`VerdictReport.from_trace(trace, oracle, preds).verified == evidence_passed(trace, oracle, preds)`).
+
+### Grounding semantics (CEO-gated change, 2026-07-13)
+- **Predicate-role map**: a world marks its goal-conditioned bool verify callables with
+  `evidence_classifier.predicate_oracle` (go2w_real: `at`/`moved`/`turned`/`stack_ready`/
+  `route_reached`/`explore_finished`); `verify_predicate_names(agent, engine)` collects the
+  marked names from the SAME live namespace as `verify_oracle_names` and both sets feed the
+  classifier. A bare call of a role-mapped, SERVED oracle now classifies GROUNDED like a
+  kernel predicate (pre-fix, every world-registered predicate classified RAN, so an
+  all-green hardware turn displayed `verified=False (0/N grounded)`). The role can only
+  RECOGNIZE a served oracle — never add one; all structural guards (or-True short-circuit,
+  bare state oracle, tautologies) are unchanged. Default empty set = kernel-only (fail-closed).
+- **verified grades goal-state truth**: a turn where EVERY step's predicate ran and passed
+  on a world-served oracle reports `verified=True (N/N grounded)`; any failed / never-run
+  predicate still fails the turn.
+- **Actor-causation is an annotation with teeth for actions**: `CAUSED`/`UNCAUSED`/
+  `NOT_GRADED` is displayed per step (`(actor=...)` in the REPL). `UNCAUSED` still
+  downgrades a step that ACTED (non-empty strategy — a teleport / satisfied-at-baseline
+  no-op behind a commanded action stays RAN). A VERIFY-ONLY step (no action) with a passing
+  predicate is a grounded OBSERVATION — it verifies (`where am I` / `is the stack up`
+  turns are honest greens) and can never mask a failed action step (every checked step
+  must still ground).
 
 | field | meaning |
 |---|---|

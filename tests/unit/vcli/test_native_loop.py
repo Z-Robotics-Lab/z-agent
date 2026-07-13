@@ -14,8 +14,11 @@ Pinned here (the RED-0 tripwire + the review fixes):
 - (fix 2 granularity) N bare walks then ONE verify -> exactly ONE StepRecord whose
   strategy is the last walk; intermediate walks are NOT each a checked sub-goal.
 - (fix 3 timing + spine parity) an HONEST walk -> CAUSED -> GROUNDED -> verified;
-  a verify-only NO-OP (predicate true at baseline, no walk) -> UNCAUSED -> RAN ->
-  NOT verified; verified == evidence_passed (the spine, not a re-derivation).
+  a verify-only NO-OP (predicate true at baseline, no walk) -> UNCAUSED annotation,
+  but the step is a grounded OBSERVATION (2026-07-13 CEO-gated semantics: verified
+  grades goal-state truth on world oracles; causation stays an annotation and only
+  downgrades a step that ACTED); verified == evidence_passed (the spine, not a
+  re-derivation).
 - (replan-via-model) a False verify is followed by ANOTHER model-issued walk +
   verify — the runner holds NO replan/iteration state; the trace has both pairs.
 """
@@ -258,8 +261,11 @@ def test_honest_walk_is_caused_and_verified() -> None:
     assert base.get_position()[0] > 1.5  # actually moved
 
 
-def test_noop_verify_only_is_uncaused_and_not_verified() -> None:
-    """verify-only (no walk), predicate true at baseline -> UNCAUSED -> RAN."""
+def test_noop_verify_only_is_uncaused_grounded_observation() -> None:
+    """verify-only (no walk), predicate true at baseline -> UNCAUSED annotation,
+    GROUNDED observation (2026-07-13 semantics: the world-served oracle read IS
+    ground truth — the goal state holds — so the turn verifies; UNCAUSED only
+    downgrades a step that ACTED, e.g. the teleport case below/PTY)."""
     backend = FakeToolScriptBackend.from_tool_script(
         [
             tool_turn(("verify", {"expr": "at_position(0.0, 0.0, 1.0)"})),
@@ -274,9 +280,10 @@ def test_noop_verify_only_is_uncaused_and_not_verified() -> None:
 
     step = trace.steps[0]
     assert step.verify_result is True, "predicate is true at baseline"
-    assert step.actor_caused is ActorCaused.UNCAUSED, "no commanded motion"
-    assert report.verified is False and report.evidence == "RAN"
-    assert report.exit_code() == 2
+    assert step.actor_caused is ActorCaused.UNCAUSED, "annotation preserved"
+    assert step.strategy == "", "verify-only: no action strategy recorded"
+    assert report.verified is True and report.evidence == "GROUNDED"
+    assert report.exit_code() == 0
     assert report.verified == evidence_passed(trace, oracle_names)
 
 

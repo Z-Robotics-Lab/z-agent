@@ -26,7 +26,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from zeno.vcli.cognitive.actor_causation import ActorCaused, from_name
-from zeno.vcli.cognitive.evidence_classifier import classify_verify_expr
+from zeno.vcli.cognitive.evidence_classifier import (
+    classify_verify_expr,
+    predicate_names_from_namespace,
+)
 from zeno.vcli.cognitive.types import (
     ExecutionTrace,
     GoalTree,
@@ -108,6 +111,35 @@ def verify_oracle_names(agent: Any, engine: Any = None) -> frozenset[str]:
     return frozenset(ns.keys())
 
 
+def verify_predicate_names(agent: Any, engine: Any = None) -> frozenset[str]:
+    """The PREDICATE-role oracle names in the LIVE verify namespace (2026-07-13).
+
+    The twin of ``verify_oracle_names`` for the predicate-role map: builds the
+    SAME namespace (``engine._build_verifier_namespace(agent)`` — the world's
+    ``build_verify_namespace`` merge + deny already applied) and collects the
+    names whose SERVED callable a world marked with
+    ``evidence_classifier.predicate_oracle`` (goal-conditioned bool the actor
+    cannot author, e.g. go2w_real ``stack_ready``/``at``/``turned``). The role
+    travels ON the callable, so this is never a hand-authored second allowlist
+    (rule 3) and a name never leaks across worlds.
+
+    FAILS CLOSED to ``frozenset()`` (no engine / no builder / build error): with
+    no roles, bare world-oracle calls classify RAN exactly as before the role
+    map — the moat can only get stricter, never looser (rule 5).
+    """
+    if engine is None:
+        return frozenset()
+    builder = getattr(engine, "_build_verifier_namespace", None)
+    if builder is None:
+        return frozenset()
+    try:
+        ns = builder(agent)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("verify_predicate_names: namespace build failed: %s", exc)
+        return frozenset()
+    return predicate_names_from_namespace(ns)
+
+
 # ---------------------------------------------------------------------------
 # Per-step evidence classification (single source for BOTH gates — rule 3)
 # ---------------------------------------------------------------------------
@@ -123,9 +155,26 @@ def _actor_uncaused(step: StepRecord) -> bool:
     return getattr(step, "actor_caused", ActorCaused.NOT_GRADED) == ActorCaused.UNCAUSED
 
 
+def _step_acted(step: StepRecord) -> bool:
+    """True iff an ACTION strategy ran for this step (non-empty ``strategy``).
+
+    2026-07-13 CEO-gated grounding semantics: the R2b UNCAUSED downgrade applies
+    only to a step that ACTED (a commanded strategy that did not cause its
+    claimed state — teleport / satisfied-at-baseline no-op behind an action).
+    A VERIFY-ONLY step (the native loop records ``strategy=""`` when zero
+    skills were dispatched before the verify) is an OBSERVATION: a passing,
+    world-served predicate read is honest ground truth the actor cannot author,
+    so causation is an annotation, not a gate, there. It can never mask a
+    failed action step — ``evidence_passed`` still requires EVERY checked step
+    to classify GROUNDED.
+    """
+    return bool((getattr(step, "strategy", "") or "").strip())
+
+
 def classify_step_evidence(
     step: StepRecord, sub_goal: SubGoal, oracle_names: frozenset[str],
     goal_text: str | None = None,
+    predicate_names: frozenset[str] = frozenset(),
 ) -> StepEvidence:
     """Classify a single executed step's evidence: GROUNDED / RAN / FAILED.
 
@@ -150,13 +199,32 @@ def classify_step_evidence(
 
     R2b ACTOR-CAUSATION downgrade (single-sourced HERE so it flows to BOTH gates
     and the VECTOR_VERDICT report): a step that would otherwise classify GROUNDED is
-    DOWNGRADED to RAN when ``step.actor_caused == ActorCaused.UNCAUSED`` — i.e. the
-    R1 predicate is GROUNDED but the executor graded that the ACTOR did NOT cause the
-    state change (a satisfied-at-baseline NO-OP, or a teleport with no commanded
-    motion). The downgrade fires ONLY on the explicit ``UNCAUSED`` value; the default
-    ``NOT_GRADED`` (legacy / hand-built / non-robot-predicate steps the executor never
-    graded) classifies EXACTLY as before R2b — zero regression. ``CAUSED`` is a no-op
-    here (the step keeps its GROUNDED classification).
+    DOWNGRADED to RAN when ``step.actor_caused == ActorCaused.UNCAUSED`` AND the step
+    ACTED (``_step_acted`` — a non-empty action strategy): the R1 predicate is
+    GROUNDED but the executor graded that the ACTOR's commanded action did NOT cause
+    the state change (a satisfied-at-baseline NO-OP behind a commanded strategy, or a
+    teleport with no commanded motion). The downgrade fires ONLY on the explicit
+    ``UNCAUSED`` value; the default ``NOT_GRADED`` (legacy / hand-built /
+    non-robot-predicate steps the executor never graded) classifies EXACTLY as before
+    R2b — zero regression. ``CAUSED`` is a no-op here (the step keeps its GROUNDED
+    classification).
+
+    2026-07-13 CEO-gated observation semantics: a VERIFY-ONLY step (no action
+    strategy — zero skills dispatched) graded UNCAUSED with a passing world-served
+    predicate is a grounded OBSERVATION, not a false green: the oracle read is
+    ground truth the actor cannot author, and ``verified`` grades GOAL-STATE truth
+    while causation stays a separate annotation on the step/display. It cannot mask
+    a failed action step (``evidence_passed`` still needs EVERY checked step
+    GROUNDED). Residual (documented, deferred — same shadow-re-step scope as
+    actor_causation's honesty claim): cross-STEP causation attribution — an action
+    step that pokes state and a LATER verify-only observation of it — is not graded.
+
+    *predicate_names* (2026-07-13 predicate-role map) is threaded verbatim into
+    ``classify_verify_expr`` so a WORLD-declared predicate oracle (go2w_real
+    ``stack_ready()``/``at(x, y)``/...) can classify GROUNDED like a kernel one.
+    Single-source it from ``verify_predicate_names(agent, engine)`` — the SAME
+    live namespace as *oracle_names*. The default empty set is the old
+    kernel-only classification (fail-closed).
 
     STEP-13 GOAL-AUTHENTICITY downgrade (also subtractive, fail-OPEN): when *goal_text*
     is provided (the turn's NL goal, single-sourced from ``trace.goal_tree.goal``) and
@@ -172,12 +240,15 @@ def classify_step_evidence(
     if _is_answer_only(sub_goal):
         return "GROUNDED" if (step.verify_result and not visual_override) else "RAN"
     grounded = (
-        classify_verify_expr(sub_goal.verify, oracle_names) == "GROUNDED"
+        classify_verify_expr(sub_goal.verify, oracle_names, predicate_names)
+        == "GROUNDED"
         and step.verify_result
         and not visual_override
     )
-    if grounded and _actor_uncaused(step):
-        # R2b: GROUNDED predicate but the actor did not cause it -> downgrade to RAN.
+    if grounded and _actor_uncaused(step) and _step_acted(step):
+        # R2b: GROUNDED predicate but the actor's ACTION did not cause it ->
+        # downgrade to RAN. A verify-only step (no action) is a grounded
+        # OBSERVATION — causation is annotation there (2026-07-13 semantics).
         return "RAN"
     if grounded and goal_text is not None:
         # STEP-13 goal-authenticity: an actor-CAUSED at_position verify whose constant
@@ -349,7 +420,11 @@ def replay(trace: ExecutionTrace, verifier: Any) -> bool:
     return checked > 0
 
 
-def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool:
+def evidence_passed(
+    trace: ExecutionTrace,
+    oracle_names: frozenset[str],
+    predicate_names: frozenset[str] = frozenset(),
+) -> bool:
     """True when the trace's success is backed by deterministic evidence.
 
     Single-sourced through ``classify_step_evidence`` (rule 3) and applied to BOTH
@@ -367,6 +442,12 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     ``GoalVerifier`` uses; never a hand-authored copy. An empty set fails closed
     (everything classifies RAN), so the moat only ever gets stricter (rule 5).
 
+    *predicate_names* (2026-07-13 predicate-role map) MUST likewise come from
+    ``verify_predicate_names(agent, engine)`` — the marked predicate-oracle names
+    of the SAME namespace — so a world-served bool oracle (go2w_real
+    ``stack_ready()``/``at(x, y)``) grounds like a kernel one. The default empty
+    set is the old kernel-only behavior (fail-closed).
+
     Stage 5 (S5.2): a step whose sub-goal is explicitly ``answer_only`` (and routed
     through the zero-I/O ``answer`` strategy) is a pure-conversation step that
     carries no robot evidence BY DESIGN; ``classify_step_evidence`` exempts it from
@@ -381,7 +462,9 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
         return False
     goal_text = trace.goal_tree.goal
     all_grounded = all(
-        classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
+        classify_step_evidence(
+            s, sg_by_name[s.sub_goal_name], oracle_names, goal_text, predicate_names
+        ) == "GROUNDED"
         for s in checked
     )
     if not all_grounded:
@@ -410,7 +493,9 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     goal_xy = parse_goal_coord(goal_text)
     if goal_xy is not None:
         return any(
-            classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
+            classify_step_evidence(
+                s, sg_by_name[s.sub_goal_name], oracle_names, goal_text, predicate_names
+            ) == "GROUNDED"
             and at_position_const_matches(sg_by_name[s.sub_goal_name].verify, goal_xy)
             for s in checked
         )
@@ -421,11 +506,15 @@ def evidence_passed(trace: ExecutionTrace, oracle_names: frozenset[str]) -> bool
     # with NO coordinate intent (room name / "explore" / "turn") fails OPEN (unchanged).
     if goal_has_coordinate_intent(goal_text):
         return any(
-            classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
+            classify_step_evidence(
+                s, sg_by_name[s.sub_goal_name], oracle_names, goal_text, predicate_names
+            ) == "GROUNDED"
             and has_necessary_at_position(sg_by_name[s.sub_goal_name].verify)
             for s in checked
         )
-    return _object_goal_turn_ok(checked, sg_by_name, oracle_names, goal_text)
+    return _object_goal_turn_ok(
+        checked, sg_by_name, oracle_names, goal_text, predicate_names
+    )
 
 
 def _object_goal_turn_ok(
@@ -433,6 +522,7 @@ def _object_goal_turn_ok(
     sg_by_name: dict[str, SubGoal],
     oracle_names: frozenset[str],
     goal_text: str | None,
+    predicate_names: frozenset[str] = frozenset(),
 ) -> bool:
     """D17 OBJECT-GOAL TURN GATE (stricter-only) — the grasp analogue of the STEP-15
     coordinate turn gate above.
@@ -467,14 +557,19 @@ def _object_goal_turn_ok(
     if not goal_has_object_intent(goal_text):
         return True
     return any(
-        classify_step_evidence(s, sg_by_name[s.sub_goal_name], oracle_names, goal_text) == "GROUNDED"
+        classify_step_evidence(
+            s, sg_by_name[s.sub_goal_name], oracle_names, goal_text, predicate_names
+        ) == "GROUNDED"
         and has_necessary_manip_oracle(sg_by_name[s.sub_goal_name].verify)
         for s in checked
     )
 
 
 def step_evidence_ok(
-    step: StepRecord, sub_goal: SubGoal, oracle_names: frozenset[str]
+    step: StepRecord,
+    sub_goal: SubGoal,
+    oracle_names: frozenset[str],
+    predicate_names: frozenset[str] = frozenset(),
 ) -> bool:
     """True when a SINGLE step's pass is backed by deterministic evidence.
 
@@ -487,5 +582,10 @@ def step_evidence_ok(
 
     *oracle_names* MUST come from ``verify_oracle_names(agent, engine)`` (live
     namespace, single source). An empty set fails closed (classifies RAN).
+    *predicate_names* MUST come from ``verify_predicate_names`` (same namespace,
+    predicate-role map 2026-07-13); the default empty set fails closed too.
     """
-    return classify_step_evidence(step, sub_goal, oracle_names) == "GROUNDED"
+    return (
+        classify_step_evidence(step, sub_goal, oracle_names, None, predicate_names)
+        == "GROUNDED"
+    )

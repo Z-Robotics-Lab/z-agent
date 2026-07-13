@@ -57,6 +57,7 @@ from zeno.vcli.cognitive.trace_store import (
     save_trace,
     step_evidence_ok,
     verify_oracle_names,
+    verify_predicate_names,
 )
 from zeno.vcli.cognitive.vgg_harness import VGGHarness, HarnessConfig, FailureRecord
 from zeno.vcli.cognitive.object_memory import ObjectMemory, TrackedObject
@@ -98,6 +99,7 @@ __all__ = [
     "step_evidence_ok",
     "classify_step_evidence",
     "verify_oracle_names",
+    "verify_predicate_names",
     "step_view",
     "run_snapshot",
     "goal_tree_view",

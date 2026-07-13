@@ -531,7 +531,10 @@ def _repl_attempt_native(
     switch done on a prior (legacy) turn is already reflected on the engine.
     """
     from zeno.vcli.backends.openai_compat import ModelUnavailableError
-    from zeno.vcli.cognitive.trace_store import verify_oracle_names
+    from zeno.vcli.cognitive.trace_store import (
+        verify_oracle_names,
+        verify_predicate_names,
+    )
     from zeno.vcli.verdict import VerdictReport
 
     agent = getattr(engine, "_vgg_agent", None)
@@ -599,8 +602,12 @@ def _repl_attempt_native(
 
     verified = False
     try:
+        # Predicate-role map (2026-07-13): both name sets come from the SAME live
+        # namespace, so a world-served predicate oracle (stack_ready/at/turned)
+        # grounds like a kernel one and an all-green turn reads N/N grounded.
         oracle_names = verify_oracle_names(agent, engine)
-        report = VerdictReport.from_trace(trace, oracle_names)
+        predicate_names = verify_predicate_names(agent, engine)
+        report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
         verified = bool(report.verified)
         color = "green" if verified else "yellow"
         console.print(
@@ -2190,7 +2197,10 @@ def run_one_turn(args: Any) -> int:
 
     Exit codes: 0 = verified, 2 = ran (not verified), 1 = error / no trace.
     """
-    from zeno.vcli.cognitive.trace_store import verify_oracle_names
+    from zeno.vcli.cognitive.trace_store import (
+        verify_oracle_names,
+        verify_predicate_names,
+    )
     from zeno.vcli.verdict import VerdictReport
 
     prompt = args.print_prompt
@@ -2265,7 +2275,8 @@ def run_one_turn(args: Any) -> int:
         if trace is not None and _native_trace_acted(trace):
             try:
                 oracle_names = verify_oracle_names(getattr(engine, "_vgg_agent", None), engine)
-                report = VerdictReport.from_trace(trace, oracle_names)
+                predicate_names = verify_predicate_names(getattr(engine, "_vgg_agent", None), engine)
+                report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
             except Exception as exc:  # noqa: BLE001
                 report = VerdictReport.no_trace(goal=prompt or "", error=f"verdict failed: {exc}")
             return _emit(report, agent=getattr(engine, "_vgg_agent", None))
@@ -2284,7 +2295,8 @@ def run_one_turn(args: Any) -> int:
             return _emit(VerdictReport.no_trace(goal=prompt or "", error=f"native loop failed: {exc}"))
         try:
             oracle_names = verify_oracle_names(getattr(engine, "_vgg_agent", None), engine)
-            report = VerdictReport.from_trace(trace, oracle_names)
+            predicate_names = verify_predicate_names(getattr(engine, "_vgg_agent", None), engine)
+            report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
         except Exception as exc:  # noqa: BLE001
             report = VerdictReport.no_trace(goal=prompt or "", error=f"verdict failed: {exc}")
         return _emit(report, agent=getattr(engine, "_vgg_agent", None))
@@ -2308,7 +2320,8 @@ def run_one_turn(args: Any) -> int:
     # namespace GoalVerifier uses. Fail CLOSED on any error reading the gate.
     try:
         oracle_names = verify_oracle_names(getattr(engine, "_vgg_agent", None), engine)
-        report = VerdictReport.from_trace(trace, oracle_names)
+        predicate_names = verify_predicate_names(getattr(engine, "_vgg_agent", None), engine)
+        report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
     except Exception as exc:  # noqa: BLE001
         report = VerdictReport.no_trace(goal=goal_tree.goal, error=f"verdict failed: {exc}")
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
+from zeno.vcli.cognitive.evidence_classifier import predicate_oracle
 from zeno.vcli.worlds.go2w_real_skills import CFG
 
 
@@ -35,7 +36,7 @@ def make_at(agent: Any) -> Callable[..., bool]:
         except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
             return False
 
-    return at
+    return predicate_oracle(at)
 
 
 def make_explore_finished(agent: Any) -> Callable[..., bool]:
@@ -57,7 +58,7 @@ def make_explore_finished(agent: Any) -> Callable[..., bool]:
         except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
             return False
 
-    return explore_finished
+    return predicate_oracle(explore_finished)
 
 
 def make_explored_progress(agent: Any) -> Callable[..., float]:
@@ -117,7 +118,7 @@ def make_moved(agent: Any) -> Callable[..., bool]:
         except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
             return False
 
-    return moved
+    return predicate_oracle(moved)
 
 
 def make_turned(agent: Any) -> Callable[..., bool]:
@@ -154,7 +155,7 @@ def make_turned(agent: Any) -> Callable[..., bool]:
         delta = wrap_angle(yaw - float(anchor))
         return abs(math.degrees(delta)) >= float(min_deg)
 
-    return turned
+    return predicate_oracle(turned)
 
 
 def make_stack_ready(agent: Any) -> Callable[[], bool]:
@@ -180,4 +181,4 @@ def make_stack_ready(agent: Any) -> Callable[[], bool]:
         except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
             return False
 
-    return stack_ready
+    return predicate_oracle(stack_ready)

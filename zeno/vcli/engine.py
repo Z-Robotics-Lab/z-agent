@@ -1927,10 +1927,14 @@ class ZenoEngine:
             from zeno.vcli.cognitive.trace_store import (
                 evidence_passed,
                 verify_oracle_names,
+                verify_predicate_names,
             )
             agent = getattr(self, "_vgg_agent", None)
+            # Predicate-role map (2026-07-13): both name sets from the SAME
+            # namespace so world-served predicate oracles ground like kernel ones.
             oracle_names = verify_oracle_names(agent, self)
-            return bool(evidence_passed(trace, oracle_names))
+            predicate_names = verify_predicate_names(agent, self)
+            return bool(evidence_passed(trace, oracle_names, predicate_names))
         except Exception as exc:  # noqa: BLE001
             logger.debug("unified: evidence gate read failed: %s", exc)
             return False

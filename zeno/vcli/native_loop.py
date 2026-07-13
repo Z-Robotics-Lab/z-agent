@@ -909,12 +909,15 @@ class NativeStepRunner:
         baseline is None (no skill ran) grades UNCAUSED (grade fail-closes).
 
         NON-ROBOT predicate (dev / state oracle — ``file_exists`` / ``path_contains``
-        / a ``get_position()`` compare): actor-causation has no displacement metric,
-        so step-9 ties grounding to whether the ACTOR ACTED this step. If NO action
-        skill was dispatched (``self._chain`` empty), the verify reads pre-existing /
-        ambient state the actor did not cause -> UNCAUSED (the spine R2b downgrade in
-        ``classify_step_evidence`` then flips an otherwise-GROUNDED predicate to RAN),
-        closing the verify-only dev/state NO-OP hole (2026-06-19 review). If ≥1 action
+        / a ``get_position()`` compare): actor-causation has no displacement metric.
+        If NO action skill was dispatched (``self._chain`` empty), the verify reads
+        pre-existing / ambient state the actor did not cause -> UNCAUSED. Since the
+        2026-07-13 CEO-gated grounding semantics this is an ANNOTATION for a
+        verify-only step: ``classify_step_evidence`` downgrades an UNCAUSED step
+        only when it ACTED (non-empty strategy), so a passing verify-only step is a
+        grounded OBSERVATION of world truth (the old STEP-9 tie reported every
+        honest confirmation turn as unverified — the field 'verified=False (0/N
+        grounded)' bug class). If ≥1 action
         skill ran -> NOT_GRADED (legacy-equivalent; the action plausibly produced the
         state — e.g. file_write -> path_contains stays GROUNDED). Goal AUTHENTICITY of
         the verify (does the constant match the task goal; an action + a trivial-but-

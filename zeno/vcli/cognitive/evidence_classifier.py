@@ -40,7 +40,7 @@ up as verification.
 from __future__ import annotations
 
 import ast
-from typing import Literal
+from typing import Any, Literal
 
 Verdict = Literal["GROUNDED", "RAN"]
 
@@ -76,6 +76,63 @@ _PREDICATE_ORACLES: frozenset[str] = frozenset(
         "resting_on_receptacle",
     }
 )
+
+# ---------------------------------------------------------------------------
+# PREDICATE-ROLE MAP (field fix 2026-07-13) — worlds declare their bool oracles
+# ---------------------------------------------------------------------------
+#
+# ``_PREDICATE_ORACLES`` above is the KERNEL's role list; it can never know a
+# world-registered predicate (go2w_real ``stack_ready``/``at``/``turned``/...),
+# so every real-hardware bare-call verify classified RAN and the field verdict
+# read ``verified=False (0/N grounded)`` on all-green turns — the honest-verify
+# moat looked broken exactly when it worked. The fix keeps rule 3/Inv-3 intact:
+# a world MARKS its goal-conditioned bool verify callables with
+# ``predicate_oracle`` when it builds its verify namespace; the role set is then
+# COLLECTED from the SAME live namespace that yields ``oracle_names``
+# (``trace_store.verify_predicate_names``) — never a hand-authored second list —
+# and threaded additively into the classifiers (default ``frozenset()`` == the
+# old kernel-only behavior, fail-closed). The role may only RECOGNIZE a served
+# oracle as goal-conditioned bool; it adds no oracle, relaxes no structural
+# guard, and the verify sandbox/evaluation are untouched (Inv-1: no looser).
+
+#: Attribute carried by a world-served verify callable that is a PREDICATE
+#: oracle (goal-conditioned bool a bare call of which is real evidence).
+PREDICATE_ORACLE_ATTR = "__predicate_oracle__"
+
+
+def predicate_oracle(fn: Any) -> Any:
+    """Mark *fn* (a world verify-namespace callable) as a PREDICATE oracle.
+
+    Use ONLY for a goal-conditioned bool the actor cannot author — the same
+    semantic bar as the kernel ``_PREDICATE_ORACLES`` entries (e.g. odometry
+    ``at(x, y)``, lifecycle ``stack_ready()``). NEVER mark a STATE oracle
+    (raw-value return, e.g. ``explored_progress()``) — a bare state call is not
+    evidence; it grounds only compared against a constant, exactly as before.
+    Returns *fn* so factories can ``return predicate_oracle(closure)``.
+    """
+    setattr(fn, PREDICATE_ORACLE_ATTR, True)
+    return fn
+
+
+def predicate_names_from_namespace(ns: Any) -> frozenset[str]:
+    """Collect the marked predicate-oracle names from a live verify namespace.
+
+    The ONLY supported way to build a ``predicate_names`` set (rule 3): the role
+    travels ON the served callable, so a name grounds only in a world that
+    actually serves that exact marked oracle — no cross-world leakage, no second
+    allowlist. Fail-safe: a non-dict / unreadable namespace yields the empty set
+    (kernel-only classification — strictly the old behavior).
+    """
+    if not isinstance(ns, dict):
+        return frozenset()
+    out: set[str] = set()
+    for name, fn in ns.items():
+        try:
+            if getattr(fn, PREDICATE_ORACLE_ATTR, False):
+                out.add(str(name))
+        except Exception:  # noqa: BLE001 — a hostile attribute read never breaks the gate
+            continue
+    return frozenset(out)
 
 
 def _oracle_calls(tree: ast.AST, oracle_names: frozenset[str]) -> list[ast.Call]:
@@ -179,7 +236,11 @@ def _truth_bearing_oracle(node: ast.AST, oracle_names: frozenset[str]) -> bool:
     return False
 
 
-def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
+def _is_grounded_node(
+    node: ast.AST,
+    oracle_names: frozenset[str],
+    predicate_names: frozenset[str] = frozenset(),
+) -> bool:
     """True iff *node*'s truth value is GATED by world-oracle results — i.e. NO
     constant or non-oracle operand can short-circuit it to True.
 
@@ -210,10 +271,10 @@ def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
     """
     if isinstance(node, ast.BoolOp):
         return bool(node.values) and all(
-            _is_grounded_node(v, oracle_names) for v in node.values
+            _is_grounded_node(v, oracle_names, predicate_names) for v in node.values
         )
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-        return _is_grounded_node(node.operand, oracle_names)
+        return _is_grounded_node(node.operand, oracle_names, predicate_names)
     if isinstance(node, ast.Compare):
         # Membership (`X in Y` / `X not in Y`): grounded ONLY if the CONTAINER being
         # searched is oracle-derived (its collection comes from the world, e.g.
@@ -245,11 +306,21 @@ def _is_grounded_node(node: ast.AST, oracle_names: frozenset[str]) -> bool:
         oracle_only = all(_truth_bearing_oracle(o, oracle_names) for o in operands)
         return has_oracle and has_const and not oracle_only
     if isinstance(node, ast.Call):
-        return isinstance(node.func, ast.Name) and node.func.id in _PREDICATE_ORACLES
+        # A bare call is evidence only for a PREDICATE-role oracle: the kernel
+        # list, or a WORLD-declared role (predicate-role map, 2026-07-13 — the
+        # caller has already intersected the map with the LIVE oracle set, so a
+        # role can only recognize a served oracle, never add one).
+        return isinstance(node.func, ast.Name) and (
+            node.func.id in _PREDICATE_ORACLES or node.func.id in predicate_names
+        )
     return False
 
 
-def classify_verify_expr(expr: str, oracle_names: frozenset[str]) -> Verdict:
+def classify_verify_expr(
+    expr: str,
+    oracle_names: frozenset[str],
+    predicate_names: frozenset[str] = frozenset(),
+) -> Verdict:
     """Classify a verify expression as GROUNDED or RAN.
 
     GROUNDED: the expression consumes a world oracle in a non-tautological way —
@@ -261,7 +332,16 @@ def classify_verify_expr(expr: str, oracle_names: frozenset[str]) -> Verdict:
     from ``engine._build_verifier_namespace`` / ``World.build_verify_namespace`` and
     passed in — never a hand-authored second copy (rule 3). Goal AUTHENTICITY is
     deferred to R2 (see the module docstring); this is a structural guard only.
+
+    *predicate_names* (2026-07-13 predicate-role map) extends the bare-call
+    PREDICATE role to WORLD-declared oracles, single-sourced from the marked
+    callables of the SAME live namespace (``predicate_names_from_namespace`` /
+    ``trace_store.verify_predicate_names``). It is intersected with
+    *oracle_names* here, so a role can only recognize a SERVED oracle, never add
+    one; the default empty set is byte-identical to the kernel-only behavior
+    (fail-closed). Every structural guard above applies unchanged.
     """
+    predicate_names = predicate_names & oracle_names
     s = (expr or "").strip()
     if s in _NO_EVIDENCE:
         return "RAN"
@@ -278,6 +358,6 @@ def classify_verify_expr(expr: str, oracle_names: frozenset[str]) -> Verdict:
     # non-oracle operand can short-circuit it (closes the ``... or True`` hole). This
     # subsumes the old "bare predicate-oracle call" and "state-oracle-vs-constant"
     # rules while rejecting a truthy-constant escape.
-    if _is_grounded_node(tree.body, oracle_names):
+    if _is_grounded_node(tree.body, oracle_names, predicate_names):
         return "GROUNDED"
     return "RAN"

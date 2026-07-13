@@ -223,20 +223,23 @@ def test_native_devworld_grounds_when_dev_action_skill_is_wrapped() -> None:
 
 
 # ---------------------------------------------------------------------------
-# (C.3) GOAL-AUTHENTICITY — a dev VERIFY-ONLY no-op (no action) must be RAN
+# (C.3) OBSERVATION SEMANTICS — a dev VERIFY-ONLY read of world truth GROUNDS
 # ---------------------------------------------------------------------------
 
 
-def test_native_devworld_verify_only_noop_is_ran(tmp_path) -> None:
-    """A dev VERIFY-ONLY no-op (no file_write) against a PRE-EXISTING file -> RAN / exit 2.
+def test_native_devworld_verify_only_noop_grounds_as_observation(tmp_path) -> None:
+    """A dev VERIFY-ONLY turn (no file_write) against a PRE-EXISTING file -> GROUNDED / exit 0.
 
-    STEP 9 goal-authenticity (closes a 2026-06-19 review gap): the native loop offers
-    the code tools, but a turn that ONLY verifies pre-existing / ambient state — zero
-    action skills dispatched — must NOT earn GROUNDED. The actor caused nothing, so
-    ``NativeStepRunner._grade`` returns UNCAUSED for the non-robot predicate (empty
-    action chain) and the spine R2b downgrade flips the otherwise-GROUNDED path to RAN.
-    The file PRE-EXISTS, so ``path_contains`` reads True — the moat must still report
-    RAN / exit 2 because the actor did not produce the state.
+    2026-07-13 CEO-gated grounding semantics (supersedes the STEP-9 tie for
+    verify-only steps): ``verified`` grades GOAL-STATE truth on world-served
+    oracles; actor-causation stays a per-step ANNOTATION and only downgrades a
+    step that ACTED. The goal here IS an observation ("confirm pre.txt contains
+    seed") and ``path_contains`` reads the real file — a passing verify-only
+    step is a grounded OBSERVATION, so the honest verdict is verified/exit 0
+    (the old semantics reported every honest confirmation turn as a failure —
+    the field 'verified=False (0/N grounded)' bug class). An UNCAUSED step that
+    DISPATCHED an action still downgrades (see the robot teleport/no-op PTY
+    pins), and a failed action step is never masked (all steps must ground).
     """
     pre = tmp_path / "pre.txt"
     pre.write_text("seed value\n", encoding="utf-8")
@@ -254,16 +257,16 @@ def test_native_devworld_verify_only_noop_is_ran(tmp_path) -> None:
         timeout_sec=90.0,
         cwd=tmp_path,
     )
-    print(f"\n[devworld no-op] cli.main --native-loop -> {r.verdict}")
-    # No action ran -> not verified, RAN, exit 2 — even though the predicate reads True.
-    assert r.verified is False, f"a verify-only dev no-op must NOT verify (no action); {r.verdict}"
-    assert r.evidence == "RAN", f"got evidence={r.evidence}; {r.verdict}"
-    assert r.exit_code == 2, f"ran-not-verified must exit 2; got {r.exit_code}"
+    print(f"\n[devworld observation] cli.main --native-loop -> {r.verdict}")
+    # The observation is world-oracle-backed -> verified, GROUNDED, exit 0.
+    assert r.verified is True, f"a passing verify-only observation must verify; {r.verdict}"
+    assert r.evidence == "GROUNDED", f"got evidence={r.evidence}; {r.verdict}"
+    assert r.exit_code == 0, f"verified observation must exit 0; got {r.exit_code}"
     per_step = r.verdict.get("per_step") or []
     assert per_step, f"expected one verify-only step; got {per_step}"
     step = per_step[0]
-    # The TELLs: the predicate READS True (file pre-exists), the action chain is EMPTY,
-    # and the step grades RAN (the goal-authenticity causation tie fired).
+    # The TELLs: the predicate READS True (file pre-exists), the action chain is
+    # EMPTY, and the step grades GROUNDED (observation; causation = annotation).
     assert step["verify_result"] is True, "path_contains should read True (file pre-exists)"
     assert step["strategy"] == "", f"verify-only step has no action chain; got {step['strategy']!r}"
-    assert step["evidence"] == "RAN", f"a no-action dev verify must be RAN; got {step['evidence']}"
+    assert step["evidence"] == "GROUNDED", f"a passing observation grounds; got {step['evidence']}"

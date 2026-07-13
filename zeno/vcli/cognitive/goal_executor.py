@@ -123,6 +123,23 @@ class GoalExecutor:
             return frozenset(ns.keys())
         return frozenset()
 
+    def _verify_predicate_names(self) -> frozenset[str]:
+        """PREDICATE-role names of the SAME live namespace (2026-07-13 role map).
+
+        The reward-gate twin of ``trace_store.verify_predicate_names``: collects
+        the names whose SERVED callable the world marked with
+        ``evidence_classifier.predicate_oracle`` — so a world predicate oracle
+        (go2w_real ``stack_ready``/``at``) earns bandit reward exactly like a
+        kernel one. Fail-closed to the empty set (kernel-only classification).
+        """
+        from zeno.vcli.cognitive.evidence_classifier import (
+            predicate_names_from_namespace,
+        )
+
+        return predicate_names_from_namespace(
+            getattr(self._verifier, "_namespace", None)
+        )
+
     def _record_strategy_stats(self, step: StepRecord, sub_goal: SubGoal) -> None:
         # W1.1 -> R1: gate the per-step bandit reward on deterministic evidence. The
         # reward is step.success AND step_evidence_ok(...). The robot bypass is GONE
@@ -139,7 +156,12 @@ class GoalExecutor:
                 strategy_name=step.strategy,
                 sub_goal_name=step.sub_goal_name,
                 success=step.success
-                and step_evidence_ok(step, sub_goal, self._verify_oracle_names()),
+                and step_evidence_ok(
+                    step,
+                    sub_goal,
+                    self._verify_oracle_names(),
+                    self._verify_predicate_names(),
+                ),
                 duration_sec=step.duration_sec,
             )
         except Exception as exc:  # noqa: BLE001

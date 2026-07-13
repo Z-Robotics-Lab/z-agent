@@ -129,7 +129,10 @@ class VerdictReport:
 
     @classmethod
     def from_trace(
-        cls, trace: Any, oracle_names: frozenset[str]
+        cls,
+        trace: Any,
+        oracle_names: frozenset[str],
+        predicate_names: frozenset[str] = frozenset(),
     ) -> "VerdictReport":
         """Build a verdict from an ExecutionTrace using the EXISTING gate.
 
@@ -138,9 +141,17 @@ class VerdictReport:
         ``n_grounded`` counts the steps the classifier calls GROUNDED. The
         top-level ``evidence`` summarizes: GROUNDED iff verified, else FAILED if
         the trace did not succeed, else RAN.
+
+        *predicate_names* (2026-07-13 predicate-role map) is threaded VERBATIM
+        into the same gate — single-source it from
+        ``trace_store.verify_predicate_names(agent, engine)`` alongside
+        ``verify_oracle_names`` so a world-served predicate oracle (go2w_real
+        ``stack_ready()``/``at(x, y)``) grounds like a kernel one. The default
+        empty set is the pre-role-map behavior (fail-closed); the delegation
+        contract above is unchanged.
         """
         sg_by_name = {sg.name: sg for sg in trace.goal_tree.sub_goals}
-        verified = bool(evidence_passed(trace, oracle_names))
+        verified = bool(evidence_passed(trace, oracle_names, predicate_names))
 
         per_step: list[StepVerdict] = []
         n_grounded = 0
@@ -153,7 +164,9 @@ class VerdictReport:
                 ev = EVIDENCE_RAN if s.success else EVIDENCE_FAILED
                 verify_str = ""
             else:
-                ev = classify_step_evidence(s, sg, oracle_names, trace.goal_tree.goal)
+                ev = classify_step_evidence(
+                    s, sg, oracle_names, trace.goal_tree.goal, predicate_names
+                )
                 verify_str = sg.verify
             if ev == EVIDENCE_GROUNDED:
                 n_grounded += 1

@@ -13,8 +13,10 @@ legacy plan.
           True / exit 0. Driven through the REAL ``cli.main -p ... --json
           --sim-go2 --native-loop`` (the R2a PTY harness) with the native tool-
           script seam (VECTOR_FAKE_LLM_TOOLS).
-- NO-OP   [verify only, no walk], predicate true at start -> UNCAUSED -> RAN ->
-          verified False / exit 2. Same PTY path.
+- NO-OP   [verify only, no walk], predicate true at start -> UNCAUSED annotation,
+          GROUNDED observation -> verified True / exit 0 (2026-07-13 CEO-gated
+          semantics: verified grades goal-state truth on world oracles; causation
+          downgrades only a step that ACTED). Same PTY path.
 - TELEPORT [a test-only skill pokes qpos, NO set_velocity] -> UNCAUSED -> RAN ->
           verified False / exit 2. Modeled in the TEST (NO production teleport
           tool — forbidden), driven through run_turn_native against the REAL go2
@@ -55,7 +57,8 @@ _HONEST_SCRIPT = {
 }
 
 # NO-OP: verify the START position (10,3) with NO walk -> predicate true at
-# baseline, zero commanded motion -> UNCAUSED -> RAN.
+# baseline, zero commanded motion -> UNCAUSED annotation; the verify-only read
+# is a grounded OBSERVATION (2026-07-13 semantics).
 _NOOP_SCRIPT = {
     "turns": [
         {"tool_calls": [{"name": "verify", "input": {"expr": "at_position(10.0, 3.0)"}}]},
@@ -115,7 +118,11 @@ def test_native_honest_walk_is_caused_and_verified(sim_cleanup) -> None:
 @pytest.mark.sim
 @pytest.mark.cli_main
 @pytest.mark.capability
-def test_native_noop_is_uncaused_and_not_verified(sim_cleanup) -> None:
+def test_native_noop_is_uncaused_grounded_observation(sim_cleanup) -> None:
+    """2026-07-13 CEO-gated semantics: a VERIFY-ONLY read of the true position is
+    a grounded OBSERVATION — verified/exit 0 with the UNCAUSED annotation intact.
+    The goal state holds on the world oracle (the robot IS at (10,3)); causation
+    only downgrades a step that ACTED (the teleport case below stays RAN)."""
     r = run_cli_turn(
         "声称已在 (10.0,3.0)",
         sim_go2=True,
@@ -123,12 +130,13 @@ def test_native_noop_is_uncaused_and_not_verified(sim_cleanup) -> None:
         extra_args=["--headless", "--native-loop"],
         tool_script=_NOOP_SCRIPT,
     )
-    assert r.verified is False, f"a native no-op must NOT verify; got {r.verdict}"
-    assert r.exit_code == 2, f"ran-not-verified must exit 2; got {r.exit_code}"
-    assert r.evidence == "RAN", f"got evidence={r.evidence}"
+    assert r.verified is True, f"a passing verify-only observation verifies; got {r.verdict}"
+    assert r.exit_code == 0, f"verified observation must exit 0; got {r.exit_code}"
+    assert r.evidence == "GROUNDED", f"got evidence={r.evidence}"
     step = r.verdict["per_step"][0]
     assert step["success"] is True and step["verify_result"] is True
-    assert step["evidence"] == "RAN"
+    assert step["strategy"] == "", f"verify-only: no action chain; got {step['strategy']!r}"
+    assert step["evidence"] == "GROUNDED"
 
 
 # ---------------------------------------------------------------------------

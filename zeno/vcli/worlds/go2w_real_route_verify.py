@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from zeno.vcli.cognitive.evidence_classifier import predicate_oracle
+
 
 def make_route_reached(agent: Any) -> Callable[..., bool]:
     """Bind ``route_reached()`` to the agent's route manager.
@@ -33,4 +35,4 @@ def make_route_reached(agent: Any) -> Callable[..., bool]:
         except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
             return False
 
-    return route_reached
+    return predicate_oracle(route_reached)
