@@ -28,6 +28,7 @@ import re
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.markup import escape as escape_markup
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.syntax import Syntax
@@ -54,6 +55,13 @@ from zeno.vcli.session import (
 )
 from zeno.vcli.permissions import PermissionContext
 from zeno.vcli.prompt import build_system_prompt
+from zeno.vcli.turn_render import (
+    ChainView,
+    fmt_duration,
+    render_trace_detail,
+    render_turn_footer,
+    render_verdict_card,
+)
 from zeno.vcli.turn_status import TurnStatus
 from zeno.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
 
@@ -116,6 +124,10 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("agent", "Show Zeno's identity and capabilities", False),
     ("status", "Show hardware, tools, session info", False),
     ("usage", "Show token usage this session", False),
+    ("cot", "Model reasoning display  (/cot off|tail|full)", True),
+    ("why", "Show the last turn's full reasoning", False),
+    ("trace", "Replay recent turn traces  (/trace [n|list|save])", True),
+    ("route", "Explain routing for an utterance  (/route <text>)", True),
     ("copy", "Copy last response to clipboard", False),
     ("export", "Export session as markdown", False),
     ("compact", "Compress context window", False),
@@ -504,6 +516,19 @@ def _intent_actionable(engine: Any, user_input: str) -> bool:
         return True
 
 
+def _cot_mode(app_state: dict[str, Any] | None) -> str:
+    """Current CoT display mode ('off' | 'tail' | 'full') — /cot sets it (P1.2).
+
+    Display-only preference; default 'tail' (the calm rolling reasoning tail).
+    Unknown values degrade to 'tail' so a stale config can never hide the moat.
+    """
+    try:
+        mode = str((app_state or {}).get("cot_mode", "tail")).lower()
+    except Exception:  # noqa: BLE001
+        return "tail"
+    return mode if mode in ("off", "tail", "full") else "tail"
+
+
 def _repl_attempt_native(
     engine: Any,
     user_input: str,
@@ -556,39 +581,49 @@ def _repl_attempt_native(
     # around its legacy turn); restore unconditionally.
     _saved_stderr = sys.stderr
     trace: Any = None
+    # P1.1 live execution chain (docs/CLI_UX_REDESIGN.md): ONE ChainView live
+    # region replaces the console.status spinner (which is itself a rich Live —
+    # they must never nest). It renders the model's chain as a live tree fed by
+    # structured on_event callbacks; transient, so the post-turn transcript
+    # still carries only the pinned step/verdict lines. Header keeps the
+    # PTY-pinned words "native working". Single-Live discipline: the view is
+    # STOPPED before any error line / post-turn print (turn_status.py rationale).
+    chain_view = ChainView(
+        live_factory=lambda renderable: Live(
+            renderable, console=console, refresh_per_second=8, transient=True
+        ),
+        show_reasoning_tail=_cot_mode(app_state) != "off",
+    )
+    if app_state is not None:
+        app_state["last_chain_view"] = chain_view  # /why reads the reasoning buffer
     try:
         try:
             sys.stderr = open(os.devnull, "w")
         except OSError:
             pass
-        with console.status(f"[{TEAL}]native[/] working…  [dim](Ctrl+C 安全中断)[/dim]", spinner="dots") as _status:
-            # Live progress (D9 #2 perceived latency): stream the model's thinking
-            # tail + each tool call into the spinner so the multi-second LLM wait
-            # shows activity instead of a frozen line. Best-effort, never fatal.
-            def _on_progress(msg: str) -> None:
-                try:
-                    _status.update(f"[{TEAL}]native[/] {msg}")
-                except Exception:  # noqa: BLE001
-                    pass
-            try:
-                trace = engine.run_turn_native(
-                    user_input, agent=agent, session=scratch, app_state=app_state,
-                    on_progress=_on_progress,
-                )
-            except KeyboardInterrupt:
-                _operator_interrupt(app_state)
-                return True  # turn handled; REPL stays alive
-            except ModelUnavailableError as exc:
-                # A BYO model that CANNOT run (out of credit / unknown id) is
-                # user-actionable — surface it clearly and OWN the turn instead of
-                # silently degrading to legacy, which would re-hit the same failure
-                # and (D179) read as "model chose not to act". console.print writes
-                # to stdout, unaffected by the stderr redirect; the finally restores.
-                console.print(f"  [yellow]model unavailable:[/] {exc}")
-                return True  # turn handled (reported) — do NOT fall through to legacy
-            except Exception:  # noqa: BLE001 — native errored -> treat as no-action
-                trace = None
+        chain_view.start()
+        try:
+            trace = engine.run_turn_native(
+                user_input, agent=agent, session=scratch, app_state=app_state,
+                on_event=chain_view.handle_event,
+            )
+        except KeyboardInterrupt:
+            chain_view.stop()
+            _operator_interrupt(app_state)
+            return True  # turn handled; REPL stays alive
+        except ModelUnavailableError as exc:
+            # A BYO model that CANNOT run (out of credit / unknown id) is
+            # user-actionable — surface it clearly and OWN the turn instead of
+            # silently degrading to legacy, which would re-hit the same failure
+            # and (D179) read as "model chose not to act". console.print writes
+            # to stdout, unaffected by the stderr redirect; the finally restores.
+            chain_view.stop()  # close the live region BEFORE printing
+            console.print(f"  [yellow]model unavailable:[/] {exc}")
+            return True  # turn handled (reported) — do NOT fall through to legacy
+        except Exception:  # noqa: BLE001 — native errored -> treat as no-action
+            trace = None
     finally:
+        chain_view.stop()  # idempotent; region always closed before prints below
         if _ij_reader is not None:
             _ij_reader.stop()  # window closes BEFORE anything else prints
         if sys.stderr is not _saved_stderr:
@@ -597,6 +632,15 @@ def _repl_attempt_native(
             except Exception:  # noqa: BLE001
                 pass
         sys.stderr = _saved_stderr
+
+    # P1.2 CoT: record the turn's FULL reasoning buffer for /why (display
+    # buffer only — never the session), and honor /cot full by printing the
+    # complete reasoning block into the transcript. tail mode stays live-region
+    # only, so the scrollback keeps just the honest chain + verdict.
+    if app_state is not None:
+        app_state["last_reasoning"] = chain_view.reasoning_text
+    if _cot_mode(app_state) == "full" and chain_view.reasoning_text.strip():
+        console.print(Text("┆ " + chain_view.reasoning_text.strip(), style="dim italic"))
 
     # TYPED INTERJECT: a queued line means the operator overrode this turn. The
     # kernel already cancelled motion + the remaining tool calls at its safe
@@ -617,36 +661,108 @@ def _repl_attempt_native(
         # overridden goal must not be re-run by another producer).
         return True if _interjected else False
 
+    # P1.5: bounded in-session trace history for /trace replay (display-only —
+    # nothing here persists; /trace save calls the existing store explicitly).
+    if app_state is not None:
+        try:
+            hist = app_state.get("trace_history")
+            if hist is None:
+                from collections import deque as _deque
+
+                hist = _deque(maxlen=5)
+                app_state["trace_history"] = hist
+            hist.append(trace)
+        except Exception:  # noqa: BLE001 — history is display convenience only
+            pass
+
     sub_goals = list(getattr(trace.goal_tree, "sub_goals", ()) or ())
     steps = list(getattr(trace, "steps", ()) or ())
+
+    # Honest verdict computed FIRST (single-sourced — the loop NEVER computes
+    # verified) so the step lines can carry per-step evidence marks; the
+    # transcript ORDER is unchanged: step lines → verdict line → card → footer.
+    # Predicate-role map (2026-07-13): both name sets come from the SAME live
+    # namespace, so a world-served predicate oracle (stack_ready/at/turned)
+    # grounds like a kernel one and an all-green turn reads N/N grounded.
+    report: Any = None
+    verified = False
+    _verdict_exc: Exception | None = None
+    try:
+        oracle_names = verify_oracle_names(agent, engine)
+        predicate_names = verify_predicate_names(agent, engine)
+        report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
+        verified = bool(report.verified)
+    except Exception as exc:  # noqa: BLE001 — fail closed (display only)
+        _verdict_exc = exc
+
     console.print()
     for i, s in enumerate(steps):
         verify_expr = sub_goals[i].verify if i < len(sub_goals) else ""
         chain = (getattr(s, "strategy", "") or "").strip() or "(no action)"
         ok = bool(getattr(s, "verify_result", False))
         actor = getattr(getattr(s, "actor_caused", None), "value", "?")
-        mark = "[green]✓[/]" if ok else "[yellow]·[/]"
+        # P2 single-meaning marks: ✓ is RESERVED for GROUNDED evidence; a
+        # passing-but-ungrounded check is ○; a false check is ✗. With no
+        # verdict available nothing can claim GROUNDED — passing checks
+        # degrade to ○ (never a false ✓).
+        evidence = (
+            report.per_step[i].evidence
+            if report is not None and i < len(report.per_step)
+            else None
+        )
+        if not ok:
+            mark = "[red]✗[/]"
+        elif evidence == "GROUNDED":
+            mark = "[green]✓[/]"
+        else:
+            mark = "[yellow]○[/]"
+        # P1.4 honest timing on the step line: measured only, never 0.0s.
+        dur = fmt_duration(getattr(s, "duration_sec", 0.0))
+        dur_part = f" [dim]{dur}[/]" if dur != "—" else ""
         console.print(
-            f"  [{TEAL}]▸[/] {chain} → verify {verify_expr} {mark} [dim](actor={actor})[/]"
+            f"  [{TEAL}]▸[/] {escape_markup(chain)} → verify {escape_markup(verify_expr)} "
+            f"{mark} [dim](actor={actor})[/]{dur_part}"
         )
 
-    verified = False
-    try:
-        # Predicate-role map (2026-07-13): both name sets come from the SAME live
-        # namespace, so a world-served predicate oracle (stack_ready/at/turned)
-        # grounds like a kernel one and an all-green turn reads N/N grounded.
-        oracle_names = verify_oracle_names(agent, engine)
-        predicate_names = verify_predicate_names(agent, engine)
-        report = VerdictReport.from_trace(trace, oracle_names, predicate_names)
-        verified = bool(report.verified)
+    if report is not None:
         color = "green" if verified else "yellow"
         console.print(
             f"  [{TEAL}]verdict[/] {report.evidence} "
             f"[{color}]verified={report.verified}[/] "
             f"[dim]({report.n_grounded}/{report.n_steps} grounded)[/]"
         )
-    except Exception as exc:  # noqa: BLE001 — fail closed (display only)
-        console.print(f"  [yellow]verdict unavailable:[/] {exc}")
+        # P1.3 verdict card (docs/CLI_UX_REDESIGN.md): unfold per-step evidence
+        # + a human explanation for every non-GROUNDED step, APPENDED after the
+        # pinned verdict line (acceptance tools sync on its `grounded)` tail —
+        # never interleave). Display-only, best-effort: a card failure must
+        # never break the turn or mute the verdict line already printed.
+        try:
+            for _card_line in render_verdict_card(report, trace):
+                console.print(_card_line)
+        except Exception:  # noqa: BLE001 — display only
+            pass
+    else:
+        console.print(f"  [yellow]verdict unavailable:[/] {_verdict_exc}")
+
+    # P2 unified turn footer: route · model · tokens · wall-clock, all from
+    # the finish event / trace — unknown parts omitted, never fabricated.
+    try:
+        _fin = dict(getattr(chain_view, "finish_data", {}) or {})
+        console.print(
+            render_turn_footer(
+                route="native",
+                model=str((app_state or {}).get("model", "") or ""),
+                in_tokens=int(_fin.get("in_tokens", 0) or 0),
+                out_tokens=int(_fin.get("out_tokens", 0) or 0),
+                wall_sec=float(
+                    _fin.get("wall_sec", 0.0)
+                    or getattr(trace, "total_duration_sec", 0.0)
+                    or 0.0
+                ),
+            )
+        )
+    except Exception:  # noqa: BLE001 — display only
+        pass
 
     # ADR-002 visual acceptance: the SAME env-gated PNG snapshot the -p path fires (see
     # _emit). Inert by construction — handed ONLY the agent (never the report), never
@@ -804,6 +920,42 @@ def ask_permission(tool_name: str, params: dict[str, Any]) -> str:
 # /permissions mode persistence (field ask 2026-07-13: the operator re-typed
 # /permissions auto every session on the real robot)
 # ---------------------------------------------------------------------------
+
+_COT_MODE_KEY = "cot_mode"  # config.yaml key: "off" | "tail" | "full" (P1.2)
+
+
+def _save_cot_mode(mode: str) -> None:
+    """Persist the /cot display mode via the EXISTING zeno config mechanism.
+
+    Same load_config/save_config path as /permissions — no new persistence
+    machinery. Best-effort: a config write failure never breaks the session.
+    """
+    try:
+        from zeno.vcli.config import load_config, save_config
+
+        cfg = load_config()
+        cfg[_COT_MODE_KEY] = mode
+        save_config(cfg)
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        pass
+
+
+def _apply_saved_cot_mode(app_state: dict[str, Any] | None) -> None:
+    """Load the persisted /cot mode at session start (display-only preference).
+
+    Unknown/absent values keep the shipped default ('tail' via _cot_mode).
+    """
+    if app_state is None:
+        return
+    try:
+        from zeno.vcli.config import load_config
+
+        mode = str(load_config().get(_COT_MODE_KEY, "")).strip().lower()
+    except Exception:  # noqa: BLE001 — an unreadable config keeps the default
+        return
+    if mode in ("off", "tail", "full"):
+        app_state["cot_mode"] = mode
+
 
 _APPROVAL_MODE_KEY = "approval_mode"  # config.yaml key: "auto" | "manual"
 
@@ -1528,6 +1680,98 @@ def _handle_slash_command(
             console.print(f"  in={u.input_tokens:,}  out={u.output_tokens:,}  total={total:,}")
         else:
             console.print("[dim]No session.[/dim]")
+
+    elif cmd == "cot":
+        # P1.2 CoT display mode — display-only preference, persisted like
+        # /permissions. Bad args refuse loudly and keep the current mode.
+        mode = args_rest[0].strip().lower() if args_rest else ""
+        if not mode:
+            console.print(
+                f"  cot mode: [bold]{_cot_mode(app_state)}[/]  "
+                f"[dim](/cot off|tail|full — off=隐藏 · tail=思考尾巴 · full=回合后全量)[/dim]"
+            )
+        elif mode in ("off", "tail", "full"):
+            if app_state is not None:
+                app_state["cot_mode"] = mode
+            _save_cot_mode(mode)
+            console.print(f"  cot mode -> [bold]{mode}[/]")
+        else:
+            console.print("  [yellow]用法: /cot off|tail|full[/yellow]")
+
+    elif cmd == "why":
+        # P1.2 — the last turn's FULL reasoning (display buffer only; a turn
+        # that streamed no reasoning gets an honest fallback, never silence).
+        reasoning = str((app_state or {}).get("last_reasoning", "") or "").strip()
+        if reasoning:
+            console.print(Text("┆ " + reasoning, style="dim italic"))
+        else:
+            console.print("  [dim]上一回合无推理记录。[/dim]")
+
+    elif cmd == "trace":
+        # P1.5 turn replay — a BOUNDED in-session history (nothing in the
+        # product persists traces; disk-reading would honestly show nothing).
+        history = list((app_state or {}).get("trace_history") or [])
+        arg = args_rest[0].strip().lower() if args_rest else ""
+        if not history:
+            console.print("  [dim]本会话尚无 trace(先执行一个动作指令)。[/dim]")
+        elif arg == "list":
+            for i, t in enumerate(reversed(history), 1):
+                g = str(getattr(getattr(t, "goal_tree", None), "goal", ""))[:60]
+                n = len(getattr(t, "steps", ()) or ())
+                ok = "[green]ok[/]" if getattr(t, "success", False) else "[red]not ok[/]"
+                console.print(
+                    f"  [{TEAL}]{i}[/] {escape_markup(g)}  [dim]{n} steps ·[/] {ok} "
+                    f"[dim]· {fmt_duration(getattr(t, 'total_duration_sec', 0.0))}[/]"
+                )
+        elif arg == "save":
+            try:
+                from zeno.vcli.cognitive import trace_store
+
+                path = trace_store.save_trace(history[-1])
+                console.print(f"  [dim]已保存: {path}[/dim]")
+            except Exception as exc:  # noqa: BLE001
+                console.print(f"  [yellow]保存失败: {exc}[/yellow]")
+        else:
+            idx = 1
+            if arg:
+                try:
+                    idx = int(arg)
+                except ValueError:
+                    idx = 0
+            latest_first = list(reversed(history))
+            if not (1 <= idx <= len(latest_first)):
+                console.print(
+                    f"  [yellow]用法: /trace [1..{len(latest_first)}|list|save][/yellow]"
+                )
+            else:
+                for _line in render_trace_detail(latest_first[idx - 1]):
+                    console.print(_line)
+
+    elif cmd == "route":
+        # P1.5 routing transparency — classify only, NEVER execute.
+        engine_obj = (app_state or {}).get("engine")
+        text = " ".join(args_rest).strip()
+        if not text:
+            console.print("  [dim]用法: /route <一句指令> — 只显示路由判定,不执行。[/dim]")
+        elif engine_obj is None:
+            console.print("  [yellow]未连接 engine,无法判定路由。[/yellow]")
+        else:
+            try:
+                decision = engine_obj.classify_intent(text)
+                route = getattr(decision, "route", "?")
+                reason = getattr(decision, "reason", "?")
+                is_complex = getattr(decision, "complex", False)
+                nxt = (
+                    "native 先试(动作型,失败回落 legacy)"
+                    if getattr(decision, "use_vgg", False)
+                    else "tool_use 对话路径"
+                )
+                console.print(
+                    f"  [{TEAL}]route[/] {route} [dim]· reason={reason} · "
+                    f"complex={is_complex}[/] → {nxt}"
+                )
+            except Exception as exc:  # noqa: BLE001
+                console.print(f"  [yellow]路由判定失败: {exc}[/yellow]")
 
     elif cmd == "compact":
         if session is not None:
@@ -2774,6 +3018,13 @@ def main(argv: list[str] | None = None) -> None:
     from zeno.vcli.interject import InterjectReader, set_current_reader
     interject_reader = InterjectReader()
     app_state["interject"] = interject_reader
+    # P1.2: restore the persisted /cot display mode for this session.
+    _apply_saved_cot_mode(app_state)
+    # P1.5: pre-create the bounded trace history ONCE on the REPL thread so the
+    # VGG background thread and the native path only ever append (deque.append
+    # is atomic) — no lazy-init race.
+    from collections import deque as _deque_init
+    app_state.setdefault("trace_history", _deque_init(maxlen=5))
     set_current_reader(interject_reader)
 
     try:
@@ -2853,7 +3104,14 @@ def main(argv: list[str] | None = None) -> None:
             # are tracked native improvements (see docs/ARCHITECTURE.md), NOT reasons to
             # fall back to legacy.
             if _repl_native_enabled() and _intent_actionable(engine, user_input):
-                if _repl_attempt_native(engine, user_input, session, app_state, console):
+                try:
+                    _native_owned = _repl_attempt_native(
+                        engine, user_input, session, app_state, console
+                    )
+                except KeyboardInterrupt:
+                    _operator_interrupt(app_state)
+                    _native_owned = True  # turn handled; REPL stays alive
+                if _native_owned:
                     continue
                 # native took NO action -> fall through to legacy routing (unchanged).
 
@@ -2865,6 +3123,11 @@ def main(argv: list[str] | None = None) -> None:
                 # tool-execution line is printed so box frames never stack and the
                 # prompt is not duplicated.
                 _turn_started = time.monotonic()
+                # P1.2 CoT: the turn's reasoning chunks (DeepSeek-style
+                # reasoning models). DISPLAY BUFFER ONLY — rendered as a dim
+                # tail inside the thinking panel (mode 'tail'/'full'), recorded
+                # for /why, never appended to the session or the answer.
+                _turn_reasoning: list[str] = []
 
                 def _status_content(text: str, elapsed: float, is_thinking: bool) -> Panel:
                     if is_thinking:
@@ -2872,8 +3135,17 @@ def main(argv: list[str] | None = None) -> None:
                         label = f"thinking{dots}" + (
                             f"  [dim]{elapsed:.0f}s[/]" if elapsed >= 1 else ""
                         )
+                        body: Any = Text.from_markup(label, style="dim italic")
+                        if _turn_reasoning and _cot_mode(app_state) != "off":
+                            tail = (
+                                "".join(_turn_reasoning)[-160:].replace("\n", " ").strip()
+                            )
+                            if tail:
+                                body = Group(
+                                    body, Text("┆ " + tail, style="dim italic")
+                                )
                         return Panel(
-                            Text.from_markup(label, style="dim italic"),
+                            body,
                             title=V_LABEL,
                             title_align="left",
                             border_style=DIM_TEAL,
@@ -2903,8 +3175,11 @@ def main(argv: list[str] | None = None) -> None:
                     status.update_text(chunk)
 
                 def on_reasoning(_chunk: str) -> None:
-                    # Hidden reasoning trace: keep the "thinking…" status alive with
-                    # an elapsed counter; never rendered as answer text.
+                    # P1.2: capture the reasoning chunk for the thinking-panel
+                    # tail + /why (display buffer only — never answer text),
+                    # and keep the "thinking…" status alive with the timer.
+                    if _chunk:
+                        _turn_reasoning.append(str(_chunk))
                     status.thinking(time.monotonic() - _turn_started)
 
                 def _format_tool_display(name: str, p: dict[str, Any]) -> str:
@@ -3089,6 +3364,17 @@ def main(argv: list[str] | None = None) -> None:
                     def _on_vgg_complete(
                         trace: Any, _user_input: str = user_input
                     ) -> None:
+                        # P1.5: VGG turns join the same bounded /trace history.
+                        try:
+                            _hist = app_state.get("trace_history")
+                            if _hist is None:
+                                from collections import deque as _deque
+
+                                _hist = _deque(maxlen=5)
+                                app_state["trace_history"] = _hist
+                            _hist.append(trace)
+                        except Exception:  # noqa: BLE001 — display convenience
+                            pass
                         n_steps = len(trace.steps)
                         n_ok = sum(1 for s in trace.steps if s.success)
                         dur = trace.total_duration_sec
@@ -3130,6 +3416,19 @@ def main(argv: list[str] | None = None) -> None:
                             for snap_line in render_run_snapshot(snapshot).splitlines():
                                 # markup=False: literal [PASS]/[FAIL] markers.
                                 console.print(f"  {snap_line}", style="dim", markup=False)
+                        except Exception:  # noqa: BLE001 — display only
+                            pass
+
+                        # P2 unified turn footer (VGG path: tokens untracked ->
+                        # omitted; wall-clock from the trace, honest-only).
+                        try:
+                            console.print(
+                                render_turn_footer(
+                                    route="vgg",
+                                    model=str(app_state.get("model", "") or ""),
+                                    wall_sec=float(dur or 0.0),
+                                )
+                            )
                         except Exception:  # noqa: BLE001 — display only
                             pass
 
@@ -3214,6 +3513,15 @@ def main(argv: list[str] | None = None) -> None:
                     status.stop()
                     sys.stderr = _saved_stderr
 
+                # P1.2 CoT: record this turn's reasoning for /why; /cot full
+                # prints the whole block into the transcript (dim, before the
+                # answer panel). Display buffer only — never session content.
+                app_state["last_reasoning"] = "".join(_turn_reasoning)
+                if _cot_mode(app_state) == "full" and app_state["last_reasoning"].strip():
+                    console.print(
+                        Text("┆ " + app_state["last_reasoning"].strip(), style="dim italic")
+                    )
+
                 # Final response: highlighted panel with braille V title
                 global _last_response
                 if turn_result.text:
@@ -3229,11 +3537,18 @@ def main(argv: list[str] | None = None) -> None:
                     before, after = session.compact(keep_recent=12)
                     console.print(f"[dim]  compacted {before} -> {after} entries (old context summarized)[/dim]")
 
-                # Token usage (show in/out breakdown)
-                if turn_result.usage:
-                    u = turn_result.usage
-                    if u.input_tokens or u.output_tokens:
-                        console.print(f"[dim]  in={u.input_tokens:,} out={u.output_tokens:,}[/]")
+                # P2 unified turn footer (route · model · tokens · wall-clock;
+                # unknown parts omitted — same grammar as the native/VGG paths).
+                _u = turn_result.usage
+                console.print(
+                    render_turn_footer(
+                        route="tool_use",
+                        model=str(app_state.get("model", "") or ""),
+                        in_tokens=getattr(_u, "input_tokens", 0) if _u else 0,
+                        out_tokens=getattr(_u, "output_tokens", 0) if _u else 0,
+                        wall_sec=time.monotonic() - _turn_started,
+                    )
+                )
                 console.print()
 
             except KeyboardInterrupt:

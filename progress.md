@@ -3,6 +3,9 @@
 更新：2026-07-13（深夜）。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
+- **CLI UX P1/P2（ui/cli-experience 并入,owner 试用批准）**:CoT 三档(/cot //why)/ChainView 活执行树/
+  verdict 卡片+人话解释/诚实计时(0.0s 绝迹)//trace //route/三路径统一页脚;markup 注入防线(16 审查
+  findings 修毕);哨兵/验收同步串原样;vcli 全量 0 新失败。
 - **P5.4 真机世界 go2w_real**：Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
   Trigger standup/liedown/estop/resume/manual/nav_cancel)。世界同 CLI/工具/技能/verify 接缝。
 - **v2 探索/route/camera**：ExploreManager/RouteManager/Camera(BEST_EFFORT,坏帧丢弃)。

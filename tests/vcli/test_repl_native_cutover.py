@@ -119,10 +119,11 @@ class _FakeEngine:
             raise RuntimeError("classify boom")
         return SimpleNamespace(use_vgg=self._use_vgg)
 
-    def run_turn_native(self, user_message, agent=None, session=None, app_state=None, on_progress=None):  # noqa: ANN001
-        # ``on_progress`` mirrors the REAL VectorEngine.run_turn_native signature —
-        # _repl_attempt_native passes it for the live spinner; a fake omitting it made
-        # the call raise TypeError (caught as "no action"), masking the cutover path.
+    def run_turn_native(self, user_message, agent=None, session=None, app_state=None, on_progress=None, on_event=None):  # noqa: ANN001
+        # ``on_progress``/``on_event`` mirror the REAL VectorEngine.run_turn_native
+        # signature — _repl_attempt_native passes on_event for the live chain view
+        # (P1.1); a fake omitting a kw the REPL passes raises TypeError (caught as
+        # "no action"), masking the cutover path.
         self.native_calls += 1
         if isinstance(self._trace, Exception):
             raise self._trace
