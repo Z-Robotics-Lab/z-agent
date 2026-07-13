@@ -166,3 +166,40 @@ def test_malformed_event_never_raises() -> None:
     view.handle_event(NativeEvent(kind="???", label=None, detail=None))  # type: ignore[arg-type]
     view.handle_event(None)  # type: ignore[arg-type]
     assert isinstance(_text(view), str)
+
+
+# ---------------------------------------------------------------------------
+# P3.1 — final_lines: the PERSISTED execution tree (owner ask 2026-07-13)
+# ---------------------------------------------------------------------------
+
+
+def test_final_lines_tree_with_goal_rounds_and_chain() -> None:
+    view, _ = _make()
+    view.handle_event(NativeEvent(kind="round", label="1"))
+    view.handle_event(NativeEvent(kind="tool_start", label="turn", detail="(direction=left)"))
+    view.handle_event(NativeEvent(kind="tool_end", label="turn", ok=True))
+    view.handle_event(NativeEvent(kind="round", label="2"))
+    view.handle_event(NativeEvent(kind="verify", label="turned(18)", ok=True))
+    view.handle_event(NativeEvent(kind="nudge", label="verify_before_finish", detail="先 verify 再停止"))
+    lines = view.final_lines("往左转动30度")
+    text = "\n".join(lines)
+    assert "⌂" in text and "往左转动30度" in text  # goal header
+    assert "2" in lines[0]  # rounds count on the header
+    assert "turn" in text and "turned(18)" in text and "✓" in text
+    assert "⟲" in text and "先 verify 再停止" in text  # nudges persist
+    # No live-only furniture in the transcript tree:
+    assert "working" not in text
+    assert "┆" not in text  # reasoning stays live-region/-why only
+
+
+def test_final_lines_empty_without_events() -> None:
+    view, _ = _make()
+    assert view.final_lines("g") == []
+
+
+def test_final_lines_escapes_goal_markup() -> None:
+    view, _ = _make()
+    view.handle_event(NativeEvent(kind="tool_start", label="walk"))
+    from rich.text import Text
+
+    Text.from_markup("\n".join(view.final_lines("确认 [/tmp/x] 已生成")))  # must not raise

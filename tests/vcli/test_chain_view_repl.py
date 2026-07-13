@@ -63,3 +63,21 @@ def test_repl_passes_on_event_and_turn_completes(monkeypatch) -> None:
     assert "verify at_position(11.0, 3.0)" in console.text
     assert "verified=True" in console.text
     assert "grounded)" in console.text
+
+
+def test_final_tree_persists_in_transcript_after_turn(monkeypatch) -> None:
+    # Owner ask (2026-07-13): after every executed task the execution TREE is
+    # visible in the scrollback — not just the flat step lines. The transient
+    # live view's final state is re-printed as a ⌂ tree before the step lines.
+    _stub_oracle(monkeypatch)
+    trace = _acted_trace(
+        "g", strategy="walk", verify="at_position(11.0, 3.0)", verified_pose=True
+    )
+    engine = _EventFakeEngine(trace)
+    console = _FakeConsole()
+
+    assert cli._repl_attempt_native(engine, "走到坐标 (11,3)", _FakeSession(), {}, console)
+    assert "⌂" in console.text  # the persisted tree header
+    tree_idx = next(i for i, l in enumerate(console.lines) if "⌂" in l)
+    step_idx = next(i for i, l in enumerate(console.lines) if "→ verify" in l)
+    assert tree_idx < step_idx  # tree first, then the pinned step/verdict block
