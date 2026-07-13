@@ -6,39 +6,12 @@
 Covers the env-var branches added to ``resolve_credentials``: ``DEEPSEEK_API_KEY``
 as the default provider, OpenRouter as the multi-model fallback, the
 ``VECTOR_PROVIDER`` opt-out, ``VECTOR_MODEL`` selection, and config-file
-back-compat. Fully hermetic — no real ``.env`` / ``~/.vector/config.yaml`` / OAuth
-token is read (load_dotenv, load_config and both OAuth loaders are patched).
+back-compat. Fully hermetic via the shared ``isolated`` fixture (conftest.py) —
+no real ``.env`` / ``~/.vector/config.yaml`` / OAuth token is read.
 """
 from __future__ import annotations
 
-import pytest
-
 from zeno.vcli import config as cfg
-from zeno.vcli import oauth as oauth_mod
-
-_CRED_ENV = (
-    "DEEPSEEK_API_KEY",
-    "DEEPSEEK_MODEL",
-    "DEEPSEEK_BASE_URL",
-    "OPENROUTER_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "VECTOR_PROVIDER",
-    "VECTOR_MODEL",
-)
-
-
-@pytest.fixture
-def isolated(monkeypatch):
-    """Isolate resolve_credentials from any real .env / config / OAuth on the host."""
-    import dotenv
-
-    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: False)
-    monkeypatch.setattr(cfg, "load_config", lambda *a, **k: {})
-    monkeypatch.setattr(cfg, "load_claude_oauth", lambda *a, **k: None)
-    monkeypatch.setattr(oauth_mod, "load_credentials", lambda *a, **k: None)
-    for var in _CRED_ENV:
-        monkeypatch.delenv(var, raising=False)
-    return monkeypatch
 
 
 def test_deepseek_api_key_env_is_the_default(isolated):
