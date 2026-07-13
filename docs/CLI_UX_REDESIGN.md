@@ -1,7 +1,31 @@
 # CLI UX 重设计提案（branch: ui/cli-experience）
 
-状态：提案（2026-07-13）。范围：**只动展示层**（vcli 渲染 + 显示回调接线），
-不动 verify 脊柱语义（vcli/cognitive 的判定逻辑零改动，verdict 只读不再算）。
+状态：**P1+P2 已实施**（2026-07-13，基线 ddf2208，6 对 RED→GREEN commit）。
+范围：**只动展示层**（vcli 渲染 + 显示回调接线），不动 verify 脊柱语义
+（vcli/cognitive 的判定逻辑零改动，verdict 只读不再算）。
+
+## 0. 实施状态（与提案的偏差，先读这个）
+
+- ✅ P1.4 诚实计时：native StepRecord/trace 填真实 wall-clock；未测量渲染 "—"
+  决不打 0.0s（fmt_duration）。
+- ✅ P1.3 verdict 卡片：turn_render.render_verdict_card + explain_step 查表。
+  **注意**：查表按 5feb14f（谓词角色映射 + grounded observations）后的新语义
+  枚举——提案 §1 里"全绿仍 verified=False"的截图场景已被脊柱修复，卡片解释
+  的是仍可达的组合（含回合级门槛兜底）。
+- ✅ P1.1 事件流：turn_events.NativeEvent + native_loop on_event（additive，
+  默认 None 字节等价）；ChainView 单 Live 活树替换 console.status；finish 事件
+  携带 usage（native 路径首次读 response.usage）；on_reasoning 首次接进 native。
+- ✅ P1.2 CoT：/cot off|tail|full（config 持久化）+ /why；chat 路径 thinking
+  面板 ┆ 尾巴；native 路径经 reasoning 事件。推理只进显示缓冲，决不进 session。
+- ✅ P1.5：**/trace 读会话内有界历史（5 条，native+VGG）而非磁盘**——取证发现
+  产品从不调 save_trace，磁盘回放永远为空；/trace save 显式落盘。/route 只判
+  路由不执行。
+- ✅ P2：三路径统一页脚 route/model/tok/wall（未知省略）；步骤行符号单义
+  ✓=GROUNDED、○=RAN 且检查过、✗=检查假；步骤行带诚实时长。
+- ⏸ 未做：Ctrl+O 详略切换（P3，低优先）；GUI（§6，事件协议已就位）。
+- 兼容性：ZENO_VERDICT 哨兵、verdict 行 `(n/m grounded)` 尾、`→ verify`/
+  `actor=`/"native working" PTY 钉词、插队行、session 摘要全部原样保留；
+  tests/vcli 与 tests/unit/vcli 回归 0 新失败（15/5+cv2 全既存基线）。
 
 ## 1. 现状诊断
 
