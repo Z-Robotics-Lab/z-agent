@@ -3,9 +3,9 @@
 更新：2026-07-13（深夜）。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**；当前 UI worktree **ui/cli-experience**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
-- **CLI UX P1–P3.4（owner 批 P1/P2/P3.3/P3.4）**:CoT/ChainView/verdict 卡/诚实计时/trace+route/
-  持久树+live_status；P3.3 多行 composer；P3.4 Claude 风格开放 input rail+owner 指定 38 列双色斜体
-  块字 ZENO；status/metadata 按字段折行、续行对齐、长 draft `100→40→100` 无残影。UI 簇 171P+裸 PTY，0 新失败。
+- **CLI UX P1–P3.5（owner 批 P1/P2/P3.3/P3.4）**:CoT/ChainView/verdict 卡/诚实计时/trace+route/
+  持久树+live_status；P3.3 composer；P3.4 开放 input rail+owner 38 列双色斜体 ZENO；
+  P3.5 `●` 开放回答+普通对话去 VGG 重复脚手架+`◌/┆` CoT；响应式无残影。UI 簇 183P+裸 PTY，0 新失败。
 - **P5.4 真机世界 go2w_real**：Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
   Trigger standup/liedown/estop/resume/manual/nav_cancel)。世界同 CLI/工具/技能/verify 接缝。
 - **v2 探索/route/camera**：ExploreManager/RouteManager/Camera(BEST_EFFORT,坏帧丢弃)。

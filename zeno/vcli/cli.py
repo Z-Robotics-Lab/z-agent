@@ -3668,7 +3668,7 @@ def main(argv: list[str] | None = None) -> None:
                     continue  # keep the REPL loop alive
                 finally:
                     # Stop/clear the single region BEFORE printing the final answer,
-                    # so the box never stacks and the prompt is not duplicated.
+                    # so live output never stacks and the prompt is not duplicated.
                     interject_reader.stop()  # window closes before any prompt
                     status.stop()
                     sys.stderr = _saved_stderr
