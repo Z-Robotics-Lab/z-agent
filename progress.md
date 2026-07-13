@@ -26,14 +26,16 @@
   y/n/a 永不被偷。VGG async 路径 prompt 本来就活着,窗口不开。
 - **/permissions 持久化**：auto|manual 经既有 config.yaml 机制存取;两条 setup 路径(REPL+-p)启动加载;
   --no-permission 旗标永远赢;auto 启动每次会话必打 REAL-ROBOT 警告(绝不静默 auto)。
-- **测试**：tests/unit/vcli/test_operator_interject.py 19 测(os.pipe 假 stdin+FakeToolScriptBackend,
-  全 hermetic 不碰 pty)。回归:tests/vcli 15 failed/972 passed=基线同款 0 新增;
-  tests/unit/vcli 5 failed=基线环境性同款(+cv2 collect 2)0 新增。
+- **测试**：test_operator_interject.py 19 测(os.pipe 假 stdin+FakeToolScriptBackend,全 hermetic 不碰 pty)。
+- **INTEGRATOR 签核 2026-07-13**：内核改动限批准 scope(verdict/cognitive/trace_store+cli 显示/interject/
+  permissions,全 additive 默认 frozenset()=旧行为);无跨流串改(sibling ui/c 85798ce 不在本支)。三套核对
+  =文档基线 0 新失败:tests/vcli 15F/972P、unit/vcli 5F/1041P(+2 cv2 collect)、unit/hardware 6F/276P/63
+  collect-err(devworld-PTY 已用 421f885 worktree 证实基线同款;go2w_hw_interrupt 隔离通过=满载 flake)。离线
+  冒烟绿:go2w_real 解析;6 谓词 oracle 标记齐,stack_ready() role-map→GROUNDED/kernel-only→RAN;turn 45°;interject 可导入。
 
 ## 路由取证（READ-ONLY,喂下一内核轮 — 坐下 未走 direct 短路）
-- direct=True 短路只在 legacy 快速路径;REPL 默认 native ReAct 截获 action-shaped 意图,
-  has_unverified_action 门强制 verify → 姿态技能转圈。修点:native 放行 direct 姿态技能或内建
-  posture verify;native 抽参器认 'angle'。
+- direct=True 短路只在 legacy 快速路径;REPL 默认 native ReAct 截获 action-shaped 意图,has_unverified_action
+  门强制 verify → 姿态技能转圈。修点:native 放行 direct 姿态技能或内建 posture verify;native 抽参器认 'angle'。
 
 ## Next
 1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,owner+E-stop 在手）**:走路中打字插队→nav 取消+
