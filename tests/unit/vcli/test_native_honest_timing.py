@@ -105,8 +105,9 @@ def test_verify_only_step_times_its_own_handling() -> None:
     assert len(trace.steps) == 1
     step = trace.steps[0]
     # No skill dispatched: the duration is just the verify handling — tiny but
-    # non-negative, and honestly bounded (never a leftover anchor from nowhere).
-    assert step.duration_sec >= 0.0
+    # strictly positive (monotonic ns resolution makes this deterministic), and
+    # honestly bounded (never a leftover anchor from nowhere).
+    assert step.duration_sec > 0.0
     assert step.duration_sec < 5.0, step.duration_sec
 
 

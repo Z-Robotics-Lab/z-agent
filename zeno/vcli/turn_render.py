@@ -93,7 +93,7 @@ def explain_step(
     if actor == "UNCAUSED" and acted:
         return "谓词为真，但下发的动作并未导致该状态（基线已满足或非指令位移）——降级，不作为证据。"
     if actor == "CAUSED":
-        return "动作执行且有检查通过，但检查的是落点而非指令目标（坐标不符）——不作为证据。"
+        return "机器人动了且有检查通过，但该检查未被认可为落地证据（验证的可能是落点而非指令目标，或谓词不构成有效判据）——不作为证据。"
     return "检查为真但不构成落地证据（谓词未注册为世界真值、状态量裸调、恒真式或仅视觉判定）——不计入 grounded。"
 
 
@@ -133,8 +133,9 @@ def render_verdict_card(report: Any, trace: Any = None, *, max_verify_len: int =
         verify = (s.verify or "").strip() or "—"
         if len(verify) > max_verify_len:
             verify = verify[: max_verify_len - 1] + "…"
-        action = (s.strategy or "").strip() or "(观察)"
-        diag = (s.diagnosis or "").strip()
+        verify = _escape_markup(verify)
+        action = _escape_markup((s.strategy or "").strip() or "(观察)")
+        diag = _escape_markup((s.diagnosis or "").strip())
         diag_part = f" [dim]{diag}[/]" if diag else ""
         lines.append(
             f"    [dim]{i}[/]  {action}  [dim]verify[/] {verify} "
@@ -244,8 +245,12 @@ def render_trace_detail(trace: Any) -> list[str]:
 
 
 def _escape_markup(text: str) -> str:
-    """Escape Rich markup brackets in model-authored text (display safety)."""
-    return str(text).replace("[", r"\[")
+    """Escape Rich markup in model/user-authored text (display safety)."""
+    try:
+        from rich.markup import escape
+        return escape(str(text))
+    except Exception:  # noqa: BLE001
+        return str(text).replace("[", r"\[")
 
 
 class ChainView:
@@ -281,6 +286,7 @@ class ChainView:
         self._round = ""
         self._nodes: list[dict[str, Any]] = []
         self._reasoning: list[str] = []
+        self._reasoning_tail: str = ""
         self._reasoning_tail_chars = int(reasoning_tail_chars)
         self._show_reasoning_tail = bool(show_reasoning_tail)
         self._nudges: deque[str] = deque(maxlen=max(1, int(max_nudges)))
@@ -366,6 +372,9 @@ class ChainView:
             self._round = label
         elif kind == "reasoning":
             self._reasoning.append(detail)
+            self._reasoning_tail = (self._reasoning_tail + detail)[
+                -max(self._reasoning_tail_chars * 2, 320) :
+            ]
         elif kind == "text":
             self._text_tail = (self._text_tail + detail)[-72:]
         elif kind == "tool_start":
@@ -393,8 +402,8 @@ class ChainView:
         lines = [
             f"  [bold {_TEAL}]native[/] working…{round_part}  [dim](Ctrl+C 安全中断)[/dim]"
         ]
-        if self._show_reasoning_tail and self._reasoning:
-            joined = "".join(self._reasoning).replace("\n", " ")
+        if self._show_reasoning_tail and self._reasoning_tail:
+            joined = self._reasoning_tail.replace("\n", " ")
             tail = joined[-self._reasoning_tail_chars :].strip()
             if tail:
                 lines.append(f"  [dim italic]┆ {_escape_markup(tail)}[/]")

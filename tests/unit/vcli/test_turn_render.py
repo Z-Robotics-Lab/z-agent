@@ -49,26 +49,27 @@ def test_fmt_duration_normal() -> None:
 # ---------------------------------------------------------------------------
 
 _COMBOS = [
-    ("GROUNDED", "CAUSED", True, "walk", ""),
-    ("GROUNDED", "NOT_GRADED", True, "standup", ""),
-    ("GROUNDED", "UNCAUSED", True, "", ""),  # grounded observation (2026-07-13)
-    ("RAN", "UNCAUSED", True, "walk", ""),  # teleport / no-op downgrade
-    ("RAN", "UNCAUSED", False, "", ""),
-    ("RAN", "CAUSED", False, "walk", ""),
-    ("RAN", "CAUSED", True, "walk", ""),  # STEP-13 landing-point mismatch
-    ("RAN", "NOT_GRADED", True, "walk", ""),
-    ("RAN", "NOT_GRADED", False, "walk", ""),
-    ("FAILED", "NOT_GRADED", False, "walk", "timeout"),
-    ("FAILED", "CAUSED", False, "walk", "verify_fail"),
+    ("GROUNDED", "CAUSED", True, "walk", "", "完全验证"),
+    ("GROUNDED", "NOT_GRADED", True, "standup", "", "因果评级"),
+    ("GROUNDED", "UNCAUSED", True, "", "", "观察"),  # grounded observation (2026-07-13)
+    ("RAN", "UNCAUSED", True, "walk", "", "未导致"),  # teleport / no-op downgrade
+    ("RAN", "UNCAUSED", False, "", "", "为假"),
+    ("RAN", "CAUSED", False, "walk", "", "未确认"),
+    ("RAN", "CAUSED", True, "walk", "", "落地证据"),  # not a valid grounding predicate
+    ("RAN", "NOT_GRADED", True, "walk", "", "证据"),
+    ("RAN", "NOT_GRADED", False, "walk", "", "为假"),
+    ("FAILED", "NOT_GRADED", False, "walk", "timeout", "超时"),
+    ("FAILED", "CAUSED", False, "walk", "verify_fail", "验证失败"),
 ]
 
 
-@pytest.mark.parametrize("evidence,actor,vres,strategy,diag", _COMBOS)
+@pytest.mark.parametrize("evidence,actor,vres,strategy,diag,keyword", _COMBOS)
 def test_explain_step_nonempty_for_all_reachable_combos(
-    evidence: str, actor: str, vres: bool, strategy: str, diag: str
+    evidence: str, actor: str, vres: bool, strategy: str, diag: str, keyword: str
 ) -> None:
     text = explain_step(evidence, actor, vres, strategy, diag)
     assert isinstance(text, str) and text.strip(), (evidence, actor, vres)
+    assert keyword in text, (evidence, actor, vres, keyword, text)
 
 
 def test_explain_downgrade_names_the_cause() -> None:

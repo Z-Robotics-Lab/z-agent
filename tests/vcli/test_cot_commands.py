@@ -51,10 +51,10 @@ def test_cot_registered_in_slash_commands() -> None:
 
 def test_cot_bare_reports_current_mode(monkeypatch) -> None:
     buf = _capture_console(monkeypatch)
-    app_state: dict = {}
+    app_state: dict = {"cot_mode": "off"}
     cont = cli._handle_slash_command("cot", [], None, None, app_state)
     assert cont is True
-    assert "tail" in buf.getvalue()  # the default
+    assert "off" in buf.getvalue()
 
 
 def test_cot_sets_and_persists_mode(monkeypatch) -> None:
@@ -113,14 +113,15 @@ class _ReasoningFakeEngine(_EventFakeEngine):
         return self._trace
 
 
-def _run_reasoning_turn(monkeypatch, app_state: dict) -> object:
+def _run_reasoning_turn(monkeypatch, app_state: dict) -> tuple[object, object]:
     _stub_oracle(monkeypatch)
     trace = _acted_trace("g", strategy="turn", verify="turned(18)", verified_pose=True)
     engine = _ReasoningFakeEngine(trace)
     console_double = _FakeConsoleProxy()
-    acted = cli._repl_attempt_native(engine, "往左转动30度", _FakeSession(), app_state, console_double)
+    session = _FakeSession()
+    acted = cli._repl_attempt_native(engine, "往左转动30度", session, app_state, console_double)
     assert acted is True
-    return console_double
+    return console_double, session
 
 
 class _FakeConsoleProxy:
@@ -145,13 +146,13 @@ def test_native_turn_records_last_reasoning(monkeypatch) -> None:
 
 def test_cot_full_prints_reasoning_after_turn(monkeypatch) -> None:
     app_state: dict = {"cot_mode": "full"}
-    console = _run_reasoning_turn(monkeypatch, app_state)
+    console, _session = _run_reasoning_turn(monkeypatch, app_state)
     assert "左转30度" in console.text
 
 
 def test_cot_tail_keeps_reasoning_out_of_transcript(monkeypatch) -> None:
     app_state: dict = {"cot_mode": "tail"}
-    console = _run_reasoning_turn(monkeypatch, app_state)
+    console, _session = _run_reasoning_turn(monkeypatch, app_state)
     # tail mode renders reasoning only inside the transient live region —
     # never as scrollback transcript lines.
     assert "左转30度" not in console.text
@@ -162,6 +163,16 @@ def test_cot_off_suppresses_live_tail(monkeypatch) -> None:
     _run_reasoning_turn(monkeypatch, app_state)
     view = app_state["last_chain_view"]
     assert "┆" not in "\n".join(view.render_lines())
+
+
+def test_reasoning_never_reaches_session(monkeypatch) -> None:
+    # The full reasoning buffer is a DISPLAY-only artifact (P1.2 docstring) —
+    # it must never leak into the persistent session transcript that follow-up
+    # turns read back as context.
+    app_state: dict = {"cot_mode": "full"}
+    _console, session = _run_reasoning_turn(monkeypatch, app_state)
+    assert "左转30度" not in "".join(session.asst)
+    assert "左转30度" not in "".join(session.user)
 
 
 def test_why_prints_last_reasoning(monkeypatch) -> None:

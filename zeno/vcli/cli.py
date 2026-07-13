@@ -28,6 +28,7 @@ import re
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.markup import escape as escape_markup
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.syntax import Syntax
@@ -719,7 +720,8 @@ def _repl_attempt_native(
         dur = fmt_duration(getattr(s, "duration_sec", 0.0))
         dur_part = f" [dim]{dur}[/]" if dur != "—" else ""
         console.print(
-            f"  [{TEAL}]▸[/] {chain} → verify {verify_expr} {mark} [dim](actor={actor})[/]{dur_part}"
+            f"  [{TEAL}]▸[/] {escape_markup(chain)} → verify {escape_markup(verify_expr)} "
+            f"{mark} [dim](actor={actor})[/]{dur_part}"
         )
 
     if report is not None:
@@ -1718,7 +1720,7 @@ def _handle_slash_command(
                 n = len(getattr(t, "steps", ()) or ())
                 ok = "[green]ok[/]" if getattr(t, "success", False) else "[red]not ok[/]"
                 console.print(
-                    f"  [{TEAL}]{i}[/] {g}  [dim]{n} steps ·[/] {ok} "
+                    f"  [{TEAL}]{i}[/] {escape_markup(g)}  [dim]{n} steps ·[/] {ok} "
                     f"[dim]· {fmt_duration(getattr(t, 'total_duration_sec', 0.0))}[/]"
                 )
         elif arg == "save":
@@ -3018,6 +3020,11 @@ def main(argv: list[str] | None = None) -> None:
     app_state["interject"] = interject_reader
     # P1.2: restore the persisted /cot display mode for this session.
     _apply_saved_cot_mode(app_state)
+    # P1.5: pre-create the bounded trace history ONCE on the REPL thread so the
+    # VGG background thread and the native path only ever append (deque.append
+    # is atomic) — no lazy-init race.
+    from collections import deque as _deque_init
+    app_state.setdefault("trace_history", _deque_init(maxlen=5))
     set_current_reader(interject_reader)
 
     try:
@@ -3097,7 +3104,14 @@ def main(argv: list[str] | None = None) -> None:
             # are tracked native improvements (see docs/ARCHITECTURE.md), NOT reasons to
             # fall back to legacy.
             if _repl_native_enabled() and _intent_actionable(engine, user_input):
-                if _repl_attempt_native(engine, user_input, session, app_state, console):
+                try:
+                    _native_owned = _repl_attempt_native(
+                        engine, user_input, session, app_state, console
+                    )
+                except KeyboardInterrupt:
+                    _operator_interrupt(app_state)
+                    _native_owned = True  # turn handled; REPL stays alive
+                if _native_owned:
                     continue
                 # native took NO action -> fall through to legacy routing (unchanged).
 
