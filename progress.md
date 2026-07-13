@@ -1,11 +1,11 @@
 # Zeno — progress
 
-更新：2026-07-13（深夜）。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
+更新：2026-07-13（深夜）。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**；当前 UI worktree **ui/cli-experience**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
-- **CLI UX P1/P2（ui/cli-experience 并入,owner 试用批准）**:CoT 三档(/cot //why)/ChainView 活执行树/
-  verdict 卡片+人话解释/诚实计时(0.0s 绝迹)//trace //route/三路径统一页脚;markup 注入防线(16 审查
-  findings 修毕);哨兵/验收同步串原样;vcli 全量 0 新失败。
+- **CLI UX P1–P3.2（owner 试用批准 P1/P2）**:CoT/ChainView/verdict 卡/诚实计时/
+  trace+route/统一页脚；P3.1 回合后持久 ⌂ 执行树；P3.2 只读同一 live_status_line
+  上 ChainView 头+输入底栏（失败清空/Rich+HTML 转义）。UI 测试簇 129P，0 新失败。
 - **P5.4 真机世界 go2w_real**：Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
   Trigger standup/liedown/estop/resume/manual/nav_cancel)。世界同 CLI/工具/技能/verify 接缝。
 - **v2 探索/route/camera**：ExploreManager/RouteManager/Camera(BEST_EFFORT,坏帧丢弃)。
@@ -38,26 +38,23 @@
 - **集成签核**(本轮):内核仅两钩子 + 消费(缺钩子世界逐字节不变,已证);未动 cli/display/UI;
   三套件对基线 0 新失败(vcli 15F、hardware 6F+63err 均既存,interrupt 隔离 1P);离线 smoke 全绿。
 
-## 路由取证（READ-ONLY,喂下一内核轮 — 坐下 未走 direct 短路）
-- direct=True 短路只在 legacy 快速路径;native ReAct 截获 action-shaped 意图,has_unverified_action
-  门强制 verify → 姿态技能转圈。修点:native 放行 direct 姿态技能或内建 posture verify;'angle' 抽参。
-
 ## Next
-1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,owner+E-stop 在手）**:方形路径闭环+航向补偿消息;
+1. **UI 下一轮**:纯 CLI 可做长动作进度或 /history；GUI WebSocket tail 是新跨进程接口，待 CEO gate。
+2. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,owner+E-stop 在手）**:方形路径闭环+航向补偿消息;
    places 现场:走几步→'记住这里叫充电桩'→绕开→'回到充电桩'/'回到刚才的位置'/'回到起点';
    重启导航栈后确认技能如实报地点失效。插队+permissions;verdict N/N 一并做。
-2. **内核轮（喂:路由取证）**:native direct 姿态技能放行/内建 posture verify;'angle' 抽参。
-3. camera 一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务。
+3. **内核轮（已取证）**:native direct 姿态技能放行/内建 posture verify;'angle' 抽参。
+4. camera 一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务。
 
 ## Failed / 教训
 - **真机 E2E 未验收**:course/插队/位姿钩子/places 全 hermetic 单测,Inv-2 待硬件闭环(0.3m 召回距离、
   地点解析话术是否合身只能现场标定)。
 - **既存失败（勿追,全环境性）**:playground/perception/courtyard/native-PTY(1)/level66(vcli 15) +
   mujoco/cv2/mcp collect-error/spawn-OOM + acceptance_env/vision_judge/d1_reexec(unit 5)。
+- **UI worktree 额外基线**:intent-pose RED 测试已在、GREEN 实现尚在 hw 分支；全 vcli 因此 32F，本轮不追。
 - **结构债（既存）**:native_loop/engine/cli/goal_decomposer >800 硬上限(上游单体);go2w_real 620。
 - **缓办残留（诚实记录）**:跨步因果归因未分级,与 shadow-MjData re-step 同一 deferral,docstring 已明示。
 
 ## 关键背景
-- go2w=Isaac 数字孪生(HTTP 桥 127.0.0.1:8042);go2w_real=真机(nav 栈 ROS_DOMAIN_ID=20 CycloneDDS,
-  ~/Z-Navigation-Stack via ~/go2w-nuc/scripts/nav.sh)。同 CLI,sim↔real 对称。verify 唯真值=/state_estimation
-  里程计(无 /gt);栈健康唯真值=nav.sh status。测仅经 `bash scripts/run-tests`(内存封顶,勿裸 pytest)。
+- go2w=Isaac 数字孪生(HTTP 桥 127.0.0.1:8042);go2w_real=真机(ROS_DOMAIN_ID=20,
+  ~/Z-Navigation-Stack)。同 CLI,sim↔real 对称；verify 唯真值=/state_estimation(无 /gt)；测仅经 `scripts/run-tests`。

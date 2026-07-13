@@ -1,6 +1,6 @@
 # CLI UX 重设计提案（branch: ui/cli-experience）
 
-状态：**P1+P2 已实施**（2026-07-13，基线 ddf2208，6 对 RED→GREEN commit）。
+状态：**P1+P2+P3.1+P3.2 已实施**（2026-07-13，基线 ddf2208）。
 范围：**只动展示层**（vcli 渲染 + 显示回调接线），不动 verify 脊柱语义
 （vcli/cognitive 的判定逻辑零改动，verdict 只读不再算）。
 
@@ -24,11 +24,14 @@
   ✓=GROUNDED、○=RAN 且检查过、✗=检查假；步骤行带诚实时长。
 - ✅ P3.1 执行树持久化（owner ask 2026-07-13）：回合后 ⌂ goal 树（rounds/工具/
   verify/nudge）留在 transcript，活区消失的过程信息不再丢。
+- ✅ P3.2 live status 同源上屏：只读现有 `world.live_status_line` hook，
+  ChainView 每个 native round 刷新，prompt_toolkit 底栏显示同一行；失败清空
+  防旧位姿，Rich/HTML 均转义；未动 native_loop/world/verify。
 - ⏸ 未做：Ctrl+O 详略切换（P3，低优先）；GUI（§6，事件协议已就位）。
 
-## 7. 下一轮候选（2026-07-13 与 owner 讨论）
+## 7. 下一轮候选（2026-07-13 与 owner 讨论，#1 已落地）
 
-1. **live_status 上屏**：pose hooks 轮（1499720）已给模型每轮重建 live_status_line
+1. ✅ **live_status 上屏（P3.2）**：pose hooks 轮（1499720）已给模型每轮重建 live_status_line
    （位姿/course drift/odom age）——同一数据渲染进 ChainView 头 + prompt_toolkit
    底栏，人和模型看同一份真值（单源，display-only）。
 2. **长动作进度**：navigate/route 执行中在树节点上滚动 距目标剩余米数/航向
@@ -39,6 +42,7 @@
 6. **回合后快照提示**：ADR-002 PNG 已拍时打印路径。
 7. **Ctrl+O 详略切换**：result_data/verify 原始值常显。
 8. **GUI dashboard**：事件协议+trace 已结构化，`zeno --dashboard` WebSocket tail。
+   注：WebSocket tail 会形成新跨进程接口，实施前必须过 CEO gate。
 - 兼容性：ZENO_VERDICT 哨兵、verdict 行 `(n/m grounded)` 尾、`→ verify`/
   `actor=`/"native working" PTY 钉词、插队行、session 摘要全部原样保留；
   tests/vcli 与 tests/unit/vcli 回归 0 新失败（15/5+cv2 全既存基线）。
