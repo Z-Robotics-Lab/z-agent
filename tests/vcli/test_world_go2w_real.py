@@ -228,13 +228,26 @@ def test_bringup_surfaces_nonzero_exit_as_error(
 
 
 class _FakeHW:
-    """Stand-in Go2WHardware exposing the odometry the verify predicates read."""
+    """Stand-in Go2WHardware: odometry position + the moved() driver anchor.
 
-    def __init__(self, x: float, y: float) -> None:
+    Mirrors the real driver contract (twin of rotate_anchor_yaw): navigate_to()
+    samples the odometry position into ``move_anchor_xy`` at command start,
+    even when the guard eats the commands (moves=False — anchor set, position
+    unchanged, so moved() honestly grades False)."""
+
+    def __init__(self, x: float = 0.0, y: float = 0.0, moves: bool = True) -> None:
         self._x, self._y = x, y
+        self._moves = moves
+        self.move_anchor_xy: tuple[float, float] | None = None
 
     def get_position(self) -> tuple[float, float, float]:
         return (self._x, self._y, 0.0)
+
+    def navigate_to(self, x: float, y: float, timeout: float = 120.0) -> bool:
+        self.move_anchor_xy = (self._x, self._y)
+        if self._moves:
+            self._x, self._y = float(x), float(y)
+        return self._moves
 
 
 def _real_world_with_fake_agent(x: float, y: float):
@@ -273,17 +286,79 @@ def test_at_default_tolerance_is_0_8() -> None:
     assert at(0.81, 0.0) is False
 
 
-def test_moved_measures_displacement_from_a_start_capture() -> None:
-    """moved(min_m) is True once the robot has displaced >= min_m from where the
-    predicate first sampled the pose (a monotonic 'did it actually move' check)."""
+# moved() — driver-anchored (LAST move command), no per-call state.
+#
+# Twin of the 2026-07-13 double-turn race: verify runs AFTER the skill, so the
+# old first-verify-call origin capture sampled the POST-walk pose and returned
+# False BY CONSTRUCTION — the model then re-ran the walk. And because the
+# verifier namespace is built once per session, every later check graded
+# displacement from a session-old origin: a failed walk could fake-pass off
+# motion that happened steps earlier. The oracle now anchors on move_anchor_xy,
+# which the DRIVER samples from odometry at command start (navigate_to/walk).
+
+
+def test_moved_grades_true_on_first_check_after_completed_move() -> None:
+    """THE race: one completed 3 m walk, ONE verify call (after the skill,
+    as verify always runs) — must grade True, not capture-and-False."""
     world, agent = _real_world_with_fake_agent(0.0, 0.0)
-    ns = world.build_verify_namespace(agent)
-    moved = ns["moved"]
-    # First call captures the origin; robot is still at origin -> not moved yet.
+    moved = world.build_verify_namespace(agent)["moved"]
+    agent._base.navigate_to(3.0, 0.0)  # the skill completes BEFORE any check
+    assert moved(2.0) is True, (
+        "first verify call after a completed move must grade True — grading "
+        "False here is what makes the model re-run the walk (double motion)")
+
+
+def test_moved_false_when_no_move_ever_commanded() -> None:
+    """Displacement with NO move command (carried, drifted, earlier session
+    motion) must never pass — no anchor, no origin capture, honest False."""
+    world, agent = _real_world_with_fake_agent(0.0, 0.0)
+    moved = world.build_verify_namespace(agent)["moved"]
+    agent._base._x = 5.0  # pose changed, but NOT via a move command
     assert moved(0.5) is False
-    # Robot drives 1 m away (fake HW pose changes), now it has moved >= 0.5 m.
-    agent._base._x = 1.0
-    assert moved(0.5) is True
+    agent._base._x = 9.0  # keeps changing — still no command
+    assert moved(0.5) is False, (
+        "the old origin capture graded True here: displacement from the first "
+        "sample, regardless of whether the LAST move command did anything")
+
+
+def test_moved_measures_only_the_last_move_command() -> None:
+    """Each navigate_to() re-anchors: a second command grades its OWN hop."""
+    world, agent = _real_world_with_fake_agent(0.0, 0.0)
+    moved = world.build_verify_namespace(agent)["moved"]
+    agent._base.navigate_to(10.0, 0.0)
+    agent._base.navigate_to(10.5, 0.0)  # short 0.5 m hop
+    assert moved(5.0) is False, "only the LAST command's displacement counts"
+    assert moved(0.4) is True
+
+
+def test_moved_is_stable_across_repeated_checks() -> None:
+    """Threshold-shopping must get consistent answers — no per-call state."""
+    world, agent = _real_world_with_fake_agent(0.0, 0.0)
+    moved = world.build_verify_namespace(agent)["moved"]
+    agent._base.navigate_to(3.0, 0.0)
+    assert moved(2.0) is True
+    assert moved(4.0) is False
+    assert moved(2.0) is True
+    assert moved() is True  # default 0.1 <= 3.0
+
+
+def test_moved_false_when_commands_eaten_by_latched_guard() -> None:
+    """navigate commanded but odometry never moved (silent guard latch):
+    anchor is set, displacement stays 0 -> honest False."""
+    from zeno.vcli.worlds.go2w_real_verify import make_moved
+
+    hw = _FakeHW(moves=False)
+    hw.navigate_to(3.0, 0.0)
+    assert make_moved(SimpleNamespace(_base=hw))(0.1) is False
+
+
+def test_moved_is_fail_safe() -> None:
+    from zeno.vcli.worlds.go2w_real_verify import make_moved
+
+    assert make_moved(None)(0.1) is False
+    assert make_moved(SimpleNamespace(_base=None))(0.1) is False
+    # A base without the anchor attribute (foreign/older driver) -> False.
+    assert make_moved(SimpleNamespace(_base=object()))(0.1) is False
 
 
 def test_at_is_fail_safe_when_no_agent() -> None:
@@ -315,6 +390,33 @@ def test_decompose_vocab_teaches_real_strategies_and_at_verify() -> None:
     assert "at" in vocab.verify_functions
     # The taught strategy set matches the strategy_descriptions keys (no drift).
     assert set(vocab.strategy_descriptions) == set(vocab.strategies)
+
+
+def test_vocab_moved_signature_teaches_driver_anchor() -> None:
+    """The taught moved() signature must say it grades the LAST move command
+    against the driver anchor — not 'since the first sample' (the wording that
+    licensed the double-motion race, twin of turned() 2026-07-13)."""
+    from zeno.vcli.worlds import resolve_world_named
+
+    sig = resolve_world_named("go2w_real").decompose_vocab().verify_fn_signatures["moved"]
+    assert "LAST move" in sig
+    assert "driver anchor" in sig
+    assert "first sample" not in sig
+
+
+def test_capability_md_teaches_moved_never_rerun() -> None:
+    """The capability card must warn against re-running a move to satisfy
+    verify (same doctrine the turn section already carries)."""
+    from pathlib import Path
+
+    import zeno.vcli.worlds.go2w_real as w
+
+    text = Path(w.__file__).with_name("go2w_real_capabilities.md").read_text(
+        encoding="utf-8")
+    assert "moved(" in text
+    assert "NEVER re-run a move" in text, (
+        "the card must teach that moved() grades the LAST move command and a "
+        "re-run drives the robot AGAIN")
 
 
 def test_persona_mentions_real_robot_and_estop_not_sim_reset() -> None:
