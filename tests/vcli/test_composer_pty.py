@@ -31,7 +31,7 @@ def test_bare_repl_logo_compact_rail_multiline_help_and_lf_submit() -> None:
 
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.transcript).replace("\r", "")
     assert result.exit_code == 0
-    assert "ZZZZZZZZ  EEEEEEEE" in text
+    assert "███████╗ ███████╗ ███╗" in text
     assert all(glyph not in text for glyph in ("┌", "┐", "└", "┘"))
     assert "zeno>" in text  # stable acceptance marker beside the open input rail
     assert "? 快捷键" in text

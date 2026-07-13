@@ -85,6 +85,6 @@ def test_startup_ascii_wordmark_is_zeno() -> None:
     """Brand belongs to startup, not repeated as input chrome every keystroke."""
     from zeno.vcli.banner import WIDE_ZENO_LOGO
 
-    assert WIDE_ZENO_LOGO[0].startswith("ZZZZZZZZ  EEEEEEEE")
-    assert any("NN     NN" in line for line in WIDE_ZENO_LOGO)
-    assert any("OOOOOO" in line for line in WIDE_ZENO_LOGO)
+    assert WIDE_ZENO_LOGO[0].startswith("███████╗ ███████╗")
+    assert any("██╔██╗ ██║" in line for line in WIDE_ZENO_LOGO)
+    assert WIDE_ZENO_LOGO[-1].endswith("╚═════╝ ")

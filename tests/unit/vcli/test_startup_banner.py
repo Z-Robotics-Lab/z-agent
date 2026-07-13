@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import os
-import string
 
 from zeno.vcli import cli
 from zeno.vcli.banner import (
@@ -16,13 +15,20 @@ from zeno.vcli.banner import (
 )
 
 
-def test_wide_logo_is_a_large_literal_ascii_zeno_wordmark() -> None:
+REFERENCE_ZENO_LOGO = (
+    "███████╗ ███████╗ ███╗   ██╗  ██████╗ ",
+    "╚══███╔╝ ██╔════╝ ████╗  ██║ ██╔═══██╗",
+    "  ███╔╝  █████╗   ██╔██╗ ██║ ██║   ██║",
+    " ███╔╝   ██╔══╝   ██║╚██╗██║ ██║   ██║",
+    "███████╗ ███████╗ ██║ ╚████║ ╚██████╔╝",
+    "╚══════╝ ╚══════╝ ╚═╝  ╚═══╝  ╚═════╝ ",
+)
+
+
+def test_wide_logo_matches_the_owner_supplied_terminal_wordmark() -> None:
+    assert WIDE_ZENO_LOGO == REFERENCE_ZENO_LOGO
     assert len(WIDE_ZENO_LOGO) == 6
-    assert max(map(len, WIDE_ZENO_LOGO)) >= 36
-    assert all(set(line) <= set(string.printable) for line in WIDE_ZENO_LOGO)
-    assert WIDE_ZENO_LOGO[0].startswith("ZZZZZZZZ  EEEEEEEE")
-    assert "NN     NN" in WIDE_ZENO_LOGO[0]
-    assert "OOOOOO" in WIDE_ZENO_LOGO[0]
+    assert {len(line) for line in WIDE_ZENO_LOGO} == {38}
 
 
 def test_logo_switches_complete_variants_instead_of_slicing_art() -> None:
