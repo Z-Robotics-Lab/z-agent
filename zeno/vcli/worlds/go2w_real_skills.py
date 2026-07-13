@@ -79,6 +79,7 @@ from zeno.vcli.worlds.go2w_real_diag import (  # noqa: E402
     _stalled_hint,
     oplog,
 )
+from zeno.vcli.worlds.go2w_real_places import record_departure  # noqa: E402
 
 
 def _base_of(context: Any) -> Any:
@@ -146,6 +147,9 @@ class RealNavigateSkill:
         # Free navigation ends the relative-course intent (a square-path plan's
         # heading bookkeeping means nothing after an absolute goal) — reset.
         reset_course(context, "navigate")
+        # Session memory: origin (once) + departure breadcrumb — the pose
+        # '回到刚才的位置' resolves to later (CEO directive 2026-07-13 night).
+        record_departure(context, "navigate")
         start = base.get_position()
         oplog("skill", "navigate", f"goal=({x:.2f},{y:.2f}) from=({start[0]:.2f},{start[1]:.2f})")
         ok = bool(base.navigate_to(x, y, timeout=CFG.nav_timeout_s))
@@ -233,6 +237,8 @@ class RealMoveRelativeSkill:
             oplog("skill", "move_relative", f"BLOCKED latched; {direction} {distance}m")
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
+        # Session memory: origin (once) + departure breadcrumb (刚才的位置).
+        record_departure(context, "move_relative")
         pos = base.get_position()
         # COURSE heading (field bug, CEO 2026-07-13 evening): straight legs run
         # ALONG the plan's intended course when one is tracked — the legs of a

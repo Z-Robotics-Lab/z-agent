@@ -12,14 +12,17 @@ append-only extension markers.
 
 from __future__ import annotations
 
-# NOTE: the ``at``/``move_relative`` examples are unchanged from the v1 world;
-# the ``route_via_skill`` example is added so the planner learns to pick global
-# route planning for a FAR cross-map goal (verify with route_reached()).
+# NOTE: the ``route_via_skill`` example teaches global route planning for a
+# FAR cross-map goal (verify with route_reached()).
 # v2 (2026-07-13): the old TWO-step '启动导航栈,站起来,打开 rviz' few-shot
 # silently dropped the rviz clause; it is REPLACED by a COMPLETE three-step
 # compound ('启动导航栈,打开 rviz,站起来' -> bringup + open_viz + standup,
 # chained) so the planner learns no clause is ever dropped. Two turn few-shots
 # (左转90度 -> turned(54); 掉头 -> turned(108)) are appended below.
+# PRUNED for the ~6000-char budget (places round, 2026-07-13 night): the old
+# '往前走2米' target-math example (后退1米 teaches the same math + at() verify,
+# and the planner_intro spells the formula out) and the '站起来' single-step
+# example (左转90度/掉头/后退1米/往前走 3 米 all pin single-step already).
 REAL_DECOMPOSE_EXAMPLES = """\
 Task: "站起来然后开到 (2.0, 3.0)"
 Response:
@@ -48,26 +51,6 @@ Response:
     }
   ],
   "context_snapshot": ""
-}
-
-Task: "往前走2米"   (world context: "Position: (3.0, 2.0)\\nHeading: 1.6 rad")
-Target math: tx = 3.0 + 2*cos(1.6) ≈ 2.9, ty = 2.0 + 2*sin(1.6) ≈ 4.0.
-Response:
-{
-  "goal": "往前走2米",
-  "sub_goals": [
-    {
-      "name": "move_forward_2m",
-      "description": "往前走2米",
-      "verify": "at(2.9, 4.0, tol=1.5)",
-      "strategy": "move_relative_skill",
-      "timeout_sec": 180,
-      "depends_on": [],
-      "strategy_params": {"distance": 2.0, "direction": "forward"},
-      "fail_action": ""
-    }
-  ],
-  "context_snapshot": "Position: (3.0, 2.0), Heading: 1.6 rad"
 }
 
 Task: "规划一条路线去 (12.0, -4.0)"   (a FAR goal across the map — use global route planning)
@@ -202,29 +185,6 @@ Response:
   "context_snapshot": "Position: (2.0, 1.0), Heading: 0.0 rad"
 }"""
 
-# Single-action commands are SINGLE steps (field trace 2026-07-10 15:19: the
-# planner gave 站起来 a 7-step plan including liedown-first and a restart).
-REAL_DECOMPOSE_EXAMPLES += """
-
-Task: "站起来"
-Response:
-{
-  "goal": "站起来",
-  "sub_goals": [
-    {
-      "name": "stand_up",
-      "description": "起立(单步;不需要 liedown/bringup/其他前置)",
-      "verify": "True",
-      "strategy": "standup_skill",
-      "timeout_sec": 30,
-      "depends_on": [],
-      "strategy_params": {},
-      "fail_action": ""
-    }
-  ],
-  "context_snapshot": ""
-}"""
-
 # In-place rotation goes STRAIGHT to turn_skill — NO bringup (odometry already
 # flows; field trace 2026-07-10 evening: '左转90度' had no rotation vocab at
 # all). Verify hint = turned(round(0.6*degrees)): the wrapped heading delta
@@ -298,6 +258,51 @@ Response:
       "timeout_sec": 30,
       "depends_on": ["leg_1"],
       "strategy_params": {"direction": "right", "degrees": 90},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""
+
+# Spatial session memory (CEO directive 2026-07-13 night: '回到刚才的位置'
+# had NOTHING to resolve against — the model improvised coordinates from
+# conversation text). goto_place resolves 起点/刚才/marked names from the
+# odometry-recorded ledger; mark_place names the current pose. The at() verify
+# uses the origin the where/world context reports — never an invented number.
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "回到起点"   (world context: 起点 origin recorded at (0.0, 0.0))
+Response:
+{
+  "goal": "回到起点",
+  "sub_goals": [
+    {
+      "name": "return_to_origin",
+      "description": "回到会话起点(台账自动记录的里程计位姿,单步,无需 bringup)",
+      "verify": "at(0.0, 0.0, tol=1.0)",
+      "strategy": "goto_place_skill",
+      "timeout_sec": 180,
+      "depends_on": [],
+      "strategy_params": {"name": "起点"},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}
+
+Task: "记住这里叫充电桩"
+Response:
+{
+  "goal": "记住这里叫充电桩",
+  "sub_goals": [
+    {
+      "name": "mark_charger",
+      "description": "把当前里程计位姿记为地点“充电桩”(坐标来自里程计,单步)",
+      "verify": "True",
+      "strategy": "mark_place_skill",
+      "timeout_sec": 15,
+      "depends_on": [],
+      "strategy_params": {"name": "充电桩"},
       "fail_action": ""
     }
   ],

@@ -30,6 +30,7 @@ from zeno.core.skill import skill
 from zeno.core.types import SkillResult
 from zeno.vcli.worlds.go2w_real_course import course_of
 from zeno.vcli.worlds.go2w_real_diag import _latched_hint, oplog, wrap_angle
+from zeno.vcli.worlds.go2w_real_places import record_departure
 from zeno.vcli.worlds.go2w_real_skills import _base_of
 
 #: agent-facing direction -> rotation sign (left = +yaw/CCW, right = -yaw/CW).
@@ -134,6 +135,9 @@ class RealTurnSkill:
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
 
+        # Session memory: origin (once) + departure breadcrumb (a turn is a
+        # motion command start; the 0.3 m recall rule skips in-place crumbs).
+        record_departure(context, "turn")
         requested = math.radians(degrees) * _TURN_DIRECTIONS[direction]
         start_yaw = float(base.get_heading())
         # COURSE COMPENSATION (field bug, CEO 2026-07-13 evening): a relative

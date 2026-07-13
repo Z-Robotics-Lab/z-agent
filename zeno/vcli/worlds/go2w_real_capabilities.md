@@ -48,6 +48,23 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   Free navigation (navigate/route/explore), stop/estop and operator interrupt
   all reset the course; the next relative command re-anchors it. Grade course
   alignment with course_locked(tol_deg=10).
+- 全局意识 (spatial session memory) — you always know WHERE you are and where
+  you have been: (1) the live pose (go2w_real_where / where_skill — it also
+  reports distance+bearing from the origin, course drift, and your marked
+  places); (2) the session ORIGIN 起点, auto-captured at the first fresh
+  odometry — "回到起点" (goto_place {name: 起点}) drives back to it; (3) a
+  breadcrumb trail of the last 20 motion-command start poses — "回到刚才的
+  位置"/"回去" resolves to the newest breadcrumb at least 0.3 m away (nearer
+  crumbs are where you already stand); (4) named places: mark_place
+  (记住这里/标记这里[, 叫<名字>], unnamed auto-names 地点N) stores the CURRENT
+  odometry pose; goto_place(name) drives back to it. Every stored coordinate
+  comes from odometry — you can trigger a mark but never author its values;
+  mark_place refuses before odometry ever arrived (no fake (0,0,0) places).
+  goto_place is free navigation: it resets the course intent and returns an
+  at(x, y, tol=1.0) verify hint for the RESOLVED target — verify with that.
+  HONEST LIMIT: places live in the CURRENT SLAM map frame and are LOST when
+  the nav stack restarts (重启导航栈后地点失效) — persistent places need the
+  relocalization roadmap item; say so instead of driving to stale coordinates.
 - Long-range goals — go2w_real_route(action=start) launches the far_planner
   overlay, then action=goto x y routes around obstacles/rooms globally;
   action=stop tears it down. Use for goals beyond line of sight.

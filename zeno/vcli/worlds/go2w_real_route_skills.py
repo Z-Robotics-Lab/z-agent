@@ -21,6 +21,7 @@ from typing import Any
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
 from zeno.vcli.worlds.go2w_real_course import reset_course
+from zeno.vcli.worlds.go2w_real_places import record_departure
 from zeno.vcli.worlds.go2w_real_skills import CFG, _target_xy
 
 
@@ -79,6 +80,9 @@ class RealRouteViaSkill:
         # Global route planning is free navigation — the relative-course intent
         # of any earlier plan is over; forget it (next command re-anchors).
         reset_course(context, "route_via")
+        # Session memory: departure breadcrumb (a long route leg is exactly
+        # when '回到刚才的位置' matters); no-op without base/ledger/odometry.
+        record_departure(context, "route_via")
         # Idempotent: launches far_planner if it is not already up (a second call
         # while active is refused inside the manager and does not disturb it).
         started_ok, start_msg = mgr.start_route()

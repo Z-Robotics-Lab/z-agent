@@ -25,11 +25,14 @@ extension marker in ``go2w_real.py``; strategies ``open_viz_skill`` /
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
-from zeno.vcli.worlds.go2w_real_diag import oplog
+from zeno.vcli.worlds.go2w_real_course import course_of
+from zeno.vcli.worlds.go2w_real_diag import oplog, wrap_angle
+from zeno.vcli.worlds.go2w_real_places import places_of
 from zeno.vcli.worlds.go2w_real_skills import _base_of
 
 _VIEW_KEYWORDS: tuple[tuple[str, str], ...] = (
@@ -158,6 +161,37 @@ class RealWhereSkill:
         }
         if age is not None:
             data["odom_age_s"] = round(float(age), 1)
-        data["message"] = (f"pose: x={data['x']}, y={data['y']}, "
-                           f"yaw={data['yaw']} rad")
+        message = (f"pose: x={data['x']}, y={data['y']}, "
+                   f"yaw={data['yaw']} rad")
+        # GLOBAL AWARENESS enrichment (CEO directive 2026-07-13 night): the
+        # spatial session memory the pose lives in — origin-relative offset,
+        # heading-intent (course) drift, marked place names. Everything below
+        # is best-effort and ADDITIVE: a ledger-less/tracker-less base keeps
+        # today's payload byte-identical.
+        ledger = places_of(context)
+        if ledger is not None:
+            # This fresh pose is also the session's first chance to capture
+            # the origin (回到起点 needs it even before any motion command).
+            origin = ledger.ensure_origin(
+                (float(pos[0]), float(pos[1]), yaw))
+            dx = float(pos[0]) - origin[0]
+            dy = float(pos[1]) - origin[1]
+            data["origin"] = {"x": round(origin[0], 2), "y": round(origin[1], 2)}
+            data["origin_distance_m"] = round(math.hypot(dx, dy), 2)
+            data["origin_bearing_deg"] = round(math.degrees(math.atan2(dy, dx)), 1)
+            message += (f"; 距起点 {data['origin_distance_m']} m "
+                        f"(方位 {data['origin_bearing_deg']}°)")
+            names = list(ledger.marks)
+            if names:
+                data["marked_places"] = names
+                message += f"; 已标记地点: {', '.join(names)}"
+        tracker = course_of(context)
+        course = getattr(tracker, "course_yaw", None)
+        if course is not None:
+            drift = wrap_angle(yaw - float(course))
+            data["course_deg"] = round(math.degrees(float(course)), 1)
+            data["course_drift_deg"] = round(math.degrees(drift), 1)
+            message += (f"; 预期航向 {data['course_deg']}° "
+                        f"(漂移 {data['course_drift_deg']:+}°)")
+        data["message"] = message
         return SkillResult(success=True, result_data=data)

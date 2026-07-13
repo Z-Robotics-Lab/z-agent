@@ -71,6 +71,11 @@ from zeno.vcli.worlds.go2w_real_route_skills import (
 from zeno.vcli.worlds.go2w_real_route_tools import Go2WRealRouteTool
 from zeno.vcli.worlds.go2w_real_route_verify import make_route_reached
 from zeno.vcli.worlds.go2w_real_course import CourseTracker
+from zeno.vcli.worlds.go2w_real_places import (
+    PoseLedger,
+    RealGotoPlaceSkill,
+    RealMarkPlaceSkill,
+)
 from zeno.vcli.worlds.go2w_real_verify import (
     make_at,
     make_course_locked,
@@ -120,6 +125,10 @@ class Go2WRealEmbodiment:
         # square paths). Deterministic state shared by move_relative/turn and
         # the course_locked() oracle. Session start = unset.
         self._course = CourseTracker()
+        # Spatial SESSION MEMORY (CEO directive 2026-07-13 night): origin +
+        # breadcrumbs + named marks, all odometry-recorded (Inv-1). Unset at
+        # session start; motion skills / where fill it deterministically.
+        self._places = PoseLedger()
         # Managers ALSO ride the driver: the VGG GoalExecutor builds its own
         # SkillContext (no world services) but always wires base — skills fall
         # back to these attributes (first-REPL-contact fix, 2026-07-10).
@@ -127,6 +136,7 @@ class Go2WRealEmbodiment:
         self._base.route_manager = self._route
         self._base.viz_manager = self._viz
         self._base.course_tracker = self._course
+        self._base.pose_ledger = self._places
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(RealNavigateSkill())
         self._skill_registry.register(RealMoveRelativeSkill())
@@ -142,6 +152,8 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealTurnSkill())
         self._skill_registry.register(RealVizSkill())
         self._skill_registry.register(RealWhereSkill())
+        self._skill_registry.register(RealMarkPlaceSkill())
+        self._skill_registry.register(RealGotoPlaceSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -155,7 +167,8 @@ class Go2WRealEmbodiment:
         return SkillContext(
             bases={"go2w": self._base},
             services={"explore": self._explore, "route": self._route,
-                      "viz": self._viz, "course": self._course},
+                      "viz": self._viz, "course": self._course,
+                      "places": self._places},
         )
 
     def _sync_robot_state(self) -> None:
@@ -528,7 +541,17 @@ class Go2WRealWorld:
                                    "route — match the running planner); "
                                    "already-open dedupes to ok. 打开可视化"),
                 "where_skill": ("Report the current map-frame pose {x, y, yaw} "
-                                "from live odometry. 查询当前位姿"),
+                                "from live odometry, plus origin distance/"
+                                "bearing, course drift and marked places. "
+                                "查询当前位姿"),
+                "mark_place_skill": ("Remember the CURRENT odometry pose as a "
+                                     "named place (记住这里[叫X]; unnamed = "
+                                     "地点N); refuses before odometry arrives"),
+                "goto_place_skill": ("Drive back to a remembered place: 起点="
+                                     "session origin, 刚才=newest breadcrumb "
+                                     "(>=0.3m away), else a mark_place name; "
+                                     "resets course intent; verify with the "
+                                     "returned at(x, y) hint. 回到起点/回到刚才的位置"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
@@ -537,6 +560,7 @@ class Go2WRealWorld:
                 "route_via_skill", "stop_route_skill",
                 "bringup_skill", "resume_skill",
                 "turn_skill", "open_viz_skill", "where_skill",
+                "mark_place_skill", "goto_place_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -552,7 +576,9 @@ class Go2WRealWorld:
   - resume_skill: {}  (解除急停;stop 之后、任何运动之前)
   - turn_skill: {"direction": "left|right", "degrees": <float, default 90>}  (掉头=180; verify turned(~0.6*degrees))
   - open_viz_skill: {"view": "main|explore|route"}  (optional; default main — match the running planner)
-  - where_skill: {}""",
+  - where_skill: {}
+  - mark_place_skill: {"name": "<地点名>"}  (optional; default auto 地点N — the pose comes from odometry, never from you)
+  - goto_place_skill: {"name": "起点|刚才|<地点名>"}  (起点=session origin, 刚才=newest breadcrumb >=0.3m away)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
             # SUPPRESS the class-default '## Loop Example' (it teaches
             # detect_objects(), a phantom here — field forensics 2026-07-10).
