@@ -396,17 +396,9 @@ class ChainView:
 
     # -- rendering ------------------------------------------------------
 
-    def render_lines(self) -> list[str]:
-        """Pure projection of the consumed events into Rich-markup lines."""
-        round_part = f" [dim]round {self._round}[/]" if self._round else ""
-        lines = [
-            f"  [bold {_TEAL}]native[/] working…{round_part}  [dim](Ctrl+C 安全中断)[/dim]"
-        ]
-        if self._show_reasoning_tail and self._reasoning_tail:
-            joined = self._reasoning_tail.replace("\n", " ")
-            tail = joined[-self._reasoning_tail_chars :].strip()
-            if tail:
-                lines.append(f"  [dim italic]┆ {_escape_markup(tail)}[/]")
+    def _chain_lines(self) -> list[str]:
+        """Node + nudge lines shared by the live view and the persisted tree."""
+        lines: list[str] = []
         for node in self._nodes:
             label = _escape_markup(node.get("label", ""))
             if node["kind"] == "tool":
@@ -432,6 +424,36 @@ class ChainView:
                 lines.append(f"  [dim]└─ verify[/] {label} {mark}")
         for nudge in self._nudges:
             lines.append(f"  [yellow]⟲[/] {_escape_markup(nudge)}")
+        return lines
+
+    def final_lines(self, goal: str) -> list[str]:
+        """The PERSISTED execution tree for the transcript (P3.1, owner ask).
+
+        Pure projection WITHOUT live-only furniture (no 'working…' header, no
+        reasoning/narration tails — reasoning stays live-region + /why): a
+        ⌂ goal header carrying the round count, then the chain + nudges.
+        Empty when the turn consumed no chain events.
+        """
+        if not self._nodes and not self._nudges:
+            return []
+        rounds = f"  [dim]{self._round} rounds[/]" if self._round else ""
+        return [
+            f"  [bold {_TEAL}]⌂[/] {_escape_markup(str(goal))}{rounds}",
+            *self._chain_lines(),
+        ]
+
+    def render_lines(self) -> list[str]:
+        """Pure projection of the consumed events into Rich-markup lines."""
+        round_part = f" [dim]round {self._round}[/]" if self._round else ""
+        lines = [
+            f"  [bold {_TEAL}]native[/] working…{round_part}  [dim](Ctrl+C 安全中断)[/dim]"
+        ]
+        if self._show_reasoning_tail and self._reasoning_tail:
+            joined = self._reasoning_tail.replace("\n", " ")
+            tail = joined[-self._reasoning_tail_chars :].strip()
+            if tail:
+                lines.append(f"  [dim italic]┆ {_escape_markup(tail)}[/]")
+        lines.extend(self._chain_lines())
         if self._text_tail.strip():
             lines.append(f"  [dim]{_escape_markup(self._text_tail.strip())}[/]")
         return lines

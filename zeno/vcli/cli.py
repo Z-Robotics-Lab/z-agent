@@ -675,6 +675,18 @@ def _repl_attempt_native(
         except Exception:  # noqa: BLE001 — history is display convenience only
             pass
 
+    # P3.1 (owner ask 2026-07-13): persist the execution TREE into the
+    # transcript — the transient live view's final state re-printed as a
+    # ⌂ tree, BEFORE the pinned step/verdict block. Display-only, best-effort.
+    try:
+        _tree_lines = chain_view.final_lines(user_input)
+        if _tree_lines:
+            console.print()
+            for _tree_line in _tree_lines:
+                console.print(_tree_line)
+    except Exception:  # noqa: BLE001 — display only
+        pass
+
     sub_goals = list(getattr(trace.goal_tree, "sub_goals", ()) or ())
     steps = list(getattr(trace, "steps", ()) or ())
 
