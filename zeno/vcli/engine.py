@@ -1717,6 +1717,7 @@ class ZenoEngine:
         session: Session | None = None,
         app_state: dict[str, Any] | None = None,
         on_progress: "Callable[[str], None] | None" = None,
+        on_event: "Callable[[Any], None] | None" = None,
     ) -> "ExecutionTrace":
         """THIN delegate to ``native_loop.run_turn_native`` — the DEFAULT producer.
 
@@ -1743,6 +1744,7 @@ class ZenoEngine:
             session=session,
             app_state=app_state,
             on_progress=on_progress,
+            on_event=on_event,
         )
 
     # ------------------------------------------------------------------

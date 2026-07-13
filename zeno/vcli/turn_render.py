@@ -24,7 +24,11 @@ so the REPL prints them line by line and tests capture them as plain text.
 """
 from __future__ import annotations
 
-from typing import Any
+from collections import deque
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator
+
+_TEAL = "#00b4b4"  # display-only brand constant (mirrors cli.TEAL)
 
 # Evidence classes (mirrors zeno.vcli.verdict constants; strings on purpose —
 # this module renders report fields verbatim and must not import spine logic).
@@ -153,3 +157,204 @@ def render_verdict_card(report: Any, trace: Any = None, *, max_verify_len: int =
             "（如坐标与指令目标不符/对象门槛）——以 verdict 行为准。[/]"
         )
     return lines
+
+
+# ---------------------------------------------------------------------------
+# ChainView — the live execution-chain tree for the native REPL turn (P1.1)
+# ---------------------------------------------------------------------------
+
+
+def _escape_markup(text: str) -> str:
+    """Escape Rich markup brackets in model-authored text (display safety)."""
+    return str(text).replace("[", r"\[")
+
+
+class ChainView:
+    """Single live region rendering the native turn's execution chain.
+
+    Consumes ``NativeEvent``s (zeno.vcli.turn_events) and renders a live tree:
+    header (keeps the PTY-pinned words "native working") → dim ┆ reasoning
+    tail → chain nodes (● tool / └─ verify ✓|✗) → ⟲ nudges → narration tail.
+
+    Lifecycle discipline is TurnStatus's (one region per turn, idempotent
+    start/stop, ``paused()`` around foreign prints — see turn_status.py for
+    WHY: printing into an active Live stacks box frames). ``live_factory`` is
+    injected so lifecycle + content are unit-testable without a TTY.
+
+    Display-only: the full reasoning buffer is exposed for /why but NEVER
+    written to the session or the trace.
+    """
+
+    def __init__(
+        self,
+        live_factory: Callable[[Any], Any] | None = None,
+        *,
+        reasoning_tail_chars: int = 160,
+        max_nudges: int = 3,
+        show_reasoning_tail: bool = True,
+    ) -> None:
+        self._live_factory = live_factory
+        self._live: Any = None
+        self._running = False
+        self.start_count = 0
+        self.stop_count = 0
+
+        self._round = ""
+        self._nodes: list[dict[str, Any]] = []
+        self._reasoning: list[str] = []
+        self._reasoning_tail_chars = int(reasoning_tail_chars)
+        self._show_reasoning_tail = bool(show_reasoning_tail)
+        self._nudges: deque[str] = deque(maxlen=max(1, int(max_nudges)))
+        self._text_tail = ""
+        self.finish_data: dict[str, Any] = {}
+
+    # -- lifecycle ------------------------------------------------------
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    @property
+    def reasoning_text(self) -> str:
+        """The FULL reasoning buffer of this turn (for /why). Display-only."""
+        return "".join(self._reasoning)
+
+    def start(self) -> None:
+        if self._running or self._live_factory is None:
+            return
+        # Display is best-effort: a console that cannot host a live region
+        # (e.g. a non-rich test double, a dumb pipe) degrades to NO live view —
+        # events still accumulate and every post-turn line prints as normal.
+        try:
+            self._live = self._live_factory(self._renderable())
+            self._live.start()
+        except Exception:  # noqa: BLE001
+            self._live = None
+            return
+        self._running = True
+        self.start_count += 1
+
+    def stop(self) -> None:
+        if not self._running:
+            return
+        live = self._live
+        self._live = None
+        self._running = False
+        self.stop_count += 1
+        if live is not None:
+            live.stop()
+
+    def pause(self) -> bool:
+        if not self._running:
+            return False
+        self.stop()
+        return True
+
+    def resume(self) -> None:
+        self.start()
+
+    @contextmanager
+    def paused(self) -> Iterator[None]:
+        was_running = self.pause()
+        try:
+            yield
+        finally:
+            if was_running:
+                self.resume()
+
+    # -- event intake ---------------------------------------------------
+
+    def handle_event(self, event: Any) -> None:
+        """Consume one NativeEvent; never raises (display is best-effort)."""
+        try:
+            self._consume(event)
+        except Exception:  # noqa: BLE001 — a display bug must never leak upward
+            return
+        if self._running and self._live is not None:
+            try:
+                self._live.update(self._renderable())
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _consume(self, event: Any) -> None:
+        kind = getattr(event, "kind", None)
+        if not kind:
+            return
+        label = str(getattr(event, "label", "") or "")
+        detail = str(getattr(event, "detail", "") or "")
+        ok = getattr(event, "ok", None)
+        if kind == "round":
+            self._round = label
+        elif kind == "reasoning":
+            self._reasoning.append(detail)
+        elif kind == "text":
+            self._text_tail = (self._text_tail + detail)[-72:]
+        elif kind == "tool_start":
+            self._nodes.append({"kind": "tool", "label": label, "detail": detail, "ok": None})
+        elif kind == "tool_end":
+            for node in reversed(self._nodes):
+                if node["kind"] == "tool" and node["label"] == label and node["ok"] is None:
+                    node["ok"] = bool(ok)
+                    node["err"] = detail if ok is False else ""
+                    break
+        elif kind == "verify":
+            self._nodes.append({"kind": "verify", "label": label, "detail": detail, "ok": ok})
+        elif kind == "nudge":
+            self._nudges.append(detail or label)
+        elif kind == "interject":
+            self._nudges.append("操作员插队 — 取消剩余步骤")
+        elif kind == "finish":
+            self.finish_data = dict(getattr(event, "data", None) or {})
+
+    # -- rendering ------------------------------------------------------
+
+    def render_lines(self) -> list[str]:
+        """Pure projection of the consumed events into Rich-markup lines."""
+        round_part = f" [dim]round {self._round}[/]" if self._round else ""
+        lines = [
+            f"  [bold {_TEAL}]native[/] working…{round_part}  [dim](Ctrl+C 安全中断)[/dim]"
+        ]
+        if self._show_reasoning_tail and self._reasoning:
+            joined = "".join(self._reasoning).replace("\n", " ")
+            tail = joined[-self._reasoning_tail_chars :].strip()
+            if tail:
+                lines.append(f"  [dim italic]┆ {_escape_markup(tail)}[/]")
+        for node in self._nodes:
+            label = _escape_markup(node.get("label", ""))
+            if node["kind"] == "tool":
+                detail = _escape_markup(node.get("detail", ""))
+                ok = node.get("ok")
+                if ok is None:
+                    mark = f"[{_TEAL}]●[/]"
+                elif ok:
+                    mark = "[green]●[/]"
+                else:
+                    mark = "[red]●[/]"
+                err = node.get("err") or ""
+                err_part = f"  [red]{_escape_markup(err)}[/]" if err else ""
+                lines.append(f"  {mark} {label}{detail}{err_part}")
+            else:  # verify
+                ok = node.get("ok")
+                if ok is None:
+                    mark = "[yellow]rejected[/]"
+                elif ok:
+                    mark = "[green]✓[/]"
+                else:
+                    mark = "[red]✗[/]"
+                lines.append(f"  [dim]└─ verify[/] {label} {mark}")
+        for nudge in self._nudges:
+            lines.append(f"  [yellow]⟲[/] {_escape_markup(nudge)}")
+        if self._text_tail.strip():
+            lines.append(f"  [dim]{_escape_markup(self._text_tail.strip())}[/]")
+        return lines
+
+    def _renderable(self) -> Any:
+        try:
+            from rich.text import Text
+
+            return Text.from_markup("\n".join(self.render_lines()))
+        except Exception:  # noqa: BLE001 — degrade to plain text, never crash
+            import re
+
+            plain = re.sub(r"\[[^\]]*\]", "", "\n".join(self.render_lines()))
+            return plain

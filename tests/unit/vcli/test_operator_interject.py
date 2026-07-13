@@ -337,7 +337,7 @@ class _FakeNativeEngine:
         self._trace = trace
         self.window_open_during_turn: bool | None = None
 
-    def run_turn_native(self, user_input, agent=None, session=None, app_state=None, on_progress=None):
+    def run_turn_native(self, user_input, agent=None, session=None, app_state=None, on_progress=None, on_event=None):
         self.window_open_during_turn = bool(self._reader.is_active())
         return self._trace
 

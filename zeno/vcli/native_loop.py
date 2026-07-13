@@ -1016,6 +1016,7 @@ def run_turn_native(
     app_state: dict[str, Any] | None = None,
     max_turns: int = _MAX_NATIVE_TURNS,
     on_progress: Callable[[str], None] | None = None,
+    on_event: Callable[[Any], None] | None = None,
 ) -> ExecutionTrace:
     """Run ONE user turn through the native tool-use loop; return an ExecutionTrace.
 
@@ -1074,13 +1075,46 @@ def run_turn_native(
         except Exception:  # noqa: BLE001 — progress is best-effort, never fatal
             pass
 
+    # P1.1 structured display events (docs/CLI_UX_REDESIGN.md): the SAME chain
+    # narration `_emit` collapses into a spinner tail, as typed NativeEvents an
+    # observer (the REPL chain view) can render as a live tree. Display-only:
+    # default None is byte-identical, a raising consumer is swallowed, nothing
+    # in the trace/spine/routing reads these.
+    def _event(
+        kind: str,
+        label: str = "",
+        detail: str = "",
+        ok: bool | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        if on_event is None:
+            return
+        try:
+            from zeno.vcli.turn_events import NativeEvent
+
+            on_event(NativeEvent(kind=kind, label=label, detail=detail, ok=ok, data=data))
+        except Exception:  # noqa: BLE001 — display is best-effort, never fatal
+            pass
+
     _narration: list[str] = []
 
     def _on_text(chunk: str) -> None:
         _narration.append(chunk)
+        _event("text", detail=chunk)
         tail = "".join(_narration)[-72:].replace("\n", " ").strip()
         if tail:
             _emit(tail)
+
+    def _on_reasoning(chunk: str) -> None:
+        # Reasoning-model CoT chunk: display buffer only — NEVER appended to the
+        # session or the trace (the answer/tool stream stays clean).
+        _event("reasoning", detail=chunk)
+
+    # P1.1: aggregate the turn's token usage (the native path read response.usage
+    # nowhere before). Display metadata for the finish event / turn footer only.
+    from zeno.vcli.session import TokenUsage
+
+    _usage_total = TokenUsage()
 
     turns = 0
     verify_nudges = 0  # D23: re-prompts spent forcing a verify before a finish/stop
@@ -1112,17 +1146,24 @@ def run_turn_native(
         # loop is byte-identical to before.
         if interject_pending(app_state):
             _emit("操作员插队 — 取消剩余步骤")
+            _event("interject", label="pre-round")
             cancel_current_motion(app_state)
             break
         messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
+        _event("round", label=str(turns + 1))
         response: LLMResponse = backend.call(
             messages=messages,
             tools=tool_schemas,
             system=system_prompt,
             max_tokens=getattr(engine, "_max_tokens", 4096),
-            on_text=_on_text if on_progress is not None else None,
+            on_text=_on_text if (on_progress is not None or on_event is not None) else None,
+            on_reasoning=_on_reasoning if on_event is not None else None,
         )
+        try:
+            _usage_total = _usage_total.add(response.usage)
+        except Exception:  # noqa: BLE001 — usage is display metadata only
+            pass
         tool_calls = list(response.tool_calls or [])
         _append_assistant(session, response, tool_calls)
 
@@ -1134,6 +1175,8 @@ def run_turn_native(
             if runner.has_unverified_action and verify_nudges < _MAX_VERIFY_NUDGES:
                 verify_nudges += 1
                 _emit("re-prompting: verify before finishing")
+                _event("nudge", label="verify_before_finish",
+                       detail="动作未验证 — 要求模型先 verify 再停止")
                 _append_user(
                     session,
                     "You ran an action but did NOT verify it. You MUST call "
@@ -1148,6 +1191,8 @@ def run_turn_native(
                 # and re-verify (brain-agnostic quantity guardrail; model still decides).
                 finish_on_fail_nudges += 1
                 _emit("re-prompting: last verify FAILED — keep going")
+                _event("nudge", label="finish_on_fail",
+                       detail="最近一次 verify 为 FAIL — 要求模型继续行动")
                 _append_user(session, _FINISH_ON_FAIL_NUDGE)
                 continue
             break  # end_turn, no tools — conversation complete
@@ -1171,6 +1216,7 @@ def run_turn_native(
                 if not interjected:
                     interjected = True
                     _emit("操作员插队 — 取消剩余步骤")
+                    _event("interject", label=tc.name)
                     cancel_current_motion(app_state)
                 result_dicts.append(
                     _tool_result_dict(tc.id, _CANCELLED_BY_OPERATOR, is_error=True)
@@ -1209,6 +1255,14 @@ def run_turn_native(
                 expr = str((tc.input or {}).get("expr", ""))
                 _emit(f"verify {expr[:56]}")
                 res = runner.handle_verify(expr)
+                _event(
+                    "verify",
+                    label=expr[:80],
+                    # ok=None marks a REJECTED foreign predicate (nothing evaluated,
+                    # no step recorded); else the runner's own latest result.
+                    ok=None if res.is_error else bool(runner.last_verify_result),
+                    detail=str(res.content)[:80] if res.is_error else "",
+                )
                 # R279/E76 goal-aware reset: a verify is PROGRESS only if it measures a
                 # (normalized predicate, result) not seen before. Re-reading the same
                 # already-known outcome (the at_position-thrash) is not progress.
@@ -1227,7 +1281,14 @@ def run_turn_native(
                     progressed_this_turn = True
             else:
                 _emit(f"{tc.name} {_progress_args(tc.input)}".strip())
+                _event("tool_start", label=tc.name, detail=_progress_args(tc.input))
                 res = runner.dispatch_skill(tc.name, dict(tc.input or {}))
+                _event(
+                    "tool_end",
+                    label=tc.name,
+                    ok=not res.is_error,
+                    detail=str(res.content)[:80] if res.is_error else "",
+                )
             result_dicts.append(_tool_result_dict(tc.id, res.content, res.is_error))
 
         _append_tool_results(session, result_dicts)
@@ -1254,12 +1315,25 @@ def run_turn_native(
             ):
                 unproductive_nudges += 1
                 _emit("re-prompting: measure progress with verify")
+                _event("nudge", label="degenerate_spin",
+                       detail="连续多轮无新测量 — 要求模型用 verify 证明进展")
                 _append_user(session, _UNPRODUCTIVE_SPIN_NUDGE)
                 continue
             if unproductive_turns >= _MAX_TURNS_WITHOUT_VERIFY:
                 _emit("degenerate spin: no verify progress — stopping honestly")
+                _event("nudge", label="spin_break",
+                       detail="无 verify 进展达硬上限 — 诚实停止")
                 break
 
+    _event(
+        "finish",
+        data={
+            "wall_sec": time.monotonic() - _turn_t0,
+            "turns": turns,
+            "in_tokens": _usage_total.input_tokens,
+            "out_tokens": _usage_total.output_tokens,
+        },
+    )
     return runner.build_trace(
         user_message, total_duration_sec=time.monotonic() - _turn_t0
     )

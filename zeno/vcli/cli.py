@@ -54,7 +54,7 @@ from zeno.vcli.session import (
 )
 from zeno.vcli.permissions import PermissionContext
 from zeno.vcli.prompt import build_system_prompt
-from zeno.vcli.turn_render import render_verdict_card
+from zeno.vcli.turn_render import ChainView, render_verdict_card
 from zeno.vcli.turn_status import TurnStatus
 from zeno.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
 
@@ -505,6 +505,19 @@ def _intent_actionable(engine: Any, user_input: str) -> bool:
         return True
 
 
+def _cot_mode(app_state: dict[str, Any] | None) -> str:
+    """Current CoT display mode ('off' | 'tail' | 'full') — /cot sets it (P1.2).
+
+    Display-only preference; default 'tail' (the calm rolling reasoning tail).
+    Unknown values degrade to 'tail' so a stale config can never hide the moat.
+    """
+    try:
+        mode = str((app_state or {}).get("cot_mode", "tail")).lower()
+    except Exception:  # noqa: BLE001
+        return "tail"
+    return mode if mode in ("off", "tail", "full") else "tail"
+
+
 def _repl_attempt_native(
     engine: Any,
     user_input: str,
@@ -557,39 +570,49 @@ def _repl_attempt_native(
     # around its legacy turn); restore unconditionally.
     _saved_stderr = sys.stderr
     trace: Any = None
+    # P1.1 live execution chain (docs/CLI_UX_REDESIGN.md): ONE ChainView live
+    # region replaces the console.status spinner (which is itself a rich Live —
+    # they must never nest). It renders the model's chain as a live tree fed by
+    # structured on_event callbacks; transient, so the post-turn transcript
+    # still carries only the pinned step/verdict lines. Header keeps the
+    # PTY-pinned words "native working". Single-Live discipline: the view is
+    # STOPPED before any error line / post-turn print (turn_status.py rationale).
+    chain_view = ChainView(
+        live_factory=lambda renderable: Live(
+            renderable, console=console, refresh_per_second=8, transient=True
+        ),
+        show_reasoning_tail=_cot_mode(app_state) != "off",
+    )
+    if app_state is not None:
+        app_state["last_chain_view"] = chain_view  # /why reads the reasoning buffer
     try:
         try:
             sys.stderr = open(os.devnull, "w")
         except OSError:
             pass
-        with console.status(f"[{TEAL}]native[/] working…  [dim](Ctrl+C 安全中断)[/dim]", spinner="dots") as _status:
-            # Live progress (D9 #2 perceived latency): stream the model's thinking
-            # tail + each tool call into the spinner so the multi-second LLM wait
-            # shows activity instead of a frozen line. Best-effort, never fatal.
-            def _on_progress(msg: str) -> None:
-                try:
-                    _status.update(f"[{TEAL}]native[/] {msg}")
-                except Exception:  # noqa: BLE001
-                    pass
-            try:
-                trace = engine.run_turn_native(
-                    user_input, agent=agent, session=scratch, app_state=app_state,
-                    on_progress=_on_progress,
-                )
-            except KeyboardInterrupt:
-                _operator_interrupt(app_state)
-                return True  # turn handled; REPL stays alive
-            except ModelUnavailableError as exc:
-                # A BYO model that CANNOT run (out of credit / unknown id) is
-                # user-actionable — surface it clearly and OWN the turn instead of
-                # silently degrading to legacy, which would re-hit the same failure
-                # and (D179) read as "model chose not to act". console.print writes
-                # to stdout, unaffected by the stderr redirect; the finally restores.
-                console.print(f"  [yellow]model unavailable:[/] {exc}")
-                return True  # turn handled (reported) — do NOT fall through to legacy
-            except Exception:  # noqa: BLE001 — native errored -> treat as no-action
-                trace = None
+        chain_view.start()
+        try:
+            trace = engine.run_turn_native(
+                user_input, agent=agent, session=scratch, app_state=app_state,
+                on_event=chain_view.handle_event,
+            )
+        except KeyboardInterrupt:
+            chain_view.stop()
+            _operator_interrupt(app_state)
+            return True  # turn handled; REPL stays alive
+        except ModelUnavailableError as exc:
+            # A BYO model that CANNOT run (out of credit / unknown id) is
+            # user-actionable — surface it clearly and OWN the turn instead of
+            # silently degrading to legacy, which would re-hit the same failure
+            # and (D179) read as "model chose not to act". console.print writes
+            # to stdout, unaffected by the stderr redirect; the finally restores.
+            chain_view.stop()  # close the live region BEFORE printing
+            console.print(f"  [yellow]model unavailable:[/] {exc}")
+            return True  # turn handled (reported) — do NOT fall through to legacy
+        except Exception:  # noqa: BLE001 — native errored -> treat as no-action
+            trace = None
     finally:
+        chain_view.stop()  # idempotent; region always closed before prints below
         if _ij_reader is not None:
             _ij_reader.stop()  # window closes BEFORE anything else prints
         if sys.stderr is not _saved_stderr:
