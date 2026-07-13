@@ -92,13 +92,18 @@ def styled_logo_line(line: str, row: int) -> Text:
         return Text(line, style=f"bold {_TERMINAL_BRAND}")
 
     palette_row = max(0, min(int(row), len(_WIDE_SECONDARY) - 1))
-    text = Text(line, style=_WIDE_SECONDARY[palette_row])
+    # SGR italic is the cell-safe approximation of the reference HTML's
+    # skewX(-18deg): capable terminals shear the glyphs, while others degrade
+    # to the same complete fixed-width mark without changing layout.
+    text = Text(line, style=f"italic {_WIDE_SECONDARY[palette_row]}")
     start: int | None = None
     for offset, char in enumerate(line + " "):
         if char == "█" and start is None:
             start = offset
         elif char != "█" and start is not None:
-            text.stylize(f"bold {_WIDE_PRIMARY[palette_row]}", start, offset)
+            text.stylize(
+                f"bold italic {_WIDE_PRIMARY[palette_row]}", start, offset
+            )
             start = None
     return text
 

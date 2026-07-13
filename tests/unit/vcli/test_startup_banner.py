@@ -36,10 +36,10 @@ def test_wide_logo_preserves_the_reference_light_and_graphite_layers() -> None:
     rendered = styled_logo_line(WIDE_ZENO_LOGO[0], 0)
 
     assert rendered.plain == WIDE_ZENO_LOGO[0]
-    assert rendered.style == "#5a5e65"
+    assert rendered.style == "italic #5a5e65"
     assert rendered.spans[0].start == 0
     assert rendered.spans[0].end == 7
-    assert rendered.spans[0].style == "bold #e0eafc"
+    assert rendered.spans[0].style == "bold italic #e0eafc"
 
 
 def test_logo_switches_complete_variants_instead_of_slicing_art() -> None:
