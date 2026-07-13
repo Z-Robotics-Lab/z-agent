@@ -107,6 +107,10 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # stop skill); navigate_to's poll loop exits promptly when set.
         self._nav_abort = __import__("threading").Event()
         self._moved_origin: tuple[float, float] | None = None
+        # turned() oracle anchor: odometry heading sampled by rotate() at
+        # command start (None until the first rotation is commanded). The
+        # actor can trigger a rotation but cannot author this value (Inv-1).
+        self.rotate_anchor_yaw: float | None = None
         # Eyes: the D435i RGB source (offline-safe; its Image subscription rides
         # this node + the shared runtime on connect, like _on_odom — no new node).
         self._camera = Go2WCamera()
@@ -455,6 +459,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
 
         self._nav_abort.clear()
         prev = float(self.get_heading())
+        # Anchor AFTER the guards — a refused rotation must never re-anchor
+        # the turned() oracle onto the current heading (it could fake-pass a
+        # later check). Field trace 2026-07-13: verify's first-call origin
+        # capture sampled the POST-turn heading, graded False, and the model
+        # re-ran the turn — 90° of physical rotation for a 45° ask.
+        self.rotate_anchor_yaw = prev
         turned_rad = 0.0
         deadline = time.monotonic() + duration
         cancelled = False

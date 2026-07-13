@@ -32,8 +32,11 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
 - Turn in place — the turn skill (turn_skill): direction left|right + degrees
   (default 90; 掉头/turn around = 180). Rotates on odometry heading (wrap-aware,
   stops early on arrival); verify with turned(min_deg) at ~60% of the request
-  (the wrapped delta caps at 180°, so a 掉头 verifies with turned(108)). Zero
-  rotation while commanding usually means the guard latch — resume first.
+  (the wrapped delta caps at 180°, so a 掉头 verifies with turned(108)).
+  turned() grades the LAST turn command (driver-anchored): a completed turn
+  verifies True on the FIRST check — NEVER re-run a turn to make verify pass;
+  a second run physically rotates the robot AGAIN. Zero rotation while
+  commanding usually means the guard latch — resume first.
 - Long-range goals — go2w_real_route(action=start) launches the far_planner
   overlay, then action=goto x y routes around obstacles/rooms globally;
   action=stop tears it down. Use for goals beyond line of sight.

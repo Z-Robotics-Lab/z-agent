@@ -417,8 +417,8 @@ class Go2WRealWorld:
                     "  # nav stack up: fresh /state_estimation odometry within 3s"),
                 "turned": (
                     "turned(min_deg: float = 30.0) -> bool"
-                    "  # |wrapped heading delta| since first call >= min_deg "
-                    "(odometry yaw; wrapped delta caps at 180)"),
+                    "  # the LAST turn command rotated >= min_deg (odometry yaw "
+                    "vs driver anchor; wrapped delta caps at 180)"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "
