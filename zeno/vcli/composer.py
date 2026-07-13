@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Framed multiline input composer for the interactive Zeno REPL.
+"""Compact multiline input composer for the interactive Zeno REPL.
 
 This module owns input *presentation and editing only*.  It never sees an
 engine, world, tool, route, trace, or verdict.  ``ZenoComposer`` replaces the
-bare one-line ``PromptSession`` surface with a coding-agent style frame while
+bare one-line ``PromptSession`` surface with a coding-agent style input rail while
 preserving the stable ``zeno>`` acceptance marker, history, completion,
 KeyboardInterrupt, and EOF contracts.
 
@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from prompt_toolkit.application import Application
-from prompt_toolkit.application.current import get_app
+from prompt_toolkit.application.current import get_app, get_app_or_none, set_app
 from prompt_toolkit.completion import CompleteEvent, Completer
 from prompt_toolkit.formatted_text import (
     AnyFormattedText,
@@ -39,18 +39,116 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Dimension, Float, FloatContainer, HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.menus import CompletionsMenu
+from prompt_toolkit.layout.mouse_handlers import MouseHandlers
+from prompt_toolkit.layout.screen import Screen, WritePosition
 from prompt_toolkit.styles import BaseStyle
-from prompt_toolkit.widgets import Frame, SearchToolbar, TextArea
+from prompt_toolkit.utils import get_cwidth
+from prompt_toolkit.widgets import SearchToolbar, TextArea
 from rich.text import Text
 
 
-COMPOSER_TITLE: AnyFormattedText = FormattedText(
-    [("class:composer.title", "Zeno")]
-)
 COMPOSER_PROMPT_TEXT = "zeno> "
 COMPOSER_PROMPT: AnyFormattedText = FormattedText(
-    [("", " "), ("class:composer.prompt", COMPOSER_PROMPT_TEXT)]
+    [
+        ("", " "),
+        ("class:composer.prompt.brand", "zeno"),
+        ("class:composer.prompt.chevron", "> "),
+    ]
 )
+_PROMPT_DISPLAY_WIDTH = get_cwidth(" " + COMPOSER_PROMPT_TEXT)
+_FOOTER_HINT = "? 快捷键"
+_FOOTER_PADDING = "  "
+_FOOTER_MAX_LINES = 3
+
+
+def _input_line_prefix(line_number: int, wrap_count: int) -> AnyFormattedText:
+    """Align explicit and soft-wrapped continuation lines below input text."""
+    if line_number == 0 and wrap_count == 0:
+        return FormattedText([])
+    return FormattedText(
+        [("class:composer.input.indent", " " * _PROMPT_DISPLAY_WIDTH)]
+    )
+
+
+def _split_at_cell_width(text: str, width: int) -> list[str]:
+    """Split a long status field without breaking CJK terminal-cell accounting."""
+    limit = max(1, width)
+    chunks: list[str] = []
+    current: list[str] = []
+    current_width = 0
+    for char in text:
+        char_width = max(0, get_cwidth(char))
+        if current and current_width + char_width > limit:
+            chunks.append("".join(current))
+            current = []
+            current_width = 0
+        current.append(char)
+        current_width += char_width
+    if current:
+        chunks.append("".join(current))
+    return chunks or [""]
+
+
+class _ReflowAwareApplication(Application[str]):
+    """Erase from the reflowed prompt origin after a terminal resize.
+
+    Modern terminals reflow already-painted lines *before* delivering SIGWINCH.
+    prompt_toolkit's non-full-screen resize handler erases from its cursor
+    distance at the old width, which leaves duplicate prompt rows whenever a
+    long draft gained a wrapped line. Build the current layout at the new width
+    first and give the renderer that reflowed cursor distance before its normal
+    erase/redraw cycle. If layout probing ever fails, the upstream behavior is
+    retained.
+    """
+
+    def reflowed_cursor_position(self):  # noqa: ANN201 — prompt_toolkit Point
+        with set_app(self):
+            size = self.output.get_size()
+            screen = Screen()
+            mouse_handlers = MouseHandlers()
+            last_height = (
+                self.renderer._last_screen.height  # noqa: SLF001 — resize correction
+                if self.renderer._last_screen is not None  # noqa: SLF001
+                else 0
+            )
+            preferred = self.layout.container.preferred_height(
+                size.columns, size.rows
+            ).preferred
+            height = min(
+                size.rows,
+                max(
+                    1,
+                    self.renderer._min_available_height,  # noqa: SLF001
+                    last_height,
+                    preferred,
+                ),
+            )
+            self.layout.container.write_to_screen(
+                screen,
+                mouse_handlers,
+                WritePosition(xpos=0, ypos=0, width=size.columns, height=height),
+                parent_style="",
+                erase_bg=False,
+                z_index=None,
+            )
+            screen.draw_all_floats()
+            return screen.get_cursor_position(self.layout.current_window)
+
+    def _on_resize(self) -> None:
+        try:
+            old_size = self.renderer._last_size  # noqa: SLF001 — see class contract
+            new_size = self.output.get_size()
+            # Modern terminals add visual rows when shrinking, but screen rows
+            # written with autowrap disabled generally stay hard-broken when the
+            # terminal expands again. Correct only the shrinking direction;
+            # upstream's remembered cursor is right for expansion.
+            if old_size is not None and new_size.columns < old_size.columns:
+                self.renderer._cursor_pos = (  # noqa: SLF001
+                    self.reflowed_cursor_position()
+                )
+        except Exception:  # noqa: BLE001 — resizing must never break text input
+            pass
+        super()._on_resize()
 
 
 class ZenoComposer:
@@ -59,7 +157,7 @@ class ZenoComposer:
     ``input``/``output`` are injectable prompt_toolkit endpoints so every key
     contract can be tested without a real TTY.  ``toolbar`` is a dynamic,
     display-only formatted-text callback (model/world/live-status in cli.py).
-    A broken callback is swallowed and only the static key help remains.
+    A broken callback is swallowed and only the compact shortcut hint remains.
     """
 
     def __init__(
@@ -88,6 +186,7 @@ class ZenoComposer:
             accept_handler=_accept,
             search_field=self.search_toolbar,
             wrap_lines=True,
+            get_line_prefix=_input_line_prefix,
             focus_on_click=True,
             height=Dimension(min=1, max=6),
             dont_extend_height=True,
@@ -95,25 +194,26 @@ class ZenoComposer:
             name="zeno-composer",
         )
 
-        footer = Window(
-            content=FormattedTextControl(self.footer_fragments, show_cursor=False),
+        self.rail = Window(
+            content=FormattedTextControl(
+                FormattedText([("class:composer.rail", "─" * 24)]),
+                show_cursor=False,
+            ),
             height=1,
+            dont_extend_height=True,
+            style="class:composer.rail",
+        )
+        self.footer = Window(
+            content=FormattedTextControl(self.footer_fragments, show_cursor=False),
+            height=Dimension(min=1, max=_FOOTER_MAX_LINES),
             dont_extend_height=True,
             style="class:composer.footer",
         )
-        separator = Window(
-            height=1,
-            char="─",
-            dont_extend_height=True,
-            style="class:composer.separator",
-        )
-        self.frame = Frame(
-            HSplit([self.text_area, self.search_toolbar, separator, footer]),
-            title=COMPOSER_TITLE,
-            style="class:composer.frame",
+        self.container = HSplit(
+            [self.rail, self.text_area, self.search_toolbar, self.footer]
         )
         root = FloatContainer(
-            content=self.frame,
+            content=self.container,
             floats=[
                 Float(
                     xcursor=True,
@@ -133,7 +233,7 @@ class ZenoComposer:
             kwargs["input"] = input
         if output is not None:
             kwargs["output"] = output
-        self.application: Application[str] = Application(
+        self.application: Application[str] = _ReflowAwareApplication(
             layout=Layout(root, focused_element=self.text_area),
             key_bindings=bindings,
             style=style,
@@ -144,30 +244,77 @@ class ZenoComposer:
             **kwargs,
         )
 
-    def footer_fragments(self) -> list[tuple[str, str]]:
-        """Static editing help plus the best-effort dynamic status surface."""
-        fragments: list[tuple[str, str]] = [
-            ("class:composer.footer.key", " Enter "),
-            ("class:composer.footer.hint", "发送 · "),
-            ("class:composer.footer.key", "Alt+Enter"),
-            ("class:composer.footer.hint", " 换行 · "),
-            ("class:composer.footer.key", "Tab"),
-            ("class:composer.footer.hint", " 补全"),
-        ]
+    def _terminal_width(self) -> int:
+        app = get_app_or_none()
+        if app is not None:
+            try:
+                return max(4, int(app.output.get_size().columns))
+            except Exception:  # noqa: BLE001 — layout fallback is display-only
+                pass
+        return 80
+
+    def _status_parts(self) -> list[str]:
         if self._toolbar is None:
-            return fragments
+            return []
         try:
             dynamic = self._toolbar()
             dynamic_fragments = list(to_formatted_text(dynamic)) if dynamic else []
         except Exception:  # noqa: BLE001 — status is display-only, never fatal
             dynamic_fragments = []
-        if dynamic_fragments:
-            fragments.append(("class:composer.footer.divider", "  │  "))
-            # prompt_toolkit also accepts 3-tuples carrying mouse handlers.  The
-            # REPL toolbar currently emits 2-tuples; normalize defensively so
-            # this method keeps a simple, stable return contract for rendering.
-            for item in dynamic_fragments:
-                fragments.append((item[0], item[1]))
+        plain = "".join(item[1] for item in dynamic_fragments)
+        # The CLI toolbar uses pipes; accept middle dots too so callers can
+        # migrate independently. Each part remains atomic during normal reflow.
+        normalized = plain.replace(" · ", " | ")
+        return [part.strip() for part in normalized.split(" | ") if part.strip()]
+
+    def _footer_lines(self, width: int) -> list[str]:
+        available = max(1, int(width) - get_cwidth(_FOOTER_PADDING))
+        parts = [_FOOTER_HINT, *self._status_parts()]
+        lines: list[str] = []
+        current = ""
+
+        for part in parts:
+            candidate = part if not current else f"{current} · {part}"
+            if get_cwidth(candidate) <= available:
+                current = candidate
+                continue
+
+            if current:
+                lines.append(current)
+                current = ""
+                if len(lines) >= _FOOTER_MAX_LINES:
+                    break
+
+            if get_cwidth(part) <= available:
+                current = part
+                continue
+
+            chunks = _split_at_cell_width(part, available)
+            for chunk in chunks[:-1]:
+                lines.append(chunk)
+                if len(lines) >= _FOOTER_MAX_LINES:
+                    break
+            if len(lines) >= _FOOTER_MAX_LINES:
+                break
+            current = chunks[-1]
+
+        if current and len(lines) < _FOOTER_MAX_LINES:
+            lines.append(current)
+        return lines or [_FOOTER_HINT]
+
+    def footer_fragments(self, width: int | None = None) -> list[tuple[str, str]]:
+        """Render compact help + responsive, priority-ordered live status."""
+        lines = self._footer_lines(width or self._terminal_width())
+        fragments: list[tuple[str, str]] = []
+        for index, line in enumerate(lines):
+            if index:
+                fragments.append(("", "\n"))
+            fragments.append(("class:composer.footer.indent", _FOOTER_PADDING))
+            if line.startswith(_FOOTER_HINT):
+                fragments.append(("class:composer.footer.key", "?"))
+                fragments.append(("class:composer.footer.hint", line[len("?"):]))
+            else:
+                fragments.append(("class:composer.footer.status", line))
         return fragments
 
     def _build_key_bindings(self) -> KeyBindings:

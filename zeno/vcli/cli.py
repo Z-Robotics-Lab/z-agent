@@ -43,6 +43,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 
 from zeno.vcli.backends import create_backend
+from zeno.vcli.banner import centered_logo_lines
 from zeno.vcli.composer import ZenoComposer, render_submission
 from zeno.vcli.env import read_env
 from zeno.vcli import paths
@@ -98,8 +99,6 @@ TEAL = "#00b4b4"
 DIM_TEAL = "#006666"
 
 EXIT_COMMANDS: frozenset[str] = frozenset({"quit", "exit", "q"})
-
-_LOGO_PATH = Path(__file__).resolve().parent.parent / "cli" / "logo_braille.txt"
 
 # Popular models on OpenRouter for /model completion
 KNOWN_MODELS: list[str] = [
@@ -219,18 +218,17 @@ PT_STYLE = PTStyle.from_dict({
     # Scrollbar
     "scrollbar.background": "bg:#0a0a1a",
     "scrollbar.button": "bg:#006666",
-    # Framed coding-agent composer
-    "composer.title": "bold #00b4b4",
-    "composer.prompt": "bold #00b4b4",
+    # Compact coding-agent composer
+    "composer.prompt.brand": "#718096",
+    "composer.prompt.chevron": "bold #00b4b4",
     "composer.input": "#e6edf3",
-    "composer.frame": "#7b8b9a",
-    "frame.border": "#006666",
-    "frame.label": "bold #00b4b4",
-    "composer.separator": "#164e55",
-    "composer.footer": "#718096",
+    "composer.input.indent": "#718096",
+    "composer.rail": "#36545a",
+    "composer.footer": "#667085",
     "composer.footer.key": "bold #00b4b4",
-    "composer.footer.hint": "#718096",
-    "composer.footer.divider": "#006666",
+    "composer.footer.hint": "#667085",
+    "composer.footer.status": "#718096",
+    "composer.footer.indent": "",
     "search-toolbar": "#7b8b9a",
     "search-toolbar.prompt": "bold #00b4b4",
 })
@@ -862,14 +860,6 @@ def is_exit_command(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _load_logo_lines() -> list[str]:
-    """Load braille logo lines, or empty list if file missing."""
-    try:
-        return _LOGO_PATH.read_text(encoding="utf-8").rstrip().splitlines()
-    except (FileNotFoundError, OSError):
-        return []
-
-
 def format_banner(model: str, agent: Any = None, scenario: str | None = None) -> str:
     """Return banner info text (testable, no side effects).
 
@@ -896,30 +886,22 @@ def format_banner(model: str, agent: Any = None, scenario: str | None = None) ->
 def print_banner(
     model: str, provider: str, agent: Any = None, scenario: str | None = None
 ) -> None:
-    """Print startup banner with braille logo (auto-scales to terminal width).
+    """Print startup banner with a complete responsive ASCII ZENO wordmark.
 
     When a playground ``scenario`` is active its name is shown in the info line.
     """
     import shutil
     term_w = shutil.get_terminal_size().columns
-    logo_lines = _load_logo_lines()
-    max_logo_w = max((len(l) for l in logo_lines), default=0) if logo_lines else 0
+    logo_lines = centered_logo_lines(term_w)
 
     console.print()
-    if logo_lines and term_w >= max_logo_w:
-        for line in logo_lines:
-            console.print(f"[bold {TEAL}]{line}[/]")
-            time.sleep(0.08)
-    elif logo_lines:
-        # Truncate each line to fit terminal
-        for line in logo_lines:
-            console.print(f"[bold {TEAL}]{line[:term_w - 1]}[/]")
-            time.sleep(0.08)
-    else:
-        console.print(f"[bold {TEAL}]Zeno[/]")
+    for line in logo_lines:
+        console.print(Text(line, style=f"bold {TEAL}"), overflow="crop", no_wrap=True)
 
-    console.print(f"[dim]{'':>{min(40, term_w - 10)}}v{VERSION}[/]")
-    time.sleep(0.15)
+    logo_end = max((len(line) for line in logo_lines), default=4)
+    version = f"v{VERSION}"
+    version_indent = max(0, min(term_w - len(version), logo_end - len(version)))
+    console.print(Text((" " * version_indent) + version, style="dim"))
 
     info_parts = [f"Model: {model}", f"Provider: {provider}"]
     if scenario:

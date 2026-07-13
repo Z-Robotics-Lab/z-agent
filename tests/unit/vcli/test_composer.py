@@ -9,7 +9,9 @@ semantics, dynamic status footer, and safe compact transcript projection.
 """
 from __future__ import annotations
 
+from prompt_toolkit.application import Application
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.data_structures import Size
 from prompt_toolkit.formatted_text import HTML, fragment_list_to_text, to_formatted_text
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.input import create_pipe_input
@@ -36,6 +38,15 @@ class _HelpCompleter(Completer):
     def get_completions(self, document, complete_event):  # noqa: ANN001
         if document.text_before_cursor == "/he":
             yield Completion("/help", start_position=-3)
+
+
+class _ResizableOutput(DummyOutput):
+    def __init__(self, columns: int, rows: int = 24) -> None:
+        self.columns = columns
+        self.rows = rows
+
+    def get_size(self) -> Size:
+        return Size(rows=self.rows, columns=self.columns)
 
 
 def _composer(*, input=None, history=None, toolbar=None) -> ZenoComposer:  # noqa: ANN001
@@ -96,6 +107,30 @@ def test_footer_reflows_whole_status_fields_with_indented_continuations() -> Non
     assert "base:go2w_hw" in "\n".join(narrow)
     # Reflow happens at status-field boundaries, never halfway through a label.
     assert "model:\ndeepseek" not in "\n".join(narrow)
+
+
+def test_resize_eraser_tracks_reflowed_cursor_distance_for_long_drafts() -> None:
+    output = _ResizableOutput(columns=60)
+    composer = ZenoComposer(
+        history=InMemoryHistory(),
+        completer=_NoopCompleter(),
+        output=output,
+    )
+    composer.text_area.text = (
+        "这是一条用于检查终端缩放后自动换行和正文缩进是否稳定的很长输入消息 "
+        "with a long english continuation"
+    )
+    composer.text_area.buffer.cursor_position = len(composer.text_area.text)
+    # The production call runs inside Application.run(), where history has an
+    # event-loop task. This pure layout probe deliberately avoids starting one.
+    composer.text_area.buffer._load_history_task = object()  # type: ignore[assignment]  # noqa: SLF001
+
+    wide = composer.application.reflowed_cursor_position()
+    output.columns = 40
+    narrow = composer.application.reflowed_cursor_position()
+
+    assert narrow.y > wide.y
+    assert type(composer.application)._on_resize is not Application._on_resize
 
 
 def test_alt_enter_inserts_newline_and_enter_submits() -> None:

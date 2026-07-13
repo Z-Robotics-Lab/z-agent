@@ -35,7 +35,8 @@ def test_logo_switches_complete_variants_instead_of_slicing_art() -> None:
         rendered = centered_logo_lines(width)
         assert rendered
         assert max(map(len, rendered)) <= width
-        assert tuple(line.lstrip() for line in rendered) == logo_lines_for_width(width)
+        indent = len(rendered[0]) - len(rendered[0].lstrip())
+        assert tuple(line[indent:] for line in rendered) == logo_lines_for_width(width)
 
 
 def test_print_banner_uses_wordmark_and_keeps_session_metadata(
