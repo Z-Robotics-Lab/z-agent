@@ -232,3 +232,33 @@ def test_rotate_default_yaw_rate_is_0_5() -> None:
 
     sig = inspect.signature(Go2WHardware.rotate)
     assert sig.parameters["yaw_rate"].default == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# turned() oracle anchor — the driver samples the start heading, not verify
+# ---------------------------------------------------------------------------
+
+
+def test_rotate_records_odometry_anchor_at_command_start(rot_hw) -> None:
+    """rotate() samples get_heading() into ``rotate_anchor_yaw`` before the
+    command loop — the turned() oracle grades against it. Field trace
+    2026-07-13: the old first-verify-call capture sampled the POST-turn
+    heading (verify runs after the skill), graded False, and the model
+    re-ran the turn — the robot rotated 90° for a 45° ask."""
+    mod, hw, frames, _clk = rot_hw
+    assert hw.rotate_anchor_yaw is None, "no anchor before any rotation"
+    start = float(hw.get_heading())
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        hw.rotate(math.pi / 2, yaw_rate=0.5)
+    assert hw.rotate_anchor_yaw == pytest.approx(start)
+
+
+def test_rotate_refusals_do_not_move_the_anchor(rot_hw) -> None:
+    """A refused rotation (E-stop latch) must leave the oracle anchor alone —
+    otherwise a refusal could re-anchor turned() onto the current heading and
+    fake-pass a later check."""
+    mod, hw, frames, _clk = rot_hw
+    hw._estop_latched = True
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        assert hw.rotate(math.pi / 2) is False
+    assert hw.rotate_anchor_yaw is None

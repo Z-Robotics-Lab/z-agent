@@ -10,9 +10,13 @@ here:
 * RealTurnSkill ('turn'): direction(left|right) + degrees (default 90;
   掉头=180) → signed delta → driver.rotate(delta, yaw_rate=0.5); estop-latch
   fail-fast like every other motion skill; verify hint names turned(min_deg).
-* turned(min_deg=30) verify predicate: captures the start heading on FIRST
-  call (the moved() pattern), True once |wrapped heading delta| >= min_deg —
-  odometry yaw the actor cannot author (Inv-1), fail-safe False.
+* turned(min_deg=30) verify predicate: grades the wrapped |heading delta|
+  between live odometry yaw and the DRIVER's rotate_anchor_yaw (sampled by
+  rotate() at command start) — call-order independent, True on the FIRST
+  check after a completed turn, fail-safe False. Field trace 2026-07-13:
+  the original first-verify-call origin capture sampled the POST-turn
+  heading (verify runs AFTER the skill), graded False, and the model re-ran
+  the turn — 90° of physical rotation for a 45° ask.
 * Wiring at the v2 extension markers: skill registered in the embodiment,
   turned in the verify namespace, turn_skill in the decompose vocab
   (strategies == strategy_descriptions set-equality holds).
@@ -39,11 +43,17 @@ def _redirect_oplog(tmp_path):
 
 
 class _TurnFakeHW:
-    """Fake driver: records rotate() calls; optionally actually 'turns'."""
+    """Fake driver: records rotate() calls; optionally actually 'turns'.
+
+    Mirrors the real driver contract: rotate() samples the odometry heading
+    into ``rotate_anchor_yaw`` at command start (the turned() oracle anchor),
+    even when the guard eats the commands (turns=False — anchor set, yaw
+    unchanged, so turned() honestly grades False)."""
 
     def __init__(self, latched: bool = False, turns: bool = True,
                  yaw: float = 0.0) -> None:
         self.estop_latched = latched
+        self.rotate_anchor_yaw: float | None = None
         self._yaw = yaw
         self._turns = turns
         self.calls: list[tuple[float, float]] = []
@@ -53,6 +63,7 @@ class _TurnFakeHW:
 
     def rotate(self, delta_yaw_rad: float, yaw_rate: float = 0.5) -> bool:
         self.calls.append((float(delta_yaw_rad), float(yaw_rate)))
+        self.rotate_anchor_yaw = self._yaw
         if self._turns:
             h = self._yaw + float(delta_yaw_rad)
             self._yaw = math.atan2(math.sin(h), math.cos(h))
@@ -155,7 +166,14 @@ def test_turn_zero_rotation_hints_latched_guard():
 
 
 # ---------------------------------------------------------------------------
-# turned() verify predicate — moved() pattern on odometry yaw, wrap-aware
+# turned() verify predicate — driver-anchored (LAST rotate command), wrap-aware
+#
+# Field trace 2026-07-13, '左转45度' ran TWICE: verify runs AFTER the skill,
+# so the first-verify-call origin capture sampled the POST-turn heading,
+# graded False, the model threshold-shopped (turned(45)/(40)/(45.9), all
+# False) and then RE-RAN the turn — 90° of physical rotation for a 45° ask.
+# The oracle now anchors on rotate_anchor_yaw, which the DRIVER samples from
+# odometry at command start: call-order independent, no per-call state.
 # ---------------------------------------------------------------------------
 
 
@@ -166,28 +184,71 @@ def _turned(yaw: float = 0.0):
     return make_turned(agent), agent._base
 
 
-def test_turned_captures_start_on_first_call_then_grades():
+def test_turned_grades_true_on_first_check_after_completed_turn():
+    """THE 2026-07-13 regression: one 45° turn, ONE verify call — True."""
+    from zeno.vcli.worlds.go2w_real_verify import make_turned
+
+    hw = _TurnFakeHW(yaw=0.0)
+    result = _skill().execute({"direction": "left", "degrees": 45}, _ctx(base=hw))
+    assert result.success, result.error_message
+    turned = make_turned(SimpleNamespace(_base=hw))
+    assert turned(27) is True, (
+        "first verify call after a completed turn must grade True — grading "
+        "False here is what made the model re-run the turn (double rotation)")
+
+
+def test_turned_false_when_no_rotation_ever_commanded():
     turned, hw = _turned(yaw=0.0)
-    assert turned(30) is False  # first call captures the start heading
-    hw._yaw = math.radians(100.0)
-    assert turned(90) is True
-    assert turned(120) is False
+    assert turned(30) is False
+    hw._yaw = math.radians(100.0)  # heading changed, but NOT via a turn command
+    assert turned(30) is False, "no anchor -> False (fail-safe; no origin capture)"
+
+
+def test_turned_is_stable_across_repeated_checks():
+    """Threshold-shopping (the trace probed 45/40/45.9) must get consistent
+    answers — the predicate holds no per-call state to corrupt."""
+    turned, hw = _turned(yaw=0.0)
+    hw.rotate(math.radians(45.0))
+    assert turned(27) is True
+    assert turned(46) is False
+    assert turned(27) is True
+    assert turned() is True  # default 30 <= 45
 
 
 def test_turned_default_min_deg_is_30():
     turned, hw = _turned(yaw=0.0)
-    assert turned() is False
-    hw._yaw = math.radians(31.0)
+    hw.rotate(math.radians(31.0))
     assert turned() is True
+    turned2, hw2 = _turned(yaw=0.0)
+    hw2.rotate(math.radians(29.0))
+    assert turned2() is False
+
+
+def test_turned_measures_only_the_last_turn_command():
+    """Each rotate() re-anchors: a second command grades on ITS OWN delta."""
+    turned, hw = _turned(yaw=0.0)
+    hw.rotate(math.radians(90.0))
+    hw.rotate(math.radians(45.0))
+    assert turned(60) is False, "only the LAST command's rotation counts"
+    assert turned(40) is True
 
 
 def test_turned_handles_wrap_around_across_pi():
-    """+pi-0.1 → -pi+0.1 is an 0.2 rad (~11.5°) turn, NOT a ~348° one."""
+    """An 0.2 rad (~11.5°) turn across +pi must NOT grade as ~348°."""
     turned, hw = _turned(yaw=math.pi - 0.1)
-    assert turned(5) is False  # capture
-    hw._yaw = -math.pi + 0.1
+    hw.rotate(0.2)  # crosses +pi -> heading wraps to -pi+0.1
     assert turned(30) is False, "wrap-around must not inflate the delta"
     assert turned(10) is True
+
+
+def test_turned_false_when_commands_eaten_by_latched_guard():
+    """rotate() commanded but odometry never moved (silent guard latch):
+    anchor is set, delta stays 0 -> honest False."""
+    from zeno.vcli.worlds.go2w_real_verify import make_turned
+
+    hw = _TurnFakeHW(turns=False)
+    hw.rotate(math.radians(45.0))
+    assert make_turned(SimpleNamespace(_base=hw))(27) is False
 
 
 def test_turned_is_fail_safe():
@@ -195,6 +256,8 @@ def test_turned_is_fail_safe():
 
     assert make_turned(None)(30) is False
     assert make_turned(SimpleNamespace(_base=None))(30) is False
+    # A base without the anchor attribute (foreign/older driver) -> False.
+    assert make_turned(SimpleNamespace(_base=object()))(30) is False
 
 
 # ---------------------------------------------------------------------------
