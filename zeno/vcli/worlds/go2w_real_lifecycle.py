@@ -190,6 +190,11 @@ class RealResumeSkill:
         if base is None:
             return SkillResult(success=False, diagnosis_code="no_base",
                                error_message="No Go2W hardware base")
+        # Resume follows an estop or a manual takeover — either way the robot
+        # may have been moved/rotated by hands or the pendant, so the relative
+        # plan's intent pose is stale: reset (next relative command re-anchors).
+        from zeno.vcli.worlds.go2w_real_course import reset_course
+        reset_course(context, "resume")
         try:
             ok = bool(base.estop_release())
         except Exception as exc:  # noqa: BLE001 — honest failure

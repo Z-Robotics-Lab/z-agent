@@ -37,16 +37,24 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   verifies True on the FIRST check — NEVER re-run a turn to make verify pass;
   a second run physically rotates the robot AGAIN. Zero rotation while
   commanding usually means the guard latch — resume first.
-- Course (heading intent) — multi-leg relative plans (前进3米,右转90度,… a
-  square path) track the INTENDED course (航向): turns execute relative to the
-  course, folding in any drift the local planner added during straight legs
-  (avoidance/corrections), and straight legs run parallel to the course. The
-  compensation is reported in the result (e.g. 右转90°,航向补偿+12°,实际下发
-  102°) — trust it, do not re-plan. If the heading deviates from the course by
-  MORE than 45° (big detour / manual takeover), the course re-anchors to the
-  actual heading and the plain requested turn executes — the result says so.
-  Free navigation (navigate/route/explore), stop/estop and operator interrupt
-  all reset the course; the next relative command re-anchors it. Grade course
+- Course (plan intent: position + heading) — multi-leg relative plans
+  (前进3米,左转90度,… ) track the operator's INTENT as a full plan frame:
+  the intended course 航向 AND the intended 计划位置 (position intent). Moves
+  aim at the INTENDED trajectory (计划轨迹): the target is the intent position
+  + distance along the course, and after each move the intent advances the
+  FULL requested distance — arrival shortfalls and avoidance displacement
+  self-correct at the next leg instead of accumulating. Turns rotate to the
+  ABSOLUTE intended heading wrap(course + delta); drift the local planner
+  added is folded in and reported (e.g. 右转90°,航向补偿+12°,实际下发102°) —
+  trust it, do not re-plan. The course is NEVER re-anchored from a stray yaw
+  (a move is a position chase; the current yaw is irrelevant to its target):
+  beyond 45° deviation the result says 注意:检测到大幅航向偏离X°,已按计划
+  航向补偿 — the plan heading still wins. Only POSITION re-anchors: a leg
+  starting more than 1.5 m off the intended trajectory (big detour / manual
+  takeover = stale plan frame) re-anchors the intent position to the actual
+  pose and the result says so. Free navigation (navigate/route/explore/
+  goto_place), stop/estop, operator interrupt, manual takeover and resume all
+  reset the intent; the next relative command re-anchors it. Grade course
   alignment with course_locked(tol_deg=10).
 - 全局意识 (spatial session memory) — you always know WHERE you are and where
   you have been: (1) the live pose (go2w_real_where / where_skill — it also

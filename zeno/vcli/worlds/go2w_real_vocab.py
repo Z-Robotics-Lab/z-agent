@@ -229,10 +229,12 @@ Response:
   "context_snapshot": ""
 }"""
 
-# Multi-leg RELATIVE plans (square path — field bug 2026-07-13 evening): each
-# clause is its own move/turn step. turn_skill executes turns relative to the
-# INTENDED course (drift folded into the commanded delta; re-anchors past 45°),
-# so the plan stays square — grade the alignment with course_locked().
+# Multi-leg RELATIVE plans (square path — field bug 2026-07-13 evening; intent
+# pose redesign after the 15:32 disaster): each clause is its own move/turn
+# step. turn_skill rotates to the ABSOLUTE intended heading (drift folded in;
+# NEVER re-anchored from a stray yaw — past 45° it reports loudly) and
+# move_relative targets the intended trajectory (intent position + d along the
+# course), so the plan stays square — grade alignment with course_locked().
 REAL_DECOMPOSE_EXAMPLES += """
 
 Task: "前进2米,右转90度"   (multi-leg relative plan — the turn is 90° off the INTENDED course; turn_skill compensates heading drift itself)

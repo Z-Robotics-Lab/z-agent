@@ -39,6 +39,22 @@ def _hw_of(context: ToolContext) -> Any:
     return getattr(agent, "_base", None) if agent is not None else None
 
 
+def _reset_intent(base: Any, reason: str) -> None:
+    """Best-effort intent-pose reset on the manual-takeover/resume tool paths.
+
+    The CourseTracker rides the driver (``base.course_tracker``); a foreign or
+    older base without it is simply a no-op. Never raises.
+    """
+    try:
+        tracker = getattr(base, "course_tracker", None)
+        if tracker is not None:
+            from zeno.vcli.worlds.go2w_real_diag import oplog
+            oplog("course", reason, "course reset")
+            tracker.reset()
+    except Exception:  # noqa: BLE001 — reset seam must never break a tool
+        pass
+
+
 @tool(
     name="go2w_real_bringup",
     description=(
@@ -285,6 +301,11 @@ class Go2WRealManualTool:
         base = _hw_of(context)
         if base is None:
             return ToolResult(content="no Go2W hardware base connected", is_error=True)
+        # Manual takeover: the operator will move/rotate the robot by hand —
+        # any relative plan's intent pose (course + position) is over. Reset
+        # so the next relative command re-anchors to reality (field disaster
+        # 2026-07-13 15:32: stale intent + takeover = inverted plan).
+        _reset_intent(base, "manual")
         ok = bool(base.manual())
         return ToolResult(content=(
             f"manual takeover {'engaged' if ok else 'FAILED'}; the remote owns "
@@ -305,6 +326,9 @@ class Go2WRealResumeTool:
         base = _hw_of(context)
         if base is None:
             return ToolResult(content="no Go2W hardware base connected", is_error=True)
+        # Resuming autonomy after an estop/manual episode: the intent pose of
+        # any relative plan is stale — reset (twin of resume_skill's reset).
+        _reset_intent(base, "resume")
         ok = bool(base.estop_release())
         return ToolResult(content=(
             f"autonomy {'resumed' if ok else 'resume FAILED'} (estop + manual "

@@ -168,19 +168,24 @@ class RealNavigateSkill:
 
 @skill(aliases=["前进", "往前走", "向前走", "move forward", "walk forward"])
 class RealMoveRelativeSkill:
-    """Relative move: (direction, distance) -> map waypoint from live pose+yaw.
+    """Relative move: (direction, distance) -> map waypoint in the PLAN frame.
 
-    Reads the current /state_estimation pose+heading from the hardware base,
-    computes the map-frame target itself, then reuses navigate_to. Same math as
-    the sim world; the ONLY difference is the transport (hardware base, no bridge).
+    With a CourseTracker (go2w_real world) the target is INTENT position +
+    d along the intended course — never the live yaw (a move is a position
+    chase; field disaster 2026-07-13 15:32) — and the intent then advances
+    the full requested d so shortfalls self-correct. Without a tracker
+    (foreign base) it degrades to the original live pose+yaw math. Reuses
+    navigate_to; the ONLY transport difference from sim is the hardware base.
     """
 
     name = "move_relative"
     description = (
-        "Move the REAL Go2W RELATIVE to its current pose: direction "
-        "(forward/backward/left/right) + distance in meters. Reads live "
-        "odometry pose+yaw and drives the computed map waypoint. "
-        "相对移动(前进/后退/左移/右移 N 米)。")
+        "Move the REAL Go2W RELATIVE to the plan intent: direction "
+        "(forward/backward/left/right) + distance in meters. Targets the "
+        "intended trajectory (intent position + distance along the course) "
+        "so leg shortfalls self-correct; falls back to live odometry "
+        "pose+yaw without a course tracker. "
+        "相对移动(前进/后退/左移/右移 N 米,按计划轨迹)。")
     parameters = {
         "distance": {"type": "number", "default": CFG.relative_default_m,
                      "required": False, "description": "distance in meters"},
@@ -240,35 +245,56 @@ class RealMoveRelativeSkill:
         # Session memory: origin (once) + departure breadcrumb (刚才的位置).
         record_departure(context, "move_relative")
         pos = base.get_position()
-        # COURSE heading (field bug, CEO 2026-07-13 evening): straight legs run
-        # ALONG the plan's intended course when one is tracked — the legs of a
-        # square stay parallel to intent even after planner drift displaced the
-        # live heading. resolve() anchors an unset course to the live yaw
-        # (= today's behavior on the first leg) and applies the 45° re-anchor
-        # cap (a bigger deviation is a detour/manual takeover, not drift).
+        # INTENT POSE (field disaster 2026-07-13 15:32): a move is a POSITION
+        # chase in the plan frame. Heading: the COURSE is the operator's
+        # intent and is NEVER re-anchored from the live yaw — the old >45°
+        # re-anchor adopted a pathFollower reverse-flip (-179.5°) and drove
+        # 'forward 3m' 3 m BACKWARD. Position: the target is computed from the
+        # INTENT position (+ d along the course direction), so arrival
+        # shortfalls and avoidance displacement self-correct at the next leg
+        # instead of accumulating; the intent then advances the FULL requested
+        # d REGARDLESS of where the robot actually stops. Only POSITION may
+        # re-anchor (>1.5 m at a leg start = stale plan frame — big detour /
+        # manual takeover), and that is reported honestly.
         # Moves never CHANGE the course — only turns advance it.
         live_yaw = float(base.get_heading())
         tracker = course_of(context)
         course_yaw = live_yaw
+        ax, ay = float(pos[0]), float(pos[1])
+        pos_reanchored = False
+        deviation_m = 0.0
         if tracker is not None:
-            course_yaw, reanchored = tracker.resolve(live_yaw)
-            if reanchored:
-                oplog("skill", "move_relative",
-                      "course re-anchored to live yaw (>45deg deviation)")
+            course_yaw = tracker.ensure(live_yaw)
+            (ax, ay), pos_reanchored, deviation_m = tracker.resolve_position(
+                (pos[0], pos[1]))
         oplog("skill", "move_relative",
               f"{direction} {distance}m from=({pos[0]:.2f},{pos[1]:.2f}) "
+              f"intent=({ax:.2f},{ay:.2f}) dev={deviation_m:.2f}m"
+              f"{' RE-ANCHORED' if pos_reanchored else ''} "
               f"course={math.degrees(course_yaw):+.1f}deg "
               f"yaw={math.degrees(live_yaw):+.1f}deg")
         heading = course_yaw + _RELATIVE_DIRECTIONS[direction]
-        tx = float(pos[0]) + distance * math.cos(heading)
-        ty = float(pos[1]) + distance * math.sin(heading)
+        tx = ax + distance * math.cos(heading)
+        ty = ay + distance * math.sin(heading)
+        if tracker is not None:
+            # Intent advances the FULL requested d along the course NOW —
+            # wherever the chase actually ends, the next leg targets the
+            # intended trajectory (shortfall self-correction).
+            tracker.set_position(tx, ty)
         ok = bool(base.navigate_to(tx, ty, timeout=CFG.nav_timeout_s))
         p = base.get_position()
+        # Honest plan-frame note: a position re-anchor is never silent.
+        pos_note = ""
+        if pos_reanchored:
+            pos_note = (f"(注意:偏离计划轨迹{deviation_m:.1f}米 — 大幅绕行/"
+                        f"人工接管?已重新锚定计划位置到当前位置)")
         data = {"target_x": round(tx, 2), "target_y": round(ty, 2),
-                "direction": direction, "distance_m": distance}
+                "direction": direction, "distance_m": distance,
+                "position_reanchored": pos_reanchored,
+                "deviation_m": round(deviation_m, 2)}
         if ok:
             data["message"] = (f"moved {direction} {distance}m to "
-                               f"({p[0]:.2f}, {p[1]:.2f}); "
+                               f"({p[0]:.2f}, {p[1]:.2f}){pos_note}; "
                                f"verify with at({tx:.2f}, {ty:.2f}, tol=1.0)")
             return SkillResult(success=True, result_data=data)
         # Honest reverse hint: a backward stall with no displacement while NOT

@@ -10,12 +10,15 @@ This skill closes the gap: direction(left|right) + degrees (default 90;
 ``Go2WHardware.rotate`` (angular-only /teleop_cmd_vel at 5 Hz, wrap-aware
 odometry tracking, _nav_abort cancel seam). Grade with ``turned(min_deg)``.
 
-Course compensation (field bug, CEO 2026-07-13 evening): the commanded delta
-folds in the drift between the live heading and the INTENDED course tracked
-by ``CourseTracker`` (go2w_real_course.py) — a square path stays square even
-when the local planner nudged the heading during the straight legs. Beyond
-the 45° cap the course re-anchors (detour/manual takeover) and the plain
-request executes; both cases are reported honestly in the result.
+Course compensation (field bug 2026-07-13 evening; REDESIGNED after the
+15:32 field disaster): the turn rotates to the ABSOLUTE intended heading
+``wrap(course + requested)`` tracked by ``CourseTracker``
+(go2w_real_course.py) — the commanded delta ``wrap(target - actual)`` is
+<=180° BY CONSTRUCTION, so a square path stays square even when the local
+planner nudged the heading during the straight legs. The course is NEVER
+re-anchored from a stray yaw (the old >45° re-anchor adopted a pathFollower
+reverse-flip and inverted the plan); beyond 45° the compensation is reported
+PROMINENTLY (注意:检测到大幅航向偏离…) and the intent still wins.
 
 Split file per the repo rule (files < 400 lines); registered at the skills
 extension marker in ``go2w_real.py``; strategy name ``turn_skill``.
@@ -140,33 +143,31 @@ class RealTurnSkill:
         record_departure(context, "turn")
         requested = math.radians(degrees) * _TURN_DIRECTIONS[direction]
         start_yaw = float(base.get_heading())
-        # COURSE COMPENSATION (field bug, CEO 2026-07-13 evening): a relative
-        # turn is N° from the INTENDED course, not from the drifted heading —
-        # the local planner's avoidance/correction rotations during straight
-        # legs must not skew the plan. command = requested + drift, where
-        # drift = wrap(course - actual): this preserves the requested magnitude
-        # and direction for >180° asks (a shortest-path wrap would flip them)
-        # and equals wrap(target_course - actual) for the common <=180° case.
-        # resolve() applies the 45° cap (REANCHOR_LIMIT_DEG): a bigger
-        # deviation is a detour / manual takeover, so the course re-anchors to
-        # the actual heading and the PLAIN requested delta executes — never a
-        # silent surprise rotation.
+        # ABSOLUTE-TARGET TURN (field bug 2026-07-13 evening; redesigned after
+        # the 15:32 disaster): a relative turn advances the INTENDED course by
+        # N° — so the rotation chases the absolute target wrap(course +
+        # requested). command = wrap(target - actual) is <=180° BY
+        # CONSTRUCTION, which makes the old 45° "compensation cap" pointless:
+        # the intent is ALWAYS honored (never a re-anchor to a stray yaw —
+        # that inverted the operator's plan when the pathFollower flipped the
+        # robot to -179.5°). resolve() only flags a >45° deviation so the
+        # result reports the large compensation PROMINENTLY.
         tracker = course_of(context)
         command = requested
         target_course: float | None = None
         comp_deg = 0.0
-        reanchored = False
+        large_dev = False
         if tracker is not None:
-            course, reanchored = tracker.resolve(start_yaw)
-            drift = wrap_angle(course - start_yaw)  # 0.0 when re-anchored
-            command = requested + drift
-            comp_deg = math.degrees(drift)
+            course, large_dev = tracker.resolve(start_yaw)
+            drift = wrap_angle(course - start_yaw)
             target_course = wrap_angle(course + requested)
+            command = wrap_angle(target_course - start_yaw)
+            comp_deg = math.degrees(drift)
         command_deg = math.degrees(command)
         oplog("skill", "turn",
               f"{direction} {degrees:g}deg from yaw={start_yaw:.2f}rad "
               f"(course comp {comp_deg:+.1f}deg -> command {command_deg:+.1f}deg"
-              f"{', RE-ANCHORED' if reanchored else ''})")
+              f"{', LARGE DEVIATION' if large_dev else ''})")
         ok = bool(base.rotate(command, yaw_rate=_YAW_RATE_RPS))
         end_yaw = float(base.get_heading())
         turned_deg = math.degrees(wrap_angle(end_yaw - start_yaw))
@@ -181,16 +182,18 @@ class RealTurnSkill:
                 "turned_deg": round(turned_deg, 1),
                 "command_deg": round(command_deg, 1),
                 "compensation_deg": round(comp_deg, 1),
-                "course_reanchored": reanchored,
+                "course_deviation_large": large_dev,
                 "verify_hint": f"turned({min_deg:g})"}
         if target_course is not None:
             data["course_deg"] = round(math.degrees(target_course), 1)
-        # Honest course note for the operator: compensation and re-anchoring
-        # are never silent (e.g. '右转90°(航向补偿+12°,实际下发102°)').
+        # Honest course note for the operator: compensation is never silent
+        # (e.g. '右转90°(航向补偿+12°,实际下发102°)'); a >45° deviation is
+        # reported PROMINENTLY — the plan heading still wins, never the stray
+        # yaw (the 15:32 field disaster was a silent re-anchor to one).
         course_note = ""
-        if reanchored:
-            course_note = ("(航向偏差超过45° — 大幅绕行/人工接管?已重新锚定"
-                           "预期航向到当前朝向,按原始请求执行)")
+        if large_dev:
+            course_note = (f"(注意:检测到大幅航向偏离{abs(comp_deg):.0f}°,"
+                           f"已按计划航向补偿,实际下发{abs(command_deg):.0f}°)")
         elif abs(comp_deg) >= 0.5:
             course_note = (f"(航向补偿{comp_deg:+.0f}°,"
                            f"实际下发{abs(command_deg):.0f}°)")
