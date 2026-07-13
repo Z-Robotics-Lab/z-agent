@@ -21,6 +21,7 @@ from __future__ import annotations
 from io import StringIO
 
 from rich.console import Console
+from rich.cells import cell_len
 
 from zeno.vcli import cli
 from zeno.vcli.turn_events import NativeEvent
@@ -131,7 +132,9 @@ class _FakeConsoleProxy:
         self.lines: list[str] = []
 
     def print(self, *a: object, **k: object) -> None:
-        self.lines.append(" ".join(str(x) for x in a))
+        buf = StringIO()
+        Console(file=buf, force_terminal=False, width=120).print(*a, **k)
+        self.lines.append(buf.getvalue().rstrip())
 
     @property
     def text(self) -> str:
@@ -181,6 +184,8 @@ def test_why_prints_last_reasoning(monkeypatch) -> None:
     cont = cli._handle_slash_command("why", [], None, None, app_state)
     assert cont is True
     assert "turned(18)" in buf.getvalue()
+    assert "Thinking · last turn" in buf.getvalue()
+    assert "┆" in buf.getvalue()
 
 
 def test_why_honest_fallback_when_empty(monkeypatch) -> None:
@@ -188,3 +193,39 @@ def test_why_honest_fallback_when_empty(monkeypatch) -> None:
     cont = cli._handle_slash_command("why", [], None, None, {})
     assert cont is True
     assert "无推理" in buf.getvalue()
+
+
+def test_reasoning_block_is_open_normalized_and_responsive() -> None:
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=False, width=38)
+    console.print(
+        cli.render_reasoning(
+            "first sentence.\n\n  second   sentence.",
+            width=38,
+            title="Thinking · full",
+        )
+    )
+    lines = [line.rstrip() for line in buf.getvalue().splitlines() if line.strip()]
+
+    assert any("◌ Thinking · full" in line for line in lines)
+    assert any("┆ first sentence. second" in line for line in lines)
+    assert all(glyph not in buf.getvalue() for glyph in ("╭", "╮", "╯", "╰"))
+    assert all(cell_len(line) <= 38 for line in lines)
+
+
+def test_live_thinking_is_open_and_bounded_to_two_rows() -> None:
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=False, width=40)
+    console.print(
+        cli.render_live_thinking(
+            elapsed=3.2,
+            reasoning_tail="A long raw thought " * 20,
+            width=40,
+        )
+    )
+    lines = [line.rstrip() for line in buf.getvalue().splitlines() if line.strip()]
+
+    assert len(lines) == 2
+    assert "◌ Thinking · 3s" in lines[0]
+    assert "┆" in lines[1]
+    assert all(glyph not in buf.getvalue() for glyph in ("╭", "╮", "╯", "╰"))
