@@ -33,6 +33,8 @@
   decompose strategies==descriptions keys 含 3 新;verify ns 服务 turned;deny 12 不变;
   RealTurnSkill fake base 旋转+driver _nav_abort 取消缝解阻+estop 快失败,全绿。
 - 内联清理(已提交):turn_skills 去未用 `Any` 导入 + 修正 yaw-rate guard 注释(1.0→驱动 MAX_YAW_RPS)。
+- 测试卫生(1c3758e):`isolated` fixture 上提至 tests/unit/vcli/conftest.py,deepseek provider 测试
+  接入 → 真 .env 在场 15/15 绿(此前宿主 DEEPSEEK_API_KEY 泄入致 3 失败,既存基线相应 -3)。
 - 未动他 agent 在飞的 DeepSeek v4-pro 改(working tree .env.example/install-launcher.sh/config.py + 已提交
   2d06aa9 RED,test_config_env_credentials GREEN 系其人所属),不入我 commit(NEVER-KILL-INFRA)。
 
