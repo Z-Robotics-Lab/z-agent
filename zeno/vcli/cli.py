@@ -117,6 +117,8 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("agent", "Show Zeno's identity and capabilities", False),
     ("status", "Show hardware, tools, session info", False),
     ("usage", "Show token usage this session", False),
+    ("cot", "Model reasoning display  (/cot off|tail|full)", True),
+    ("why", "Show the last turn's full reasoning", False),
     ("copy", "Copy last response to clipboard", False),
     ("export", "Export session as markdown", False),
     ("compact", "Compress context window", False),
@@ -622,6 +624,15 @@ def _repl_attempt_native(
                 pass
         sys.stderr = _saved_stderr
 
+    # P1.2 CoT: record the turn's FULL reasoning buffer for /why (display
+    # buffer only — never the session), and honor /cot full by printing the
+    # complete reasoning block into the transcript. tail mode stays live-region
+    # only, so the scrollback keeps just the honest chain + verdict.
+    if app_state is not None:
+        app_state["last_reasoning"] = chain_view.reasoning_text
+    if _cot_mode(app_state) == "full" and chain_view.reasoning_text.strip():
+        console.print(Text("┆ " + chain_view.reasoning_text.strip(), style="dim italic"))
+
     # TYPED INTERJECT: a queued line means the operator overrode this turn. The
     # kernel already cancelled motion + the remaining tool calls at its safe
     # boundary; report it here and OWN the turn — falling through to legacy would
@@ -838,6 +849,42 @@ def ask_permission(tool_name: str, params: dict[str, Any]) -> str:
 # /permissions mode persistence (field ask 2026-07-13: the operator re-typed
 # /permissions auto every session on the real robot)
 # ---------------------------------------------------------------------------
+
+_COT_MODE_KEY = "cot_mode"  # config.yaml key: "off" | "tail" | "full" (P1.2)
+
+
+def _save_cot_mode(mode: str) -> None:
+    """Persist the /cot display mode via the EXISTING zeno config mechanism.
+
+    Same load_config/save_config path as /permissions — no new persistence
+    machinery. Best-effort: a config write failure never breaks the session.
+    """
+    try:
+        from zeno.vcli.config import load_config, save_config
+
+        cfg = load_config()
+        cfg[_COT_MODE_KEY] = mode
+        save_config(cfg)
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        pass
+
+
+def _apply_saved_cot_mode(app_state: dict[str, Any] | None) -> None:
+    """Load the persisted /cot mode at session start (display-only preference).
+
+    Unknown/absent values keep the shipped default ('tail' via _cot_mode).
+    """
+    if app_state is None:
+        return
+    try:
+        from zeno.vcli.config import load_config
+
+        mode = str(load_config().get(_COT_MODE_KEY, "")).strip().lower()
+    except Exception:  # noqa: BLE001 — an unreadable config keeps the default
+        return
+    if mode in ("off", "tail", "full"):
+        app_state["cot_mode"] = mode
+
 
 _APPROVAL_MODE_KEY = "approval_mode"  # config.yaml key: "auto" | "manual"
 
@@ -1562,6 +1609,32 @@ def _handle_slash_command(
             console.print(f"  in={u.input_tokens:,}  out={u.output_tokens:,}  total={total:,}")
         else:
             console.print("[dim]No session.[/dim]")
+
+    elif cmd == "cot":
+        # P1.2 CoT display mode — display-only preference, persisted like
+        # /permissions. Bad args refuse loudly and keep the current mode.
+        mode = args_rest[0].strip().lower() if args_rest else ""
+        if not mode:
+            console.print(
+                f"  cot mode: [bold]{_cot_mode(app_state)}[/]  "
+                f"[dim](/cot off|tail|full — off=隐藏 · tail=思考尾巴 · full=回合后全量)[/dim]"
+            )
+        elif mode in ("off", "tail", "full"):
+            if app_state is not None:
+                app_state["cot_mode"] = mode
+            _save_cot_mode(mode)
+            console.print(f"  cot mode -> [bold]{mode}[/]")
+        else:
+            console.print("  [yellow]用法: /cot off|tail|full[/yellow]")
+
+    elif cmd == "why":
+        # P1.2 — the last turn's FULL reasoning (display buffer only; a turn
+        # that streamed no reasoning gets an honest fallback, never silence).
+        reasoning = str((app_state or {}).get("last_reasoning", "") or "").strip()
+        if reasoning:
+            console.print(Text("┆ " + reasoning, style="dim italic"))
+        else:
+            console.print("  [dim]上一回合无推理记录。[/dim]")
 
     elif cmd == "compact":
         if session is not None:
@@ -2808,6 +2881,8 @@ def main(argv: list[str] | None = None) -> None:
     from zeno.vcli.interject import InterjectReader, set_current_reader
     interject_reader = InterjectReader()
     app_state["interject"] = interject_reader
+    # P1.2: restore the persisted /cot display mode for this session.
+    _apply_saved_cot_mode(app_state)
     set_current_reader(interject_reader)
 
     try:
@@ -2899,6 +2974,11 @@ def main(argv: list[str] | None = None) -> None:
                 # tool-execution line is printed so box frames never stack and the
                 # prompt is not duplicated.
                 _turn_started = time.monotonic()
+                # P1.2 CoT: the turn's reasoning chunks (DeepSeek-style
+                # reasoning models). DISPLAY BUFFER ONLY — rendered as a dim
+                # tail inside the thinking panel (mode 'tail'/'full'), recorded
+                # for /why, never appended to the session or the answer.
+                _turn_reasoning: list[str] = []
 
                 def _status_content(text: str, elapsed: float, is_thinking: bool) -> Panel:
                     if is_thinking:
@@ -2906,8 +2986,17 @@ def main(argv: list[str] | None = None) -> None:
                         label = f"thinking{dots}" + (
                             f"  [dim]{elapsed:.0f}s[/]" if elapsed >= 1 else ""
                         )
+                        body: Any = Text.from_markup(label, style="dim italic")
+                        if _turn_reasoning and _cot_mode(app_state) != "off":
+                            tail = (
+                                "".join(_turn_reasoning)[-160:].replace("\n", " ").strip()
+                            )
+                            if tail:
+                                body = Group(
+                                    body, Text("┆ " + tail, style="dim italic")
+                                )
                         return Panel(
-                            Text.from_markup(label, style="dim italic"),
+                            body,
                             title=V_LABEL,
                             title_align="left",
                             border_style=DIM_TEAL,
@@ -2937,8 +3026,11 @@ def main(argv: list[str] | None = None) -> None:
                     status.update_text(chunk)
 
                 def on_reasoning(_chunk: str) -> None:
-                    # Hidden reasoning trace: keep the "thinking…" status alive with
-                    # an elapsed counter; never rendered as answer text.
+                    # P1.2: capture the reasoning chunk for the thinking-panel
+                    # tail + /why (display buffer only — never answer text),
+                    # and keep the "thinking…" status alive with the timer.
+                    if _chunk:
+                        _turn_reasoning.append(str(_chunk))
                     status.thinking(time.monotonic() - _turn_started)
 
                 def _format_tool_display(name: str, p: dict[str, Any]) -> str:
@@ -3247,6 +3339,15 @@ def main(argv: list[str] | None = None) -> None:
                     interject_reader.stop()  # window closes before any prompt
                     status.stop()
                     sys.stderr = _saved_stderr
+
+                # P1.2 CoT: record this turn's reasoning for /why; /cot full
+                # prints the whole block into the transcript (dim, before the
+                # answer panel). Display buffer only — never session content.
+                app_state["last_reasoning"] = "".join(_turn_reasoning)
+                if _cot_mode(app_state) == "full" and app_state["last_reasoning"].strip():
+                    console.print(
+                        Text("┆ " + app_state["last_reasoning"].strip(), style="dim italic")
+                    )
 
                 # Final response: highlighted panel with braille V title
                 global _last_response
