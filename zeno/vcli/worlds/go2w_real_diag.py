@@ -52,11 +52,31 @@ def odom_fresh(base: Any, max_age_s: float = 3.0) -> bool:
         return False
 
 
-def _stalled_hint(start_pos: Any, end_pos: Any) -> str:
-    """Distinguish 'blocked path' from 'commands eaten by a latched guard'."""
+def _stalled_hint(start_pos: Any, end_pos: Any, direction: str | None = None,
+                  latched: bool = False) -> str:
+    """Distinguish 'blocked path' from 'commands eaten by a latched guard'.
+
+    ``direction`` / ``latched`` are additive (default None/False), so the old
+    two-arg absolute-nav callers keep the latch/resume hint unchanged.
+
+    Honest reverse hint (field trace 2026-07-13): a REVERSE move that produced
+    ZERO displacement while NOT estop-latched is almost never a guard latch —
+    the nav-stack local planner is known to refuse reverse-driving (under
+    investigation). Steering the model to resume_skill there sent it on a
+    goose-chase (a wasted resume + 3 retries + an invented 掉头-detour). Name
+    the real cause and give the concrete workaround instead of resume.
+    """
     try:
         d = math.hypot(end_pos[0] - start_pos[0], end_pos[1] - start_pos[1])
         if d < 0.05:
+            if str(direction).lower() == "backward" and not latched:
+                return (" — zero displacement driving backward while NOT "
+                        "estop-latched: the local planner likely refuses "
+                        "reverse-driving (known nav-stack issue, under "
+                        "investigation). Workaround: 掉头 (turn 180°) then 前进 "
+                        "(drive forward), or report the reverse-drive refusal "
+                        "to the operator — retrying the reverse move will not "
+                        "help")
             return (" — zero displacement while commanding: guard likely "
                     "latched (estop/manual, possibly from a previous session)."
                     " Try resume_skill, then retry")

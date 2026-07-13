@@ -176,6 +176,32 @@ Response:
   "context_snapshot": ""
 }"""
 
+# Reverse move is ONE relative step {direction: backward} — verify at() on the
+# computed target (field trace 2026-07-13: the semantics are correct even while
+# the nav-stack reverse-drive fix is still landing; the skill fails HONESTLY,
+# and its error names the 掉头+前进 workaround). NO bringup (stack already runs).
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "后退1米"   (world context: "Position: (2.0, 1.0)\\nHeading: 0.0 rad")
+Target math: backward = heading+pi, tx = 2.0 + 1*cos(pi) = 1.0, ty = 1.0.
+Response:
+{
+  "goal": "后退1米",
+  "sub_goals": [
+    {
+      "name": "move_backward_1m",
+      "description": "向后相对移动 1 米(栈在跑,直接运动,无需 bringup)",
+      "verify": "at(1.0, 1.0, tol=1.0)",
+      "strategy": "move_relative_skill",
+      "timeout_sec": 60,
+      "depends_on": [],
+      "strategy_params": {"direction": "backward", "distance": 1},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": "Position: (2.0, 1.0), Heading: 0.0 rad"
+}"""
+
 # Single-action commands are SINGLE steps (field trace 2026-07-10 15:19: the
 # planner gave 站起来 a 7-step plan including liedown-first and a restart).
 REAL_DECOMPOSE_EXAMPLES += """

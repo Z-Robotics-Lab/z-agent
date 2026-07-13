@@ -41,6 +41,11 @@ _YAW_RATE_RPS: float = 0.5  # gentle in-place rate, well inside the driver MAX_Y
 
 
 @skill(aliases=["turn", "左转", "右转", "转身", "掉头", "调头", "原地转",
+                "原地左转", "原地右转",
+                # PREFIX aliases (field trace 2026-07-13): the router prefix-
+                # matches, so '往左转动30度' must start with a listed alias or
+                # it takes a full LLM hop. '左转' does NOT prefix '往左转...'.
+                "往左转", "向左转", "往右转", "向右转",
                 "turn left", "turn right", "rotate", "turn around"], direct=True)
 class RealTurnSkill:
     """Rotate the REAL Go2W in place by N degrees (odometry-tracked)."""
@@ -58,6 +63,16 @@ class RealTurnSkill:
         "degrees": {"type": "number", "default": _DEFAULT_DEGREES,
                     "required": False,
                     "description": "rotation magnitude in degrees (掉头=180)"},
+        # 'angle' MIRRORS 'degrees' so the engine's VGG fast path
+        # (_try_skill_goal_tree extracts generic params by NAME — it knows
+        # 'angle', not 'degrees') passes the magnitude through instead of
+        # dropping it and defaulting to 90. Without this a fast-pathed
+        # '左转45度' turned 90° (a 45° ask → 90° turn — a REAL hazard, field
+        # trace 2026-07-13). _parse_degrees already reads the 'angle' key.
+        "angle": {"type": "number", "default": _DEFAULT_DEGREES,
+                  "required": False,
+                  "description": "rotation magnitude in degrees (mirror of "
+                                 "'degrees' for the fast-path extractor)"},
     }
     preconditions: list = []
     effects = {"base_state": "turned"}

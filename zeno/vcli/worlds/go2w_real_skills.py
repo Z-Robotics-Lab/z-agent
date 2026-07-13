@@ -244,9 +244,13 @@ class RealMoveRelativeSkill:
                                f"({p[0]:.2f}, {p[1]:.2f}); "
                                f"verify with at({tx:.2f}, {ty:.2f}, tol=1.0)")
             return SkillResult(success=True, result_data=data)
+        # Honest reverse hint: a backward stall with no displacement while NOT
+        # estop-latched points at the local planner's reverse-drive refusal,
+        # not a guard latch (field trace 2026-07-13 — resume goose-chase).
         return SkillResult(success=False, result_data=data, error_message=(
             f"did not reach ({tx:.2f}, {ty:.2f}); at ({p[0]:.2f}, {p[1]:.2f})"
-            + _stalled_hint(pos, p)))
+            + _stalled_hint(pos, p, direction=direction,
+                            latched=bool(getattr(base, "estop_latched", False)))))
 
 
 @skill(aliases=["standup", "stand", "stand up", "起立", "站起来", "起来"], direct=True)
