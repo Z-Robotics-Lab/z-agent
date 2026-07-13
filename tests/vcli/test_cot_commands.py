@@ -14,7 +14,8 @@ the display layer and was discarded. Contract pinned here:
   ["last_reasoning"] (display buffer — never the session); /why prints it,
   with an honest fallback when a turn carried no reasoning.
 - cot_mode=full prints the complete reasoning block after the turn; tail
-  (default) keeps it live-region-only; off suppresses the ┆ tail entirely.
+  (default) keeps a bounded two-line preview with /why as the honest expansion
+  path; off suppresses the ┆ tail entirely.
 """
 from __future__ import annotations
 
@@ -153,12 +154,12 @@ def test_cot_full_prints_reasoning_after_turn(monkeypatch) -> None:
     assert "左转30度" in console.text
 
 
-def test_cot_tail_keeps_reasoning_out_of_transcript(monkeypatch) -> None:
+def test_cot_tail_keeps_a_bounded_preview_with_why_expansion(monkeypatch) -> None:
     app_state: dict = {"cot_mode": "tail"}
     console, _session = _run_reasoning_turn(monkeypatch, app_state)
-    # tail mode renders reasoning only inside the transient live region —
-    # never as scrollback transcript lines.
-    assert "左转30度" not in console.text
+    assert "左转30度" in console.text
+    assert "/why" in console.text
+    assert "Thinking · preview" in console.text
 
 
 def test_cot_off_suppresses_live_tail(monkeypatch) -> None:
@@ -229,3 +230,33 @@ def test_live_thinking_is_open_and_bounded_to_two_rows() -> None:
     assert "◌ Thinking · 3s" in lines[0]
     assert "┆" in lines[1]
     assert all(glyph not in buf.getvalue() for glyph in ("╭", "╮", "╯", "╰"))
+
+
+def test_reasoning_preview_is_bounded_and_uses_visual_depth() -> None:
+    preview = cli.render_reasoning_preview(
+        "first thought " * 40,
+        width=40,
+        max_lines=2,
+    )
+    buf = StringIO()
+    Console(file=buf, force_terminal=False, width=40).print(preview)
+    lines = [line.rstrip() for line in buf.getvalue().splitlines() if line.strip()]
+
+    assert len(lines) == 3  # header + exactly two bounded preview rows
+    assert "Thinking · preview" in lines[0]
+    assert "/why" in lines[0]
+    assert lines[-1].endswith("…")
+    assert all(cell_len(line) <= 40 for line in lines)
+
+
+def test_tool_activity_is_a_quiet_separate_visual_layer() -> None:
+    rendered = cli.render_tool_activity(
+        "[dim]go2w_real_bringup[/](action=status)",
+        is_error=False,
+        elapsed=49.8,
+    )
+
+    assert rendered.plain == "  ◇ Tool · go2w_real_bringup(action=status)  ✓ 49.8s"
+    styles = {str(span.style) for span in rendered.spans}
+    assert "dim #738091" in styles
+    assert "bold green" in styles

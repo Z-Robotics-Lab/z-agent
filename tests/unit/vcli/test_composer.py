@@ -68,7 +68,8 @@ def test_composer_is_a_compact_claude_style_input_rail() -> None:
     assert isinstance(composer.search_toolbar, SearchToolbar)
     assert COMPOSER_PROMPT_TEXT == "zeno> "  # acceptance harness compatibility
     footer = fragment_list_to_text(composer.footer_fragments(width=100))
-    assert "? 快捷键" in footer
+    assert "? 快捷键" not in footer
+    assert footer.strip().startswith("model:test")
     assert "Enter 发送" not in footer
     assert "Alt+Enter 换行" not in footer
     assert "Tab 补全" not in footer
@@ -216,7 +217,7 @@ def test_toolbar_failure_is_display_only() -> None:
 
     composer = _composer(toolbar=broken_toolbar)
     footer = fragment_list_to_text(composer.footer_fragments(width=80))
-    assert "? 快捷键" in footer
+    assert footer == ""
     assert "sensor failed" not in footer
 
 
