@@ -1,6 +1,6 @@
 # CLI UX 重设计提案（branch: ui/cli-experience）
 
-状态：**P1+P2+P3.1+P3.2 已实施**（2026-07-13，基线 ddf2208）。
+状态：**P1+P2+P3.1+P3.2+P3.3 已实施**（2026-07-13，基线 ddf2208）。
 范围：**只动展示层**（vcli 渲染 + 显示回调接线），不动 verify 脊柱语义
 （vcli/cognitive 的判定逻辑零改动，verdict 只读不再算）。
 
@@ -27,6 +27,10 @@
 - ✅ P3.2 live status 同源上屏：只读现有 `world.live_status_line` hook，
   ChainView 每个 native round 刷新，prompt_toolkit 底栏显示同一行；失败清空
   防旧位姿，Rich/HTML 均转义；未动 native_loop/world/verify。
+- ✅ P3.3 独立输入 composer（owner ask 2026-07-13）：裸单行 `PromptSession`
+  替换为全宽 `Frame + TextArea`，最多 6 行滚动编辑；Enter 提交（CR/LF 均接受，
+  保持 acceptance `sendline`），Alt+Enter 换行，Tab 补全，Ctrl+R 历史；提交后压成
+  markup-safe `›` transcript。状态底栏收进输入区，Ctrl+C/EOF/插队契约不变。
 - ⏸ 未做：Ctrl+O 详略切换（P3，低优先）；GUI（§6，事件协议已就位）。
 
 ## 7. 下一轮候选（2026-07-13 与 owner 讨论，#1 已落地）
@@ -45,7 +49,8 @@
    注：WebSocket tail 会形成新跨进程接口，实施前必须过 CEO gate。
 - 兼容性：ZENO_VERDICT 哨兵、verdict 行 `(n/m grounded)` 尾、`→ verify`/
   `actor=`/"native working" PTY 钉词、插队行、session 摘要全部原样保留；
-  tests/vcli 与 tests/unit/vcli 回归 0 新失败（15/5+cv2 全既存基线）。
+  CLI UX 簇 144P + 裸 zeno PTY 全绿；全量 unit/vcli 1120P/5F（另 2 cv2 collect）、
+  tests/vcli 1108P/32F/33skip/1xfail，失败全为环境或 UI worktree 未合入的 hw RED。
 
 ## 1. 现状诊断
 
@@ -183,6 +188,8 @@ zeno> 往左转动30度
 ### P3 — 交互面
 
 - `/cot`、`/why`、`/trace` 如上；`/route` 显示本 turn 路由决策及原因（classify_intent 结果）。
+- 输入面为独立全宽 composer：标题/多行编辑/补全菜单/历史搜索/动态状态底栏
+  共一个 prompt_toolkit Application；提交后清掉编辑 chrome，scrollback 只留 `›` 用户消息。
 - Ctrl+O 循环 compact/verbose（verbose 常显 result_data 与 verify 原始值）。
 - `-p/--json` 路径**零变化**（机器面不动）。
 

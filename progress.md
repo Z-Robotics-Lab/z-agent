@@ -3,9 +3,9 @@
 更新：2026-07-13（深夜）。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**；当前 UI worktree **ui/cli-experience**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
-- **CLI UX P1–P3.2（owner 试用批准 P1/P2）**:CoT/ChainView/verdict 卡/诚实计时/
-  trace+route/统一页脚；P3.1 回合后持久 ⌂ 执行树；P3.2 只读同一 live_status_line
-  上 ChainView 头+输入底栏（失败清空/Rich+HTML 转义）。UI 测试簇 129P，0 新失败。
+- **CLI UX P1–P3.3（owner 批 P1/P2/P3.3）**:CoT/ChainView/verdict 卡/诚实计时/trace+route/
+  统一页脚；P3.1 持久 ⌂ 树；P3.2 live_status 上树头+底栏；P3.3 全宽 Frame+TextArea
+  composer(多行/Tab/Ctrl+R/CR+LF 提交/Alt+Enter 换行/› transcript)。UI 簇 144P+裸 zeno PTY，0 新失败。
 - **P5.4 真机世界 go2w_real**：Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
   Trigger standup/liedown/estop/resume/manual/nav_cancel)。世界同 CLI/工具/技能/verify 接缝。
 - **v2 探索/route/camera**：ExploreManager/RouteManager/Camera(BEST_EFFORT,坏帧丢弃)。
