@@ -1,67 +1,56 @@
 # Zeno — progress
 
-更新：2026-07-10。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
+更新：2026-07-13。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
 
-## Works（已验证）
+## Works（已验证 / 单测 GREEN）
 - **P5.4 真机世界 go2w_real**：驱动 go2w_hw.py::Go2WHardware（navigate_to 发 /way_point+轮询
   里程计；/teleop_cmd_vel 钳 0.6m/s+5Hz deadman；Trigger standup/liedown/estop/resume/manual/
-  nav_cancel；rclpy 懒加载）。世界同 CLI/工具/技能/verify 接缝；禁内核 sim/diag/system；registry
-  懒注册（Inv-4）。at/moved 只读 /state_estimation 里程计（Inv-1）fail-safe。
-- **P5.5 探索**：Go2WExploreManager 管 `nav.sh explore` 子进程；oracle=/exploration_finish
-  （TARE 自发）+里程计行程双谓词防"原地宣告完成"；stop=SIGINT→/nav_cancel→resume 受 estop 闩锁守卫。
-- **v2 route**：Go2WRouteManager 复用 OverlayLauncher(`nav.sh route`/far_planner)；发 /goal_point
-  一次，far_planner 自 republish；到达以里程计判定（Inv-1）；verify route_reached。frozen 加字段守 Inv-7。
-- **v2 camera**：Go2WCamera+CameraMixin 订 /camera 图像（BEST_EFFORT，手工 decode 无 cv_bridge，坏帧丢弃）；
-  接缝点亮 look/describe（VLM mock 端到端绿）；未改 frozen capability 权威。
-- **产品面**：persona 由 go2w_real_capabilities.md 加载（改 md 即改自知，缺文件安全回退）；工具
-  go2w_real_viz 经 OverlayLauncher 非阻塞拉 RViz（DISPLAY :0 兜底）；bringup_skill（启栈≠站立，阻塞到
-  里程计就绪，verify stack_ready）+中文 few-shot；restart 仅 operator，settle-then-confirm 就绪，env
-  指纹+result oplog；liveness 唯真值=里程计新鲜度（杀零位兜底 e969dfc）。
+  nav_cancel；rclpy 懒加载）。世界同 CLI/工具/技能/verify 接缝；禁内核 sim/diag/system。
+  at/moved 只读 /state_estimation 里程计（Inv-1）fail-safe。
+- **v2 探索/route/camera**：ExploreManager(`nav.sh explore`,/exploration_finish+行程双谓词)；
+  RouteManager(far_planner /goal_point,route_reached)；Camera(/camera BEST_EFFORT,坏帧丢弃,look/describe)。
+- **sim→real 内核迁移（CEO 特批,已复核 GREEN）**：内核只教/评在集谓词(schema tail + native 白名单 +
+  verify_namespace_deny 12 stub + foreach 抑制)；dev+go2w(sim) 逐字节不变,verify 只更严(Inv-1)。
 
-## sim→real 内核迁移（CEO 特批，本轮 integrator 复核 GREEN）
-真机取证：内核教/评了本世界不服务的幻影谓词 → 'verdict 0/N grounded' 假 FAIL。全部 **ADDITIVE、
-dev+go2w(sim) 逐字节不变**（无钩子/无字段=原文，守卫测已证），verify 只更严（Inv-1）：
-- ①schema `_verify_teaching_tail`：只教在集谓词（at_position 在集=逐字节原文；at 在集教 at() tol
-  语义不硬编码默认，tol 归世界 Inv-4；例句必来自在集）。
-- ②native handle_verify 白名单=与 schema 同源 oracle 集；界外调用→纠错 is_error（不评估/不记步/
-  不算 R274 spin 进展；已接受 verify 逐字节不变）。
-- ③engine.verify_namespace_deny() 钩子（world merge 后 remove-only）；go2w_real deny 12 stub 名
-  （含 get_position/get_heading——已核 world_context/actor_causation 直读 base 非 namespace，无载荷消费）。
-- ④DecomposeVocab 末位 foreach_example（None=原样/''=删节/文本=替换）；go2w_real 抑制 foreach 例。
-- 次级三项：恢复提示 no_base 去 start_simulation 幻影→agent.recovery_hints() 覆盖（go2w_real_bringup）；
-  /reset supports_pose_reset()==False 诚实拒绝、不写 /tmp/vector_reset_pose、指站起来/resume；go2-SIM
-  关键词梯 disable_keyword_ladder()==True 时改走本世界 registry 别名或响亮 fallback。
-- 复核：新测 47 绿（24 unit + 23 vcli）；回归 ~505 passed / 9 skipped、**0 新失败**（native_loop/verify/
-  cognitive/foreach/go2w-sim+real 世界/dev-world PTY/repl-cutover/arm PTY）；离线 smoke：dev+go2w_real
-  裸 REPL 启动绿，go2w_real /reset 拒绝且不写旗标、dev /reset 仍写旗标（逐字节对称已眼验）。
+## 本轮 orchestration round（DONE — turn/viz/where/快速状态/复合few-shot）
+新增全部 **world 文件 only**,内核零改(cli/engine/native_loop/cognitive 自 1cfde15 逐字节不变已核):
+- **turn 技能**：direction(left|right)+degrees(默认90,掉头=180)→signed delta→Go2WHardware.rotate
+  (角速度-only /teleop_cmd_vel 5Hz,里程计 wrap-aware 追踪,到点早停,_nav_abort 取消缝,estop 快失败)。
+  verify **turned(min_deg)**(里程计 yaw,首调捕原点返 False,|wrap delta|≥min_deg;wrap 封顶180°)。
+  few-shot: 左转90°→turned(54)、掉头→turned(108),单步无 bringup。
+- **viz/where 升格技能**：VizOverlaySession 单一 launcher 表(embodiment._viz==base.viz_manager,tool 与
+  open_viz 技能共享,决不双开 RViz;已开=already_open 幂等)。where 读活位姿,里程计未到则诚实拒绝(0,0,0 非真位姿)。
+- **bringup(status) 快速路径**：odom_fresh(<3s)→<1s 从驱动已知事实答(话题率/odom 龄/estop),陈旧/无 base
+  才回落慢 nav.sh 探针。lifecycle ready-probe 同样 odom 新鲜即真、免烧 settle。
+- **复合指令 few-shot + 规则 1d**：把丢 rviz 子句的旧 2 步例替成完整 3 步链(bringup←open_rviz←stand_up);
+  capabilities 规则 1d = 复合请求每个子句都成一步,决不静默丢步。
 
-## Failed / 教训
-- **go2w_real 真机 E2E 未验收**：Inv-2 要裸 zeno REPL+眼看硬件；本轮全为纯单测（rclpy/subprocess mock）。
-- **既存失败（勿追，全环境性，本分支未改涉及文件）**：vcli 6（scene_room.xml×4+PIL/mcp×2）；deepseek
-  provider 3（仓根 .env 真钥被 load_dotenv 注入劫持断言，config/oauth 逐字节同基线）；mujoco/cv2/mcp
-  依赖模块 collect-error/spawn-OOM。教训：测须 delenv 全部凭据源，不止 monkeypatch load_config。
-- **结构债（既存，非本轮）**：native_loop 1666 / engine 2132 / cli 3115 / goal_decomposer 1161 行
-  均 >800 硬上限（上游单体，本轮沿模块 append 保局部性，未拆）；go2w_real 468（>400 典型 <800）。
+## 复核（integrator, 2026-07-13）
+- 新测 68 绿（9 unit rotate + 21 turn + 13 ops + 10 fast-status + 9 vocab-fewshot + 6 vocab-integrity）。
+- 全套回归 **0 新失败**：tests/vcli 934 passed/33 skipped(15 fail 全既存基线);tests/unit/hardware
+  267 passed(6 fail+63 collect-error 全既存)。interrupt cancel 隔离跑 2 passed(满载下才 timing flake)。
+- 离线 smoke 绿：resolve_world→build_embodiment 有 turn/open_viz/where + _viz is base.viz_manager;
+  decompose strategies==descriptions keys 含 3 新;verify ns 服务 turned;deny 12 不变;
+  RealTurnSkill fake base 旋转+driver _nav_abort 取消缝解阻+estop 快失败,全绿。
+- 内联清理(已提交):turn_skills 去未用 `Any` 导入 + 修正 yaw-rate guard 注释(1.0→驱动 MAX_YAW_RPS)。
+- 未动他 agent 在飞的 DeepSeek v4-pro 改(working tree .env.example/install-launcher.sh/config.py + 已提交
+  2d06aa9 RED,test_config_env_credentials GREEN 系其人所属),不入我 commit(NEVER-KILL-INFRA)。
 
 ## Next
-1. **go2w_real 真机 E2E 验收（等 owner 在场，E-stop 遥控在手）**：源 ros_env.sh → nav.sh start
-   （40-60s）→ `zeno --world go2w_real` → 「站起来，往前走 2 米」→ **verify at(tx,ty) GROUNDED**（确认
-   不再冒 at_position/detect_objects 幻影，纠错列表如触发则模型自修到 at）→「探索」explore_finished∧
-   explored_progress>N →「去 (x,y)」route_reached →「看看前面」look/describe 出真实非黑帧。
-2. 真机复测须确认：/reset 说"仿真专用、指站起来/resume"；no_base 失败提示指 go2w_real_bringup（非
-   start_simulation）；decompose 提示零外来谓词；skill 失败纠错措辞对真机成立。
-3. camera 若要一等 look_skill STRATEGY：注册 look 技能+_build_context 加 vlm 服务，走接缝（集合相等）。
+1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,等 owner+E-stop 在手）**:「左转90度」→ verify
+   turned(54) GROUNDED;「启动导航,打开rviz,站起来」→3 步全执行不丢子句;bringup(status) 实测 <1s;
+   物理倒车 twoWayDrive 复测;掉头 180° 里程计 wrap 越 ±pi 判定正确。
+2. camera 若要一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务,走接缝。
+
+## Failed / 教训
+- **真机 E2E 未验收**：本轮全纯单测(rclpy/subprocess mock),Inv-2 未闭环。
+- **既存失败（勿追,全环境性,本分支未改涉及文件）**：playground/perception/courtyard/native-PTY/level66
+  + mujoco/cv2/mcp 依赖 collect-error/spawn-OOM。
+- **结构债（既存,非本轮）**：native_loop/engine/cli/goal_decomposer 均 >800 硬上限(上游单体,沿模块
+  append 保局部性未拆);go2w_real 516(>400 典型 <800)。
+- **脊柱缓办项**：全绿仍 verified=False(actor 因果 NOT_GRADED)=谓词角色映射设计,待专项。
 
 ## 关键背景
-- go2w=Isaac 数字孪生（HTTP 桥 127.0.0.1:8042）；go2w_real=真机（nav 栈 ROS_DOMAIN_ID=20 CycloneDDS，
-  ~/Z-Navigation-Stack via ~/go2w-nuc/scripts/nav.sh）。同 CLI，sim↔real 对称。verify 唯真值=/state_estimation
-  里程计（无 /gt）；栈健康唯真值=nav.sh status。测仅经 `bash scripts/run-tests`（内存封顶，勿裸 pytest）。
-
-## 交接(2026-07-10 晚,会话中断点)
-编排修复轮 workflow 中断于 Core 阶段(未落盘)。恢复方式(下个会话):
-Workflow resume: scriptPath=~/.claude/projects/-home-yusenzlabnuc/eb4e2656-a625-4d5c-acf4-ca130b4846d0/workflows/scripts/orchestration-round-wf_4615d993-276.js, runId=wf_4615d993-276
-或按规格重派,交付物:①turn技能(角速度5Hz经guard+turned(min_deg)谓词+左转/掉头few-shot)
-②viz/where升格技能(VGG可编排,复合指令不丢步)③bringup status快速路径(odom新鲜<1s,免nav.sh六探针)
-④复合指令few-shot(启动导航+rviz+站起来=完整3步计划)。
-已验收:Ctrl+C安全中断✓ 幂等bringup✓ 词表整洁化✓ 倒车twoWayDrive✓(待物理复测)。
-评分观感问题(全绿仍verified=False,actor因果NOT_GRADED)=脊柱缓办项,连同谓词角色映射设计。
+- go2w=Isaac 数字孪生(HTTP 桥 127.0.0.1:8042);go2w_real=真机(nav 栈 ROS_DOMAIN_ID=20 CycloneDDS,
+  ~/Z-Navigation-Stack via ~/go2w-nuc/scripts/nav.sh)。同 CLI,sim↔real 对称。verify 唯真值=/state_estimation
+  里程计(无 /gt);栈健康唯真值=nav.sh status。测仅经 `bash scripts/run-tests`(内存封顶,勿裸 pytest)。

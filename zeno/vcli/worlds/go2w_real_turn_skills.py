@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
 
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
@@ -38,7 +37,7 @@ _UTURN_WORDS: tuple[str, ...] = ("掉头", "调头", "turn around", "u-turn", "u
 
 _DEFAULT_DEGREES: float = 90.0
 _MAX_DEGREES: float = 360.0
-_YAW_RATE_RPS: float = 0.5  # gentle in-place rate, well inside the 1.0 rad/s guard
+_YAW_RATE_RPS: float = 0.5  # gentle in-place rate, well inside the driver MAX_YAW_RPS guard
 
 
 @skill(aliases=["turn", "左转", "右转", "转身", "掉头", "调头", "原地转",
