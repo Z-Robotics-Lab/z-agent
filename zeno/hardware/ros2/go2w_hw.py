@@ -106,7 +106,10 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # Operator-interrupt seam: set by cancel_navigation() (Ctrl+C handler,
         # stop skill); navigate_to's poll loop exits promptly when set.
         self._nav_abort = __import__("threading").Event()
-        self._moved_origin: tuple[float, float] | None = None
+        # moved() oracle anchor: odometry position sampled by navigate_to()/
+        # walk() at command start (None until the first move is commanded).
+        # The actor can trigger a move but cannot author this value (Inv-1).
+        self.move_anchor_xy: tuple[float, float] | None = None
         # turned() oracle anchor: odometry heading sampled by rotate() at
         # command start (None until the first rotation is commanded). The
         # actor can trigger a rotation but cannot author this value (Inv-1).
@@ -318,6 +321,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             logger.warning("Go2WHardware.navigate_to: not connected")
             return False
 
+        # Anchor AFTER the guards — a refused command must never re-anchor the
+        # moved() oracle. Twin of rotate_anchor_yaw (field trace 2026-07-13):
+        # verify runs AFTER the skill, so a verify-side origin capture samples
+        # the POST-motion pose, grades False, and the model re-runs the walk.
+        px, py, _ = self._position
+        self.move_anchor_xy = (px, py)
         self._publish_waypoint(x, y)
         logger.info("Go2WHardware: /way_point -> (%.2f, %.2f), timeout=%.0fs", x, y, timeout)
 
@@ -411,6 +420,10 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         final zero frame ends the motion cleanly; after that "stop" is just the
         absence of new commands (the deadman does the rest).
         """
+        # walk() is the other displacement command — anchor the moved() oracle
+        # like navigate_to (rotate stays hands-off: in-place turns don't displace).
+        px, py, _ = self._position
+        self.move_anchor_xy = (px, py)
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
             self.set_velocity(vx, vy, vyaw)

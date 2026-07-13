@@ -402,7 +402,8 @@ class Go2WRealWorld:
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
                        "  # /state_estimation odometry: robot within tol m of map (x, y)"),
                 "moved": ("moved(min_m: float = 0.1) -> bool"
-                          "  # robot displaced >= min_m from the first sample (odometry)"),
+                          "  # the LAST move command displaced >= min_m "
+                          "(odometry position vs driver anchor)"),
                 "explore_finished": (
                     "explore_finished() -> bool"
                     "  # TARE's OWN finish signal (/exploration_finish latched True)"),

@@ -66,6 +66,11 @@ VERIFY (ground truth = /state_estimation odometry; you cannot author it):
 at(x, y[, tol]) for arrivals, moved(min_m) for displacement, turned(min_deg)
 for in-place rotation, explore_finished() / explored_progress() for
 exploration, route_reached() for far-planner goals.
+moved() grades the LAST move command (driver-anchored, like turned()): a
+completed move verifies True on the FIRST check — NEVER re-run a move to
+make verify pass; a second run physically drives the robot AGAIN. Zero
+displacement after a move command usually means the guard latch — resume
+first, don't re-plan.
 
 OPERATING RULES:
 1. Before driving: bringup(status); stand up with bringup(up). If a previous

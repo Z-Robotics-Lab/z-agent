@@ -83,28 +83,39 @@ def make_explored_progress(agent: Any) -> Callable[..., float]:
 
 
 def make_moved(agent: Any) -> Callable[..., bool]:
-    """Bind a ``moved(min_m)`` predicate that captures a start pose on first call.
+    """Bind ``moved(min_m=0.1)`` — did the LAST move command actually displace?
 
-    True once the base has displaced >= ``min_m`` from where ``moved`` first
-    sampled the pose — a monotonic "did it actually move" check on odometry.
-    Fail-safe False when no base is wired.
+    Grades the distance between the live odometry position and the DRIVER's
+    ``move_anchor_xy`` — the position the driver itself sampled from odometry
+    when the last ``navigate_to()``/``walk()`` started commanding. The actor
+    can trigger a move but cannot author either side of the compare (Inv-1).
+
+    Anchor semantics are call-order independent — twin of the turned() fix
+    (field trace 2026-07-13): the original first-verify-call origin capture
+    sampled the POST-walk pose (verify runs AFTER the skill) and returned
+    False by construction, so the model re-ran the walk — double physical
+    motion; and because the closure lived for the whole session, later checks
+    graded displacement from a session-old origin, letting a guard-eaten walk
+    fake-pass off earlier motion. Now: True on the FIRST check after a
+    completed move, stable under repeated checks, False when no move was ever
+    commanded or the guard ate the commands. Fail-safe False on any error.
     """
-    origin: dict[str, tuple[float, float]] = {}
 
     def moved(min_m: float = 0.1) -> bool:
         base = getattr(agent, "_base", None) if agent is not None else None
         if base is None:
             return False
         try:
+            anchor = getattr(base, "move_anchor_xy", None)
+            if anchor is None:
+                return False
             pos = base.get_position()
-            here = (float(pos[0]), float(pos[1]))
+            return math.hypot(
+                float(pos[0]) - float(anchor[0]),
+                float(pos[1]) - float(anchor[1]),
+            ) >= float(min_m)
         except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
             return False
-        if "start" not in origin:
-            origin["start"] = here
-            return False
-        sx, sy = origin["start"]
-        return math.hypot(here[0] - sx, here[1] - sy) >= float(min_m)
 
     return moved
 
