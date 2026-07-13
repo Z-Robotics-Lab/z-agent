@@ -12,27 +12,31 @@
 - **sim→real 内核迁移（CEO 特批,已复核 GREEN）**：内核只教/评在集谓词(schema tail + native 白名单 +
   verify_namespace_deny 12 stub + foreach 抑制)；dev+go2w(sim) 逐字节不变,verify 只更严(Inv-1)。
 
-## 本轮 orchestration round（DONE — turn/viz/where/快速状态/复合few-shot）
-新增全部 **world 文件 only**,内核零改(cli/engine/native_loop/cognitive 自 1cfde15 逐字节不变已核):
-- **turn 技能**：direction(left|right)+degrees(默认90,掉头=180)→signed delta→Go2WHardware.rotate
-  (角速度-only /teleop_cmd_vel 5Hz,里程计 wrap-aware 追踪,到点早停,_nav_abort 取消缝,estop 快失败)。
-  verify **turned(min_deg)**(驱动锚 rotate_anchor_yaw vs 活 yaw,|wrap delta|≥min_deg;wrap 封顶180°)。
-  few-shot: 左转90°→turned(54)、掉头→turned(108),单步无 bringup。
-- **viz/where 升格技能**：VizOverlaySession 单一 launcher 表(embodiment._viz==base.viz_manager,tool 与
-  open_viz 技能共享,决不双开 RViz;已开=already_open 幂等)。where 读活位姿,里程计未到则诚实拒绝(0,0,0 非真位姿)。
-- **bringup(status) 快速路径**：odom_fresh(<3s)→<1s 从驱动已知事实答(话题率/odom 龄/estop),陈旧/无 base
-  才回落慢 nav.sh 探针。lifecycle ready-probe 同样 odom 新鲜即真、免烧 settle。
-- **复合指令 few-shot + 规则 1d**：把丢 rviz 子句的旧 2 步例替成完整 3 步链(bringup←open_rviz←stand_up);
-  capabilities 规则 1d = 复合请求每个子句都成一步,决不静默丢步。
+## 前轮 orchestration round（DONE,叙事在 commit 里）
+- turn 技能(rotate+turned(min_deg) 驱动锚)、viz/where 升格技能(VizOverlaySession 幂等)、bringup(status)
+  快速路径(odom_fresh<3s→<1s)、复合指令 3 步 few-shot+规则 1d(决不丢子句)。全 world 文件,内核零改。
+- 复核 68 新测绿,全套 0 新失败;moved() 驱动锚移植(下详)。测试卫生 isolated fixture 上提。
 
-## 复核（integrator, 2026-07-13）
-- 新测 68 绿（9 unit rotate + 21 turn + 13 ops + 10 fast-status + 9 vocab-fewshot + 6 vocab-integrity）。
-- 全套回归 **0 新失败**：tests/vcli 934 passed/33 skipped(15 fail 全既存基线);tests/unit/hardware
-  267 passed(6 fail+63 collect-error 全既存)。interrupt cancel 隔离跑 2 passed(满载下才 timing flake)。
-- 离线 smoke 绿:embodiment 有 turn/open_viz/where;strategies==descriptions 含 3 新;deny 12 不变。
-- 测试卫生(1c3758e):isolated fixture 上提 tests/unit/vcli/conftest.py,deepseek 真 .env 下 15/15 绿(基线 -3)。
-- 未动他 agent 在飞的 DeepSeek v4-pro 改(working tree .env.example/install-launcher.sh/config.py + 已提交
-  2d06aa9 RED,test_config_env_credentials GREEN 系其人所属),不入我 commit(NEVER-KILL-INFRA)。
+## world-layer 快赢（2026-07-13,d5d78a7 RED→78961f2 GREEN,纯 world 文件）
+- **turn 前缀别名 + angle 镜像（快速路径安全）**：加 往左转/向左转/往右转/向右转/原地转/原地左转/
+  原地右转（router 前缀匹配,'往左转动30度'不再整跳 LLM）。engine 快速路径按 NAME 抽 generic 参
+  （认 'angle' 不认 'degrees')→给 RealTurnSkill.parameters 加 'angle' 镜像(_parse_degrees 已读该键),
+  堵住 fast-path '左转45度' 落 degrees-default-90 的 45°→90° 实害。engine READ-ONLY 已核。
+- **诚实倒车提示**：move_relative backward 零位移且未 latch → _stalled_hint 说 local planner 疑拒倒车
+  (已知 nav-stack 待查),给 掉头+前进 workaround（或报操作员),不再 resume-goose-chase。direction/latched
+  加参附加化(Inv-7,旧 2 参 navigate 调用不变)。
+- **后退1米 few-shot**：单步 move_relative{backward,1} verify at(1.0,1.0)（语义正确无关倒车修复落地;
+  技能诚实失败）。examples 4568→~5.1k 字符,仍 <6k 预算,无需删例。
+- 新测 18 绿(quickwins),go2w_real 全套 168 绿+驱动 rotate/anchor 42 绿,0 新失败。
+
+## 路由取证（READ-ONLY,喂下一内核轮 — 坐下 未走 direct 短路之谜）
+- direct=True 别名的短路（立即执行免 LLM 计划）只在 engine._try_skill_goal_tree（VGG **快速路径**,
+  legacy tool_use 分支)里读 SkillMatch.direct。但 2026-06-19 cutover 起 REPL 默认先走 **native**：
+  cli.py:2719 `_repl_native_enabled() and _intent_actionable()`→_repl_attempt_native→engine.run_turn_native。
+- 坐下 是 action-shaped(_intent_actionable=classify_intent().use_vgg=True)→被 native ReAct loop 截获,
+  native_loop.py:1124 `has_unverified_action` 门要求 finish 前先 verify → 转圈 'verify required before finish'。
+  direct 短路根本没跑（它在被 strangler 淘汰的 legacy 路径上）。**内核轮修点**：native 侧需识别 direct 姿态
+  技能(liedown/standup)→放行 finish 免强制 verify,或给它们一个内建 posture verify。世界侧无法修（禁触内核）。
 
 ## moved() 驱动锚移植（2026-07-13 下午,c7ebba7 RED→73ebe58 GREEN）
 - turned() 双转竞态(316772c/25ba40a)在 moved() 尚存且在册(few-shot 往前走3米 verify=moved(2.0)):首调
@@ -44,7 +48,9 @@
 1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,等 owner+E-stop 在手）**:「左转90度」→ verify
    turned(54) GROUNDED;「启动导航,打开rviz,站起来」→3 步全执行不丢子句;bringup(status) 实测 <1s;
    物理倒车 twoWayDrive 复测;掉头 180° wrap 越 ±pi 判定正确;「往前走3米」→moved(2.0) 首查 True 不重走。
-2. camera 若要一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务,走接缝。
+2. **内核轮（喂:上「路由取证」）**：native 侧放行 direct 姿态技能(坐下/liedown)免强制 verify,或给内建
+   posture verify;并让 native 快速路径按 'angle' 抽参(世界已加镜像,但 native 抽参器仍在内核)。
+3. camera 若要一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务,走接缝。
 
 ## Failed / 教训
 - **真机 E2E 未验收**：本轮全纯单测(rclpy/subprocess mock),Inv-2 未闭环。
