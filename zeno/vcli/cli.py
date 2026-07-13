@@ -54,6 +54,7 @@ from zeno.vcli.session import (
 )
 from zeno.vcli.permissions import PermissionContext
 from zeno.vcli.prompt import build_system_prompt
+from zeno.vcli.turn_render import render_verdict_card
 from zeno.vcli.turn_status import TurnStatus
 from zeno.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
 
@@ -645,6 +646,16 @@ def _repl_attempt_native(
             f"[{color}]verified={report.verified}[/] "
             f"[dim]({report.n_grounded}/{report.n_steps} grounded)[/]"
         )
+        # P1.3 verdict card (docs/CLI_UX_REDESIGN.md): unfold per-step evidence
+        # + a human explanation for every non-GROUNDED step, APPENDED after the
+        # pinned verdict line (acceptance tools sync on its `grounded)` tail —
+        # never interleave). Display-only, best-effort: a card failure must
+        # never break the turn or mute the verdict line already printed.
+        try:
+            for _card_line in render_verdict_card(report, trace):
+                console.print(_card_line)
+        except Exception:  # noqa: BLE001 — display only
+            pass
     except Exception as exc:  # noqa: BLE001 — fail closed (display only)
         console.print(f"  [yellow]verdict unavailable:[/] {exc}")
 
