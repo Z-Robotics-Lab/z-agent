@@ -16,7 +16,7 @@
 新增全部 **world 文件 only**,内核零改(cli/engine/native_loop/cognitive 自 1cfde15 逐字节不变已核):
 - **turn 技能**：direction(left|right)+degrees(默认90,掉头=180)→signed delta→Go2WHardware.rotate
   (角速度-only /teleop_cmd_vel 5Hz,里程计 wrap-aware 追踪,到点早停,_nav_abort 取消缝,estop 快失败)。
-  verify **turned(min_deg)**(里程计 yaw,首调捕原点返 False,|wrap delta|≥min_deg;wrap 封顶180°)。
+  verify **turned(min_deg)**(驱动锚 rotate_anchor_yaw vs 活 yaw,|wrap delta|≥min_deg;wrap 封顶180°)。
   few-shot: 左转90°→turned(54)、掉头→turned(108),单步无 bringup。
 - **viz/where 升格技能**：VizOverlaySession 单一 launcher 表(embodiment._viz==base.viz_manager,tool 与
   open_viz 技能共享,决不双开 RViz;已开=already_open 幂等)。where 读活位姿,里程计未到则诚实拒绝(0,0,0 非真位姿)。
@@ -29,19 +29,21 @@
 - 新测 68 绿（9 unit rotate + 21 turn + 13 ops + 10 fast-status + 9 vocab-fewshot + 6 vocab-integrity）。
 - 全套回归 **0 新失败**：tests/vcli 934 passed/33 skipped(15 fail 全既存基线);tests/unit/hardware
   267 passed(6 fail+63 collect-error 全既存)。interrupt cancel 隔离跑 2 passed(满载下才 timing flake)。
-- 离线 smoke 绿：resolve_world→build_embodiment 有 turn/open_viz/where + _viz is base.viz_manager;
-  decompose strategies==descriptions keys 含 3 新;verify ns 服务 turned;deny 12 不变;
-  RealTurnSkill fake base 旋转+driver _nav_abort 取消缝解阻+estop 快失败,全绿。
-- 内联清理(已提交):turn_skills 去未用 `Any` 导入 + 修正 yaw-rate guard 注释(1.0→驱动 MAX_YAW_RPS)。
-- 测试卫生(1c3758e):`isolated` fixture 上提至 tests/unit/vcli/conftest.py,deepseek provider 测试
-  接入 → 真 .env 在场 15/15 绿(此前宿主 DEEPSEEK_API_KEY 泄入致 3 失败,既存基线相应 -3)。
+- 离线 smoke 绿:embodiment 有 turn/open_viz/where;strategies==descriptions 含 3 新;deny 12 不变。
+- 测试卫生(1c3758e):isolated fixture 上提 tests/unit/vcli/conftest.py,deepseek 真 .env 下 15/15 绿(基线 -3)。
 - 未动他 agent 在飞的 DeepSeek v4-pro 改(working tree .env.example/install-launcher.sh/config.py + 已提交
   2d06aa9 RED,test_config_env_credentials GREEN 系其人所属),不入我 commit(NEVER-KILL-INFRA)。
+
+## moved() 驱动锚移植（2026-07-13 下午,c7ebba7 RED→73ebe58 GREEN）
+- turned() 双转竞态(316772c/25ba40a)在 moved() 尚存且在册(few-shot 往前走3米 verify=moved(2.0)):首调
+  捕原点必返 False→模型重走;命名空间会话级只建一次,旧原点还能让 guard 吃掉的走假过(_moved_origin 系死桩)。
+- 修法:navigate_to/walk 命令起点采 move_anchor_xy(guard 后,refusal 不重锚;rotate 不碰),make_moved 只比
+  活位姿 vs 驱动锚(无每调状态);vocab 签名+能力卡教 NEVER re-run a move。36 测绿,回归 0 新失败(基线不变)。
 
 ## Next
 1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,等 owner+E-stop 在手）**:「左转90度」→ verify
    turned(54) GROUNDED;「启动导航,打开rviz,站起来」→3 步全执行不丢子句;bringup(status) 实测 <1s;
-   物理倒车 twoWayDrive 复测;掉头 180° 里程计 wrap 越 ±pi 判定正确。
+   物理倒车 twoWayDrive 复测;掉头 180° wrap 越 ±pi 判定正确;「往前走3米」→moved(2.0) 首查 True 不重走。
 2. camera 若要一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务,走接缝。
 
 ## Failed / 教训
