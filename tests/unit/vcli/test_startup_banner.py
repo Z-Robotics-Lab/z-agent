@@ -58,3 +58,19 @@ def test_print_banner_uses_wordmark_and_keeps_session_metadata(
     assert "v0.1.0" in output
     assert "Model: deepseek-v4-pro | Provider: DeepSeek" in output
     assert "Type / for commands, quit to exit" in output
+
+
+def test_narrow_banner_wraps_metadata_at_fields_and_keeps_indent(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cli.shutil,
+        "get_terminal_size",
+        lambda: os.terminal_size((40, 24)),
+    )
+
+    with cli.console.capture() as captured:
+        cli.print_banner("claude-haiku-4-5", "Anthropic")
+
+    lines = [line.rstrip() for line in captured.get().splitlines()]
+    assert "  Model: claude-haiku-4-5" in lines
+    assert "  Provider: Anthropic" in lines
+    assert "Anthropic" not in lines

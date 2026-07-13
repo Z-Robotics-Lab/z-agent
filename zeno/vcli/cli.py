@@ -43,7 +43,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 
 from zeno.vcli.backends import create_backend
-from zeno.vcli.banner import centered_logo_lines
+from zeno.vcli.banner import centered_logo_lines, metadata_lines_for_width
 from zeno.vcli.composer import ZenoComposer, render_submission
 from zeno.vcli.env import read_env
 from zeno.vcli import paths
@@ -913,8 +913,12 @@ def print_banner(
             info_parts.append(f"Arm: {getattr(arm, 'name', type(arm).__name__)}")
         if base is not None:
             info_parts.append(f"Base: {getattr(base, 'name', type(base).__name__)}")
-    console.print(f"[dim]  {' | '.join(info_parts)}[/]")
-    console.print(f"[dim]  Type / for commands, quit to exit[/]")
+    for line in metadata_lines_for_width(info_parts, term_w):
+        console.print(Text("  " + line, style="dim"), overflow="crop", no_wrap=True)
+    for line in metadata_lines_for_width(
+        ["Type / for commands, quit to exit"], term_w
+    ):
+        console.print(Text("  " + line, style="dim"), overflow="crop", no_wrap=True)
     console.print()
 
 

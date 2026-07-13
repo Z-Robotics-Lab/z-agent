@@ -13,6 +13,8 @@ verification code.
 """
 from __future__ import annotations
 
+from rich.cells import cell_len
+
 
 WIDE_ZENO_LOGO: tuple[str, ...] = (
     "ZZZZZZZZ  EEEEEEEE  NN     NN   OOOOOO",
@@ -60,3 +62,35 @@ def centered_logo_lines(terminal_width: int) -> tuple[str, ...]:
     canvas_width = min(width, _MAX_BRAND_CANVAS)
     indent = max(0, (canvas_width - _logo_width(logo)) // 2)
     return tuple((" " * indent) + line for line in logo)
+
+
+def metadata_lines_for_width(
+    parts: list[str], terminal_width: int
+) -> tuple[str, ...]:
+    """Pack complete metadata fields; never wrap halfway through a label."""
+    available = max(1, int(terminal_width) - 4)
+    lines: list[str] = []
+    current = ""
+    for part in parts:
+        if cell_len(part) > available:
+            if current:
+                lines.append(current)
+                current = ""
+            chunk = ""
+            for char in part:
+                if chunk and cell_len(chunk + char) > available:
+                    lines.append(chunk)
+                    chunk = ""
+                chunk += char
+            if chunk:
+                lines.append(chunk)
+            continue
+        candidate = part if not current else f"{current} | {part}"
+        if current and cell_len(candidate) > available:
+            lines.append(current)
+            current = part
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return tuple(lines)
