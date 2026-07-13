@@ -1,61 +1,53 @@
 # Zeno — progress
 
-更新：2026-07-13（深夜）。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
+更新：2026-07-13（傍晚）。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
-- **CLI UX P1/P2（ui/cli-experience 并入,owner 试用批准）**:CoT 三档(/cot //why)/ChainView 活执行树/
-  verdict 卡片+人话解释/诚实计时(0.0s 绝迹)//trace //route/三路径统一页脚;markup 注入防线(16 审查
-  findings 修毕);哨兵/验收同步串原样;vcli 全量 0 新失败。
-- **P5.4 真机世界 go2w_real**：Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
+- **CLI UX P1/P2（ui/cli-experience 并入,owner 试用批准)**:CoT 三档(/cot //why)/ChainView 活执行树/
+  verdict 卡片+人话解释/诚实计时//trace //route/统一页脚;markup 注入防线;vcli 全量 0 新失败。
+- **P5.4 真机世界 go2w_real**:Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
   Trigger standup/liedown/estop/resume/manual/nav_cancel)。世界同 CLI/工具/技能/verify 接缝。
-- **v2 探索/route/camera**：ExploreManager/RouteManager/Camera(BEST_EFFORT,坏帧丢弃)。
-- **sim→real 内核迁移 + world-layer 快赢 + moved() 驱动锚**：git log(d5d78a7→73ebe58),全绿 0 新失败。
-- **verdict 谓词角色映射（CEO 批）** + **TYPED INTERJECT + /permissions 持久化**(0f361e9→0313891 签核)。
-- **COURSE 航向意图追踪**(9035f96→2c475aa,签核 da1da47):CourseTracker 骑 base.course_tracker;turn 补偿
-  wrap(course−actual),45° 上限重锚定;move 沿 course;自由导航/estop/interrupt 重置;course_locked() oracle。
-- **全局位姿意识·钩子**(c7216a3→1499720):engine 世界可声明 world_context_ttl()(go2w_real=0.0,缺省 5.0s
-  逐字节不变);native_loop 每次 backend.call 前重建 live_status_line 单块(pose 度+弧度|course drift|
-  odom age;无里程计→诚实 '(no odometry)')。12 新测全绿。
+- **v2 探索/route/camera** + **sim→real 内核迁移+快赢+moved() 驱动锚** + **verdict 谓词角色映射** +
+  **TYPED INTERJECT + /permissions 持久化** + **全局位姿意识钩子**(world_context_ttl=0;live_status 单块)。
+- **PLACES 空间会话记忆**(4aa0bf3→20783ba):PoseLedger 起点/面包屑(20)/命名地点,mark_place/goto_place,
+  where 增强;坐标只来自里程计,重启导航栈后地点失效如实报。51/51 绿。
+- **COURSE→INTENT POSE**(本轮重设计,见下)。course_locked() oracle 不变。
 
-## 本轮：空间会话记忆 PLACES — 起点/面包屑/命名地点（CEO 指令 2026-07-13 夜,4aa0bf3 RED→20783ba GREEN）
-- **现场 bug**:操作员说'回到刚才的位置',模型无可解析对象,从对话文本臆造坐标开走。
-- **go2w_real_places.py(新,399 行)**:PoseLedger=确定性会话记忆(Inv-1:模型可触发 mark/goto,坐标只来自
-  里程计;odom_age_s()=None 拒写,绝无 (0,0,0) 假地点)。三事实:①ORIGIN 起点=首个新鲜里程计位姿一次性
-  捕获;②面包屑 deque(N=20,(monotonic_t,x,y,yaw)),每个运动命令开始时压入(navigate/move_relative/turn/
-  route_via/goto,latch 吞掉则不记);③命名地点 mark(name,pose),未命名自动 地点N。骑 base.pose_ledger +
-  services['places'](同 explore/route/viz/course 接缝;无台账的外来 base 行为逐字节不变)。
-- **mark_place 技能**(记住这里/标记这里[叫X]):存当前里程计位姿;params x/y 忽略;无里程计诚实拒绝。
-- **goto_place 技能**(回到起点/回到刚才的位置/回去/回到X):解析 起点→origin、刚才/缺省→距当前≥0.3m 的
-  最新面包屑(近处重复跳过)、否则命名地点(参数或话语内含名);estop 快拒;先 reset course(自由导航);
-  压离开面包屑(goto 后还能'回去');base.navigate_to 驱动;verify_hint=at(解析目标,tol=1.0);
-  未知地点拒绝并列出已知——绝不臆造坐标。
-- **where 增强**:距起点距离+方位角、course+drift(锚定时)、已标记地点名;无里程计拒绝不变。
-- **vocab+card**:策略 mark_place_skill/goto_place_skill;few-shot '回到起点'→单步 goto_place、
-  '记住这里叫充电桩'→mark_place{name:充电桩};预算 5875/6000(裁 往前走2米+站起来,数学/单步教义他例已载)。
-  能力卡 全局意识 节+诚实上限:地点活在当前 SLAM 图帧,**重启导航栈后地点失效**(持久化=重定位路线图项)。
-- **测试**:test_world_go2w_real_places.py 51/51;全部 go2w_real 套件 269P;tests/vcli 全量
-  15F/1064P/33skip/1xfail——15F 恰为基线集(基线 worktree da1da47 复现同 15F)。0 新失败。
-- **集成签核**(本轮):内核仅两钩子 + 消费(缺钩子世界逐字节不变,已证);未动 cli/display/UI;
-  三套件对基线 0 新失败(vcli 15F、hardware 6F+63err 均既存,interrupt 隔离 1P);离线 smoke 全绿。
-
-## 路由取证（READ-ONLY,喂下一内核轮 — 坐下 未走 direct 短路）
-- direct=True 短路只在 legacy 快速路径;native ReAct 截获 action-shaped 意图,has_unverified_action
-  门强制 verify → 姿态技能转圈。修点:native 放行 direct 姿态技能或内建 posture verify;'angle' 抽参。
+## 本轮:INTENT POSE 重设计 — 现场事故 2026-07-13 15:32(ca5bc3e RED→272659e GREEN)
+- **现场事故(真机)**:'前进3米,左转90,前进1米,右转90,前进3米'。腿1 短停 0.5m 于 (2.54,-0.02) 且
+  朝向 -179.5°(twoWayDrive pathFollower 追点途中倒车翻转,导航栈侧并行修)。我方 >45° course 重锚定
+  吞下了这个野 yaw,腿2 '前进3米' 倒着开 3m 到 (-0.36,-0.09)——自家补偿上限反转了操作员的计划。
+  操作员判词:'避障会影响机器人对自己全局位置的判断,多个小任务组合执行不行'。
+- **重设计(go2w_real_course.py)**:CourseTracker=完整计划坐标系(航向意图+**位置意图**)。
+  ①move=位置追逐:目标=意图位置+d·course 方向;下发后意图前进**全额 d**(不管实际停哪)——短停/避障
+  位移在下一腿自愈,不累积(操作员'全局意识'之位置半);②航向意图**绝不**被野 yaw 重锚定(resolve()
+  只举旗,45°=大声上报阈值,REANCHOR_LIMIT_DEG 语义改);③turn 转向**绝对目标** wrap(course+delta),
+  下发角按构造 ≤180°,>45° 偏差上报 '注意:检测到大幅航向偏离X°,已按计划航向补偿';④位置唯一可
+  重锚定:腿起点偏离计划轨迹 >1.5m(POSITION_REANCHOR_M,大绕行/人工接管=计划系过期)→锚到实际并
+  如实说;⑤manual 接管+resume(技能与工具双路径)重置意图;原 estop/stop/interrupt/自由导航照旧。
+- **金测试**:test_world_go2w_real_intent_pose.py 逐字回放现场 oplog——腿2 目标 ≈(6.07,0.00) 且
+  course 仍 +0.6°,绝不倒车;短停自愈跨两腿;>1.5m 诚实重锚定;>45° 大声上报;manual/resume 重置。
+  course 套件语义变更处成心改(重锚定测试→保意图测试)。能力卡+vocab:位置+航向意图,move 瞄准计划轨迹。
+- **oplog 卫生(同轮)**:真机日志 15:00-15:24 混入假测试事件(open_viz pid4242/teleport/mark'A'假坐标)。
+  重定向改为 tests/vcli/conftest.py autouse fixture(全 vcli 测试写 tmp_path),删 6 处逐文件重复,
+  test_oplog_hygiene.py 钉死默认路径测试期绝非 ~/go2w-nuc。
+- **测试**:go2w_real 全套 310P + hardware 驱动套件 119P;0 新失败。并行会话 ui/cli-experience 合并
+  期间等待其完结后才提交(NEVER-KILL-INFRA,无冲突:世界文件 vs vcli 核心)。
 
 ## Next
-1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,owner+E-stop 在手）**:方形路径闭环+航向补偿消息;
-   places 现场:走几步→'记住这里叫充电桩'→绕开→'回到充电桩'/'回到刚才的位置'/'回到起点';
-   重启导航栈后确认技能如实报地点失效。插队+permissions;verdict N/N 一并做。
-2. **内核轮（喂:路由取证）**:native direct 姿态技能放行/内建 posture verify;'angle' 抽参。
-3. camera 一等 look_skill STRATEGY:注册 look 技能+_build_context 加 vlm 服务。
+1. **真机 E2E 验收(Inv-2)**:重放 15:32 五步计划——短停+yaw 翻转下腿2 必须继续向前;>1.5m 绕行看
+   诚实重锚定消息;places 现场;重启导航栈后地点失效话术。owner+E-stop 在手。
+2. 导航栈侧 twoWayDrive 倒车翻转修复对齐后,复核 0.5m 短停(arrival radius)是否可收紧。
+3. 内核轮(路由取证):native direct 姿态技能放行/内建 posture verify;'angle' 抽参。
+4. camera 一等 look_skill STRATEGY。
 
 ## Failed / 教训
-- **真机 E2E 未验收**:course/插队/位姿钩子/places 全 hermetic 单测,Inv-2 待硬件闭环(0.3m 召回距离、
-  地点解析话术是否合身只能现场标定)。
-- **既存失败（勿追,全环境性）**:playground/perception/courtyard/native-PTY(1)/level66(vcli 15) +
+- **教训(本轮)**:'重锚定到实际'类安全上限必须区分**航向**与**位置**——航向重锚定会把执行器故障
+  (倒车翻转)洗成'操作员意图',把 forward 变 backward;位置重锚定才是对的过期计划系处理。
+- **真机 E2E 未验收**:intent-pose/places 全 hermetic 单测,Inv-2 待硬件闭环。
+- **既存失败(勿追,全环境性)**:playground/perception/courtyard/native-PTY(1)/level66(vcli 15) +
   mujoco/cv2/mcp collect-error/spawn-OOM + acceptance_env/vision_judge/d1_reexec(unit 5)。
-- **结构债（既存）**:native_loop/engine/cli/goal_decomposer >800 硬上限(上游单体);go2w_real 620。
-- **缓办残留（诚实记录）**:跨步因果归因未分级,与 shadow-MjData re-step 同一 deferral,docstring 已明示。
+- **结构债(既存)**:native_loop/engine/cli/goal_decomposer >800 硬上限(上游单体)。
 
 ## 关键背景
 - go2w=Isaac 数字孪生(HTTP 桥 127.0.0.1:8042);go2w_real=真机(nav 栈 ROS_DOMAIN_ID=20 CycloneDDS,
