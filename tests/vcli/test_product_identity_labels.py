@@ -5,7 +5,7 @@
 
 Covers the high-frequency REPL surfaces the audit flagged:
 - V_LABEL: the brand glyph reused as the title of every response Panel.
-- The bottom toolbar's leading brand token (rendered every keystroke).
+- The framed composer's title (rendered every keystroke).
 - The /export markdown assistant-line prefix.
 - The /agent slash-command description shown in /help and the completer.
 
@@ -14,7 +14,6 @@ _handle_slash_command with a capturing console.
 """
 from __future__ import annotations
 
-import inspect
 from typing import Any
 
 import zeno.vcli.cli as cli
@@ -82,12 +81,11 @@ def test_login_help_names_zeno_not_v() -> None:
     assert "gives V its own" not in text, text
 
 
-def test_bottom_toolbar_brand_token_is_zeno() -> None:
-    """The bottom toolbar's leading brand token must be Zeno, not the legacy 'V'.
+def test_composer_title_brand_token_is_zeno() -> None:
+    """The every-keystroke input surface must carry the Zeno product identity."""
+    from prompt_toolkit.formatted_text import fragment_list_to_text, to_formatted_text
+    from zeno.vcli.composer import COMPOSER_TITLE
 
-    The toolbar builder is a closure inside the REPL; assert on its source so the
-    every-keystroke brand token can never regress to '<b>V</b>'.
-    """
-    src = inspect.getsource(cli.main)  # _get_toolbar is a closure inside main()
-    assert '"<b>V</b>"' not in src and "'<b>V</b>'" not in src, "toolbar still shows <b>V</b>"
-    assert "<b>Zeno</b>" in src, "toolbar brand token should be <b>Zeno</b>"
+    title = fragment_list_to_text(to_formatted_text(COMPOSER_TITLE))
+    assert title == "Zeno"
+    assert title != "V"
