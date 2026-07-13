@@ -38,6 +38,8 @@
   门强制 verify → 姿态技能转圈。修点:native 放行 direct 姿态技能或内建 posture verify;native 抽参器认 'angle'。
 
 ## Next
+0. **ui/cli-experience 分支（UI-only）**：CLI UX 重设计提案已落 docs/CLI_UX_REDESIGN.md
+   （CoT/执行链/verdict 卡片/诚实计时）；实现中,worktree 隔离,基线 ddf2208。
 1. **真机 E2E 验收（Inv-2:裸 zeno REPL+眼看硬件,owner+E-stop 在手）**:走路中打字插队→nav 取消+
    新指令接管;`⏸ 插队` 回显;permission prompt 不被偷字节;/permissions auto 重启仍 auto+警告;
    上轮 verdict N/N grounded 现场验证一并做。
