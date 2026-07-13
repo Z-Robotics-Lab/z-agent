@@ -12,7 +12,7 @@ Content contract (render_lines is a PURE projection of consumed events):
 - the header keeps the PTY-pinned words "native" + "working" (the transient
   frames land in the raw transcript that tests/vcli/test_repl_native_cutover_pty.py
   scans);
-- tool nodes render as chain entries with running/ok/fail states; a verify
+- tool nodes render as quiet ◇ Tool entries with running/ok/fail states; a verify
   attaches to its chain node with ✓/✗;
 - reasoning chunks render as a dim ┆ tail (bounded) and accumulate in full
   for the /why command (display buffer only — never the session);
@@ -110,6 +110,23 @@ def test_tool_and_verify_nodes_render_chain() -> None:
     text = _text(view)
     assert "turned(18)" in text
     assert "✓" in text
+
+
+def test_tool_nodes_use_the_quiet_activity_layer() -> None:
+    from rich.text import Text
+
+    view, _ = _make()
+    view.handle_event(
+        NativeEvent(kind="tool_start", label="turn", detail="(direction=left)")
+    )
+    running = _text(view)
+    running_plain = Text.from_markup(running).plain
+    assert "◇" in running_plain and "Tool · turn" in running_plain
+
+    view.handle_event(NativeEvent(kind="tool_end", label="turn", ok=True))
+    finished = _text(view)
+    assert "◇" in finished and "✓" in finished
+    assert "[dim #738091]Tool[/]" in finished
 
 
 def test_failed_verify_renders_cross() -> None:

@@ -258,7 +258,8 @@ class ChainView:
 
     Consumes ``NativeEvent``s (zeno.vcli.turn_events) and renders a live tree:
     header (keeps the PTY-pinned words "native working") → dim ┆ reasoning
-    tail → chain nodes (● tool / └─ verify ✓|✗) → ⟲ nudges → narration tail.
+    tail → chain nodes (◇ Tool · call ✓|× / └─ verify ✓|✗) → ⟲ nudges
+    → narration tail.
 
     Lifecycle discipline is TurnStatus's (one region per turn, idempotent
     start/stop, ``paused()`` around foreign prints — see turn_status.py for
@@ -420,14 +421,17 @@ class ChainView:
                 detail = _escape_markup(node.get("detail", ""))
                 ok = node.get("ok")
                 if ok is None:
-                    mark = f"[{_TEAL}]●[/]"
+                    state = "[dim]…[/]"
                 elif ok:
-                    mark = "[green]●[/]"
+                    state = "[green]✓[/]"
                 else:
-                    mark = "[red]●[/]"
+                    state = "[red]×[/]"
                 err = node.get("err") or ""
                 err_part = f"  [red]{_escape_markup(err)}[/]" if err else ""
-                lines.append(f"  {mark} {label}{detail}{err_part}")
+                lines.append(
+                    f"  [bold {_TEAL}]◇[/] [dim #738091]Tool[/] "
+                    f"[#46515e]·[/] {label}{detail}  {state}{err_part}"
+                )
             else:  # verify
                 ok = node.get("ok")
                 if ok is None:

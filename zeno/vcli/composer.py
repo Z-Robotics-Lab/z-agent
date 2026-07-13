@@ -56,7 +56,6 @@ COMPOSER_PROMPT: AnyFormattedText = FormattedText(
     ]
 )
 _PROMPT_DISPLAY_WIDTH = get_cwidth(" " + COMPOSER_PROMPT_TEXT)
-_FOOTER_HINT = "? 快捷键"
 _FOOTER_PADDING = "  "
 _FOOTER_MAX_LINES = 3
 
@@ -157,7 +156,7 @@ class ZenoComposer:
     ``input``/``output`` are injectable prompt_toolkit endpoints so every key
     contract can be tested without a real TTY.  ``toolbar`` is a dynamic,
     display-only formatted-text callback (model/world/live-status in cli.py).
-    A broken callback is swallowed and only the compact shortcut hint remains.
+    A broken callback is swallowed and leaves the display-only footer empty.
     """
 
     def __init__(
@@ -269,7 +268,7 @@ class ZenoComposer:
 
     def _footer_lines(self, width: int) -> list[str]:
         available = max(1, int(width) - get_cwidth(_FOOTER_PADDING))
-        parts = [_FOOTER_HINT, *self._status_parts()]
+        parts = self._status_parts()
         lines: list[str] = []
         current = ""
 
@@ -300,21 +299,17 @@ class ZenoComposer:
 
         if current and len(lines) < _FOOTER_MAX_LINES:
             lines.append(current)
-        return lines or [_FOOTER_HINT]
+        return lines
 
     def footer_fragments(self, width: int | None = None) -> list[tuple[str, str]]:
-        """Render compact help + responsive, priority-ordered live status."""
+        """Render responsive, priority-ordered live status without fake controls."""
         lines = self._footer_lines(width or self._terminal_width())
         fragments: list[tuple[str, str]] = []
         for index, line in enumerate(lines):
             if index:
                 fragments.append(("", "\n"))
             fragments.append(("class:composer.footer.indent", _FOOTER_PADDING))
-            if line.startswith(_FOOTER_HINT):
-                fragments.append(("class:composer.footer.key", "?"))
-                fragments.append(("class:composer.footer.hint", line[len("?"):]))
-            else:
-                fragments.append(("class:composer.footer.status", line))
+            fragments.append(("class:composer.footer.status", line))
         return fragments
 
     def _build_key_bindings(self) -> KeyBindings:

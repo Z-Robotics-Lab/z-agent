@@ -14,7 +14,7 @@ verification code.
 """
 from __future__ import annotations
 
-from rich.cells import cell_len
+from rich.cells import cell_len, chop_cells
 from rich.text import Text
 
 
@@ -84,6 +84,48 @@ def centered_logo_lines(terminal_width: int) -> tuple[str, ...]:
     canvas_width = min(width, _MAX_BRAND_CANVAS)
     indent = max(0, (canvas_width - _logo_width(logo)) // 2)
     return tuple((" " * indent) + line for line in logo)
+
+
+def _shared_left_indent(lines: tuple[str, ...]) -> int:
+    """Return layout indentation shared by every non-blank logo row."""
+    indents = [len(line) - len(line.lstrip(" ")) for line in lines if line.strip()]
+    return min(indents, default=0)
+
+
+def logo_reveal_width(lines: tuple[str, ...]) -> int:
+    """Cell width swept by the reveal, excluding the centering indentation."""
+    origin = _shared_left_indent(lines)
+    return max((cell_len(line[origin:]) for line in lines), default=0)
+
+
+def reveal_logo_lines(
+    lines: tuple[str, ...], visible_cells: int
+) -> tuple[str, ...]:
+    """Reveal a fixed-geometry logo frame from left to right.
+
+    Hidden cells are replaced with spaces instead of removed. The six-row live
+    region therefore never changes size and metadata below it cannot jump while
+    the wordmark emerges.
+    """
+    if not lines:
+        return ()
+    origin = _shared_left_indent(lines)
+    visible = max(0, int(visible_cells))
+    if visible >= logo_reveal_width(lines):
+        return lines
+
+    frame: list[str] = []
+    for line in lines:
+        prefix = line[:origin]
+        body = line[origin:]
+        if visible <= 0 or not body:
+            shown = ""
+        else:
+            chunks = chop_cells(body, visible)
+            shown = chunks[0] if chunks else ""
+        hidden_width = max(0, cell_len(body) - cell_len(shown))
+        frame.append(prefix + shown + (" " * hidden_width))
+    return tuple(frame)
 
 
 def styled_logo_line(line: str, row: int) -> Text:

@@ -34,6 +34,6 @@ def test_bare_repl_logo_compact_rail_multiline_help_and_lf_submit() -> None:
     assert "███████╗ ███████╗ ███╗" in text
     assert all(glyph not in text for glyph in ("┌", "┐", "└", "┘"))
     assert "zeno>" in text  # stable acceptance marker beside the open input rail
-    assert "? 快捷键" in text
+    assert "? 快捷键" not in text  # no fake/non-interactive help control
     assert "› /help" in text  # submitted rail collapsed to compact transcript
     assert "Shortcuts:" in text and "insert newline" in text

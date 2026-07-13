@@ -26,6 +26,7 @@ from typing import Any, Callable
 
 import re
 
+from rich.cells import cell_len, chop_cells
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
@@ -45,7 +46,9 @@ from prompt_toolkit.styles import Style as PTStyle
 from zeno.vcli.backends import create_backend
 from zeno.vcli.banner import (
     centered_logo_lines,
+    logo_reveal_width,
     metadata_lines_for_width,
+    reveal_logo_lines,
     styled_logo_line,
 )
 from zeno.vcli.composer import ZenoComposer, render_submission
@@ -229,8 +232,6 @@ PT_STYLE = PTStyle.from_dict({
     "composer.input.indent": "#718096",
     "composer.rail": "#36545a",
     "composer.footer": "#667085",
-    "composer.footer.key": "bold #00b4b4",
-    "composer.footer.hint": "#667085",
     "composer.footer.status": "#718096",
     "composer.footer.indent": "",
     "search-toolbar": "#7b8b9a",
@@ -327,6 +328,40 @@ def _normalize_reasoning(text: str) -> str:
     return " ".join(str(text or "").split())
 
 
+def _bounded_text_lines(text: str, *, width: int, max_lines: int) -> tuple[str, ...]:
+    """Cell-safe word wrapping with an honest ellipsis at the preview boundary."""
+    remaining = _normalize_reasoning(text)
+    limit = max(1, int(width))
+    line_limit = max(1, int(max_lines))
+    lines: list[str] = []
+
+    while remaining and len(lines) < line_limit:
+        if cell_len(remaining) <= limit:
+            lines.append(remaining)
+            remaining = ""
+            break
+        chunks = chop_cells(remaining, limit)
+        cell_prefix = chunks[0] if chunks else remaining
+        # Prefer a word boundary, but keep long CJK/identifier runs moving.
+        boundary = cell_prefix.rfind(" ")
+        if boundary > 0:
+            line = cell_prefix[:boundary]
+            consumed = boundary + 1
+        else:
+            line = cell_prefix
+            consumed = len(cell_prefix)
+        lines.append(line.rstrip())
+        remaining = remaining[consumed:].lstrip()
+
+    if remaining and lines:
+        ellipsis_width = cell_len("…")
+        allowed = max(1, limit - ellipsis_width)
+        chunks = chop_cells(lines[-1], allowed)
+        prefix = (chunks[0] if chunks else lines[-1]).rstrip()
+        lines[-1] = prefix + "…"
+    return tuple(lines)
+
+
 def render_reasoning(
     text: str,
     *,
@@ -350,6 +385,71 @@ def render_reasoning(
         Text(_normalize_reasoning(text), style="dim italic", overflow="fold"),
     )
     return grid
+
+
+def render_reasoning_preview(
+    text: str,
+    *,
+    width: int = 80,
+    max_lines: int = 2,
+) -> Table:
+    """Render a stable collapsed CoT preview; ``/why`` is its real expansion."""
+    grid = Table.grid(padding=(0, 1), pad_edge=False)
+    render_width = max(8, int(width))
+    grid.width = render_width
+    grid.add_column(width=1, no_wrap=True)
+    grid.add_column(ratio=1, overflow="ellipsis", no_wrap=True)
+
+    header = Text("Thinking · preview", style="dim #738091")
+    header.append(" · ", style="#46515e")
+    header.append("/why 展开", style=f"bold {DIM_TEAL}")
+    grid.add_row(Text("◌", style=f"bold {DIM_TEAL}"), header)
+
+    content_width = max(1, render_width - 3)
+    lines = _bounded_text_lines(text, width=content_width, max_lines=max_lines)
+    for line in lines:
+        grid.add_row(
+            Text("┆", style="#3d555a"),
+            Text(line, style="italic #56606d", overflow="ellipsis", no_wrap=True),
+        )
+    return grid
+
+
+def reasoning_transcript_block(
+    text: str,
+    *,
+    mode: str,
+    width: int,
+) -> Table | None:
+    """Project reasoning into scrollback according to the display-only mode."""
+    if not str(text or "").strip() or mode == "off":
+        return None
+    if mode == "full":
+        return render_reasoning(text, width=width, title="Thinking · full")
+    return render_reasoning_preview(text, width=width)
+
+
+def render_tool_activity(
+    display_markup: str,
+    *,
+    is_error: bool,
+    elapsed: float,
+) -> Text:
+    """Render tool execution as a quieter layer than answer prose and verdicts."""
+    line = Text("  ")
+    line.append("◇", style=f"bold {DIM_TEAL}")
+    line.append(" Tool", style="dim #738091")
+    line.append(" · ", style="#46515e")
+    try:
+        line.append_text(Text.from_markup(display_markup))
+    except Exception:  # noqa: BLE001 — tool arguments are untrusted display text
+        line.append(str(display_markup), style="dim")
+    if is_error:
+        line.append("  ×", style="bold red")
+    else:
+        line.append("  ✓", style="bold green")
+    line.append(f" {max(0.0, float(elapsed)):.1f}s", style="dim #657080")
+    return line
 
 
 def render_live_thinking(
@@ -790,19 +890,17 @@ def _repl_attempt_native(
         sys.stderr = _saved_stderr
 
     # P1.2 CoT: record the turn's FULL reasoning buffer for /why (display
-    # buffer only — never the session), and honor /cot full by printing the
-    # complete reasoning block into the transcript. tail mode stays live-region
-    # only, so the scrollback keeps just the honest chain + verdict.
+    # buffer only — never the session). Tail mode leaves a bounded, low-contrast
+    # preview in scrollback; /why is the honest full expansion path.
     if app_state is not None:
         app_state["last_reasoning"] = chain_view.reasoning_text
-    if _cot_mode(app_state) == "full" and chain_view.reasoning_text.strip():
-        console.print(
-            render_reasoning(
-                chain_view.reasoning_text,
-                width=min(int(getattr(console, "width", 80)), 80),
-                title="Thinking · full",
-            )
-        )
+    reasoning_block = reasoning_transcript_block(
+        chain_view.reasoning_text,
+        mode=_cot_mode(app_state),
+        width=min(int(getattr(console, "width", 80)), 80),
+    )
+    if reasoning_block is not None:
+        console.print(reasoning_block)
 
     # TYPED INTERJECT: a queued line means the operator overrode this turn. The
     # kernel already cancelled motion + the remaining tool calls at its safe
@@ -1003,6 +1101,48 @@ def format_banner(model: str, agent: Any = None, scenario: str | None = None) ->
     return "\n".join(lines)
 
 
+_LOGO_REVEAL_SECONDS = 0.9
+_LOGO_REVEAL_FRAMES = 18
+
+
+def _styled_logo_group(lines: tuple[str, ...]) -> Group:
+    return Group(*(styled_logo_line(line, row) for row, line in enumerate(lines)))
+
+
+def _print_startup_logo(logo_lines: tuple[str, ...]) -> None:
+    """Print once in pipes; animate one fixed region in an interactive terminal."""
+    interactive = bool(
+        getattr(console, "is_terminal", False)
+        and not getattr(console, "is_dumb_terminal", False)
+    )
+    if not interactive:
+        for row, line in enumerate(logo_lines):
+            console.print(styled_logo_line(line, row), overflow="crop", no_wrap=True)
+        return
+
+    sweep_width = logo_reveal_width(logo_lines)
+    frames = max(1, min(_LOGO_REVEAL_FRAMES, sweep_width or 1))
+    started = time.monotonic()
+    initial = _styled_logo_group(reveal_logo_lines(logo_lines, 0))
+    with Live(
+        initial,
+        console=console,
+        refresh_per_second=30,
+        transient=False,
+        vertical_overflow="visible",
+    ) as live:
+        for frame in range(1, frames + 1):
+            target = _LOGO_REVEAL_SECONDS * frame / frames
+            delay = target - (time.monotonic() - started)
+            if delay > 0:
+                time.sleep(delay)
+            visible = (sweep_width * frame + frames - 1) // frames
+            live.update(
+                _styled_logo_group(reveal_logo_lines(logo_lines, visible)),
+                refresh=True,
+            )
+
+
 def print_banner(
     model: str, provider: str, agent: Any = None, scenario: str | None = None
 ) -> None:
@@ -1015,8 +1155,7 @@ def print_banner(
     logo_lines = centered_logo_lines(term_w)
 
     console.print()
-    for row, line in enumerate(logo_lines):
-        console.print(styled_logo_line(line, row), overflow="crop", no_wrap=True)
+    _print_startup_logo(logo_lines)
 
     logo_end = max((len(line) for line in logo_lines), default=4)
     version = f"v{VERSION}"
@@ -3462,12 +3601,17 @@ def main(argv: list[str] | None = None) -> None:
                 def on_tool_end(name: str, result: Any) -> None:
                     elapsed = time.monotonic() - _tool_start_times.pop(name, time.monotonic())
                     display = _tool_displays.pop(name, name)
-                    tag = "[green]ok[/]" if not result.is_error else "[red]fail[/]"
                     summary = _format_result_summary(name, result)
                     # Pause the live region BEFORE printing — printing into an active
                     # Live interleaves with its redraw and re-stacks the box frame.
                     with status.paused():
-                        console.print(f"  [{TEAL}]▸[/] {display} {tag} [dim]{elapsed:.1f}s[/]")
+                        console.print(
+                            render_tool_activity(
+                                display,
+                                is_error=bool(result.is_error),
+                                elapsed=elapsed,
+                            )
+                        )
                         if summary:
                             console.print(summary)
 
@@ -3673,18 +3817,17 @@ def main(argv: list[str] | None = None) -> None:
                     status.stop()
                     sys.stderr = _saved_stderr
 
-                # P1.2 CoT: record this turn's reasoning for /why; /cot full
-                # prints the whole block into the transcript (dim, before the
-                # answer). Display buffer only — never session content.
+                # P1.2 CoT: record this turn's reasoning for /why. Tail leaves a
+                # bounded preview; full prints everything. Display-only — never
+                # session content.
                 app_state["last_reasoning"] = "".join(_turn_reasoning)
-                if _cot_mode(app_state) == "full" and app_state["last_reasoning"].strip():
-                    console.print(
-                        render_reasoning(
-                            app_state["last_reasoning"],
-                            width=min(console.width, 80),
-                            title="Thinking · full",
-                        )
-                    )
+                reasoning_block = reasoning_transcript_block(
+                    app_state["last_reasoning"],
+                    mode=_cot_mode(app_state),
+                    width=min(console.width, 80),
+                )
+                if reasoning_block is not None:
+                    console.print(reasoning_block)
 
                 # Final response: open coding-agent message (no repeated frame/title).
                 global _last_response
