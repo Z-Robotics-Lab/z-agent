@@ -54,7 +54,12 @@ from zeno.vcli.session import (
 )
 from zeno.vcli.permissions import PermissionContext
 from zeno.vcli.prompt import build_system_prompt
-from zeno.vcli.turn_render import ChainView, render_verdict_card
+from zeno.vcli.turn_render import (
+    ChainView,
+    fmt_duration,
+    render_trace_detail,
+    render_verdict_card,
+)
 from zeno.vcli.turn_status import TurnStatus
 from zeno.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
 
@@ -119,6 +124,8 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("usage", "Show token usage this session", False),
     ("cot", "Model reasoning display  (/cot off|tail|full)", True),
     ("why", "Show the last turn's full reasoning", False),
+    ("trace", "Replay recent turn traces  (/trace [n|list|save])", True),
+    ("route", "Explain routing for an utterance  (/route <text>)", True),
     ("copy", "Copy last response to clipboard", False),
     ("export", "Export session as markdown", False),
     ("compact", "Compress context window", False),
@@ -651,6 +658,20 @@ def _repl_attempt_native(
         # native could not route -> legacy fallback, EXCEPT on an interject (the
         # overridden goal must not be re-run by another producer).
         return True if _interjected else False
+
+    # P1.5: bounded in-session trace history for /trace replay (display-only —
+    # nothing here persists; /trace save calls the existing store explicitly).
+    if app_state is not None:
+        try:
+            hist = app_state.get("trace_history")
+            if hist is None:
+                from collections import deque as _deque
+
+                hist = _deque(maxlen=5)
+                app_state["trace_history"] = hist
+            hist.append(trace)
+        except Exception:  # noqa: BLE001 — history is display convenience only
+            pass
 
     sub_goals = list(getattr(trace.goal_tree, "sub_goals", ()) or ())
     steps = list(getattr(trace, "steps", ()) or ())
@@ -1635,6 +1656,72 @@ def _handle_slash_command(
             console.print(Text("┆ " + reasoning, style="dim italic"))
         else:
             console.print("  [dim]上一回合无推理记录。[/dim]")
+
+    elif cmd == "trace":
+        # P1.5 turn replay — a BOUNDED in-session history (nothing in the
+        # product persists traces; disk-reading would honestly show nothing).
+        history = list((app_state or {}).get("trace_history") or [])
+        arg = args_rest[0].strip().lower() if args_rest else ""
+        if not history:
+            console.print("  [dim]本会话尚无 trace(先执行一个动作指令)。[/dim]")
+        elif arg == "list":
+            for i, t in enumerate(reversed(history), 1):
+                g = str(getattr(getattr(t, "goal_tree", None), "goal", ""))[:60]
+                n = len(getattr(t, "steps", ()) or ())
+                ok = "[green]ok[/]" if getattr(t, "success", False) else "[red]not ok[/]"
+                console.print(
+                    f"  [{TEAL}]{i}[/] {g}  [dim]{n} steps ·[/] {ok} "
+                    f"[dim]· {fmt_duration(getattr(t, 'total_duration_sec', 0.0))}[/]"
+                )
+        elif arg == "save":
+            try:
+                from zeno.vcli.cognitive import trace_store
+
+                path = trace_store.save_trace(history[-1])
+                console.print(f"  [dim]已保存: {path}[/dim]")
+            except Exception as exc:  # noqa: BLE001
+                console.print(f"  [yellow]保存失败: {exc}[/yellow]")
+        else:
+            idx = 1
+            if arg:
+                try:
+                    idx = int(arg)
+                except ValueError:
+                    idx = 0
+            latest_first = list(reversed(history))
+            if not (1 <= idx <= len(latest_first)):
+                console.print(
+                    f"  [yellow]用法: /trace [1..{len(latest_first)}|list|save][/yellow]"
+                )
+            else:
+                for _line in render_trace_detail(latest_first[idx - 1]):
+                    console.print(_line)
+
+    elif cmd == "route":
+        # P1.5 routing transparency — classify only, NEVER execute.
+        engine_obj = (app_state or {}).get("engine")
+        text = " ".join(args_rest).strip()
+        if not text:
+            console.print("  [dim]用法: /route <一句指令> — 只显示路由判定,不执行。[/dim]")
+        elif engine_obj is None:
+            console.print("  [yellow]未连接 engine,无法判定路由。[/yellow]")
+        else:
+            try:
+                decision = engine_obj.classify_intent(text)
+                route = getattr(decision, "route", "?")
+                reason = getattr(decision, "reason", "?")
+                is_complex = getattr(decision, "complex", False)
+                nxt = (
+                    "native 先试(动作型,失败回落 legacy)"
+                    if getattr(decision, "use_vgg", False)
+                    else "tool_use 对话路径"
+                )
+                console.print(
+                    f"  [{TEAL}]route[/] {route} [dim]· reason={reason} · "
+                    f"complex={is_complex}[/] → {nxt}"
+                )
+            except Exception as exc:  # noqa: BLE001
+                console.print(f"  [yellow]路由判定失败: {exc}[/yellow]")
 
     elif cmd == "compact":
         if session is not None:
@@ -3215,6 +3302,17 @@ def main(argv: list[str] | None = None) -> None:
                     def _on_vgg_complete(
                         trace: Any, _user_input: str = user_input
                     ) -> None:
+                        # P1.5: VGG turns join the same bounded /trace history.
+                        try:
+                            _hist = app_state.get("trace_history")
+                            if _hist is None:
+                                from collections import deque as _deque
+
+                                _hist = _deque(maxlen=5)
+                                app_state["trace_history"] = _hist
+                            _hist.append(trace)
+                        except Exception:  # noqa: BLE001 — display convenience
+                            pass
                         n_steps = len(trace.steps)
                         n_ok = sum(1 for s in trace.steps if s.success)
                         dur = trace.total_duration_sec

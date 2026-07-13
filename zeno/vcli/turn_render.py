@@ -159,6 +159,58 @@ def render_verdict_card(report: Any, trace: Any = None, *, max_verify_len: int =
     return lines
 
 
+def render_trace_detail(trace: Any) -> list[str]:
+    """Full-detail view of ONE stored ExecutionTrace (P1.5 /trace replay).
+
+    Pure projection of what the trace RECORDS: per-step strategy, verify expr,
+    PASS/FAIL (the stored verify_result), honest duration, actor annotation,
+    failure_class/diagnosis, result_data extras, validation notes. It NEVER
+    re-derives evidence/verified — that requires the live oracle namespace and
+    belongs to turn-time classification (the verdict line + card).
+    """
+    lines: list[str] = []
+    goal = str(getattr(getattr(trace, "goal_tree", None), "goal", "") or "")
+    lines.append(f"  [bold]Goal:[/] {_escape_markup(goal)}")
+    sub_by_name = {
+        sg.name: sg for sg in getattr(getattr(trace, "goal_tree", None), "sub_goals", ()) or ()
+    }
+    for i, s in enumerate(getattr(trace, "steps", ()) or (), 1):
+        sg = sub_by_name.get(getattr(s, "sub_goal_name", ""))
+        verify = _escape_markup(getattr(sg, "verify", "") or "") if sg else ""
+        ok = bool(getattr(s, "verify_result", False))
+        word = "[green]PASS[/]" if ok else "[red]FAIL[/]"
+        strategy = _escape_markup((getattr(s, "strategy", "") or "").strip() or "(观察)")
+        actor = getattr(getattr(s, "actor_caused", None), "value", "—")
+        dur = fmt_duration(getattr(s, "duration_sec", 0.0))
+        line = (
+            f"  [dim]{i}[/]  {strategy}  [dim]verify[/] {verify} {word} "
+            f"[dim]actor={actor} · {dur}[/]"
+        )
+        fc = (getattr(s, "failure_class", "") or "").strip()
+        if fc:
+            line += f" [red]{_escape_markup(fc)}[/]"
+        err = (getattr(s, "error", "") or "").strip()
+        if err:
+            line += f" [dim]{_escape_markup(err[:60])}[/]"
+        lines.append(line)
+        rd = getattr(s, "result_data", None)
+        if isinstance(rd, dict):
+            extras = {
+                k: v for k, v in rd.items() if k != "output" and v not in ("", None, {})
+            }
+            if extras:
+                pairs = ", ".join(f"{k}={str(v)[:24]}" for k, v in list(extras.items())[:4])
+                lines.append(f"       [dim]{_escape_markup(pairs)}[/]")
+    notes = getattr(getattr(trace, "goal_tree", None), "validation_notes", ()) or ()
+    for note in notes:
+        lines.append(f"  [yellow]ⓘ[/] [dim]{_escape_markup(str(note))}[/]")
+    n = len(getattr(trace, "steps", ()) or ())
+    outcome = "[green]ok[/]" if bool(getattr(trace, "success", False)) else "[red]not ok[/]"
+    total = fmt_duration(getattr(trace, "total_duration_sec", 0.0))
+    lines.append(f"  [dim]Outcome:[/] {outcome} [dim]· {n} steps · total {total}[/]")
+    return lines
+
+
 # ---------------------------------------------------------------------------
 # ChainView — the live execution-chain tree for the native REPL turn (P1.1)
 # ---------------------------------------------------------------------------
