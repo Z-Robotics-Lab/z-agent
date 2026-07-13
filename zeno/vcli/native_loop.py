@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import ast
 import logging
+import time
 from typing import Any, Callable
 
 from zeno.vcli.backends.types import LLMResponse
@@ -673,6 +674,10 @@ class NativeStepRunner:
         self._chain: list[str] = []
         self._baseline: Any = None
         self._step_open: bool = False
+        # P1.4 honest timing: wall-clock anchor of the current step (set when the
+        # step opens at its first skill; None for a verify-only step). Display
+        # metadata only — the moat never reads durations.
+        self._step_t0: float | None = None
         # The model's MOST-RECENT verify result (None until it verifies once). Read by
         # ``latest_verify_failed`` so the runner can refuse a finish/stop while the
         # model's own proof of the goal is still FAILING (D-quantity: a flaky brain
@@ -761,6 +766,8 @@ class NativeStepRunner:
             # First skill of a fresh step -> capture the causation baseline NOW.
             self._baseline = actor_causation.capture(self._agent)
             self._step_open = True
+            # P1.4 honest timing: the step's wall-clock starts at its FIRST skill.
+            self._step_t0 = time.monotonic()
         self._chain.append(name)
         try:
             result = tool.execute(params, self._ctx)
@@ -801,6 +808,10 @@ class NativeStepRunner:
         rejection = self._reject_foreign_verify(expr)
         if rejection is not None:
             return rejection
+        # P1.4 honest timing: a verify-only step (no skill opened it) is timed
+        # from here — its cost is just this verify handling, never a leftover
+        # anchor from a previous step (reset below guarantees that).
+        _t0 = self._step_t0 if self._step_t0 is not None else time.monotonic()
         # Evaluate the predicate via the SAME GoalVerifier sandbox the spine uses.
         try:
             verify_result = bool(self._verifier.verify(expr))
@@ -840,7 +851,7 @@ class NativeStepRunner:
             strategy=strategy,
             success=True,
             verify_result=verify_result,
-            duration_sec=0.0,
+            duration_sec=max(0.0, time.monotonic() - _t0),
             actor_caused=actor_caused,
             # Backlog #2 — INFORMATIONAL triage code from the step's last action
             # skill (e.g. 'ran_no_weld'). Read by verdict._step_diagnosis as the
@@ -868,6 +879,7 @@ class NativeStepRunner:
         self._baseline = None
         self._step_open = False
         self._step_diag = None
+        self._step_t0 = None
 
         return ToolResult(
             content=(
@@ -952,13 +964,16 @@ class NativeStepRunner:
     # Trace assembly
     # ------------------------------------------------------------------
 
-    def build_trace(self, goal: str) -> ExecutionTrace:
+    def build_trace(self, goal: str, total_duration_sec: float = 0.0) -> ExecutionTrace:
         """Assemble the ExecutionTrace from the recorded (chain -> verify) steps.
 
         ``success`` is True iff at least one step was recorded AND none failed —
         the structural success flag the verdict reads (the moat is GROUNDED/RAN, not
         this flag). An empty trace (no verify ever called) is success=False, so the
         verdict gate fails closed (no checked step -> not verified).
+
+        ``total_duration_sec`` is the caller-measured turn wall-clock (P1.4 honest
+        timing; ``run_turn_native`` passes its own elapsed). Display metadata only.
         """
         steps = tuple(self._steps)
         success = bool(steps) and all(s.success for s in steps)
@@ -967,7 +982,7 @@ class NativeStepRunner:
             goal_tree=goal_tree,
             steps=steps,
             success=success,
-            total_duration_sec=0.0,
+            total_duration_sec=max(0.0, total_duration_sec),
         )
 
 
@@ -1015,6 +1030,8 @@ def run_turn_native(
     ``VerdictReport.from_trace(trace, verify_oracle_names(agent, engine))`` — this
     function NEVER computes ``verified``.
     """
+    # P1.4 honest timing: the turn's wall-clock anchor (display metadata only).
+    _turn_t0 = time.monotonic()
     agent = agent if agent is not None else getattr(engine, "_vgg_agent", None)
 
     # The live verifier + oracle names — single-sourced from the SAME namespace the
@@ -1035,7 +1052,9 @@ def run_turn_native(
     backend = getattr(engine, "_backend", None)
     if backend is None:
         # No backend wired -> no native turns -> empty trace (verdict fails closed).
-        return runner.build_trace(user_message)
+        return runner.build_trace(
+            user_message, total_duration_sec=time.monotonic() - _turn_t0
+        )
 
     system_prompt = _native_system_prompt(
         engine, oracle_names, _scene_object_names(agent), has_navigate="navigate" in motor_tools
@@ -1241,7 +1260,9 @@ def run_turn_native(
                 _emit("degenerate spin: no verify progress — stopping honestly")
                 break
 
-    return runner.build_trace(user_message)
+    return runner.build_trace(
+        user_message, total_duration_sec=time.monotonic() - _turn_t0
+    )
 
 
 # ---------------------------------------------------------------------------
