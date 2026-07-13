@@ -22,7 +22,23 @@
   路由不执行。
 - ✅ P2：三路径统一页脚 route/model/tok/wall（未知省略）；步骤行符号单义
   ✓=GROUNDED、○=RAN 且检查过、✗=检查假；步骤行带诚实时长。
+- ✅ P3.1 执行树持久化（owner ask 2026-07-13）：回合后 ⌂ goal 树（rounds/工具/
+  verify/nudge）留在 transcript，活区消失的过程信息不再丢。
 - ⏸ 未做：Ctrl+O 详略切换（P3，低优先）；GUI（§6，事件协议已就位）。
+
+## 7. 下一轮候选（2026-07-13 与 owner 讨论）
+
+1. **live_status 上屏**：pose hooks 轮（1499720）已给模型每轮重建 live_status_line
+   （位姿/course drift/odom age）——同一数据渲染进 ChainView 头 + prompt_toolkit
+   底栏，人和模型看同一份真值（单源，display-only）。
+2. **长动作进度**：navigate/route 执行中在树节点上滚动 距目标剩余米数/航向
+   （轮询里程计，display-only；world 层已有活位姿接缝）。
+3. **/history**：回合级时间线（一行=goal+verdict+耗时），配合 /trace n 下钻。
+4. **底栏升级**：model · world · odom age · estop · cot mode · permissions mode。
+5. **/export**：上一回合导出 markdown 报告（树+verdict 卡+CoT），现场记录用。
+6. **回合后快照提示**：ADR-002 PNG 已拍时打印路径。
+7. **Ctrl+O 详略切换**：result_data/verify 原始值常显。
+8. **GUI dashboard**：事件协议+trace 已结构化，`zeno --dashboard` WebSocket tail。
 - 兼容性：ZENO_VERDICT 哨兵、verdict 行 `(n/m grounded)` 尾、`→ verify`/
   `actor=`/"native working" PTY 钉词、插队行、session 摘要全部原样保留；
   tests/vcli 与 tests/unit/vcli 回归 0 新失败（15/5+cv2 全既存基线）。
