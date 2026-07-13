@@ -31,7 +31,9 @@
   '记住这里叫充电桩'→mark_place{name:充电桩};预算 5875/6000(裁 往前走2米+站起来,数学/单步教义他例已载)。
   能力卡 全局意识 节+诚实上限:地点活在当前 SLAM 图帧,**重启导航栈后地点失效**(持久化=重定位路线图项)。
 - **测试**:test_world_go2w_real_places.py 51/51;全部 go2w_real 套件 269P;tests/vcli 全量
-  15F/1064P/33skip/1xfail——15F 恰为基线集(上一轮记录的 13 places RED 已 GREEN)。0 新失败。
+  15F/1064P/33skip/1xfail——15F 恰为基线集(基线 worktree da1da47 复现同 15F)。0 新失败。
+- **集成签核**(本轮):内核仅两钩子 + 消费(缺钩子世界逐字节不变,已证);未动 cli/display/UI;
+  三套件对基线 0 新失败(vcli 15F、hardware 6F+63err 均既存,interrupt 隔离 1P);离线 smoke 全绿。
 
 ## 路由取证（READ-ONLY,喂下一内核轮 — 坐下 未走 direct 短路）
 - direct=True 短路只在 legacy 快速路径;native ReAct 截获 action-shaped 意图,has_unverified_action
