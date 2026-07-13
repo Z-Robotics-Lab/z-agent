@@ -36,7 +36,6 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import HTML
@@ -44,6 +43,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 
 from zeno.vcli.backends import create_backend
+from zeno.vcli.composer import ZenoComposer, render_submission
 from zeno.vcli.env import read_env
 from zeno.vcli import paths
 from zeno.vcli.engine import VectorEngine, TurnResult
@@ -219,11 +219,20 @@ PT_STYLE = PTStyle.from_dict({
     # Scrollbar
     "scrollbar.background": "bg:#0a0a1a",
     "scrollbar.button": "bg:#006666",
-    # Bottom toolbar
-    "bottom-toolbar": "bg:#0a0a1a #00b4b4",
-    "bottom-toolbar.text": "bg:#0a0a1a #00b4b4",
-    # Prompt
-    "prompt": "bold #00b4b4",
+    # Framed coding-agent composer
+    "composer.title": "bold #00b4b4",
+    "composer.prompt": "bold #00b4b4",
+    "composer.input": "#e6edf3",
+    "composer.frame": "#7b8b9a",
+    "frame.border": "#006666",
+    "frame.label": "bold #00b4b4",
+    "composer.separator": "#164e55",
+    "composer.footer": "#718096",
+    "composer.footer.key": "bold #00b4b4",
+    "composer.footer.hint": "#718096",
+    "composer.footer.divider": "#006666",
+    "search-toolbar": "#7b8b9a",
+    "search-toolbar.prompt": "bold #00b4b4",
 })
 
 
@@ -1559,6 +1568,7 @@ def _handle_slash_command(
         console.print(f"[bold {TEAL}]Shortcuts:[/]")
         console.print("[dim]  /          show command menu (auto-complete)[/dim]")
         console.print("[dim]  Tab        accept completion[/dim]")
+        console.print("[dim]  Alt+Enter  insert newline[/dim]")
         console.print("[dim]  Ctrl+R     search history[/dim]")
         console.print("[dim]  Ctrl+C     cancel current turn[/dim]")
         console.print("[dim]  <文字>+Enter (任务执行中) 插队: 取消当前动作,你的新指令立即接管[/dim]")
@@ -3031,11 +3041,11 @@ def main(argv: list[str] | None = None) -> None:
     def _get_toolbar() -> HTML:
         agent_now = app_state.get("agent")
         current_model = app_state.get("model", "?")
-        parts: list[str] = [f"<b>Zeno</b>"]
+        parts: list[str] = []
         live_status = _live_status_toolbar_fragment(app_state)
         if live_status:
-            # Keep live truth immediately after the brand so narrow terminals
-            # show pose/odom before lower-priority counters are clipped.
+            # Keep live truth first so narrow terminals show pose/odom before
+            # lower-priority model/tool/message counters are clipped.
             parts.append(live_status)
         arm_now = getattr(agent_now, "_arm", None) if agent_now else None
         base_now = getattr(agent_now, "_base", None) if agent_now else None
@@ -3046,12 +3056,12 @@ def main(argv: list[str] | None = None) -> None:
         parts.append(f"model:{current_model.split('/')[-1]}")
         parts.append(f"tools:{len(registry.list_tools())}")
         parts.append(f"msgs:{len(session._entries)}")
-        return HTML(f' {" | ".join(parts)} ')
+        return HTML(" | ".join(parts))
 
-    pt_session: PromptSession = PromptSession(
+    composer = ZenoComposer(
         history=FileHistory(str(history_dir / "history")),
         completer=ZenoCompleter(),
-        complete_while_typing=True,
+        toolbar=_get_toolbar,
         style=PT_STYLE,
     )
 
@@ -3090,10 +3100,9 @@ def main(argv: list[str] | None = None) -> None:
                 raw = _queued
             else:
                 try:
-                    raw = pt_session.prompt(
-                        HTML(f'<style fg="{TEAL}" bold="true">zeno&gt;</style> '),
-                        bottom_toolbar=_get_toolbar,
-                    )
+                    raw = composer.prompt()
+                    if raw:
+                        console.print(render_submission(raw))
                 except EOFError:
                     break
                 except KeyboardInterrupt:
