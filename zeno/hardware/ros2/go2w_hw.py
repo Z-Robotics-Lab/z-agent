@@ -77,7 +77,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
     TELEOP_PERIOD_S: float = 0.2       # 5 Hz refresh — strictly < deadman, >= 4 Hz
 
     # --- navigate_to poll defaults ---
-    ARRIVAL_RADIUS_M: float = 0.8      # real-oracle arrival tolerance
+    # Arrival radius, measured on /state_estimation (SENSOR pose, 0.2 m ahead
+    # of base_link). Nav-stack forensics 2026-07-13: the planner's own
+    # goalReachedThreshold is 0.3 (base frame) — 0.8 here declared "arrived"
+    # up to ~1 m short in base terms (the CEO's "不准确"). Floor is
+    # goalReachedThreshold + 0.2 frame skew + noise, so keep >= 0.35.
+    ARRIVAL_RADIUS_M: float = 0.4      # real-oracle arrival tolerance
     STALL_TIMEOUT_S: float = 10.0      # no-progress window before aborting
     STALL_EPS_M: float = 0.1           # min distance decrease counted as progress
 
