@@ -173,6 +173,17 @@ _CANCELLED_BY_OPERATOR = (
     "remaining actions in this turn are cancelled; a new instruction takes over."
 )
 
+# Global-awareness hook B (CEO directive 2026-07-13: the agent must ALWAYS know
+# its live global pose). A world may declare ``live_status_line(agent) -> str``;
+# the loop re-reads it before EVERY model call and appends it as ONE marked
+# system-side block. The prefix tells the model the line is authoritative and
+# fresher than any pose mentioned earlier in the conversation — the whole
+# injection stays a single token-cheap line (see ``_live_status_block``).
+_LIVE_STATUS_PREFIX = (
+    "[LIVE STATE — refreshed before EVERY model call; trust this over any "
+    "earlier pose in the conversation] "
+)
+
 # The registry category whose tools are the kernel's domain-general ACTION surface
 # (file_read/file_write/file_edit/bash/glob/grep — see tools.__init__._TOOL_CATEGORIES
 # and worlds.dev.DEV_TOOL_ALLOWLIST, which is this category). The native loop offers
@@ -1097,10 +1108,18 @@ def run_turn_native(
             break
         messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
+        # Global-awareness hook B: re-read the world's live status line NOW —
+        # immediately before this model call — and append it as ONE marked
+        # system-side block. EPHEMERAL by construction: rebuilt per iteration
+        # (replace, never accumulate) and never appended to the session, so a
+        # moving robot's stale pose can never linger in context. No hook ->
+        # ``system_prompt`` is passed UNCHANGED (byte-identical, pinned).
+        live_block = _live_status_block(engine, agent)
+        system = system_prompt if live_block is None else [*system_prompt, live_block]
         response: LLMResponse = backend.call(
             messages=messages,
             tools=tool_schemas,
-            system=system_prompt,
+            system=system,
             max_tokens=getattr(engine, "_max_tokens", 4096),
             on_text=_on_text if on_progress is not None else None,
         )
@@ -1247,6 +1266,38 @@ def run_turn_native(
 # ---------------------------------------------------------------------------
 # Helpers — verifier / tools / system prompt / session glue (no planner imports)
 # ---------------------------------------------------------------------------
+
+
+def _live_status_block(engine: Any, agent: Any) -> dict[str, Any] | None:
+    """ONE marked system block of live world state — optional world hook B.
+
+    Consults ``engine._world.live_status_line(agent)`` (duck-typed, the
+    supports_pose_reset plug-and-play pattern). Called immediately before EVERY
+    backend round-trip so the model always plans from the CURRENT pose — the
+    fix for the field gap where the native loop gave the model no pose refresh
+    between iterations at all (a moving robot's context pose was whatever the
+    last tool result happened to mention). The returned line is flattened to a
+    single line (token-cheap by construction) and prefixed with
+    ``_LIVE_STATUS_PREFIX`` so it is clearly system-side and supersedes older
+    pose mentions. Fail-safe: no world / no hook / None / empty / raising hook
+    -> None, and the caller passes the system prompt object UNCHANGED
+    (byte-identical for every hook-less world; pinned by test).
+    """
+    world = getattr(engine, "_world", None)
+    hook = getattr(world, "live_status_line", None) if world is not None else None
+    if not callable(hook):
+        return None
+    try:
+        line = hook(agent)
+    except Exception as exc:  # noqa: BLE001 — live status is best-effort, never fatal
+        logger.debug("native_loop: live_status_line hook failed: %s", exc)
+        return None
+    if not line:
+        return None
+    flat = " ".join(str(line).split())  # ONE short line, whatever the hook returned
+    if not flat:
+        return None
+    return {"type": "text", "text": _LIVE_STATUS_PREFIX + flat}
 
 
 def _build_verifier(engine: Any, agent: Any) -> Any:

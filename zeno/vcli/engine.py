@@ -1448,6 +1448,29 @@ class ZenoEngine:
                 return True
         return False
 
+    def _effective_world_context_ttl(self) -> float:
+        """The world-context cache TTL — optional world hook, kernel default 5 s.
+
+        Global-awareness hook A (CEO-approved kernel edit, 2026-07-13: the agent
+        must always know its live global pose). The kernel TTL exists to protect
+        EXPENSIVE sensor/graph queries when the robot is static; a world whose
+        pose read is a cheap cached driver attribute may declare
+        ``world_context_ttl() -> float`` (seconds) — go2w_real returns 0.0 so
+        the plan-time Position/Heading is never up to TTL*speed metres stale.
+        Plug-and-play opt-in (the supports_pose_reset pattern, Invariants 3/4):
+        a world without the hook keeps the exact 5.0 s default, byte-identical;
+        a raising hook fails safe to the default and never breaks a turn.
+        """
+        world = getattr(self, "_world", None)
+        hook = getattr(world, "world_context_ttl", None) if world is not None else None
+        if not callable(hook):
+            return self._world_context_ttl
+        try:
+            return float(hook())
+        except Exception as exc:  # noqa: BLE001 — hook failure must not break planning
+            logger.debug("world_context_ttl hook failed: %s", exc)
+            return self._world_context_ttl
+
     def _build_world_context(self, force: bool = False) -> str:
         """Build a brief world context string for the GoalDecomposer.
 
@@ -1463,7 +1486,7 @@ class ZenoEngine:
         if (
             not force
             and self._world_context_cache is not None
-            and now - self._world_context_ts < self._world_context_ttl
+            and now - self._world_context_ts < self._effective_world_context_ttl()
         ):
             return self._world_context_cache
 

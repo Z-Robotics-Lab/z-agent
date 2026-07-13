@@ -391,6 +391,62 @@ class Go2WRealWorld:
         """
         return False
 
+    def world_context_ttl(self) -> float:
+        """0.0 — the plan-time world context must always read the LIVE pose.
+
+        Global-awareness hook A (CEO directive 2026-07-13: the agent must
+        always know its live global coordinates + orientation). The kernel's
+        5 s cache exists to protect EXPENSIVE sensor/graph queries (sim scene
+        graphs); this world's Position/Heading contribution is a CACHED driver
+        attribute the /state_estimation subscription already paid for — a
+        zero-cost read — while at 0.6 m/s a 5 s-stale pose is up to 3 m wrong
+        at plan time. Opt-in hook: a world without it keeps the 5 s default.
+        """
+        return 0.0
+
+    def live_status_line(self, agent: Any) -> str:
+        """ONE live-state line the native loop injects before EVERY model call.
+
+        Global-awareness hook B (same CEO directive): pose x/y (2 decimals),
+        yaw in BOTH degrees and radians (the model does mental geometry in
+        degrees but the verify oracles / cos-sin math speak radians), the
+        course INTENT + live drift when a relative plan anchored one
+        (base.course_tracker), and the odometry age. Honesty first: when
+        ``odom_age_s()`` is None (stack down / never connected) — or any pose
+        read fails — the line says so instead of fabricating the driver's
+        (0, 0) defaults (the same 永真 trap stack_ready() closed). Never raises.
+        """
+        import math
+
+        base = getattr(agent, "_base", None) if agent is not None else None
+        fallback = "(no odometry — stack down?)"
+        if base is None:
+            return fallback
+        try:
+            age_fn = getattr(base, "odom_age_s", None)
+            age = age_fn() if callable(age_fn) else None
+            if age is None:
+                return fallback
+            pos = base.get_position()
+            yaw = float(base.get_heading())
+        except Exception:  # noqa: BLE001 — live status is best-effort, never fatal
+            return fallback
+        line = (
+            f"pose x={pos[0]:.2f} y={pos[1]:.2f} "
+            f"yaw={math.degrees(yaw):+.1f}deg ({yaw:+.3f}rad)"
+        )
+        tracker = getattr(base, "course_tracker", None)
+        course = getattr(tracker, "course_yaw", None) if tracker is not None else None
+        if course is not None:
+            from zeno.vcli.worlds.go2w_real_diag import wrap_angle
+
+            drift = wrap_angle(float(course) - yaw)
+            line += (
+                f" | course {math.degrees(float(course)):+.1f}deg"
+                f" (drift {math.degrees(drift):+.1f}deg)"
+            )
+        return line + f" | odom age {age:.1f}s"
+
     def decompose_vocab(self) -> DecomposeVocab | None:
         return DecomposeVocab(
             planner_intro=(
