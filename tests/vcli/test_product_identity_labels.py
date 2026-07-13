@@ -5,7 +5,7 @@
 
 Covers the high-frequency REPL surfaces the audit flagged:
 - V_LABEL: the brand glyph reused as the title of every response Panel.
-- The framed composer's title (rendered every keystroke).
+- The startup ASCII wordmark.
 - The /export markdown assistant-line prefix.
 - The /agent slash-command description shown in /help and the completer.
 
@@ -81,11 +81,10 @@ def test_login_help_names_zeno_not_v() -> None:
     assert "gives V its own" not in text, text
 
 
-def test_composer_title_brand_token_is_zeno() -> None:
-    """The every-keystroke input surface must carry the Zeno product identity."""
-    from prompt_toolkit.formatted_text import fragment_list_to_text, to_formatted_text
-    from zeno.vcli.composer import COMPOSER_TITLE
+def test_startup_ascii_wordmark_is_zeno() -> None:
+    """Brand belongs to startup, not repeated as input chrome every keystroke."""
+    from zeno.vcli.banner import WIDE_ZENO_LOGO
 
-    title = fragment_list_to_text(to_formatted_text(COMPOSER_TITLE))
-    assert title == "Zeno"
-    assert title != "V"
+    assert WIDE_ZENO_LOGO[0].startswith("ZZZZZZZZ  EEEEEEEE")
+    assert any("NN     NN" in line for line in WIDE_ZENO_LOGO)
+    assert any("OOOOOO" in line for line in WIDE_ZENO_LOGO)
