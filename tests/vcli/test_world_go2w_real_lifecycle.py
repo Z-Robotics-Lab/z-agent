@@ -18,16 +18,6 @@ from types import SimpleNamespace
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def _redirect_oplog(tmp_path):
-    """Unit tests must never pollute the operator's real zeno_agent.log."""
-    from zeno.vcli.worlds import go2w_real_diag as d
-    old = d._OPLOG_PATH
-    d.set_oplog_path(str(tmp_path / "test_agent.log"))
-    yield
-    d.set_oplog_path(old)
-
-
 class _FakeHW:
     def __init__(self) -> None:
         self.explore_manager = None

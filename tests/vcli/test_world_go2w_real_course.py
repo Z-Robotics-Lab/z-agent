@@ -13,19 +13,24 @@ Pinned here:
 
 * CourseTracker (go2w_real_course.py): course_yaw = the map-frame INTENDED
   heading (None = unset). ensure(actual) anchors when unset; apply_turn /
-  set_course advance intent; resolve(actual) applies the 45° re-anchor cap
-  (big drift = avoidance detour / manual takeover — intent is stale, never
-  "compensate" 60° silently); reset() forgets intent. Deterministic — no LLM
-  input beyond the operator's requested degrees (Inv-1 parity with turned()).
-* RealTurnSkill compensation: command_delta folds the drift in
-  (requested + wrap(course - actual)), so 'turn right 90' from a +12°-drifted
-  heading commands ≈ -102° and lands ON the intended course. Compensation is
-  reported honestly (result_data + message); verify_hint grades the COMMANDED
-  delta. On rotate success course := target; on failure course resets (intent
-  state unknown — never guess).
+  set_course advance intent; resolve(actual) NEVER re-anchors the heading —
+  beyond the 45° REANCHOR_LIMIT_DEG it only raises the loud-report flag (the
+  2026-07-13 15:32 field disaster: the old re-anchor adopted a pathFollower
+  reverse-flip and drove leg 2 backward); reset() forgets intent.
+  Deterministic — no LLM input beyond the operator's requested degrees
+  (Inv-1 parity with turned()).
+* RealTurnSkill: rotates to the ABSOLUTE target wrap(course + requested);
+  the commanded delta wrap(target - actual) is <=180° by construction, so
+  'turn right 90' from a +12°-drifted heading commands ≈ -102° and lands ON
+  the intended course. Compensation is reported honestly (result_data +
+  message; PROMINENTLY past 45°); verify_hint grades the COMMANDED delta. On
+  rotate success course := target; on failure course resets (intent state
+  unknown — never guess).
 * RealMoveRelativeSkill: straight legs run ALONG THE COURSE heading when set
-  (live yaw only anchors an unset course) — the square's legs stay parallel
+  (live yaw only anchors an unset course; a move is a POSITION chase — the
+  live yaw NEVER re-anchors the course) — the square's legs stay parallel
   to intent even after drift displaced the heading. Moves never change course.
+  (Position-intent behavior is pinned in test_world_go2w_real_intent_pose.py.)
 * Reset seams: navigate / route_via / explore start / stop (estop) / operator
   interrupt all reset the course (free navigation or emergency = intent gone).
 * course_locked(tol_deg=10) verify oracle: |wrap(actual - course)| <= tol;
@@ -40,16 +45,6 @@ import math
 from types import SimpleNamespace
 
 import pytest
-
-
-@pytest.fixture(autouse=True)
-def _redirect_oplog(tmp_path):
-    from zeno.vcli.worlds import go2w_real_diag as d
-
-    old = d._OPLOG_PATH
-    d.set_oplog_path(str(tmp_path / "test_agent.log"))
-    yield
-    d.set_oplog_path(old)
 
 
 def _wrap(a: float) -> float:
@@ -180,16 +175,19 @@ def test_course_tracker_resolve_keeps_course_within_cap():
     assert reanchored is False
 
 
-def test_course_tracker_resolve_reanchors_past_45_degrees():
+def test_course_tracker_resolve_keeps_intent_past_45_degrees():
+    """SEMANTICS CHANGED (field disaster 2026-07-13 15:32): a big deviation no
+    longer re-anchors the heading intent — resolve() keeps the course and
+    raises the loud-report flag instead."""
     from zeno.vcli.worlds.go2w_real_course import CourseTracker
 
     t = CourseTracker()
     t.ensure(0.0)
     actual = math.radians(60.0)  # NOT small drift: detour / manual takeover
-    course, reanchored = t.resolve(actual)
-    assert reanchored is True
-    assert course == pytest.approx(actual)
-    assert t.course_yaw == pytest.approx(actual)
+    course, deviates = t.resolve(actual)
+    assert deviates is True
+    assert course == pytest.approx(0.0)
+    assert t.course_yaw == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -301,32 +299,35 @@ def test_square_path_two_legs_compensate_each_turn():
 
 
 # ---------------------------------------------------------------------------
-# 45° cap — big deviation is NOT drift (detour / manual takeover): re-anchor,
-# execute the plain requested delta, and SAY SO
+# 45° threshold — SEMANTICS CHANGED (field disaster 2026-07-13 15:32): a big
+# deviation NEVER re-anchors the intent. Turns still chase the ABSOLUTE
+# intended heading (wrapped <=180° by construction) and REPORT the deviation
+# prominently; moves keep driving along the course, full stop.
 # ---------------------------------------------------------------------------
 
 
-def test_turn_reanchors_beyond_45_and_executes_plain_delta():
+def test_turn_beyond_45_compensates_to_intent_and_reports_loudly():
     hw = _CourseFakeHW(yaw=0.0)
     hw.course_tracker.ensure(0.0)
-    hw.set_yaw(math.radians(60.0))  # way past the 45° small-drift cap
+    hw.set_yaw(math.radians(60.0))  # way past the 45° small-drift threshold
     result = _turn_skill().execute({"direction": "right", "degrees": 90},
                                    _ctx(base=hw))
     assert result.success, result.error_message
-    assert hw.rotate_calls[0][0] == pytest.approx(-math.pi / 2), (
-        "past the cap the request is executed PLAIN from the actual heading — "
-        "never a silent 150° 'compensation'")
+    # target = wrap(course 0 - 90) = -90; command = wrap(-90 - 60) = -150
+    assert hw.rotate_calls[0][0] == pytest.approx(math.radians(-150.0)), (
+        "the intent is ALWAYS honored: the turn chases the absolute intended "
+        "heading — the old plain-delta re-anchor inverted the operator's plan")
     data = result.result_data or {}
-    assert data.get("course_reanchored") is True
-    assert data.get("compensation_deg") == pytest.approx(0.0)
+    assert data.get("course_deviation_large") is True
+    assert data.get("compensation_deg") == pytest.approx(-60.0, abs=0.1)
     msg = str(data.get("message", ""))
-    assert "锚" in msg or "anchor" in msg.lower(), (
-        "re-anchoring must be reported to the operator, not silent")
-    # course = re-anchored actual (60°) + requested (-90°) = -30°
-    assert hw.course_tracker.course_yaw == pytest.approx(math.radians(-30.0))
+    assert "注意" in msg and "航向偏离" in msg and "补偿" in msg, (
+        "a >45° deviation must be reported PROMINENTLY, never silently adopted")
+    # course = intended target: 0° + (-90°) = -90°
+    assert hw.course_tracker.course_yaw == pytest.approx(-math.pi / 2)
 
 
-def test_move_relative_reanchors_beyond_45_and_uses_actual_heading():
+def test_move_relative_beyond_45_still_follows_the_course():
     hw = _CourseFakeHW(yaw=0.0, x=0.0, y=0.0)
     hw.course_tracker.ensure(0.0)
     hw.set_yaw(math.radians(60.0))
@@ -334,9 +335,12 @@ def test_move_relative_reanchors_beyond_45_and_uses_actual_heading():
                               _ctx(base=hw))
     assert r.success
     tx, ty = hw.nav_calls[0]
-    assert tx == pytest.approx(2.0 * math.cos(math.radians(60.0)))
-    assert ty == pytest.approx(2.0 * math.sin(math.radians(60.0)))
-    assert hw.course_tracker.course_yaw == pytest.approx(math.radians(60.0))
+    assert tx == pytest.approx(2.0, abs=1e-6), (
+        "a move is a POSITION chase — the stray yaw is irrelevant; the leg "
+        "runs along the operator's course")
+    assert ty == pytest.approx(0.0, abs=1e-6)
+    assert hw.course_tracker.course_yaw == pytest.approx(0.0), (
+        "the course stays the operator's intent — never re-anchored by a move")
 
 
 # ---------------------------------------------------------------------------
