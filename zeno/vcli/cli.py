@@ -849,9 +849,36 @@ def _live_status_for_display(app_state: dict[str, Any] | None) -> str | None:
     return flat or None
 
 
+def _live_status_cached(
+    app_state: dict[str, Any] | None,
+    *,
+    now: "Callable[[], float]" = time.monotonic,
+    ttl: float = 0.2,
+) -> str | None:
+    """TTL-cached live-status read (P3.11 — 'cli 整个交互很卡').
+
+    The composer footer re-renders on EVERY keystroke and every 0.5s refresh;
+    each redraw called the world's ``live_status_line`` hook, which on hardware
+    is three driver reads. Under the persistent composer's high-frequency
+    transcript prints that becomes dozens of driver reads/sec and stalls
+    typing. This caches the flattened line for ``ttl`` seconds so redraws are
+    memory-cheap — odom never needs sub-200ms UI freshness. Display-only; a
+    cache race (two threads) at worst reads a value one tick stale, harmless.
+    """
+    if app_state is None:
+        return _live_status_for_display(None)
+    cache = app_state.get("_live_status_cache")
+    t = now()
+    if cache is not None and (t - cache[0]) < ttl:
+        return cache[1]
+    value = _live_status_for_display(app_state)
+    app_state["_live_status_cache"] = (t, value)
+    return value
+
+
 def _live_status_toolbar_fragment(app_state: dict[str, Any] | None) -> str:
     """Prompt-toolkit-HTML-safe live status, or an empty toolbar fragment."""
-    line = _live_status_for_display(app_state)
+    line = _live_status_cached(app_state)
     return escape_html(line) if line else ""
 
 
@@ -925,7 +952,7 @@ def _repl_attempt_native(
             transcript_sink=lambda line: console.print(line),
             activity_sink=_runner.set_activity,
             show_reasoning_tail=_cot_mode(app_state) != "off",
-            status_provider=lambda: _live_status_for_display(app_state),
+            status_provider=lambda: _live_status_cached(app_state),
         )
         chain_view.begin_goal(user_input)
     else:
@@ -934,7 +961,7 @@ def _repl_attempt_native(
                 renderable, console=console, refresh_per_second=8, transient=True
             ),
             show_reasoning_tail=_cot_mode(app_state) != "off",
-            status_provider=lambda: _live_status_for_display(app_state),
+            status_provider=lambda: _live_status_cached(app_state),
         )
     if app_state is not None:
         app_state["last_chain_view"] = chain_view  # /why reads the reasoning buffer

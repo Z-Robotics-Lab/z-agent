@@ -60,4 +60,6 @@ def test_main_toolbar_and_native_chain_both_use_live_status_projection() -> None
     main_src = inspect.getsource(cli.main)
     native_src = inspect.getsource(cli._repl_attempt_native)
     assert "_live_status_toolbar_fragment(app_state)" in main_src
-    assert "status_provider=lambda: _live_status_for_display(app_state)" in native_src
+    # P3.11: both seams read the SAME source through the TTL cache wrapper
+    # (which delegates to _live_status_for_display) — still single-sourced.
+    assert "status_provider=lambda: _live_status_cached(app_state)" in native_src
