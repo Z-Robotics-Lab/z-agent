@@ -54,6 +54,11 @@
   暗色预览，`/why` 是可兑现的全量展开；legacy/native 工具统一为更低对比的
   `◇ Tool · call ✓|×`层。Logo 仅在交互 TTY 以固定六行区域从左向右 0.9s
   浮现；pipe/JSON/测试直接输出最终帧，无延迟。
+- ✅ P3.7 常驻 composer（owner ask 2026-07-13）：输入框永不让出终端。TurnRunner
+  worker 跑回合、patch_stdout 上方落盘、忙时打字=插队（内核同一队列协议）、^C 忙时
+  取消回合、ChainView 流式落盘替代 Live、⚙ 活动串+thinking 心跳进底栏。
+  逃生门 VECTOR_COMPOSER_SYNC=1。已知边界：worker 内权限询问 UX 待专项（native
+  电机技能自动放行,少触发）；chat 流式文本不再逐字上屏（完稿落盘,心跳在底栏）。
 - ⏸ 未做：当前 transcript 是 Rich 静态 scrollback，旧行不再接收鼠标事件；
   真正“点击某个块原地展开”需要持久全屏 TUI 或 GUI，本轮不伪造可点击箭头。
   Ctrl+O 详略切换与 GUI（§6，WebSocket 需 CEO gate）仍待做。
