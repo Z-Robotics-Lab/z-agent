@@ -121,6 +121,10 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   (彩色预建图 + 实时位姿): the colorized pre-built map with the robot's live pose
   drawn on top. Use it when the operator wants to see the dog inside the scanned
   world (not just the 2D RViz planner view).
+- CLEAN SLATE — clear_goals (清除所有目标): sweeps EVERY cached goal at once
+  (in-flight drive, the latched waypoint, far_planner's stale route goal, the
+  operator RViz goal record, the course intent). Use it whenever motion feels
+  haunted by an old command. It does NOT release the E-stop latch (resume does).
 - Safety — go2w_real_stop = software E-stop: LATCHES zero velocity + cancels
   the goal. THE LATCH STAYS until you resume: after ANY stop, motion commands
   are silently eaten until resume_skill / go2w_real_resume runs — pair every

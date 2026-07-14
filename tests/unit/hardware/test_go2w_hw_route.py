@@ -67,7 +67,10 @@ def _rmgr(tmp_path: Path, hw: FakeHW | None = None, proc: FakeProc | None = None
     factory = FakePopenFactory(proc)
     hw = hw if hw is not None else FakeHW()
     cfg = RouteConfig(nav_sh=str(nav), stop_grace_s=0.01)
-    mgr = Go2WRouteManager(hw, config=cfg, popen_factory=factory)
+    # resident probe pinned False: unit tests must never adopt a REAL
+    # far_planner running on this host (map mode keeps one resident).
+    mgr = Go2WRouteManager(hw, config=cfg, popen_factory=factory,
+                           resident_probe=lambda: False)
     return mgr, hw, factory
 
 

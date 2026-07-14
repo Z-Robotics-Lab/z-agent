@@ -200,6 +200,49 @@ class RealBringupSkill:
         })
 
 
+@skill(aliases=["clear_goals", "清除目标", "清空目标", "清除所有目标",
+                "取消所有目标", "清理目标", "clear goals"], direct=True)
+class RealClearGoalsSkill:
+    """The clean slate: sweep EVERY cached goal (CEO 2026-07-14).
+
+    Field lesson: stale goals hide in four places (in-flight poll loops, the
+    local planner's latched waypoint, the resident far_planner's route goal,
+    the recorded operator RViz click) and any survivor keeps steering the
+    robot. One skill sweeps all of them + the relative-plan course intent.
+    E-stop latch deliberately untouched (resume stays explicit).
+    """
+
+    name = "clear_goals"
+    description = ("Clear EVERY cached goal: in-flight drives, the latched "
+                   "waypoint, far_planner's route goal, the operator RViz "
+                   "goal and the course intent. Robot coasts to a stop via "
+                   "the deadman; E-stop latch untouched (use resume for "
+                   "that). 一键清除所有残留目标/缓存指令。")
+    requires = ()
+    preconditions: list = []
+    effects = {"goals": "cleared"}
+
+    def execute(self, params=None, context=None, **kw) -> SkillResult:
+        base = getattr(context, "base", None) if context is not None else None
+        if base is None:
+            return SkillResult(success=False, diagnosis_code="no_base",
+                               error_message="No Go2W hardware base")
+        try:
+            if callable(getattr(base, "clear_all_goals", None)):
+                base.clear_all_goals()
+            else:  # older driver: best-effort pieces
+                base.cancel_navigation()
+        except Exception as exc:  # noqa: BLE001 — sweep must not crash a turn
+            return SkillResult(success=False, diagnosis_code="clear_failed",
+                               error_message=f"clear_all_goals failed: {exc}")
+        from zeno.vcli.worlds.go2w_real_course import reset_course
+        reset_course(context, "clear_goals")
+        oplog("lifecycle", "clear_goals", "ALL goals + course intent cleared")
+        return SkillResult(success=True, result_data={
+            "message": ("已清除所有残留目标(在途导航/锁存路点/far_planner旧目标/"
+                        "RViz手动目标/航向意图)。急停锁存未动,如被锁请 resume。")})
+
+
 @skill(aliases=["resume", "恢复", "解除急停", "release", "estop_release",
                 "恢复自主", "继续"], direct=True)
 class RealResumeSkill:

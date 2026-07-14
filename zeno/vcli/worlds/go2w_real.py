@@ -60,7 +60,11 @@ from zeno.vcli.worlds.go2w_real_tools import (
     Go2WRealStopTool,
     Go2WRealWhereTool,
 )
-from zeno.vcli.worlds.go2w_real_lifecycle import RealBringupSkill, RealResumeSkill
+from zeno.vcli.worlds.go2w_real_lifecycle import (
+    RealBringupSkill,
+    RealClearGoalsSkill,
+    RealResumeSkill,
+)
 from zeno.vcli.worlds.go2w_real_ops_skills import RealVizSkill, RealWhereSkill
 from zeno.vcli.worlds.go2w_real_turn_skills import RealTurnSkill
 from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool, VizOverlaySession
@@ -149,6 +153,7 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealStopRouteSkill())
         self._skill_registry.register(RealBringupSkill())
         self._skill_registry.register(RealResumeSkill())
+        self._skill_registry.register(RealClearGoalsSkill())
         self._skill_registry.register(RealTurnSkill())
         self._skill_registry.register(RealVizSkill())
         self._skill_registry.register(RealWhereSkill())
@@ -608,6 +613,11 @@ class Go2WRealWorld:
                                      "(>=0.3m away), else a mark_place name; "
                                      "resets course intent; verify with the "
                                      "returned at(x, y) hint. 回到起点/回到刚才的位置"),
+                "clear_goals_skill": ("Sweep EVERY cached goal: in-flight drive, "
+                                      "latched waypoint, far_planner route goal, "
+                                      "operator RViz goal, course intent — the "
+                                      "clean slate. E-stop latch untouched. "
+                                      "一键清除所有残留目标/缓存指令"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
@@ -617,6 +627,7 @@ class Go2WRealWorld:
                 "bringup_skill", "resume_skill",
                 "turn_skill", "open_viz_skill", "where_skill",
                 "mark_place_skill", "goto_place_skill",
+                "clear_goals_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -634,7 +645,8 @@ class Go2WRealWorld:
   - open_viz_skill: {"view": "main|explore|route"}  (optional; default main — match the running planner)
   - where_skill: {}
   - mark_place_skill: {"name": "<地点名>"}  (optional; default auto 地点N — the pose comes from odometry, never from you)
-  - goto_place_skill: {"name": "起点|刚才|<地点名>"}  (起点=session origin, 刚才=newest breadcrumb >=0.3m away)""",
+  - goto_place_skill: {"name": "起点|刚才|<地点名>"}  (起点=session origin, 刚才=newest breadcrumb >=0.3m away)
+  - clear_goals_skill: {}  (清除所有残留目标+航向意图;不动急停锁存)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
             # SUPPRESS the class-default '## Loop Example' (it teaches
             # detect_objects(), a phantom here — field forensics 2026-07-10).
