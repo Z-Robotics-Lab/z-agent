@@ -143,6 +143,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("compact", "Compress context window", False),
     ("clear", "Reset conversation", False),
     ("clear_memory", "Clear scene graph (forget all explored rooms/objects)", False),
+    ("clean", "Wipe ALL saved map places (预建图地点;双重确认)", False),
     ("reset", "Reset robot pose after a tip-over (SIM only; real worlds refuse)", False),
     ("scenario", "Show or enter a playground scenario  (/scenario <id>)", True),
     ("permissions", "Show or switch approval mode  (/permissions auto|manual)", True),
@@ -2001,6 +2002,113 @@ def _launch_ros2_stack(go2: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# /clean — wipe ALL persisted map places, DOUBLE-confirmed (CEO 2026-07-14)
+# ---------------------------------------------------------------------------
+
+#: Confirmation-input seam. Overridable in tests with a scripted reader; in the
+#: REPL it reads one line from stdin (EOF/Ctrl-D raises EOFError -> abort).
+def _CLEAN_INPUT(prompt: str = "") -> str:  # noqa: N802 — test-patchable seam
+    return input(prompt)
+
+
+#: Built-in place names derived from start_pose.txt (NOT places.json) — they
+#: cannot be deleted and reload after a clear via home_place.
+_CLEAN_BUILTINS: frozenset[str] = frozenset({"home", "家"})
+
+
+def _handle_clean_command(app_state: dict[str, Any] | None) -> None:
+    """`/clean` — wipe ALL persisted places for the ACTIVE map, double-confirmed.
+
+    Kernel MUST NOT import the world statically (Inv-4): the map seam is imported
+    LAZILY here so sim worlds are unaffected and a missing seam degrades to an
+    honest message. Flow: refuse when no map is active -> preview the deletable
+    places (excluding the built-in home/家) -> confirmation 1 = TYPE THE MAP
+    NAME exactly -> confirmation 2 = y/N (default N) -> on confirm back up +
+    clear places.json and the live ledger's non-builtin marks (reloading home).
+    Any mismatch / EOF / Ctrl+C aborts with '已取消'; nothing is ever deleted.
+    """
+    try:
+        from zeno.vcli.worlds import go2w_real_maps as _maps
+        active = _maps.current_map()
+    except Exception:  # noqa: BLE001 — no map world / seam unavailable
+        console.print(
+            "[yellow]  当前不在预建图模式,没有可清空的持久地点。[/yellow]")
+        return
+    if not active:
+        console.print(
+            "[yellow]  当前不在预建图模式,没有可清空的持久地点。[/yellow]")
+        return
+
+    places = _maps.load_places(active)
+    deletable = {n: p for n, p in places.items() if n not in _CLEAN_BUILTINS}
+    console.print()
+    console.print(
+        f"  [bold]/clean[/bold] 将清空预建图 [bold]{escape_markup(active)}[/bold] "
+        f"的 {len(deletable)} 个持久地点:")
+    if deletable:
+        for name, (x, y, yaw) in deletable.items():
+            console.print(
+                f"    [{TEAL}]{escape_markup(name)}[/]  "
+                f"[dim]({x:.2f}, {y:.2f}, {yaw:.3f})[/dim]")
+    else:
+        console.print("    [dim](没有可删除的地点)[/dim]")
+    console.print(
+        "  [dim]内置地点 home/家 来自 start_pose.txt(非 places.json),"
+        "无法删除,清空后会自动重新载入。[/dim]")
+
+    try:
+        typed = _CLEAN_INPUT(
+            f"  确认 1/2 — 请精确输入地图名 “{active}” 以继续: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        console.print("[dim]  已取消。[/dim]")
+        return
+    if typed != active:
+        console.print("[dim]  已取消(地图名不匹配)。[/dim]")
+        return
+    try:
+        yn = _CLEAN_INPUT("  确认 2/2 — 确定清空?[y/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        console.print("[dim]  已取消。[/dim]")
+        return
+    if yn not in ("y", "yes"):
+        console.print("[dim]  已取消。[/dim]")
+        return
+
+    # Confirmed: back up + empty places.json (helper is atomic + best-effort).
+    removed = _maps.clear_places(active)
+    # Clear the LIVE session ledger's non-builtin marks too, so goto_place no
+    # longer resolves a just-deleted place, then reload the built-in home/家.
+    _clean_session_ledger(app_state, active, _maps)
+    console.print(
+        f"  [green]✓ 已清空 {removed} 个地点(备份在 places.json.bak)[/green]")
+
+
+def _clean_session_ledger(
+        app_state: dict[str, Any] | None, active: str, maps_mod: Any) -> None:
+    """Drop non-builtin marks from the live go2w_real ledger; reload home/家.
+
+    Best-effort: no active go2w_real agent (sim world / plain dict) = no-op.
+    """
+    try:
+        agent = (app_state or {}).get("agent")
+        base = getattr(agent, "_base", None)
+        ledger = getattr(base, "pose_ledger", None)
+        if ledger is None or not hasattr(ledger, "marks"):
+            return
+        keep = {n: p for n, p in ledger.marks.items() if n in _CLEAN_BUILTINS}
+        # Rebuild the mark store from the survivors only.
+        ledger._marks = dict(keep)  # noqa: SLF001 — same-package ledger reset
+        home = maps_mod.home_place(active)
+        if home is not None:
+            reload = {}
+            reload.setdefault("home", home)
+            reload.setdefault("家", home)
+            ledger.load_marks(reload)
+    except Exception:  # noqa: BLE001 — ledger reset must not break /clean
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Slash command handler
 # ---------------------------------------------------------------------------
 
@@ -2381,6 +2489,9 @@ def _handle_slash_command(
             console.print(f"[dim]  Scene graph cleared. All rooms/objects forgotten.[/dim]")
         else:
             console.print(f"[dim]  No scene graph file found.[/dim]")
+
+    elif cmd == "clean":
+        _handle_clean_command(app_state)
 
     elif cmd == "reset":
         import os as _os

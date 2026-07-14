@@ -498,7 +498,23 @@ class Go2WRealWorld:
                 f" | course {math.degrees(float(course)):+.1f}deg"
                 f" (drift {math.degrees(drift):+.1f}deg)"
             )
-        return line + f" | odom age {age:.1f}s"
+        line += f" | odom age {age:.1f}s"
+        # Operator RViz goal (CEO field ask 2026-07-14): surface a FRESH manual
+        # goal every model call so the model knows the operator took over and
+        # never fights it. Fresh = age < 180 s; older/absent -> nothing (a stale
+        # click is not the current intent). Best-effort — never fatal.
+        info_fn = getattr(base, "external_goal_info", None)
+        if callable(info_fn):
+            try:
+                info = info_fn()
+                if info is not None and float(info[2]) < 180.0:
+                    line += (
+                        f" | RViz手动目标 ({float(info[0]):.2f}, "
+                        f"{float(info[1]):.2f}) {float(info[2]):.0f}s前"
+                    )
+            except Exception:  # noqa: BLE001 — status note is best-effort
+                pass
+        return line
 
     def decompose_vocab(self) -> DecomposeVocab | None:
         return DecomposeVocab(

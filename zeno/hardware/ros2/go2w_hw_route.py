@@ -170,6 +170,7 @@ class Go2WRouteManager:
             if not ok:
                 return False, msg
             self._state = "launching"
+            self._sync_overlay_flag_locked()
             return True, (
                 f"far_planner route launched (pid={self._launcher.pid}); send a "
                 f"goal with goto_via_route(x, y) — plans a global route on "
@@ -210,6 +211,7 @@ class Go2WRouteManager:
             self._cancel_requested = False
             if self._state == "launching":
                 self._state = "active"
+            self._sync_overlay_flag_locked()
         self._publish_goal(float(x), float(y))
         logger.info("Go2WRouteManager: %s -> (%.2f, %.2f), timeout=%.0fs",
                     self.GOAL_TOPIC, x, y, bound)
@@ -270,6 +272,7 @@ class Go2WRouteManager:
         with self._lock:
             if clean:
                 self._state = "stopped"
+                self._sync_overlay_flag_locked()
                 self._reason = f"stopped by request (rc={rc})"
                 msg = f"route stopped (child exited rc={rc})"
             else:
@@ -297,6 +300,7 @@ class Go2WRouteManager:
             self._far_reach = bool(msg.data)
             if self._state == "launching":
                 self._state = "active"  # liveness proof: far_planner is planning
+                self._sync_overlay_flag_locked()
 
     def _on_odom(self, msg: Any) -> None:
         with self._lock:
@@ -315,9 +319,26 @@ class Go2WRouteManager:
         node = getattr(self._hw, "_node", None)
         publish_goal_point(node, self._goal_pub, self.GOAL_FRAME, x, y)
 
+    def _sync_overlay_flag_locked(self) -> None:
+        """Mirror the active state onto the driver's ``route_overlay_active``.
+
+        far_planner republishes ``/way_point`` continuously toward its route
+        while the overlay is up; the driver reads this flag to classify those
+        frames as PLUMBING (not an operator RViz click). Best-effort: an older
+        driver without the attribute is simply set once, harmlessly.
+        """
+        hw = self._hw
+        if hw is None:
+            return
+        try:
+            hw.route_overlay_active = self._state in _ACTIVE_STATES
+        except Exception:  # noqa: BLE001 — flag sync must never raise
+            pass
+
     def _refresh_locked(self) -> None:
         """Orphan detection: an active state with a dead child => stopped."""
         if self._state not in _ACTIVE_STATES or self._launcher.is_running():
+            self._sync_overlay_flag_locked()
             return
         rc = self._launcher.returncode()
         self._state = "stopped"
@@ -334,6 +355,9 @@ class Go2WRouteManager:
             if not self._orphan_cancel_fired:
                 self._orphan_cancel_fired = True
                 self._fire_nav_cancel(sync=False)
+        # Just left an active state (orphan death) — the overlay is no longer
+        # republishing /way_point, so operator clicks are external again.
+        self._sync_overlay_flag_locked()
 
     def _orphan_cancel_needed_locked(self) -> bool:
         """True when an orphan death was seen but the async cancel may need a

@@ -94,6 +94,36 @@ def _base_of(context: Any) -> Any:
 
 
 
+def _operator_override(base: Any) -> tuple[float, float, float] | None:
+    """The operator RViz goal the driver yielded to, or None.
+
+    True ONLY when the driver reports both the override flag AND an external
+    goal (CEO field ask 2026-07-14): the operator clicked a goal in RViz that
+    overwrote the agent's latched waypoint, so the drive returned False not
+    because it failed but because it LET GO. An older base without the seam
+    yields None and every skill keeps its original failure diagnosis.
+    """
+    if not bool(getattr(base, "nav_overridden", False)):
+        return None
+    info_fn = getattr(base, "external_goal_info", None)
+    if not callable(info_fn):
+        return None
+    try:
+        info = info_fn()
+    except Exception:  # noqa: BLE001 — seam probe must never raise
+        return None
+    if info is None:
+        return None
+    return (float(info[0]), float(info[1]), float(info[2]))
+
+
+def _override_message(ox: float, oy: float) -> str:
+    """The honest yield message (让位 + operator coords) — no failure hints."""
+    return (f"操作者在 RViz 手动指定了新目标 ({ox:.2f}, {oy:.2f}) — "
+            f"已让位,机器人正在前往操作者的目标。"
+            f"可用 at({ox:.2f}, {oy:.2f}) 验证他的目标是否到达")
+
+
 def _target_xy(params: Any, kw: dict, context: Any) -> tuple[float, float]:
     """Extract an (x, y) map-frame target from skill params/kwargs/instruction."""
     for src in (params, kw, getattr(context, "params", None) or {},
@@ -164,6 +194,17 @@ class RealNavigateSkill:
                 "message": f"arrived at ({pos[0]:.2f}, {pos[1]:.2f}); "
                            f"verify with at({x:.2f}, {y:.2f})",
                 "x": round(x, 2), "y": round(y, 2)})
+        override = _operator_override(base)
+        if override is not None:
+            ox, oy, _age = override
+            # Operator free navigation — the plan intent is over; reset it.
+            reset_course(context, "operator_override")
+            oplog("skill", "navigate", f"OPERATOR OVERRIDE -> ({ox:.2f},{oy:.2f})")
+            return SkillResult(
+                success=False, diagnosis_code="operator_override",
+                result_data={"operator_goal_x": round(ox, 2),
+                             "operator_goal_y": round(oy, 2)},
+                error_message=_override_message(ox, oy))
         return SkillResult(
             success=False, result_data={"x": round(x, 2), "y": round(y, 2)},
             error_message=(f"did not arrive; at ({pos[0]:.2f}, {pos[1]:.2f})"
@@ -317,6 +358,17 @@ class RealMoveRelativeSkill:
                                f"({p[0]:.2f}, {p[1]:.2f}){pos_note}; "
                                f"verify with at({tx:.2f}, {ty:.2f}, tol=1.0)")
             return SkillResult(success=True, result_data=data)
+        override = _operator_override(base)
+        if override is not None:
+            ox, oy, _age = override
+            reset_course(context, "operator_override")
+            oplog("skill", "move_relative",
+                  f"OPERATOR OVERRIDE -> ({ox:.2f},{oy:.2f})")
+            data["operator_goal_x"] = round(ox, 2)
+            data["operator_goal_y"] = round(oy, 2)
+            return SkillResult(
+                success=False, diagnosis_code="operator_override",
+                result_data=data, error_message=_override_message(ox, oy))
         # Honest reverse hint: a backward stall with no displacement while NOT
         # estop-latched points at the local planner's reverse-drive refusal,
         # not a guard latch (field trace 2026-07-13 — resume goose-chase).

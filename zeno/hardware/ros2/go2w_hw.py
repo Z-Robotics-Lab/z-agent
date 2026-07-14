@@ -86,6 +86,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
     STALL_TIMEOUT_S: float = 10.0      # no-progress window before aborting
     STALL_EPS_M: float = 0.1           # min distance decrease counted as progress
 
+    # --- Operator RViz-goal classification ---
+    #: A /way_point echo matching our own publish within this window (and ~coords)
+    #: is our own round-trip, not an operator click.
+    OWN_ECHO_WINDOW_S: float = 1.0
+    OWN_ECHO_EPS_M: float = 1e-4       # ~coordinate-match tolerance for an echo
+
     # Topics / services (the robot's EXISTING interface — we add none).
     WAYPOINT_TOPIC: str = "/way_point"
     TELEOP_TOPIC: str = "/teleop_cmd_vel"
@@ -108,6 +114,22 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self._heading: float = 0.0
         self._last_odom: Any = None
         self._odom_arrival_mono: float | None = None
+        # Operator RViz-goal seam (CEO field ask 2026-07-14): the driver
+        # subscribes its OWN /way_point and classifies each frame. A publish of
+        # our own records (x, y, monotonic) so the echo is ignored; while the
+        # route overlay streams /way_point (route_overlay_active, set by the
+        # route manager) frames are plumbing; anything else is an operator click
+        # stored as external_goal. navigate_to yields to a mid-drive external
+        # goal (nav_overridden) WITHOUT nav_cancel — the operator's latched goal
+        # must keep driving the robot.
+        self._own_goal: tuple[float, float, float] | None = None  # x, y, mono
+        self._external_goal: tuple[float, float, float] | None = None
+        #: Set/cleared by Go2WRouteManager while far_planner republishes
+        #: /way_point toward its route — those frames are plumbing, not clicks.
+        self.route_overlay_active: bool = False
+        #: True when the LAST navigate_to yielded to an operator RViz goal.
+        #: Cleared at each navigate start (it describes THIS drive).
+        self.nav_overridden: bool = False
         # Operator-interrupt seam: set by cancel_navigation() (Ctrl+C handler,
         # stop skill); navigate_to's poll loop exits promptly when set.
         self._nav_abort = __import__("threading").Event()
@@ -174,6 +196,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             )
             self._teleop_pub = node.create_publisher(Twist, self.TELEOP_TOPIC, reliable)
             node.create_subscription(Odometry, self.ODOM_TOPIC, self._on_odom, sensor)
+            # Listen to our OWN /way_point so an operator RViz click (which
+            # OVERWRITES our latched goal) is seen — reliable QoS like the
+            # publisher so no click frame is dropped.
+            node.create_subscription(
+                PointStamped, self.WAYPOINT_TOPIC, self._on_waypoint, reliable
+            )
             for svc in self._TRIGGER_SERVICES:
                 self._clients[svc] = node.create_client(Trigger, svc)
 
@@ -219,6 +247,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self._waypoint_pub = node.create_publisher(None, self.WAYPOINT_TOPIC, 10)
         self._teleop_pub = node.create_publisher(None, self.TELEOP_TOPIC, 10)
         node.create_subscription(None, self.ODOM_TOPIC, self._on_odom, 10)
+        node.create_subscription(None, self.WAYPOINT_TOPIC, self._on_waypoint, 10)
         for svc in self._TRIGGER_SERVICES:
             self._clients[svc] = node.create_client(None, svc)
         self._camera.attach_node_for_test(node)
@@ -332,6 +361,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # the POST-motion pose, grades False, and the model re-runs the walk.
         px, py, _ = self._position
         self.move_anchor_xy = (px, py)
+        # This drive's operator-override verdict starts clean; remember the
+        # external-goal timestamp at start so only a goal arriving AFTER this
+        # navigate began counts as a mid-drive takeover (a pre-existing one is
+        # not this drive's business).
+        self.nav_overridden = False
+        prev_ext = self._external_goal
         self._publish_waypoint(x, y)
         logger.info("Go2WHardware: /way_point -> (%.2f, %.2f), timeout=%.0fs", x, y, timeout)
 
@@ -348,6 +383,17 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
                 logger.info("Go2WHardware: navigation cancelled by operator")
                 return False
             time.sleep(period)
+            # Operator RViz takeover: an external /way_point arrived AFTER this
+            # navigate started (a NEW record vs prev_ext). The operator's click
+            # already OVERWROTE our latched goal and is driving the robot — stop
+            # polling OUR goal and yield, but do NOT nav_cancel (that would kill
+            # the operator's goal too). The skill layer reports the honest yield.
+            if self._external_goal is not None and self._external_goal is not prev_ext:
+                gx, gy, _gt = self._external_goal
+                logger.info("Go2WHardware: yielding to operator RViz goal "
+                            "(%.2f, %.2f) — NOT cancelling (operator drives)", gx, gy)
+                self.nav_overridden = True
+                return False
             px, py, _ = self._position
             dist = math.hypot(px - x, py - y)
 
@@ -387,7 +433,54 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         msg.point.x = float(x)
         msg.point.y = float(y)
         msg.point.z = 0.0
+        # Record this as our OWN goal so its /way_point echo is not misread as
+        # an operator RViz click (own-echo suppression in _on_waypoint).
+        self._own_goal = (float(x), float(y), time.monotonic())
         self._waypoint_pub.publish(msg)
+
+    # ------------------------------------------------------------------
+    # Operator RViz-goal detection (own /way_point subscription)
+    # ------------------------------------------------------------------
+
+    def _on_waypoint(self, msg: Any) -> None:
+        """Classify a /way_point frame: own echo / route plumbing / operator.
+
+        OWN ECHO — matches our last _publish_waypoint within OWN_ECHO_WINDOW_S
+        and ~OWN_ECHO_EPS_M coords -> ignore. ROUTE PLUMBING — far_planner
+        streams /way_point toward its route while the overlay is active
+        (route_overlay_active) -> ignore. Otherwise EXTERNAL: an operator clicked
+        a goal in RViz, which OVERWROTE our latched waypoint — store it so
+        navigate_to can yield and the status line can surface it. Executor-thread
+        callback: tiny, never raises.
+        """
+        try:
+            x = float(msg.point.x)
+            y = float(msg.point.y)
+        except Exception:  # noqa: BLE001 — malformed frame, ignore
+            return
+        if self.route_overlay_active:
+            return  # far_planner route plumbing, not an operator click
+        own = self._own_goal
+        if own is not None:
+            ox, oy, ot = own
+            if (time.monotonic() - ot <= self.OWN_ECHO_WINDOW_S
+                    and abs(x - ox) <= self.OWN_ECHO_EPS_M
+                    and abs(y - oy) <= self.OWN_ECHO_EPS_M):
+                return  # our own publish round-tripping back
+        self._external_goal = (x, y, time.monotonic())
+        logger.info("Go2WHardware: EXTERNAL /way_point (operator RViz click) "
+                    "-> (%.2f, %.2f) — will yield", x, y)
+
+    def external_goal_info(self) -> tuple[float, float, float] | None:
+        """Operator RViz goal as (x, y, age_s), or None when never/cleared."""
+        ext = self._external_goal
+        if ext is None:
+            return None
+        return (ext[0], ext[1], time.monotonic() - ext[2])
+
+    def clear_external_goal(self) -> None:
+        """Consume/forget the recorded operator goal (idempotent)."""
+        self._external_goal = None
 
     # ------------------------------------------------------------------
     # Direct velocity — /teleop_cmd_vel, clamped, >=4 Hz cadence

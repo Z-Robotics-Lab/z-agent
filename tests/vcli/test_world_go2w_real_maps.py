@@ -288,6 +288,83 @@ def test_load_marks_does_not_clobber_breadcrumbs():
 
 
 # ---------------------------------------------------------------------------
+# /clean — clear_places helper (CEO 2026-07-14): wipe persisted places, back
+# up the old places.json, return the count removed. Best-effort, never raises.
+# ---------------------------------------------------------------------------
+
+
+def test_clear_places_backs_up_and_empties(tmp_path, monkeypatch):
+    root = tmp_path / "maps"
+    (root / "zeno_office").mkdir(parents=True)
+    monkeypatch.setattr(_maps(), "MAPS_ROOT", root)
+    _maps().save_places(
+        "zeno_office", {"充电桩": (1.0, 2.0, 0.5), "门口": (3.0, -1.0, 1.2)})
+
+    n = _maps().clear_places("zeno_office")
+
+    assert n == 2, "returns the number of places removed"
+    # places.json is now empty of persisted marks
+    assert _maps().load_places("zeno_office") == {}
+    # backup carries the OLD content
+    bak = root / "zeno_office" / "places.json.bak"
+    assert bak.is_file(), "the old places.json is backed up to places.json.bak"
+    backed = json.loads(bak.read_text(encoding="utf-8"))
+    assert backed["充电桩"] == [1.0, 2.0, 0.5]
+    assert backed["门口"] == [3.0, -1.0, 1.2]
+
+
+def test_clear_places_bak_is_overwritten(tmp_path, monkeypatch):
+    root = tmp_path / "maps"
+    (root / "zeno_office").mkdir(parents=True)
+    monkeypatch.setattr(_maps(), "MAPS_ROOT", root)
+    # a stale bak from a previous /clean must be OVERWRITTEN, not appended
+    (root / "zeno_office" / "places.json.bak").write_text(
+        '{"old": [9.0, 9.0, 9.0]}', encoding="utf-8")
+    _maps().save_places("zeno_office", {"新点": (1.0, 2.0, 0.5)})
+
+    _maps().clear_places("zeno_office")
+
+    backed = json.loads(
+        (root / "zeno_office" / "places.json.bak").read_text("utf-8"))
+    assert "old" not in backed, "old bak overwritten"
+    assert backed["新点"] == [1.0, 2.0, 0.5]
+
+
+def test_clear_places_no_file_is_zero(tmp_path, monkeypatch):
+    root = tmp_path / "maps"
+    (root / "zeno_office").mkdir(parents=True)
+    monkeypatch.setattr(_maps(), "MAPS_ROOT", root)
+    # nothing to clear (no places.json) -> 0, no backup, no raise
+    assert _maps().clear_places("zeno_office") == 0
+    assert not (root / "zeno_office" / "places.json.bak").exists()
+
+
+def test_clear_places_missing_map_dir_is_zero(tmp_path, monkeypatch):
+    root = tmp_path / "maps"
+    root.mkdir(parents=True)
+    monkeypatch.setattr(_maps(), "MAPS_ROOT", root)
+    # a map dir that does not exist must degrade to 0, never raise
+    assert _maps().clear_places("ghost_map") == 0
+
+
+def test_clear_places_builtins_survive_via_reload(tmp_path, monkeypatch):
+    """clear_places wipes persisted marks; home/家 come from start_pose.txt,
+    NOT places.json, so a reload after clearing still has them."""
+    root = tmp_path / "maps"
+    (root / "zeno_office").mkdir(parents=True)
+    monkeypatch.setattr(_maps(), "MAPS_ROOT", root)
+    (root / "zeno_office" / "start_pose.txt").write_text(
+        "1.0 2.0 0.0 0.0 0.0 0.5 3.0\n", encoding="utf-8")
+    _maps().save_places("zeno_office", {"充电桩": (5.0, 6.0, 0.1)})
+
+    _maps().clear_places("zeno_office")
+
+    assert _maps().load_places("zeno_office") == {}, "persisted places gone"
+    # the built-in home is derived from start_pose.txt and survives clearing
+    assert _maps().home_place("zeno_office") == (1.0, 2.0, 0.5)
+
+
+# ---------------------------------------------------------------------------
 # TASK 3 — mark_place persists when a map is active
 # ---------------------------------------------------------------------------
 

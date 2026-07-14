@@ -93,6 +93,13 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   session-only and DIE on a nav-stack restart (从零建图模式下重启导航栈后地点失效)
   — say so instead of driving to stale coordinates. bringup start defaults to
   the pre-built map 'zeno_office' (重定位); pass map=从零 to build fresh.
+- 操作者优先 (operator RViz goal) — the operator can click a goal point in RViz
+  at ANY time, and that is the HIGHEST priority: their click OVERWRITES your
+  latched waypoint and the robot goes there. When it happens mid-navigate your
+  drive returns with diagnosis operator_override — you must 让位 (yield) and say
+  so plainly, never re-issue your own goal to fight it. The live status line
+  shows a fresh "RViz手动目标 (x, y)" note; use at(x, y) to verify the operator's
+  goal arrived. This is a feature, not a conflict — 手动标记 goal point 和 CLI 兼容。
 - Long-range goals — go2w_real_route(action=start) launches the far_planner
   overlay, then action=goto x y routes around obstacles/rooms globally;
   action=stop tears it down. Use for goals beyond line of sight.

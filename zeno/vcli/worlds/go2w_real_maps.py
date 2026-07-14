@@ -184,6 +184,32 @@ def save_places(
         return False
 
 
+def clear_places(map_name: str) -> int:
+    """Wipe the persisted named marks for *map_name*; return the count removed.
+
+    The /clean REPL command's disk half (CEO 2026-07-14). Backs the current
+    ``places.json`` up to ``places.json.bak`` (OVERWRITING any old backup) and
+    then removes the file, so the store reads empty on the next load. The
+    built-in ``home``/``家`` place is NOT stored here (it derives from
+    ``start_pose.txt``), so it survives a clear and reloads via
+    :func:`home_place` — nothing to do for it.
+
+    Best-effort: no places.json / missing map dir -> 0 (no backup, no raise);
+    a backup or unlink failure is logged and yields 0 rather than propagating.
+    """
+    path = places_json_path(map_name)
+    try:
+        if not path.is_file():
+            return 0
+        count = len(load_places(map_name))
+        bak = path.with_name(f"{PLACES_BASENAME}.bak")
+        os.replace(path, bak)  # atomic move = backup + delete in one step
+        return count
+    except OSError as exc:  # noqa: BLE001 — a failed clear must not crash /clean
+        logger.warning("go2w_real: clear_places(%s) failed: %s", map_name, exc)
+        return 0
+
+
 def home_place(map_name: str) -> tuple[float, float, float] | None:
     """The built-in 'home' pose from start_pose.txt line 1, or None.
 
