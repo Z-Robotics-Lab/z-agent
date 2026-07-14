@@ -274,6 +274,7 @@ live-status hook + NativeEvent 事件流,-p 机器路径不动;palette 配色复
 - ✅ 阶段1（dashboard.py）：render_status_panel 纯函数（stale 警示/estop 大写/
   markup 转义）+ Dashboard 三区 build_layout + ZENO_DASHBOARD 门（默认 OFF 阶段
   opt-in）+ _run_dashboard 接入 main（状态区读 _live_status_cached，回合执行 stub）。
-- ⏳ 阶段2：回合区消费 NativeEvent 实时渲染（worker 执行,console 重定向回合 buffer）；
-  回合日志表（序号+时间+goal+route+耗时,工具四列对齐,verdict 卡片）。
+- ✅ 阶段2：console 重绑定到回合区(rich Console file=_TurnWriter→ANSI,prompt_toolkit
+  ANSI() 解析保色),整条回合链路(ChainView sink/verdict 卡/页脚/chat)零改动落回合区;
+  worker 用同一 TurnRunner(忙时插队),start_turn 出 #N HH:MM goal 头。工具四列对齐留阶段3。
 - ⏳ 阶段3：滚动/历史下钻/help/窄终端降级；退出 dump transcript 回 stdout。
