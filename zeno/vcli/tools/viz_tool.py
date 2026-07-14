@@ -81,7 +81,7 @@ class FoxgloveTool:
                     "Foxglove Bridge already running on ws://localhost:8765\n\n"
                     "Connect: app.foxglove.dev → Open connection → "
                     "Foxglove WebSocket → ws://localhost:8765\n"
-                    "Dashboard: foxglove/vector-os-dashboard.json"
+                    "Dashboard: foxglove/zeno-go2w-dashboard.json"
                 )
             )
 
@@ -129,7 +129,7 @@ class FoxgloveTool:
                 "Connect:\n"
                 "  1. Open app.foxglove.dev in Chrome\n"
                 "  2. Open connection → Foxglove WebSocket → ws://localhost:8765\n"
-                "  3. Import layout: foxglove/vector-os-dashboard.json\n\n"
+                "  3. Import layout: foxglove/zeno-go2w-dashboard.json\n\n"
                 "Use open_foxglove(action='stop') to shut down."
             )
         )

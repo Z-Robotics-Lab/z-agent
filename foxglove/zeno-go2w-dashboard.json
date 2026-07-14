@@ -1,17 +1,16 @@
 {
   "_watermark": {
     "creator": "Zeno",
-    "author": "Vector Robotics",
-    "version": "2.0",
-    "timestamp": "2026-04-10",
-    "description": "Go2 navigation + SLAM + V-Graph + cognitive data dashboard"
+    "version": "3.0",
+    "timestamp": "2026-07-14",
+    "description": "Go2W real-robot dashboard — prior map + live scan + nav chain + cameras (RGB/depth/semantic) + cmd-vs-actual honesty plots. Topics verified against ~/Z-Navigation-Stack + go2w-nuc sources; palette matches the Zeno CLI (#2dd4bf brand / #5cc98f ok / #f0b849 warn / #e8897d bad)."
   },
   "configById": {
     "3D!main": {
       "cameraState": {
         "perspective": true,
-        "distance": 14,
-        "phi": 50,
+        "distance": 16,
+        "phi": 48,
         "thetaOffset": -90,
         "targetOffset": [0, 0, 0],
         "target": [0, 0, 0],
@@ -20,10 +19,10 @@
         "near": 0.01,
         "far": 5000
       },
-      "followMode": "follow-pose",
+      "followMode": "follow-position",
       "followTf": "sensor",
       "scene": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#0d0f14",
         "enableStats": false,
         "syncCamera": false
       },
@@ -32,132 +31,110 @@
         "frame:sensor": { "visible": true }
       },
       "topics": {
+        "/prior_map_color": {
+          "visible": true,
+          "colorField": "rgb",
+          "colorMode": "rgb",
+          "pointSize": 2,
+          "pointShape": "circle",
+          "decayTime": 0
+        },
         "/registered_scan": {
           "visible": true,
           "colorField": "z",
           "colorMode": "colormap",
           "colorMap": "turbo",
-          "pointSize": 5,
+          "pointSize": 3,
           "pointShape": "circle",
           "decayTime": 0
         },
         "/overall_map": {
-          "visible": true,
-          "colorField": "z",
-          "colorMode": "colormap",
-          "colorMap": "turbo",
-          "pointSize": 3,
-          "pointShape": "circle",
-          "decayTime": 0
-        },
-        "/stacked_cloud": {
           "visible": false,
           "colorField": "z",
           "colorMode": "colormap",
           "colorMap": "turbo",
-          "pointSize": 3,
+          "pointSize": 2,
           "pointShape": "circle",
           "decayTime": 0
         },
-        "/free_paths": {
-          "visible": true,
-          "colorField": "intensity",
+        "/sensor_scan": {
+          "visible": false,
+          "colorField": "z",
           "colorMode": "colormap",
           "colorMap": "turbo",
           "pointSize": 2,
-          "pointShape": "circle",
-          "decayTime": 1
+          "decayTime": 0
         },
-        "/frontier_cloud": {
+        "/terrain_map": {
+          "visible": false,
+          "colorField": "intensity",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "pointSize": 3,
+          "pointShape": "circle"
+        },
+        "/terrain_map_ext": {
+          "visible": false,
+          "colorField": "intensity",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "pointSize": 3
+        },
+        "/added_obstacles": {
           "visible": true,
           "colorField": "intensity",
           "colorMode": "flat",
-          "flatColor": "#00ffff88",
-          "pointSize": 4,
-          "pointShape": "circle",
+          "flatColor": "#e8897dcc",
+          "pointSize": 4
+        },
+        "/trajectory": {
+          "visible": true,
+          "colorField": "intensity",
+          "colorMode": "flat",
+          "flatColor": "#5cc98f88",
+          "pointSize": 2
+        },
+        "/free_paths": {
+          "visible": false,
+          "colorField": "intensity",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "pointSize": 1.5,
           "decayTime": 1
         },
         "/explored_areas": {
           "visible": false,
           "colorField": "intensity",
           "colorMode": "flat",
-          "flatColor": "#00ff4444",
-          "pointSize": 3,
-          "decayTime": 0
-        },
-        "/coverage_cloud": {
-          "visible": false,
-          "colorField": "intensity",
-          "colorMode": "flat",
-          "flatColor": "#4488ff44",
+          "flatColor": "#5cc98f44",
           "pointSize": 3,
           "decayTime": 0
         },
         "/path": {
           "visible": true,
-          "lineWidth": 0.08,
-          "color": "#ffffffcc"
-        },
-        "/global_path": {
-          "visible": true,
-          "lineWidth": 0.06,
-          "color": "#00d4b4cc"
-        },
-        "/global_path_full": {
-          "visible": true,
-          "lineWidth": 0.04,
-          "color": "#00d4b466"
-        },
-        "/exploration_path": {
-          "visible": true,
-          "lineWidth": 0.05,
-          "color": "#f0a030cc"
-        },
-        "/tare_visualizer/local_path": {
-          "visible": true,
-          "lineWidth": 0.04,
-          "color": "#ff8800aa"
+          "lineWidth": 0.1,
+          "color": "#2dd4bfee"
         },
         "/way_point": {
           "visible": true,
-          "color": "#ff4444"
+          "color": "#f0b849"
         },
         "/goal_point": {
           "visible": true,
-          "color": "#ff8800",
+          "color": "#e8897d",
           "type": "arrow"
         },
-        "/scene_graph_markers": {
+        "/state_estimation": {
           "visible": true
         },
-        "/terrain_map": {
-          "visible": false,
-          "colorField": "z",
-          "colorMode": "colormap",
-          "colorMap": "turbo",
-          "pointSize": 4,
-          "pointShape": "circle"
+        "/navigation_boundary": {
+          "visible": true,
+          "color": "#5cc98f",
+          "lineWidth": 0.12
         },
-        "/terrain_map_ext": {
-          "visible": false,
-          "colorField": "z",
-          "colorMode": "colormap",
-          "colorMap": "turbo",
-          "pointSize": 4
-        },
-        "/added_obstacles": {
-          "visible": false,
-          "colorField": "intensity",
-          "colorMode": "flat",
-          "flatColor": "#ff1900",
-          "pointSize": 4
-        },
-        "/trajectory": {
-          "visible": false,
-          "colorField": "intensity",
-          "colorMode": "colormap",
-          "colorMap": "rainbow",
-          "pointSize": 5
+        "/nogo_boundary": {
+          "visible": true,
+          "color": "#e8897d99"
         },
         "/viz_graph_topic": {
           "visible": true,
@@ -181,30 +158,6 @@
             "vertices_matches": { "visible": false },
             "visibility_edge": { "visible": false }
           }
-        },
-        "/keypose_graph_edge_marker": {
-          "visible": false
-        },
-        "/keypose_graph_node_marker": {
-          "visible": false
-        },
-        "/navigation_boundary": {
-          "visible": true,
-          "color": "#00ff00",
-          "lineWidth": 0.15
-        },
-        "/nogo_boundary_marker": {
-          "visible": true,
-          "color": "#ff000088"
-        },
-        "/tare_visualizer/marker_array": {
-          "visible": false
-        },
-        "/tare_visualizer/viewpoints": {
-          "visible": false
-        },
-        "/tare_visualizer/viewpoint_candidates": {
-          "visible": false
         }
       },
       "layers": {
@@ -215,7 +168,7 @@
           "label": "Grid",
           "position": [0, 0, 0],
           "rotation": [0, 0, 0],
-          "color": "#1a4a4a",
+          "color": "#1c2029",
           "size": 100,
           "divisions": 100,
           "lineWidth": 1,
@@ -226,10 +179,6 @@
         "type": "point",
         "poseTopic": "/goal_point",
         "pointTopic": "/way_point",
-        "poseEstimateTopic": "/initialpose",
-        "poseEstimateXDeviation": 0.5,
-        "poseEstimateYDeviation": 0.5,
-        "poseEstimateThetaDeviation": 0.26179939,
         "frameId": "map"
       },
       "imageMode": {}
@@ -237,7 +186,7 @@
     "3D!topdown": {
       "cameraState": {
         "perspective": false,
-        "distance": 30,
+        "distance": 28,
         "phi": 0,
         "thetaOffset": -90,
         "targetOffset": [0, 0, 0],
@@ -247,10 +196,10 @@
         "near": 0.01,
         "far": 5000
       },
-      "followMode": "follow-pose",
+      "followMode": "follow-position",
       "followTf": "sensor",
       "scene": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#0d0f14",
         "enableStats": false,
         "syncCamera": false
       },
@@ -259,98 +208,48 @@
         "frame:sensor": { "visible": true }
       },
       "topics": {
+        "/prior_map_color": {
+          "visible": true,
+          "colorField": "rgb",
+          "colorMode": "rgb",
+          "pointSize": 1.5,
+          "decayTime": 0
+        },
         "/registered_scan": {
           "visible": true,
           "colorField": "z",
           "colorMode": "colormap",
           "colorMap": "turbo",
-          "pointSize": 3,
-          "pointShape": "circle",
-          "decayTime": 0
-        },
-        "/overall_map": {
-          "visible": true,
-          "colorField": "z",
-          "colorMode": "colormap",
-          "colorMap": "turbo",
           "pointSize": 2,
-          "pointShape": "circle",
           "decayTime": 0
         },
-        "/free_paths": {
-          "visible": true,
-          "colorField": "intensity",
-          "colorMode": "colormap",
-          "colorMap": "turbo",
-          "pointSize": 1.5,
-          "decayTime": 1
-        },
-        "/frontier_cloud": {
+        "/trajectory": {
           "visible": true,
           "colorField": "intensity",
           "colorMode": "flat",
-          "flatColor": "#00ffff66",
-          "pointSize": 3,
-          "decayTime": 1
+          "flatColor": "#5cc98f88",
+          "pointSize": 1.5
         },
         "/path": {
           "visible": true,
           "lineWidth": 0.08,
-          "color": "#ffffffcc"
-        },
-        "/global_path": {
-          "visible": true,
-          "lineWidth": 0.06,
-          "color": "#00d4b4cc"
-        },
-        "/global_path_full": {
-          "visible": true,
-          "lineWidth": 0.04,
-          "color": "#00d4b466"
-        },
-        "/exploration_path": {
-          "visible": true,
-          "lineWidth": 0.05,
-          "color": "#f0a030cc"
+          "color": "#2dd4bfee"
         },
         "/way_point": {
           "visible": true,
-          "color": "#ff4444"
+          "color": "#f0b849"
         },
         "/goal_point": {
           "visible": true,
-          "color": "#ff8800"
+          "color": "#e8897d"
         },
-        "/scene_graph_markers": {
+        "/state_estimation": {
           "visible": true
-        },
-        "/viz_graph_topic": {
-          "visible": true,
-          "namespaces": {
-            "freespace_vgraph": { "visible": true },
-            "polygon_edge": { "visible": true },
-            "angle_direct": { "visible": false },
-            "boundary_edge": { "visible": false },
-            "boundary_vertex": { "visible": false },
-            "freespace_vertex": { "visible": false },
-            "frontier_vertex": { "visible": false },
-            "global_vertex": { "visible": false },
-            "global_vgraph": { "visible": false },
-            "localrange_vertex": { "visible": false },
-            "odom_edge": { "visible": false },
-            "to_goal_edge": { "visible": false },
-            "trajectory_edge": { "visible": false },
-            "trajectory_vertex": { "visible": false },
-            "updating_vertex": { "visible": false },
-            "vertex_angle": { "visible": false },
-            "vertices_matches": { "visible": false },
-            "visibility_edge": { "visible": false }
-          }
         },
         "/navigation_boundary": {
           "visible": true,
-          "color": "#00ff00",
-          "lineWidth": 0.1
+          "color": "#5cc98f",
+          "lineWidth": 0.08
         }
       },
       "layers": {
@@ -361,7 +260,7 @@
           "label": "Grid",
           "position": [0, 0, 0],
           "rotation": [0, 0, 0],
-          "color": "#1a4a4a",
+          "color": "#1c2029",
           "size": 100,
           "divisions": 100,
           "lineWidth": 1,
@@ -376,11 +275,11 @@
       },
       "imageMode": {}
     },
-    "Image!camera": {
-      "cameraTopic": "/camera/image",
+    "Image!rgb": {
+      "cameraTopic": "/camera/image/compressed",
       "enabledMarkerTopics": [],
       "synchronize": false,
-      "transformMarkers": true,
+      "transformMarkers": false,
       "smooth": false,
       "flipHorizontal": false,
       "flipVertical": false,
@@ -388,41 +287,88 @@
       "maxValue": 1,
       "rotation": 0
     },
-    "RawMessages!scenegraph": {
-      "topicPath": "/vector_os/scene_graph",
-      "diffEnabled": false,
-      "diffMethod": "custom",
-      "diffTopicPath": "",
-      "showFullMessageForDiff": false,
-      "fontSize": 12
+    "Image!depth": {
+      "cameraTopic": "/camera/depth/compressed",
+      "enabledMarkerTopics": [],
+      "synchronize": false,
+      "transformMarkers": false,
+      "smooth": false,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": 0,
+      "maxValue": 1,
+      "rotation": 0
     },
-    "RawMessages!debug": {
-      "topicPath": "/state_estimation",
-      "diffEnabled": false,
-      "diffMethod": "custom",
-      "diffTopicPath": "",
-      "showFullMessageForDiff": false,
-      "fontSize": 12
+    "Image!semantic": {
+      "cameraTopic": "/camera/semantic_image/compressed",
+      "enabledMarkerTopics": [],
+      "synchronize": false,
+      "transformMarkers": false,
+      "smooth": false,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": 0,
+      "maxValue": 1,
+      "rotation": 0
     },
-    "Plot!speed": {
+    "Tab!cameras": {
+      "activeTabIdx": 0,
+      "tabs": [
+        { "title": "RGB", "layout": "Image!rgb" },
+        { "title": "深度", "layout": "Image!depth" },
+        { "title": "语义", "layout": "Image!semantic" }
+      ]
+    },
+    "Plot!linear": {
       "paths": [
         {
           "value": "/state_estimation.twist.twist.linear.x",
           "enabled": true,
           "timestampMethod": "receiveTime",
-          "label": "Linear X"
+          "label": "实际 vx"
         },
         {
-          "value": "/state_estimation.twist.twist.linear.y",
+          "value": "/cmd_vel.linear.x",
           "enabled": true,
           "timestampMethod": "receiveTime",
-          "label": "Linear Y"
+          "label": "指令 vx"
         },
+        {
+          "value": "/cmd_vel_safe.linear.x",
+          "enabled": false,
+          "timestampMethod": "receiveTime",
+          "label": "安全钳 vx"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "minYValue": -1,
+      "maxYValue": 1
+    },
+    "Plot!angular": {
+      "paths": [
         {
           "value": "/state_estimation.twist.twist.angular.z",
           "enabled": true,
           "timestampMethod": "receiveTime",
-          "label": "Angular Z"
+          "label": "实际 ωz"
+        },
+        {
+          "value": "/cmd_vel.angular.z",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "指令 ωz"
+        },
+        {
+          "value": "/imu/data.angular_velocity.z",
+          "enabled": false,
+          "timestampMethod": "receiveTime",
+          "label": "IMU ωz"
         }
       ],
       "showXAxisLabels": true,
@@ -434,6 +380,38 @@
       "sidebarDimension": 240,
       "minYValue": -1.5,
       "maxYValue": 1.5
+    },
+    "RawMessages!pose": {
+      "topicPath": "/state_estimation.pose.pose",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "fontSize": 12
+    },
+    "RawMessages!goalstatus": {
+      "topicPath": "/far_reach_goal_status",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "fontSize": 12
+    },
+    "RawMessages!explore": {
+      "topicPath": "/exploration_finish",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "fontSize": 12
+    },
+    "Tab!state": {
+      "activeTabIdx": 0,
+      "tabs": [
+        { "title": "位姿", "layout": "RawMessages!pose" },
+        { "title": "目标状态", "layout": "RawMessages!goalstatus" },
+        { "title": "探索", "layout": "RawMessages!explore" }
+      ]
     }
   },
   "globalVariables": {},
@@ -446,26 +424,26 @@
     "first": {
       "first": "3D!main",
       "second": {
-        "first": "Image!camera",
+        "first": "Tab!cameras",
         "second": "3D!topdown",
         "direction": "column",
-        "splitPercentage": 35
+        "splitPercentage": 48
       },
       "direction": "row",
-      "splitPercentage": 68
+      "splitPercentage": 64
     },
     "second": {
-      "first": "RawMessages!scenegraph",
+      "first": "Plot!linear",
       "second": {
-        "first": "RawMessages!debug",
-        "second": "Plot!speed",
+        "first": "Plot!angular",
+        "second": "Tab!state",
         "direction": "row",
-        "splitPercentage": 45
+        "splitPercentage": 50
       },
       "direction": "row",
-      "splitPercentage": 28
+      "splitPercentage": 33
     },
     "direction": "column",
-    "splitPercentage": 80
+    "splitPercentage": 74
   }
 }

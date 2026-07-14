@@ -7,6 +7,11 @@
 
 set -e
 
+# Real-robot DDS isolation (domain 20 + CycloneDDS): without this the bridge
+# joins the default domain and sees ZERO topics on the NUC. Same guarded
+# source the zeno launcher uses; dev machines without the file are unaffected.
+[ -f "$HOME/go2w-nuc/bringup/ros_env.sh" ] && source "$HOME/go2w-nuc/bringup/ros_env.sh"
+
 PORT="${FOXGLOVE_PORT:-8765}"
 
 # Colors
@@ -53,7 +58,7 @@ echo ""
 echo -e "  ${BOLD}连接方式:${RESET}"
 echo -e "  1. 打开 ${TEAL}https://app.foxglove.dev${RESET}"
 echo -e "  2. Open connection → Foxglove WebSocket → ${TEAL}ws://localhost:${PORT}${RESET}"
-echo -e "  3. 导入 dashboard: Layout menu → Import → ${DIM}${SCRIPT_DIR}/vector-os-dashboard.json${RESET}"
+echo -e "  3. 导入 dashboard: Layout menu → Import → ${DIM}${SCRIPT_DIR}/zeno-go2w-dashboard.json${RESET}"
 echo ""
 echo -e "${DIM}Press Ctrl+C to stop${RESET}"
 
