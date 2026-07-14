@@ -84,8 +84,8 @@ VERSION = "0.1.0"
 
 
 def _env(name: str, default: str | None = None) -> str | None:
-    """Thin delegate over :func:`zeno.vcli.env.read_env` (ZENO_-first, VECTOR_
-    fallback). Kept as a module-local name for the many call sites here; the
+    """Thin delegate over :func:`zeno.vcli.env.read_env` (ZENO_-prefixed, with a
+    quiet legacy fallback). Kept as a module-local name for the many call sites here; the
     ``default=None`` mirrors the old ``os.environ.get`` misses this file relied on.
     """
     return read_env(name, default)
@@ -641,8 +641,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Select an explicit registered world by id (e.g. 'go2w'). Highest "
             "precedence — beats --scenario and the agent-driven default. Resolves "
             "through the world registry; unknown ids fail loud with the valid set. "
-            "Env default: ZENO_WORLD (legacy VECTOR_WORLD still read as a fallback). "
-            "Combine with ZENO_WORLD_PLUGINS (legacy VECTOR_WORLD_PLUGINS) to load a "
+            "Env default: ZENO_WORLD (legacy ZENO_WORLD still read as a fallback). "
+            "Combine with ZENO_WORLD_PLUGINS (legacy ZENO_WORLD_PLUGINS) to load a "
             "third-party world module before resolution."
         ),
     )
@@ -687,7 +687,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Campaign #13 M1 (default OFF): run the -p turn through the frontier-model "
             "NATIVE TOOL-USE producer (engine.run_turn_native) instead of the legacy "
             "decompose plan. The verdict block is unchanged. Also enableable via "
-            "ZENO_NATIVE_LOOP=1 (legacy VECTOR_NATIVE_LOOP=1 still honoured)."
+            "ZENO_NATIVE_LOOP=1 (legacy ZENO_NATIVE_LOOP=1 still honoured)."
         ),
     )
     parser.add_argument(
@@ -699,7 +699,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "the native tool-use producer first; if it took NO action (could not route "
             "the goal) FALL BACK to the legacy decompose plan. A SEPARATE additive mode "
             "from --native-loop. Also enableable via ZENO_NATIVE_FIRST=1 (legacy "
-            "VECTOR_NATIVE_FIRST=1 still honoured)."
+            "ZENO_NATIVE_FIRST=1 still honoured)."
         ),
     )
     return parser.parse_args(argv)
@@ -709,7 +709,7 @@ def _native_loop_enabled(args: Any) -> bool:
     """True iff the M1 native tool-use path is selected (flag OR env, default OFF).
 
     Single source for the strangler-fig flag: ``--native-loop`` on the CLI OR
-    ``VECTOR_NATIVE_LOOP=1`` in the env. Default OFF — every existing path is
+    ``ZENO_NATIVE_LOOP=1`` in the env. Default OFF — every existing path is
     byte-identical when neither is set.
     """
     if getattr(args, "native_loop", None):
@@ -721,7 +721,7 @@ def _native_first_enabled(args: Any) -> bool:
     """True iff STEP 5 native-attempt-then-fallback is selected (flag OR env, default OFF).
 
     A SEPARATE, additive mode from ``_native_loop_enabled``: ``--native-first`` on the
-    CLI OR ``VECTOR_NATIVE_FIRST=1`` in the env. Default OFF — every existing path is
+    CLI OR ``ZENO_NATIVE_FIRST=1`` in the env. Default OFF — every existing path is
     byte-identical when neither this nor ``--native-loop`` is set. This reader does NOT
     consult the native-loop flag/env, so the two modes stay independent.
     """
@@ -738,10 +738,10 @@ def _print_native_enabled() -> bool:
     tool-use producer first, then FALLS BACK to the legacy decompose+execute when
     native took NO action — so bare ``zeno -p`` + natural language exercises the
     redesign by default (CLAUDE.md North Star "Acceptance interface"), the same way
-    the interactive REPL already does. Default ON; ``VECTOR_PRINT_NATIVE`` in
+    the interactive REPL already does. Default ON; ``ZENO_PRINT_NATIVE`` in
     {0, false, off, no} forces the pure-legacy ``-p`` path (byte-identical to the
     pre-cutover behavior) — a reversible escape hatch. The explicit ``--native-first``
-    flag / ``VECTOR_NATIVE_FIRST`` stays an INDEPENDENT force-on reader (default OFF,
+    flag / ``ZENO_NATIVE_FIRST`` stays an INDEPENDENT force-on reader (default OFF,
     unchanged) so its documented semantics are preserved; this is the additional
     default-ON knob, NOT a change to that flag's default.
     """
@@ -774,7 +774,7 @@ def _repl_native_enabled() -> bool:
     producer first (then falls back to the legacy planner) so the owner's ONLY
     acceptance interface — bare ``zeno`` + natural language — exercises the
     redesign (CLAUDE.md North Star -> "Acceptance interface"). Default ON.
-    ``VECTOR_REPL_NATIVE`` in {0, false, off, no} forces the pure-legacy REPL
+    ``ZENO_REPL_NATIVE`` in {0, false, off, no} forces the pure-legacy REPL
     (byte-identical to the pre-cutover turn path) — a reversible escape hatch.
     """
     return _env("REPL_NATIVE", "").strip().lower() not in (
@@ -852,7 +852,7 @@ def _run_dashboard(app_state: dict[str, Any], registry: Any, session: Any) -> No
 def _persistent_composer_enabled() -> bool:
     """P3.7 persistent composer — default ON; ZENO_COMPOSER_SYNC in
     {1,true,on,yes} restores the alternating prompt (reversible escape hatch,
-    the same pattern as VECTOR_REPL_NATIVE)."""
+    the same pattern as ZENO_REPL_NATIVE)."""
     return _env("COMPOSER_SYNC", "").strip().lower() not in ("1", "true", "on", "yes")
 
 
@@ -1503,11 +1503,11 @@ def _warn_if_auto_mode(permissions: Any) -> None:
 
 
 def _load_world_plugins() -> None:
-    """Import every module named in ``VECTOR_WORLD_PLUGINS`` for its register() side-effect.
+    """Import every module named in ``ZENO_WORLD_PLUGINS`` for its register() side-effect.
 
     Plug-and-play discovery (Invariant 3): a third-party world lives in its OWN
     module and self-registers into the process-wide world registry on import
-    (``register()`` runs at module load). Set ``VECTOR_WORLD_PLUGINS`` to a
+    (``register()`` runs at module load). Set ``ZENO_WORLD_PLUGINS`` to a
     comma-separated list of importable module names; each is imported here so its
     world id becomes resolvable by ``--world``. A module that fails to import (bad
     name, missing dep) is warned about and skipped — one broken plugin never
@@ -1525,7 +1525,7 @@ def _load_world_plugins() -> None:
             importlib.import_module(name)
         except Exception as exc:  # noqa: BLE001 — one bad plugin must not crash the CLI
             logger.warning(
-                "VECTOR_WORLD_PLUGINS: failed to import world plugin %r: %s", name, exc
+                "ZENO_WORLD_PLUGINS: failed to import world plugin %r: %s", name, exc
             )
             console.print(
                 f"[yellow]World plugin '{name}' failed to load:[/yellow] {exc}"
@@ -1535,12 +1535,12 @@ def _load_world_plugins() -> None:
 def _resolve_active_world(args: argparse.Namespace, agent: Any) -> Any:
     """Select the active world, honouring ``--world`` then ``--scenario``.
 
-    Plugin discovery runs first: ``VECTOR_WORLD_PLUGINS`` modules are imported so
+    Plugin discovery runs first: ``ZENO_WORLD_PLUGINS`` modules are imported so
     a BYO world's ``register()`` side-effect lands in the registry before we
     resolve a name.
 
     Precedence (highest first):
-      1. ``--world <id>`` (or env ``VECTOR_WORLD``) -> resolve that registered
+      1. ``--world <id>`` (or env ``ZENO_WORLD``) -> resolve that registered
          world by id through the process-wide registry. Beats --scenario and the
          agent-driven default — an explicit named world always wins.
       2. ``--scenario <id>`` -> the playground world for that scenario. Loading
@@ -1817,9 +1817,9 @@ def _init_agent(args: argparse.Namespace) -> Any:
         )
 
         # The in-process Piper arm is attached when the go2_piper attach scene
-        # was selected (VECTOR_SIM_WITH_ARM=1) so this lightweight --sim-go2 path
+        # was selected (ZENO_SIM_WITH_ARM=1) so this lightweight --sim-go2 path
         # is manipulation-capable — same capability the bare-REPL NL path
-        # (sim_tool._start_go2 under VECTOR_NO_ROS2=1) provides. Both build the
+        # (sim_tool._start_go2 under ZENO_NO_ROS2=1) provides. Both build the
         # agent through the SAME helper (Rule 3/11) so they can never drift.
         _with_arm = _env("SIM_WITH_ARM", "0") == "1"
         from zeno.hardware.sim.go2_inprocess import (
@@ -1833,7 +1833,7 @@ def _init_agent(args: argparse.Namespace) -> Any:
         # ROS2 bridge + nav stack (background). OPTIONAL: navigate_to_object plans
         # in-process via MuJoCoGo2.navigate_to (visibility-graph), so the external
         # nav stack is only needed for explore (TARE/FAR), never for the fetch flow.
-        # VECTOR_NO_ROS2=1 skips it so the bare `cli --sim-go2` fetch runs fully
+        # ZENO_NO_ROS2=1 skips it so the bare `cli --sim-go2` fetch runs fully
         # in-process — the lightweight path autonomous verification needs (the heavy
         # multi-process stack OOM/SIGKILLs an unattended round). Default unchanged.
         if _should_launch_ros2_stack():
@@ -1844,7 +1844,7 @@ def _init_agent(args: argparse.Namespace) -> Any:
                 console.print(f"[dim]  ROS2: not available ({exc})[/dim]")
         else:
             console.print(
-                f"[dim]  ROS2: skipped (VECTOR_NO_ROS2=1; in-process vgraph nav)[/dim]"
+                f"[dim]  ROS2: skipped (ZENO_NO_ROS2=1; in-process vgraph nav)[/dim]"
             )
 
         return agent
@@ -1860,9 +1860,9 @@ def _should_launch_ros2_stack() -> bool:
     """Whether to launch the external ROS2 nav stack on a ``--sim-go2`` startup.
 
     The in-process ``MuJoCoGo2.navigate_to`` plans collision-free paths with the
-    visibility-graph planner, so the external Vector Nav Stack is only needed for
+    visibility-graph planner, so the external Nav Stack is only needed for
     explore (TARE/FAR), never for the fetch flow (look -> navigate_to_object ->
-    perception_grasp). ``VECTOR_NO_ROS2=1`` skips it, yielding the lightweight
+    perception_grasp). ``ZENO_NO_ROS2=1`` skips it, yielding the lightweight
     fully-in-process path autonomous fetch verification uses — the heavy
     multi-process stack OOM/SIGKILLs an unattended ``claude -p`` round. Default
     (unset, or any value other than the exact string "1") launches the stack so
@@ -1872,7 +1872,7 @@ def _should_launch_ros2_stack() -> bool:
 
 
 def _launch_ros2_stack(go2: Any) -> None:
-    """Launch ROS2 bridge + Vector Nav Stack in background.
+    """Launch ROS2 bridge + Nav Stack in background.
 
     Starts the bridge in a daemon thread and the nav stack as a subprocess.
     Non-blocking — returns immediately after launching.
@@ -2579,7 +2579,7 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
     Gates (ALL must be true for re-exec to fire):
     1. sys.platform == 'darwin'                 — macOS only
     2. _wants_window(args)                      — --sim/--sim-go2 without --headless
-    3. VECTOR_REEXEC != '1'                     — not already re-exec'd (loop guard)
+    3. ZENO_REEXEC != '1'                     — not already re-exec'd (loop guard)
     4. not running under pytest                 — never re-exec during tests
     5. mujoco.viewer._MJPYTHON is falsy         — not already under mjpython
 
@@ -2620,10 +2620,10 @@ def _maybe_reexec_under_mjpython(args: argparse.Namespace) -> None:
         return
 
     # Re-exec the entire process under mjpython with the same argv.
-    # ZENO_REEXEC=1 (legacy VECTOR_REEXEC mirror) prevents infinite loops.
+    # ZENO_REEXEC=1 (legacy ZENO_REEXEC mirror) prevents infinite loops.
     new_env = os.environ.copy()
     new_env["ZENO_REEXEC"] = "1"  # ZENO_ primary
-    new_env["VECTOR_REEXEC"] = "1"  # legacy mirror (additive; _env/read_env falls back to it)
+    new_env["ZENO_REEXEC"] = "1"  # legacy mirror (additive; _env/read_env falls back to it)
     os.execve(mjpython, [mjpython, "-m", "zeno.vcli.cli"] + sys.argv[1:], new_env)
 
 
@@ -2693,7 +2693,7 @@ def create_backend_with_fake_seam(
 
     By default this is byte-identical to ``create_backend`` — the production path
     is unchanged. The ONLY override is gated on the env var
-    ``VECTOR_FAKE_LLM=<json-path>``: when set, the network LLM is replaced by a
+    ``ZENO_FAKE_LLM=<json-path>``: when set, the network LLM is replaced by a
     ``FakeBackend`` that returns a canned decompose-plan response read from that
     JSON file (see ``tests/harness/fake_backend.py``). This replaces ONLY the
     network call — the REAL decomposer / validator / skill / GoalVerifier /
@@ -2761,7 +2761,7 @@ def _build_turn_context(
     Identical to the block that used to live inline in ``main()`` (cli.py setup
     1271-1486). The display callbacks are injected so the REPL can pass its live
     step renderers while a headless turn passes None (no-op). The LLM backend is
-    built through ``create_backend_with_fake_seam`` so a ``VECTOR_FAKE_LLM`` test
+    built through ``create_backend_with_fake_seam`` so a ``ZENO_FAKE_LLM`` test
     run drives the REAL cli.main with a deterministic plan.
     """
     # Resolve API key + provider from CLI flags > env vars > config file
@@ -2887,7 +2887,7 @@ def _build_turn_context(
 
     # Backend + engine (deferred if no API key — /login can set it up). The
     # backend is built through the fake-LLM seam (production-identical unless
-    # VECTOR_FAKE_LLM is set) at the SINGLE create_backend site.
+    # ZENO_FAKE_LLM is set) at the SINGLE create_backend site.
     engine: VectorEngine | None = None
     if api_key:
         backend = create_backend_with_fake_seam(
@@ -2970,7 +2970,7 @@ def _build_turn_context(
 def _safe_verdict_snapshot(agent: Any) -> None:
     """Best-effort same-process visual snapshot at verdict time (ADR-002 visual acceptance).
 
-    PNG-only, env-gated by ``VECTOR_SNAPSHOT_DIR``. It is handed ONLY the agent (never the
+    PNG-only, env-gated by ``ZENO_SNAPSHOT_DIR``. It is handed ONLY the agent (never the
     ``VerdictReport``) so it CANNOT change the verdict, and any failure is swallowed here as
     defense-in-depth over ``capture.snapshot_on_verdict`` (which is itself non-raising). The
     capture module is imported lazily so non-sim turns never pay the cost.
@@ -2984,7 +2984,7 @@ def _safe_verdict_snapshot(agent: Any) -> None:
 
 
 def _sim_lock_enabled(args: Any) -> bool:
-    """True when the global ONE-sim lock should wrap this turn — ``VECTOR_SIM_LOCK=1`` AND a sim is
+    """True when the global ONE-sim lock should wrap this turn — ``ZENO_SIM_LOCK=1`` AND a sim is
     launched (ADR-002 Stage 0). Default OFF: interactive ``zeno`` and the test suite are
     unaffected; the EvolvingLoop and the acceptance harnesses opt in via the env so EVERY automated
     sim serializes through this one owner (no double-lock: only the sim-running cli process holds it).
@@ -2997,7 +2997,7 @@ def _sim_lock_enabled(args: Any) -> bool:
 def _hold_sim_lock_until_exit() -> None:
     """Acquire the global one-sim lock for this process's lifetime (released + nuke-after at exit).
 
-    Raises ``sim_lock.SimBusy`` if the host cannot be cleared within ``VECTOR_SIM_LOCK_TIMEOUT`` (the
+    Raises ``sim_lock.SimBusy`` if the host cannot be cleared within ``ZENO_SIM_LOCK_TIMEOUT`` (the
     caller turns that into a fail-fast 'sim busy' verdict — never a silent 2nd concurrent sim).
     """
     import atexit
@@ -3063,7 +3063,7 @@ def run_one_turn(args: Any) -> int:
         return report.exit_code()
 
     # ADR-002 Stage 0: serialize the global one-sim-at-a-time discipline when enabled (the loop /
-    # harnesses set VECTOR_SIM_LOCK=1). Acquire BEFORE building the sim; hold for the process; release
+    # harnesses set ZENO_SIM_LOCK=1). Acquire BEFORE building the sim; hold for the process; release
     # + teardown at exit. Fail-fast (never run a 2nd concurrent sim) if the host can't be cleared.
     if _sim_lock_enabled(args):
         from zeno.acceptance.sim_lock import SimBusy
@@ -3085,14 +3085,14 @@ def run_one_turn(args: Any) -> int:
         return _emit(VerdictReport.no_trace(goal=prompt or "", error="no engine (no API key)"))
 
     # S5b PRINT-PATH CUTOVER native-attempt-then-fallback (DEFAULT ON via
-    # _print_native_enabled; also forced by --native-first / VECTOR_NATIVE_FIRST):
+    # _print_native_enabled; also forced by --native-first / ZENO_NATIVE_FIRST):
     # ATTEMPT the native producer first; if it DISPATCHED an action skill (routed the
     # goal) emit its verdict — otherwise it took NO action (zero skills dispatched ->
     # no half-action side-effects) and we FALL THROUGH to the EXISTING legacy
     # decompose+execute+verdict block below. Strictly ADDITIVE: a goal native cannot
-    # route (e.g. the VECTOR_FAKE_LLM decompose-plan seam yields no tool_calls) falls
+    # route (e.g. the ZENO_FAKE_LLM decompose-plan seam yields no tool_calls) falls
     # through to the byte-identical legacy verdict, so only goals native CAN route
-    # change producer. VECTOR_PRINT_NATIVE in {0,false,off,no} forces the pure-legacy
+    # change producer. ZENO_PRINT_NATIVE in {0,false,off,no} forces the pure-legacy
     # -p path (reversible escape hatch). The fallback's vgg_decompose(prompt) uses the
     # RAW prompt, independent of any session text the native attempt may have appended.
     # The DEFAULT-ON print cutover must NOT pre-empt an EXPLICIT --native-loop (pure
@@ -3322,7 +3322,7 @@ def main(argv: list[str] | None = None) -> None:
     _setup_explore_events(console)
 
     # Backend + engine (deferred if no API key — /login can set it up). Built
-    # through the SINGLE fake-LLM seam (production-identical unless VECTOR_FAKE_LLM
+    # through the SINGLE fake-LLM seam (production-identical unless ZENO_FAKE_LLM
     # is set) so the REPL and the non-interactive -p path share one create_backend
     # site (the seam is byte-identical to create_backend in production).
     engine: VectorEngine | None = None
@@ -3559,7 +3559,7 @@ def main(argv: list[str] | None = None) -> None:
         # If it took NO action (could not route — e.g. "启动 go2 仿真", embodiment
         # switch, chat) FALL THROUGH to the UNCHANGED legacy routing below, so sim
         # launch + NL embodiment switch keep working via the untouched tool_use
-        # path. VECTOR_REPL_NATIVE=0 forces the pure-legacy REPL (reversible).
+        # path. ZENO_REPL_NATIVE=0 forces the pure-legacy REPL (reversible).
         # native OWNS navigation too (CEO architecture call 2026-06-19: the
         # model-driven producer is the correct design; the hardcoded legacy planner
         # is being strangled, not retreated to). Obstacle-AVOIDANCE for native nav
@@ -3810,7 +3810,7 @@ def main(argv: list[str] | None = None) -> None:
             #   * tool_use route -> run_turn_unified, which produces the answer
             #     via the ReAct loop AND closes the loop with a verified
             #     answer-only trace (chat is verified too; the moat is intact).
-            # VECTOR_LEGACY_TURN=1 restores the exact pre-cutover fork
+            # ZENO_LEGACY_TURN=1 restores the exact pre-cutover fork
             # (vgg_decompose-then-run_turn) for one release as a fallback.
             _legacy_turn = _env("LEGACY_TURN") == "1"
             if _legacy_turn:
@@ -3959,7 +3959,7 @@ def main(argv: list[str] | None = None) -> None:
             try:
                 status.start()  # one live region for the whole turn
                 if _legacy_turn:
-                    # Legacy fallback (VECTOR_LEGACY_TURN=1): the open ReAct loop
+                    # Legacy fallback (ZENO_LEGACY_TURN=1): the open ReAct loop
                     # with no closed-loop verify — kept one release.
                     turn_result: TurnResult = engine.run_turn(
                         user_message=user_input,

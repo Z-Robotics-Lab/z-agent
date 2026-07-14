@@ -259,7 +259,7 @@ class ZenoEngine:
         self._system_prompt: list[dict[str, Any]] = system_prompt or []
         self._permissions: PermissionContext = permissions or PermissionContext()
         self._max_turns: int = max_turns
-        # ZENO_MAX_TOKENS (legacy VECTOR_MAX_TOKENS fallback) overrides the per-request
+        # ZENO_MAX_TOKENS (legacy ZENO_MAX_TOKENS fallback) overrides the per-request
         # output cap — for smaller models or a credit-constrained provider key (OpenRouter
         # returns HTTP 402 when the requested max_tokens exceeds the key's remaining weekly
         # affordance). Fails safe to the default.
@@ -880,7 +880,7 @@ class ZenoEngine:
         # A name is "documented-lazy" (opt-in, conditionally bound) when its
         # signature string contains "opt-in" or "may be disabled" — this is the
         # convention used for verify predicates that are available only under
-        # specific conditions (e.g. tests_pass requires VECTOR_DEV_ALLOW_TESTS).
+        # specific conditions (e.g. tests_pass requires ZENO_DEV_ALLOW_TESTS).
         # Lazy names that are absent from verify_ns generate a WARNING only, not
         # a hard fail, because their absence is a designed opt-in posture, not drift.
         verify_fn_signatures: dict[str, str] = vocab_kwargs.get("verify_fn_signatures", {})
