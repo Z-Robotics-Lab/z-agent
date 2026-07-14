@@ -12,6 +12,7 @@ records the calls.
 """
 from __future__ import annotations
 
+from threading import Event
 from typing import Any
 
 from zeno.vcli.turn_status import TurnStatus
@@ -49,7 +50,9 @@ def _make() -> tuple[TurnStatus, list[StubLive], list[tuple[str, float, bool]]]:
         lives.append(live)
         return live
 
-    return TurnStatus(content, live_factory), lives, rendered
+    # Unit tests drive manual updates unless a test opts into the autonomous
+    # heartbeat explicitly; this keeps every test deterministic and thread-free.
+    return TurnStatus(content, live_factory, tick_interval=None), lives, rendered
 
 
 # --------------------------------------------------------------------------
@@ -156,6 +159,41 @@ def test_thinking_bumps_elapsed_in_place_no_new_region() -> None:
     last_text, last_elapsed, last_is_thinking = rendered[-1]
     assert last_is_thinking is True
     assert last_elapsed == 5.0
+
+
+def test_thinking_elapsed_ticks_without_reasoning_chunks() -> None:
+    """The visible timer advances while a provider buffers all reasoning."""
+    lives: list[StubLive] = []
+    rendered: list[tuple[str, float, bool]] = []
+    clock = [100.0]
+    reached_three_seconds = Event()
+
+    def content(text: str, elapsed: float, is_thinking: bool) -> Any:
+        rendered.append((text, elapsed, is_thinking))
+        if is_thinking and elapsed >= 3.0:
+            reached_three_seconds.set()
+        return (text, elapsed, is_thinking)
+
+    def live_factory(renderable: Any) -> StubLive:
+        live = StubLive(renderable)
+        lives.append(live)
+        return live
+
+    status = TurnStatus(
+        content,
+        live_factory,
+        tick_interval=0.01,
+        clock=lambda: clock[0],
+    )
+    status.start()
+    clock[0] = 103.2  # no status.thinking(...) / provider callback occurs
+    try:
+        assert reached_three_seconds.wait(0.2)
+    finally:
+        status.stop()
+
+    assert len(lives) == 1
+    assert any(elapsed >= 3.0 for _text, elapsed, thinking in rendered if thinking)
 
 
 def test_streamed_text_leaves_thinking_state() -> None:

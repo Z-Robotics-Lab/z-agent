@@ -19,6 +19,8 @@ frames STACK and the prompt duplicates.
 - ``update_text(text)`` — render streamed assistant text in place.
 - ``thinking(elapsed_sec)`` — render the calm "thinking…" indicator during the
   reasoning gap (single in-place status, never a new box).
+- an internal one-second heartbeat advances elapsed time even when a provider
+  buffers all reasoning and invokes no callbacks.
 
 The renderer is injected (``content_factory``) and the live region is created via
 ``live_factory`` so the controller's start/stop/pause/resume *logic* is unit-testable
@@ -26,7 +28,9 @@ without a TTY — tests pass stub factories and assert the call counts.
 """
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
+from threading import Event, RLock, Thread
 from typing import Any, Callable, Iterator, Protocol
 
 
@@ -70,10 +74,16 @@ class TurnStatus:
         live_factory: LiveFactory,
         *,
         thinking_label: str = "thinking…",
+        tick_interval: float | None = 1.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._content_factory = content_factory
         self._live_factory = live_factory
         self._thinking_label = thinking_label
+        self._tick_interval = (
+            max(0.001, float(tick_interval)) if tick_interval is not None else None
+        )
+        self._clock = clock
 
         self._live: _LiveLike | None = None
         self._running = False
@@ -82,6 +92,10 @@ class TurnStatus:
         # Once any real assistant text streams we leave the "thinking" state and
         # stop showing the reasoning indicator.
         self._has_text = False
+        self._started_at: float | None = None
+        self._ticker_stop: Event | None = None
+        self._ticker_thread: Thread | None = None
+        self._lock = RLock()
 
         # Observable counters (for tests / debugging). Count real transitions only.
         self.start_count = 0
@@ -94,20 +108,65 @@ class TurnStatus:
 
     @property
     def running(self) -> bool:
-        return self._running
+        with self._lock:
+            return self._running
 
     def _renderable(self) -> Any:
         is_thinking = not self._has_text
         return self._content_factory(self._text, self._elapsed, is_thinking)
 
+    def _start_ticker_locked(self) -> None:
+        """Start one autonomous heartbeat for the current live-region generation."""
+        if self._tick_interval is None or self._has_text:
+            return
+        stop_event = Event()
+        self._ticker_stop = stop_event
+        ticker = Thread(
+            target=self._tick,
+            args=(stop_event,),
+            name="zeno-thinking-timer",
+            daemon=True,
+        )
+        self._ticker_thread = ticker
+        ticker.start()
+
+    def _invalidate_ticker_locked(self) -> None:
+        stop_event = self._ticker_stop
+        self._ticker_stop = None
+        self._ticker_thread = None
+        if stop_event is not None:
+            stop_event.set()
+
+    def _tick(self, stop_event: Event) -> None:
+        """Refresh elapsed time even when the provider buffers every chunk."""
+        assert self._tick_interval is not None
+        while not stop_event.wait(self._tick_interval):
+            with self._lock:
+                if (
+                    stop_event is not self._ticker_stop
+                    or not self._running
+                    or self._has_text
+                ):
+                    return
+                started_at = self._started_at
+                if started_at is None:
+                    continue
+                self._elapsed = max(self._elapsed, self._clock() - started_at)
+                if self._live is not None:
+                    self._live.update(self._renderable())
+
     def start(self) -> None:
         """Open the live region. Idempotent — a no-op if already running."""
-        if self._running:
-            return
-        self._live = self._live_factory(self._renderable())
-        self._live.start()
-        self._running = True
-        self.start_count += 1
+        with self._lock:
+            if self._running:
+                return
+            if self._started_at is None:
+                self._started_at = self._clock()
+            self._live = self._live_factory(self._renderable())
+            self._live.start()
+            self._running = True
+            self.start_count += 1
+            self._start_ticker_locked()
 
     def stop(self) -> None:
         """Close the live region. Idempotent — a no-op if already stopped.
@@ -115,12 +174,14 @@ class TurnStatus:
         Always call this BEFORE printing a final answer or anything outside the
         region, so the region is cleared first and frames never stack.
         """
-        if not self._running:
-            return
-        live = self._live
-        self._live = None
-        self._running = False
-        self.stop_count += 1
+        with self._lock:
+            if not self._running:
+                return
+            live = self._live
+            self._live = None
+            self._running = False
+            self._invalidate_ticker_locked()
+            self.stop_count += 1
         if live is not None:
             live.stop()
 
@@ -134,9 +195,10 @@ class TurnStatus:
         Returns True if it actually stopped a running region (so ``resume`` should
         restart it), False if nothing was running.
         """
-        if not self._running:
-            return False
-        self.pause_count += 1
+        with self._lock:
+            if not self._running:
+                return False
+            self.pause_count += 1
         self.stop()
         return True
 
@@ -164,11 +226,15 @@ class TurnStatus:
 
     def update_text(self, text: str) -> None:
         """Append streamed assistant text and refresh the region in place."""
-        if text:
-            self._text += text
-            self._has_text = True
-        if self._running and self._live is not None:
-            self._live.update(self._renderable())
+        with self._lock:
+            if text:
+                self._text += text
+                self._has_text = True
+                # Once answer text arrives, no late timer frame may replace it.
+                if self._ticker_stop is not None:
+                    self._ticker_stop.set()
+            if self._running and self._live is not None:
+                self._live.update(self._renderable())
 
     def thinking(self, elapsed_sec: float) -> None:
         """Refresh the calm reasoning indicator in place (no new box).
@@ -177,8 +243,9 @@ class TurnStatus:
         only while still in the thinking state; once real text has streamed this is
         a no-op so the answer is never replaced by a spinner.
         """
-        if self._has_text:
-            return
-        self._elapsed = max(self._elapsed, float(elapsed_sec))
-        if self._running and self._live is not None:
-            self._live.update(self._renderable())
+        with self._lock:
+            if self._has_text:
+                return
+            self._elapsed = max(self._elapsed, float(elapsed_sec))
+            if self._running and self._live is not None:
+                self._live.update(self._renderable())

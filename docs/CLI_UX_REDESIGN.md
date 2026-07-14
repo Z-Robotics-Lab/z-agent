@@ -1,6 +1,6 @@
 # CLI UX 重设计提案（branch: ui/cli-experience）
 
-状态：**P1+P2 已实施**（2026-07-13，基线 ddf2208，6 对 RED→GREEN commit）。
+状态：**P1+P2+P3.1+P3.2+P3.3+P3.4+P3.5+P3.6 已实施**（2026-07-13，基线 ddf2208）。
 范围：**只动展示层**（vcli 渲染 + 显示回调接线），不动 verify 脊柱语义
 （vcli/cognitive 的判定逻辑零改动，verdict 只读不再算）。
 
@@ -15,20 +15,52 @@
 - ✅ P1.1 事件流：turn_events.NativeEvent + native_loop on_event（additive，
   默认 None 字节等价）；ChainView 单 Live 活树替换 console.status；finish 事件
   携带 usage（native 路径首次读 response.usage）；on_reasoning 首次接进 native。
-- ✅ P1.2 CoT：/cot off|tail|full（config 持久化）+ /why；chat 路径 thinking
-  面板 ┆ 尾巴；native 路径经 reasoning 事件。推理只进显示缓冲，决不进 session。
+- ✅ P1.2 CoT：/cot off|tail|full（config 持久化）+ /why；chat 路径开放
+  `◌/┆` thinking；native 路径经 reasoning 事件。P3.6 后 tail 回合留两行预览，
+  `/why` 展开全量；推理只进显示缓冲，决不进 session。
 - ✅ P1.5：**/trace 读会话内有界历史（5 条，native+VGG）而非磁盘**——取证发现
   产品从不调 save_trace，磁盘回放永远为空；/trace save 显式落盘。/route 只判
   路由不执行。
-- ✅ P2：三路径统一页脚 route/model/tok/wall（未知省略）；步骤行符号单义
+- ✅ P2：native/VGG 保留 route/model/tok/wall 页脚，普通 chat 在 P3.5 压为
+  tok/wall（route/model 由 composer 常显）；步骤行符号单义
   ✓=GROUNDED、○=RAN 且检查过、✗=检查假；步骤行带诚实时长。
 - ✅ P3.1 执行树持久化（owner ask 2026-07-13）：回合后 ⌂ goal 树（rounds/工具/
   verify/nudge）留在 transcript，活区消失的过程信息不再丢。
-- ⏸ 未做：Ctrl+O 详略切换（P3，低优先）；GUI（§6，事件协议已就位）。
+- ✅ P3.2 live status 同源上屏：只读现有 `world.live_status_line` hook，
+  ChainView 每个 native round 刷新，prompt_toolkit 底栏显示同一行；失败清空
+  防旧位姿，Rich/HTML 均转义；未动 native_loop/world/verify。
+- ✅ P3.3 独立输入 composer（owner ask 2026-07-13）：裸单行 `PromptSession`
+  替换为全宽 `Frame + TextArea`，最多 6 行滚动编辑；Enter 提交（CR/LF 均接受，
+  保持 acceptance `sendline`），Alt+Enter 换行，Tab 补全，Ctrl+R 历史；提交后压成
+  markup-safe `›` transcript。状态底栏收进输入区，Ctrl+C/EOF/插队契约不变。
+- ✅ P3.4 Claude Code 风格收口（owner 截图反馈 2026-07-13）：去掉重复的 `Zeno`
+  Frame 标题与四边框，改为短 rail + 开放输入面；启动内置 owner 指定的 6 行、38 列
+  双色终端 `ZENO` 字标（亮色块字 + 石墨结构线 + SGR 斜体近似原稿斜切），≥38 列始终
+  原样显示，更窄时才完整切换
+  compact 版本，不截画。live status 按完整字段
+  最多 3 行重排，续行与软换行正文均对齐。针对现代终端先 reflow 后 SIGWINCH 导致的
+  重复 prompt，缩窄时按新宽度重算擦除原点，扩宽沿用原生路径；tmux 实测同一长 draft
+  `100→40→100` 无残影。启动 metadata 在窄端也按字段折行并保持两格缩进。
+- ✅ P3.5 消息层级 + CoT 收口（owner 要求截图审视 2026-07-13）：同一个
+  `hello + /cot full` 真实 DeepSeek 回合前后对照。普通回答从带标题全边框收为 `●`
+  开放消息，软换行对齐正文；answer-only 回合不再重复打 `answer done` / `VGG [PASS]
+  answer`（动作步骤的执行链、verify、verdict 全保留）。普通对话 footer 不再重复
+  composer 已常显的 route/model，只留诚实 tokens/time。CoT full 与 `/why` 改为
+  `◌ Thinking` + `┆` 左轨的响应式开放块，provider 空白归一后自然换行；实时
+  tail 去边框并严格限制为标题 + 单行尾巴。`off|tail|full` 兼容不变，推理仍不进 session。
+- ✅ P3.6 实时反馈 + 层级再收口（owner 现场反馈 2026-07-13）：删除底栏无绑定的
+  `? 快捷键`；`TurnStatus` 自带 1s UI 心跳，provider 55s 不送 reasoning chunk 时
+  `Thinking` 仍逐秒增加，答案开始后立即停止心跳。tail 在 transcript 留标题+两行
+  暗色预览，`/why` 是可兑现的全量展开；legacy/native 工具统一为更低对比的
+  `◇ Tool · call ✓|×`层。Logo 仅在交互 TTY 以固定六行区域从左向右 0.9s
+  浮现；pipe/JSON/测试直接输出最终帧，无延迟。
+- ⏸ 未做：当前 transcript 是 Rich 静态 scrollback，旧行不再接收鼠标事件；
+  真正“点击某个块原地展开”需要持久全屏 TUI 或 GUI，本轮不伪造可点击箭头。
+  Ctrl+O 详略切换与 GUI（§6，WebSocket 需 CEO gate）仍待做。
 
-## 7. 下一轮候选（2026-07-13 与 owner 讨论）
+## 7. 下一轮候选（2026-07-13 与 owner 讨论，#1 已落地）
 
-1. **live_status 上屏**：pose hooks 轮（1499720）已给模型每轮重建 live_status_line
+1. ✅ **live_status 上屏（P3.2）**：pose hooks 轮（1499720）已给模型每轮重建 live_status_line
    （位姿/course drift/odom age）——同一数据渲染进 ChainView 头 + prompt_toolkit
    底栏，人和模型看同一份真值（单源，display-only）。
 2. **长动作进度**：navigate/route 执行中在树节点上滚动 距目标剩余米数/航向
@@ -39,9 +71,12 @@
 6. **回合后快照提示**：ADR-002 PNG 已拍时打印路径。
 7. **Ctrl+O 详略切换**：result_data/verify 原始值常显。
 8. **GUI dashboard**：事件协议+trace 已结构化，`zeno --dashboard` WebSocket tail。
+   注：WebSocket tail 会形成新跨进程接口，实施前必须过 CEO gate。
 - 兼容性：ZENO_VERDICT 哨兵、verdict 行 `(n/m grounded)` 尾、`→ verify`/
   `actor=`/"native working" PTY 钉词、插队行、session 摘要全部原样保留；
-  tests/vcli 与 tests/unit/vcli 回归 0 新失败（15/5+cv2 全既存基线）。
+  P3.5 历史 UI 簇 183P；P3.6 变更+邻接簇 191P/2skip + 裸 zeno PTY + 真实 DeepSeek
+  chat/tool 回合全绿；全量 unit/vcli 1120P/5F（另 2 cv2 collect）、
+  tests/vcli 1108P/32F/33skip/1xfail，失败全为环境或 UI worktree 未合入的 hw RED。
 
 ## 1. 现状诊断
 
@@ -172,13 +207,17 @@ zeno> 往左转动30度
   现在 `✓` 在 native 步骤行里表示 verify_result=True（cli.py:595），但 verdict
   又说没 grounded——同一屏两套语义。改为：`✓`=GROUNDED、`○`=RAN、`✗`=FAILED，
   勾号只留给真正落地的证据。
-- 符号：`●` 执行中（配 spinner）、`✓/○/✗` 定格态、`┆` CoT、`ⓘ` 解释、`▸` 工具。
-- 答案面板保留现有 teal 边框 Panel，宽度仍 min(width, 80)。
+- 符号：`●` 回答、`✓/○/✗` 证据定格态、`┆` CoT、`ⓘ` 解释、`◇ Tool` 工具。
+- 普通答案用 `●` 开放消息，不再用全边框 Panel；宽度仍 min(width, 80)。
 - 进度纪律不变：全 turn 单 Live，外来行走 paused()。
 
 ### P3 — 交互面
 
 - `/cot`、`/why`、`/trace` 如上；`/route` 显示本 turn 路由决策及原因（classify_intent 结果）。
+- 静态 scrollback 不宣称支持原地鼠标展开；compact 预览用 `/why`/`/trace`
+  进入完整视图。鼠标折叠依赖全屏持久 TUI 或 GUI 消费同一事件流。
+- 输入面为独立全宽 composer：标题/多行编辑/补全菜单/历史搜索/动态状态底栏
+  共一个 prompt_toolkit Application；提交后清掉编辑 chrome，scrollback 只留 `›` 用户消息。
 - Ctrl+O 循环 compact/verbose（verbose 常显 result_data 与 verify 原始值）。
 - `-p/--json` 路径**零变化**（机器面不动）。
 

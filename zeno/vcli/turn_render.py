@@ -258,7 +258,8 @@ class ChainView:
 
     Consumes ``NativeEvent``s (zeno.vcli.turn_events) and renders a live tree:
     header (keeps the PTY-pinned words "native working") → dim ┆ reasoning
-    tail → chain nodes (● tool / └─ verify ✓|✗) → ⟲ nudges → narration tail.
+    tail → chain nodes (◇ Tool · call ✓|× / └─ verify ✓|✗) → ⟲ nudges
+    → narration tail.
 
     Lifecycle discipline is TurnStatus's (one region per turn, idempotent
     start/stop, ``paused()`` around foreign prints — see turn_status.py for
@@ -276,6 +277,7 @@ class ChainView:
         reasoning_tail_chars: int = 160,
         max_nudges: int = 3,
         show_reasoning_tail: bool = True,
+        status_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self._live_factory = live_factory
         self._live: Any = None
@@ -289,6 +291,8 @@ class ChainView:
         self._reasoning_tail: str = ""
         self._reasoning_tail_chars = int(reasoning_tail_chars)
         self._show_reasoning_tail = bool(show_reasoning_tail)
+        self._status_provider = status_provider
+        self._live_status = ""
         self._nudges: deque[str] = deque(maxlen=max(1, int(max_nudges)))
         self._text_tail = ""
         self.finish_data: dict[str, Any] = {}
@@ -369,6 +373,7 @@ class ChainView:
         detail = str(getattr(event, "detail", "") or "")
         ok = getattr(event, "ok", None)
         if kind == "round":
+            self._refresh_live_status()
             self._round = label
         elif kind == "reasoning":
             self._reasoning.append(detail)
@@ -394,6 +399,17 @@ class ChainView:
         elif kind == "finish":
             self.finish_data = dict(getattr(event, "data", None) or {})
 
+    def _refresh_live_status(self) -> None:
+        """Refresh the optional display-only status; failure clears stale text."""
+        if self._status_provider is None:
+            self._live_status = ""
+            return
+        try:
+            status = self._status_provider()
+        except Exception:  # noqa: BLE001 — display providers are best-effort
+            status = None
+        self._live_status = " ".join(str(status).split()) if status else ""
+
     # -- rendering ------------------------------------------------------
 
     def _chain_lines(self) -> list[str]:
@@ -405,14 +421,17 @@ class ChainView:
                 detail = _escape_markup(node.get("detail", ""))
                 ok = node.get("ok")
                 if ok is None:
-                    mark = f"[{_TEAL}]●[/]"
+                    state = "[dim]…[/]"
                 elif ok:
-                    mark = "[green]●[/]"
+                    state = "[green]✓[/]"
                 else:
-                    mark = "[red]●[/]"
+                    state = "[red]×[/]"
                 err = node.get("err") or ""
                 err_part = f"  [red]{_escape_markup(err)}[/]" if err else ""
-                lines.append(f"  {mark} {label}{detail}{err_part}")
+                lines.append(
+                    f"  [bold {_TEAL}]◇[/] [dim #738091]Tool[/] "
+                    f"[#46515e]·[/] {label}{detail}  {state}{err_part}"
+                )
             else:  # verify
                 ok = node.get("ok")
                 if ok is None:
@@ -448,6 +467,8 @@ class ChainView:
         lines = [
             f"  [bold {_TEAL}]native[/] working…{round_part}  [dim](Ctrl+C 安全中断)[/dim]"
         ]
+        if self._live_status:
+            lines.append(f"  [dim]⌖ {_escape_markup(self._live_status)}[/]")
         if self._show_reasoning_tail and self._reasoning_tail:
             joined = self._reasoning_tail.replace("\n", " ")
             tail = joined[-self._reasoning_tail_chars :].strip()

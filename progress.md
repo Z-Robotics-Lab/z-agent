@@ -1,11 +1,12 @@
 # Zeno — progress
 
-更新：2026-07-13（傍晚）。fork 自 vector-os-nano @ R715 (12f3e15)。分支 **hw-go2w-real**（未 push/未动 main）。
+更新：2026-07-13（深夜）。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**（未 push/未动 main）；UI worktree ui/cli-experience 已并入。
 
 ## Works（已验证 / 单测 GREEN）
-- **CLI UX P1/P2（ui/cli-experience 并入,owner 试用批准)**:CoT 三档(/cot //why)/ChainView 活执行树/
-  verdict 卡片+人话解释/诚实计时//trace //route/统一页脚;markup 注入防线;vcli 全量 0 新失败。
-- **P5.4 真机世界 go2w_real**:Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
+- **CLI UX P1–P3.6（ui/cli-experience 并入,owner 批）**:CoT/ChainView/verdict 卡/trace+route；P3.3 composer；
+  P3.4 owner ZENO 字标+响应式；P3.5 `●` 开放回答+去重复脚手架；P3.6 Thinking 心跳+tail 两行预览(`/why`展开)+
+  `◇ Tool` 暗层+Logo 动画；markup 注入防线(16 审查 findings 修毕)；变更+邻接簇 191P+裸/DeepSeek PTY,0 新失败。
+- **P5.4 真机世界 go2w_real**：Go2WHardware 驱动(/way_point+里程计轮询;/teleop_cmd_vel 钳幅+deadman;
   Trigger standup/liedown/estop/resume/manual/nav_cancel)。世界同 CLI/工具/技能/verify 接缝。
 - **v2 探索/route/camera** + **sim→real 内核迁移+快赢+moved() 驱动锚** + **verdict 谓词角色映射** +
   **TYPED INTERJECT + /permissions 持久化** + **全局位姿意识钩子**(world_context_ttl=0;live_status 单块)。
@@ -35,6 +36,7 @@
   期间等待其完结后才提交(NEVER-KILL-INFRA,无冲突:世界文件 vs vcli 核心)。
 
 ## Next
+0. **UI 下一轮**:纯 CLI 可做长动作进度或 /history；GUI WebSocket tail 是新跨进程接口,待 CEO gate。
 1. **真机 E2E 验收(Inv-2)**:重放 15:32 五步计划——短停+yaw 翻转下腿2 必须继续向前;>1.5m 绕行看
    诚实重锚定消息;places 现场;重启导航栈后地点失效话术。owner+E-stop 在手。
 2. 导航栈侧 twoWayDrive 倒车翻转修复对齐后,复核 0.5m 短停(arrival radius)是否可收紧。
@@ -47,9 +49,9 @@
 - **真机 E2E 未验收**:intent-pose/places 全 hermetic 单测,Inv-2 待硬件闭环。
 - **既存失败(勿追,全环境性)**:playground/perception/courtyard/native-PTY(1)/level66(vcli 15) +
   mujoco/cv2/mcp collect-error/spawn-OOM + acceptance_env/vision_judge/d1_reexec(unit 5)。
-- **结构债(既存)**:native_loop/engine/cli/goal_decomposer >800 硬上限(上游单体)。
+- **结构债（既存）**:native_loop/engine/cli/goal_decomposer >800 硬上限(上游单体);go2w_real 620。
+- **缓办残留（诚实记录）**:跨步因果归因未分级,与 shadow-MjData re-step 同一 deferral,docstring 已明示。
 
 ## 关键背景
-- go2w=Isaac 数字孪生(HTTP 桥 127.0.0.1:8042);go2w_real=真机(nav 栈 ROS_DOMAIN_ID=20 CycloneDDS,
-  ~/Z-Navigation-Stack via ~/go2w-nuc/scripts/nav.sh)。同 CLI,sim↔real 对称。verify 唯真值=/state_estimation
-  里程计(无 /gt);栈健康唯真值=nav.sh status。测仅经 `bash scripts/run-tests`(内存封顶,勿裸 pytest)。
+- go2w=Isaac 数字孪生(HTTP 桥 127.0.0.1:8042);go2w_real=真机(ROS_DOMAIN_ID=20,
+  ~/Z-Navigation-Stack)。同 CLI,sim↔real 对称；verify 唯真值=/state_estimation(无 /gt)；测仅经 `scripts/run-tests`。

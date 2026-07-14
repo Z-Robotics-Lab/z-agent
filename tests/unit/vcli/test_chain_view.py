@@ -12,7 +12,7 @@ Content contract (render_lines is a PURE projection of consumed events):
 - the header keeps the PTY-pinned words "native" + "working" (the transient
   frames land in the raw transcript that tests/vcli/test_repl_native_cutover_pty.py
   scans);
-- tool nodes render as chain entries with running/ok/fail states; a verify
+- tool nodes render as quiet ◇ Tool entries with running/ok/fail states; a verify
   attaches to its chain node with ✓/✗;
 - reasoning chunks render as a dim ┆ tail (bounded) and accumulate in full
   for the /why command (display buffer only — never the session);
@@ -42,7 +42,7 @@ class StubLive:
         self.updates.append(renderable)
 
 
-def _make() -> tuple[ChainView, list[StubLive]]:
+def _make(*, status_provider=None) -> tuple[ChainView, list[StubLive]]:  # noqa: ANN001
     lives: list[StubLive] = []
 
     def factory(renderable: object) -> StubLive:
@@ -50,7 +50,9 @@ def _make() -> tuple[ChainView, list[StubLive]]:
         lives.append(live)
         return live
 
-    return ChainView(live_factory=factory), lives
+    if status_provider is None:
+        return ChainView(live_factory=factory), lives
+    return ChainView(live_factory=factory, status_provider=status_provider), lives
 
 
 def _text(view: ChainView) -> str:
@@ -110,6 +112,23 @@ def test_tool_and_verify_nodes_render_chain() -> None:
     assert "✓" in text
 
 
+def test_tool_nodes_use_the_quiet_activity_layer() -> None:
+    from rich.text import Text
+
+    view, _ = _make()
+    view.handle_event(
+        NativeEvent(kind="tool_start", label="turn", detail="(direction=left)")
+    )
+    running = _text(view)
+    running_plain = Text.from_markup(running).plain
+    assert "◇" in running_plain and "Tool · turn" in running_plain
+
+    view.handle_event(NativeEvent(kind="tool_end", label="turn", ok=True))
+    finished = _text(view)
+    assert "◇" in finished and "✓" in finished
+    assert "[dim #738091]Tool[/]" in finished
+
+
 def test_failed_verify_renders_cross() -> None:
     view, _ = _make()
     view.handle_event(NativeEvent(kind="tool_start", label="walk"))
@@ -130,6 +149,49 @@ def test_reasoning_tail_bounded_and_full_buffer_kept() -> None:
     # ...but the FULL buffer is kept for /why.
     assert "思考片段0" in view.reasoning_text
     assert "思考片段49" in view.reasoning_text
+
+
+def test_live_status_is_in_header_and_refreshes_each_round() -> None:
+    """The operator sees the same live world truth the model plans from."""
+    status = ["pose x=0.00 y=0.00 yaw=+0.0deg (+0.000rad) · odom age=0.1s"]
+    view, _ = _make(status_provider=lambda: status[0])
+
+    view.handle_event(NativeEvent(kind="round", label="1"))
+    first = _text(view)
+    assert "⌖" in first
+    assert "x=0.00" in first and "odom age=0.1s" in first
+    assert first.index("working") < first.index("⌖") < first.index("pose")
+
+    status[0] = "pose x=2.00 y=0.00 yaw=+0.0deg (+0.000rad) · odom age=0.0s"
+    view.handle_event(NativeEvent(kind="round", label="2"))
+    second = _text(view)
+    assert "x=2.00" in second and "x=0.00" not in second
+
+
+def test_live_status_provider_failure_clears_stale_text() -> None:
+    values = ["pose x=1.00", RuntimeError("driver read failed")]
+
+    def provider() -> str:
+        value = values.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    view, _ = _make(status_provider=provider)
+    view.handle_event(NativeEvent(kind="round", label="1"))
+    assert "pose x=1.00" in _text(view)
+    view.handle_event(NativeEvent(kind="round", label="2"))
+    assert "pose x=1.00" not in _text(view)  # never leave stale pose on screen
+
+
+def test_live_status_escapes_rich_markup() -> None:
+    view, _ = _make(status_provider=lambda: "pose [bold red]spoof[/] x=0")
+    view.handle_event(NativeEvent(kind="round", label="1"))
+
+    from rich.text import Text
+
+    rendered = Text.from_markup("\n".join(view.render_lines()))
+    assert "[bold red]spoof[/]" in rendered.plain
 
 
 def test_nudge_renders_and_is_bounded() -> None:

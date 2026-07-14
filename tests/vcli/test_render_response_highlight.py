@@ -15,6 +15,7 @@ an unknown language must degrade gracefully instead of crashing the REPL.
 from __future__ import annotations
 
 from rich.console import Console
+from rich.cells import cell_len
 
 from zeno.vcli.cli import render_response
 
@@ -66,3 +67,25 @@ def test_no_code_block_still_renders() -> None:
     """Plain prose with no fenced block renders unchanged."""
     panel = render_response("just a plain sentence")
     assert "just a plain sentence" in _capture(panel, styles=False)
+
+
+def test_plain_response_is_an_open_message_not_a_panel() -> None:
+    rendered = _capture(render_response("A calm answer."), styles=False)
+
+    assert "● A calm answer." in rendered
+    assert "Zeno" not in rendered
+    assert all(glyph not in rendered for glyph in ("╭", "╮", "╯", "╰", "│"))
+
+
+def test_open_response_wraps_under_the_message_body() -> None:
+    rendered = _capture(
+        render_response("one two three four five six seven eight nine ten", width=32),
+        styles=False,
+        width=32,
+    )
+    lines = [line.rstrip() for line in rendered.splitlines() if line.strip()]
+
+    assert len(lines) >= 2
+    assert lines[0].startswith("● ")
+    assert all(line.startswith("  ") for line in lines[1:])
+    assert all(cell_len(line) <= 32 for line in lines)
