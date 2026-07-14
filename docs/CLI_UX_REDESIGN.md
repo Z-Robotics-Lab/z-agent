@@ -57,7 +57,7 @@
 - ✅ P3.7 常驻 composer（owner ask 2026-07-13）：输入框永不让出终端。TurnRunner
   worker 跑回合、patch_stdout 上方落盘、忙时打字=插队（内核同一队列协议）、^C 忙时
   取消回合、ChainView 流式落盘替代 Live、⚙ 活动串+thinking 心跳进底栏。
-  逃生门 VECTOR_COMPOSER_SYNC=1。已知边界：worker 内权限询问 UX 待专项（native
+  逃生门 ZENO_COMPOSER_SYNC=1。已知边界：worker 内权限询问 UX 待专项（native
   电机技能自动放行,少触发）；chat 流式文本不再逐字上屏（完稿落盘,心跳在底栏）。
 - ✅ P3.8 底栏排版（owner 真机反馈 2026-07-13）：⚙ 活动/⌖ 位姿/身份计数三区
   分色，odom age>3s 整片 amber 警示；执行期常驻+0.5s 自刷新；折行与文本不变。
@@ -272,7 +272,7 @@ trace JSONL（~/.zeno/traces）+ session JSONL（~/.zeno/sessions）已经构成
 live-status hook + NativeEvent 事件流,-p 机器路径不动;palette 配色复用。
 
 - ✅ 阶段1（dashboard.py）：render_status_panel 纯函数（stale 警示/estop 大写/
-  markup 转义）+ Dashboard 三区 build_layout + VECTOR_DASHBOARD 门（默认 OFF 阶段
+  markup 转义）+ Dashboard 三区 build_layout + ZENO_DASHBOARD 门（默认 OFF 阶段
   opt-in）+ _run_dashboard 接入 main（状态区读 _live_status_cached，回合执行 stub）。
 - ⏳ 阶段2：回合区消费 NativeEvent 实时渲染（worker 执行,console 重定向回合 buffer）；
   回合日志表（序号+时间+goal+route+耗时,工具四列对齐,verdict 卡片）。

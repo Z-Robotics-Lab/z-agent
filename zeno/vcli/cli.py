@@ -788,7 +788,7 @@ def _repl_native_enabled() -> bool:
 def _dashboard_enabled() -> bool:
     """P4 info-density dashboard TUI — default OFF (stage-1 opt-in via env).
 
-    VECTOR_DASHBOARD / ZENO_DASHBOARD in {1,true,on,yes} launches the full-screen
+    ZENO_DASHBOARD in {1,true,on,yes} launches the full-screen
     three-region panel instead of the scrollback REPL. Default OFF while the TUI
     matures; will flip to default-ON once the turn region + history land.
     """
@@ -807,7 +807,7 @@ def _read_estop(app_state: dict[str, Any] | None) -> bool:
 
 
 def _run_dashboard(app_state: dict[str, Any], registry: Any, session: Any) -> None:
-    """P4 stage 1 — launch the full-screen dashboard (opt-in via VECTOR_DASHBOARD).
+    """P4 stage 1 — launch the full-screen dashboard (opt-in via ZENO_DASHBOARD).
 
     Display-only shell: the status panel reads the SAME cached live-status hook
     the model plans from; the turn region + worker execution land in stage 2 (a
@@ -850,7 +850,7 @@ def _run_dashboard(app_state: dict[str, Any], registry: Any, session: Any) -> No
 
 
 def _persistent_composer_enabled() -> bool:
-    """P3.7 persistent composer — default ON; VECTOR_COMPOSER_SYNC in
+    """P3.7 persistent composer — default ON; ZENO_COMPOSER_SYNC in
     {1,true,on,yes} restores the alternating prompt (reversible escape hatch,
     the same pattern as VECTOR_REPL_NATIVE)."""
     return _env("COMPOSER_SYNC", "").strip().lower() not in ("1", "true", "on", "yes")
@@ -4069,7 +4069,7 @@ def main(argv: list[str] | None = None) -> None:
     # yields the terminal. Turns run on the TurnRunner worker; stdout is
     # patched so worker prints land ABOVE the live composer; typing while
     # busy routes into the kernel-polled interject queue (cancel-and-replace
-    # semantics unchanged). VECTOR_COMPOSER_SYNC=1 restores the alternating
+    # semantics unchanged). ZENO_COMPOSER_SYNC=1 restores the alternating
     # prompt (reversible escape hatch).
     turn_runner = None
     _stdout_stack = contextlib.ExitStack()
@@ -4153,7 +4153,7 @@ def main(argv: list[str] | None = None) -> None:
             # P3.7 persistent composer: hand the turn to the worker and
             # return to the prompt IMMEDIATELY (Claude-Code-style). Typing
             # while busy queues via the SAME kernel interject seam. Sync
-            # escape hatch (VECTOR_COMPOSER_SYNC=1) runs inline as before.
+            # escape hatch (ZENO_COMPOSER_SYNC=1) runs inline as before.
             if turn_runner is not None:
                 turn_runner.submit(user_input)
                 continue

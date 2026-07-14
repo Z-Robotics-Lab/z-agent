@@ -3,7 +3,7 @@
 
 """P3.7 wiring — persistent composer mode in the REPL (owner ask 2026-07-13).
 
-- Gate: default ON; VECTOR_COMPOSER_SYNC in {1,true,on,yes} restores the
+- Gate: default ON; ZENO_COMPOSER_SYNC in {1,true,on,yes} restores the
   alternating prompt (reversible escape hatch, same pattern as REPL_NATIVE).
 - Native turn under a runner: ChainView streams to the transcript (⌂ header
   first, node lines as they complete) and the post-turn duplicate ⌂ tree is
@@ -24,13 +24,13 @@ from tests.vcli.test_repl_native_cutover import (
 
 
 def test_gate_default_on(monkeypatch) -> None:
-    monkeypatch.delenv("VECTOR_COMPOSER_SYNC", raising=False)
+    monkeypatch.delenv("ZENO_COMPOSER_SYNC", raising=False)
     monkeypatch.delenv("ZENO_COMPOSER_SYNC", raising=False)
     assert cli._persistent_composer_enabled() is True
 
 
 def test_gate_escape_hatch(monkeypatch) -> None:
-    monkeypatch.setenv("VECTOR_COMPOSER_SYNC", "1")
+    monkeypatch.setenv("ZENO_COMPOSER_SYNC", "1")
     assert cli._persistent_composer_enabled() is False
 
 

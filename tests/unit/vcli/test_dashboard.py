@@ -136,13 +136,12 @@ def test_dashboard_append_turn_line_shows_in_region() -> None:
 
 
 def test_dashboard_gate_default_off(monkeypatch) -> None:
-    monkeypatch.delenv("VECTOR_DASHBOARD", raising=False)
     monkeypatch.delenv("ZENO_DASHBOARD", raising=False)
     assert cli._dashboard_enabled() is False
 
 
 def test_dashboard_gate_env_enables(monkeypatch) -> None:
-    monkeypatch.setenv("VECTOR_DASHBOARD", "1")
+    monkeypatch.setenv("ZENO_DASHBOARD", "1")
     assert cli._dashboard_enabled() is True
 
 
