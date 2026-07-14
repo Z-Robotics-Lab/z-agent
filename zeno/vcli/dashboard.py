@@ -33,6 +33,7 @@ from typing import Any, Callable
 from prompt_toolkit.formatted_text import StyleAndTextTuples
 
 from zeno.vcli import palette as _p
+from zeno.vcli.turn_render import _escape_markup
 
 # Fragment style classes (mapped to concrete colors in the Style built at run).
 _S_BRAND = "class:dash.brand"
@@ -134,6 +135,9 @@ class Dashboard:
         self._completer = completer
         self._style = style
         self._turn_lines: list[str] = []
+        self._turn_no = 0
+        self._turn_width = 100
+        self._rc = None
         self._activity = ""
         self._app: Any = None
         self._text_area: Any = None
@@ -148,25 +152,76 @@ class Dashboard:
         return render_status_panel(merged)
 
     def _turn_text(self) -> str:
-        return "\n".join(self._turn_lines)
+        # ANSI-stripped plain text (for tests / accessibility).
+        return _strip_ansi("\n".join(self._turn_lines))
 
     def _turn_fragments(self) -> StyleAndTextTuples:
-        from prompt_toolkit.formatted_text import to_formatted_text
-        from prompt_toolkit.formatted_text import HTML  # noqa: F401 — parity import
+        # The turn buffer stores ANSI (rendered by rich); prompt_toolkit's ANSI
+        # class parses SGR codes back into styled fragments, so evidence colors
+        # / the palette survive into the full-screen region.
+        from prompt_toolkit.formatted_text import ANSI, to_formatted_text
 
-        out: StyleAndTextTuples = []
-        for i, line in enumerate(self._turn_lines):
-            if i:
-                out.append(("", "\n"))
-            # Rich markup -> plain text for the buffer (stage 2 maps to PT styles).
-            out.extend(to_formatted_text(_rich_to_plain(line)))
-        return out
+        return to_formatted_text(ANSI("\n".join(self._turn_lines)))
 
     # -- mutation (called by the worker / REPL) --------------------------
 
+    def _render_console(self) -> Any:
+        """A cached rich Console that renders markup to ANSI for the buffer."""
+        if getattr(self, "_rc", None) is None:
+            from io import StringIO
+
+            from rich.console import Console
+
+            self._rc_buf = StringIO()
+            self._rc = Console(
+                file=self._rc_buf, force_terminal=True, color_system="truecolor",
+                highlight=False, width=self._turn_width,
+            )
+        return self._rc
+
+    def _markup_to_ansi(self, markup: str) -> str:
+        rc = self._render_console()
+        self._rc_buf.seek(0)
+        self._rc_buf.truncate(0)
+        rc.print(markup, end="")
+        return self._rc_buf.getvalue()
+
     def append_turn_line(self, line: str) -> None:
-        self._turn_lines.append(line)
+        """Append ONE turn line. A Rich-markup string is rendered to ANSI first
+        so evidence colors show; an already-ANSI line (from ``make_console``)
+        passes through untouched."""
+        self._append_ansi(self._markup_to_ansi(line) if "[" in line else line)
+
+    def _append_ansi(self, ansi_line: str) -> None:
+        self._turn_lines.append(ansi_line)
         self._invalidate()
+
+    def make_console(self, width: int = 100) -> Any:
+        """A rich Console whose output streams into the turn region.
+
+        The whole turn (native/legacy/chat) prints through this in dashboard
+        mode — cli.console is rebound to it — so every existing renderer
+        (ChainView sink, verdict card, footer) lands in the scrollable region
+        with full color, ZERO changes to those functions.
+        """
+        from rich.console import Console
+
+        self._turn_width = int(width)
+        return Console(
+            file=_TurnWriter(self), force_terminal=True, color_system="truecolor",
+            highlight=False, width=int(width),
+        )
+
+    def start_turn(self, goal: str, *, now: Callable[[], float] | None = None) -> None:
+        """Emit a numbered, timestamped turn header (#N HH:MM goal)."""
+        import time as _time
+
+        self._turn_no += 1
+        ts = _time.strftime("%H:%M", _time.localtime((now or _time.time)()))
+        self.append_turn_line(
+            f"  [bold {_p.BRAND}]#{self._turn_no}[/] [{_p.TEXT_FAINT}]{ts}[/] "
+            f"[{_p.TEXT}]{_escape_markup(str(goal))}[/]"
+        )
 
     def set_activity(self, text: str) -> None:
         self._activity = str(text or "")
@@ -270,6 +325,34 @@ class Dashboard:
             refresh_interval=0.5,
         )
         self._app.run()
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    """Drop SGR color codes for plain-text views (tests / accessibility)."""
+    return _ANSI_RE.sub("", str(text))
+
+
+class _TurnWriter:
+    """A file-like sink: rich Console writes ANSI here; we split it into the
+    dashboard's turn buffer line by line (so each print lands as region rows)."""
+
+    def __init__(self, dash: "Dashboard") -> None:
+        self._dash = dash
+        self._buf = ""
+
+    def write(self, s: str) -> None:
+        self._buf += s
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            self._dash._append_ansi(line)
+
+    def flush(self) -> None:  # noqa: D102 — file protocol
+        if self._buf:
+            self._dash._append_ansi(self._buf)
+            self._buf = ""
 
 
 def _rich_to_plain(markup: str) -> str:

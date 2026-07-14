@@ -806,18 +806,27 @@ def _read_estop(app_state: dict[str, Any] | None) -> bool:
         return False
 
 
-def _run_dashboard(app_state: dict[str, Any], registry: Any, session: Any) -> None:
-    """P4 stage 1 — launch the full-screen dashboard (opt-in via ZENO_DASHBOARD).
+def _run_dashboard(
+    app_state: dict[str, Any], registry: Any, session: Any, engine_turn: Any
+) -> None:
+    """P4 — launch the full-screen dashboard and run turns in it (opt-in).
 
-    Display-only shell: the status panel reads the SAME cached live-status hook
-    the model plans from; the turn region + worker execution land in stage 2 (a
-    submit currently echoes into the turn region). The scrollback REPL is the
-    default; this is a reversible alternate shape.
+    Reuses ``engine_turn`` (the REPL body) VERBATIM: ``cli.console`` is rebound
+    to a rich Console that streams into the turn region, so ChainView, the
+    verdict card, the footer — every existing renderer — lands in the
+    scrollable region with full color and ZERO changes. Turns run on the same
+    ``TurnRunner`` worker the persistent composer uses (typing mid-turn queues
+    via the kernel's interject seam). The scrollback REPL stays the default;
+    this is a reversible alternate shape.
     """
+    global console
+
     from prompt_toolkit.styles import Style as _PTStyle
     from prompt_toolkit.styles import merge_styles
 
     from zeno.vcli.dashboard import Dashboard, dashboard_style_rules
+    from zeno.vcli.interject import set_current_reader
+    from zeno.vcli.turn_runner import ComposerInterjectQueue, TurnRunner
 
     perms = app_state.get("permissions")
 
@@ -835,18 +844,39 @@ def _run_dashboard(app_state: dict[str, Any], registry: Any, session: Any) -> No
     def _status() -> dict[str, Any]:
         return {"live_status": _live_status_cached(app_state) or "", "estop": _read_estop(app_state)}
 
-    def _submit(text: str) -> None:
-        dash.append_turn_line(f"  \u203a {text}")
-        dash.append_turn_line("  (\u56de\u5408\u6267\u884c\u5c06\u5728 P4 \u9636\u6bb52\u63a5\u5165)")
-
     dash = Dashboard(
         status_provider=_status,
         identity_provider=_identity,
-        on_submit=_submit,
+        on_submit=lambda text: _runner.submit(text),
         completer=ZenoCompleter(),
         style=merge_styles([PT_STYLE, _PTStyle.from_dict(dashboard_style_rules())]),
     )
-    dash.run()
+
+    # The turn worker: a numbered header, then the UNCHANGED engine turn body,
+    # whose console output (rebound below) streams into the turn region.
+    def _dash_turn(text: str) -> None:
+        dash.start_turn(text)
+        engine_turn(text)
+
+    _runner = TurnRunner(
+        run_turn=_dash_turn,
+        interject_queue=ComposerInterjectQueue(),
+        echo=dash.append_turn_line,
+    )
+    # Route the interject queue + runner through app_state so the native loop's
+    # safe-boundary poll and _repl_attempt_native's sink mode both see them.
+    app_state["interject"] = _runner._queue  # kernel-facing duck type (no stdin)
+    set_current_reader(_runner._queue)
+    app_state["turn_runner"] = _runner
+
+    # Rebind the module console to the turn region for the whole session — the
+    # full-screen app owns the terminal, so nothing reaches real stdout.
+    _saved_console = console
+    console = dash.make_console(width=100)
+    try:
+        dash.run()
+    finally:
+        console = _saved_console
 
 
 def _persistent_composer_enabled() -> bool:
@@ -3534,11 +3564,6 @@ def main(argv: list[str] | None = None) -> None:
     app_state.setdefault("trace_history", _deque_init(maxlen=5))
     set_current_reader(interject_reader)
 
-    # P4: the info-density dashboard TUI (opt-in; default scrollback REPL below).
-    if _dashboard_enabled():
-        _run_dashboard(app_state, registry, session)
-        return
-
 
     def _engine_turn(user_input: str) -> None:
         """ONE engine turn (native -> legacy routing -> unified) — the REPL
@@ -4064,6 +4089,13 @@ def main(argv: list[str] | None = None) -> None:
             if args.verbose:
                 import traceback
                 traceback.print_exc()
+
+    # P4: the info-density dashboard TUI (opt-in; default scrollback REPL below).
+    # Reuses _engine_turn VERBATIM — cli.console is rebound to the turn region
+    # so every existing renderer lands there with full color, zero changes.
+    if _dashboard_enabled():
+        _run_dashboard(app_state, registry, session, _engine_turn)
+        return
 
     # P3.7 persistent composer (owner ask 2026-07-13): the input NEVER
     # yields the terminal. Turns run on the TurnRunner worker; stdout is
