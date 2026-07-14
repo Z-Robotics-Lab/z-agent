@@ -145,11 +145,15 @@ def test_status_falls_back_when_no_base(record_navsh):
 
 def test_start_action_never_takes_the_fast_path(record_navsh):
     """Only STATUS gets the fast answer — lifecycle actions still go to nav.sh
-    (start stays idempotent at the SKILL layer, not silently skipped here)."""
+    (start stays idempotent at the SKILL layer, not silently skipped here).
+
+    Updated 2026-07-14 (default-map bringup): start now defaults to pre-built
+    map mode, so nav.sh sees `start <map>` — the subcommand is 'start' at
+    argv[2], not the last element (which is the map name)."""
     res = _bringup_tool().execute(
         {"action": "start"}, _tool_ctx(_LiveFakeHW()))
     assert not res.is_error
-    assert record_navsh and record_navsh[-1][-1] == "start"
+    assert record_navsh and record_navsh[-1][2] == "start"
 
 
 # ---------------------------------------------------------------------------

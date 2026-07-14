@@ -152,7 +152,14 @@ class OverlayLauncher:
                 return False, (
                     f"nav.sh not found at {self._nav_sh} — set GO2W_NAV_SH"
                 )
-            argv = ["bash", self._nav_sh, self._mode, *[str(a) for a in extra_args]]
+            # A standalone-script overlay (e.g. view3d.sh) has an EMPTY mode: the
+            # script IS the whole command, no nav.sh subcommand. Drop the empty
+            # arg so argv stays ['bash', <script>, extra...]. Named nav.sh modes
+            # (explore/route/rviz*) are byte-identical (additive, backward-compat).
+            argv = ["bash", self._nav_sh]
+            if self._mode:
+                argv.append(self._mode)
+            argv.extend(str(a) for a in extra_args)
             out = self._open_log()
             try:
                 self._proc = self._popen(

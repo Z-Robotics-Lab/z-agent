@@ -91,9 +91,13 @@ class RealBringupSkill:
         "Nav-stack lifecycle. action='start' is IDEMPOTENT: if the stack is "
         "already running it does NOTHING — it can never rebuild a live stack. "
         "Only a cold stack is launched (blocks until odometry flows, <=150s). "
+        "start takes an optional map: DEFAULT (unspecified) loads the pre-built "
+        "map 'zeno_office' in RELOCALIZATION mode (地点跨重启有效); pass "
+        "map='从零' (or 'none') to build a FRESH map instead (从零建图,地点仅本"
+        "会话); pass an explicit map name to relocalize in that map. "
         "action='stop' tears down (ONLY on explicit operator command). There "
         "is NO restart — stack rebuilds are operator-only. NOT standing up — "
-        "use standup for posture. 启动(幂等)/关闭导航栈(非起立;无重启)。")
+        "use standup for posture. 启动(幂等,默认预建图重定位)/关闭导航栈。")
     requires = ()
     preconditions: list = []
     effects = {"stack": "running"}
@@ -107,10 +111,18 @@ class RealBringupSkill:
 
     def execute(self, params=None, context=None, **kw) -> SkillResult:
         action = "start"
+        action_found = False
+        map_param = None
+        map_specified = False
         for src in (params if isinstance(params, dict) else {}, kw):
-            if isinstance(src, dict) and src.get("action"):
+            if not isinstance(src, dict):
+                continue
+            if not action_found and src.get("action"):
                 action = str(src["action"]).lower()
-                break
+                action_found = True
+            if not map_specified and "map" in src:
+                map_param = src.get("map")
+                map_specified = True
         if action == "restart":
             # Field trace 2026-07-10 15:20: the model restarted a HEALTHY
             # stack mid-conversation; the walk then ran on a 1-minute-old
@@ -137,9 +149,24 @@ class RealBringupSkill:
                 "verify_hint": "stack_ready()"})
         nav_action = "start" if action == "restart" else action
         script = nav_sh_path()
-        oplog("lifecycle", "bringup", f"nav.sh {nav_action} launching...")
+        # DEFAULT-MAP BRINGUP (2026-07-14): a start may carry a pre-built map.
+        # Resolution lives in go2w_real_maps: explicit name wins; explicit
+        # 从零/none/'' = plain fresh mapping; unspecified default = env
+        # GO2W_DEFAULT_MAP else zeno_office (when its PCD exists). map applies
+        # ONLY to start (stop/restart never take a map arg).
+        resolved_map = None
+        if nav_action == "start":
+            from zeno.vcli.worlds.go2w_real_maps import resolve_bringup_map
+
+            resolved_map = resolve_bringup_map(
+                map_param if map_specified else None)
+        argv = ["bash", script, nav_action]
+        if resolved_map:
+            argv.append(resolved_map)
+        oplog("lifecycle", "bringup",
+              f"nav.sh {nav_action} map={resolved_map or 'none'} launching...")
         try:
-            proc = self._runner(["bash", script, nav_action], timeout=180.0)
+            proc = self._runner(argv, timeout=180.0)
         except Exception as exc:  # noqa: BLE001 — honest failure, never raise
             return SkillResult(success=False, diagnosis_code="nav_sh_failed",
                                error_message=f"nav.sh {action} failed: {exc}")
@@ -158,9 +185,17 @@ class RealBringupSkill:
                 error_message=("stack launched but odometry never became ready "
                                f"within {_READY_TIMEOUT_S:.0f}s — check nav.sh "
                                "status / lidar power"))
-        oplog("lifecycle", "bringup", f"{action}: stack ready (odometry flowing)")
+        if resolved_map:
+            mode_msg = (f"预建图 {resolved_map} 重定位模式:已在预建地图里定位"
+                        f"(地点跨重启有效)")
+        else:
+            mode_msg = "从零建图模式:全新 SLAM 建图(地点仅本会话有效)"
+        oplog("lifecycle", "bringup",
+              f"{action}: stack ready (odometry flowing) — {mode_msg}")
         return SkillResult(success=True, result_data={
             "action": action,
+            "map": resolved_map,
+            "message": f"导航栈已就绪 — {mode_msg}",
             "verify_hint": "stack_ready()",
         })
 

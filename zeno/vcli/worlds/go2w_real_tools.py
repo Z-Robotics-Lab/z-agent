@@ -61,7 +61,10 @@ def _reset_intent(base: Any, reason: str) -> None:
         "Manage the REAL Go2W nav stack lifecycle via nav.sh (out-of-band). "
         "action: start (bring the stack up — ~40-60s until SLAM ready), stop "
         "(tear it down), status (unit state + key topic rates), up (stand up), "
-        "down (lie down). Idempotent. 管理真机导航栈生命周期。"),
+        "down (lie down). Idempotent. start takes an optional map: DEFAULT "
+        "(omitted) loads the pre-built map 'zeno_office' in RELOCALIZATION mode "
+        "(places persist across restarts); map='从零' (or 'none') builds a FRESH "
+        "map instead. 管理真机导航栈生命周期(start 默认预建图重定位)。"),
     read_only=False,
     permission="allow",
 )
@@ -72,11 +75,16 @@ class Go2WRealBringupTool:
             "action": {"type": "string",
                        "enum": ["start", "stop", "status", "up", "down"],
                        "default": "status"},
+            "map": {"type": "string",
+                    "description": ("start only: pre-built map name to relocalize "
+                                    "in (omit = default 'zeno_office'; '从零'/"
+                                    "'none' = fresh mapping)")},
         },
     }
 
     def execute(self, params: dict[str, Any], context: ToolContext) -> ToolResult:
-        action = (params or {}).get("action", "status")
+        params = params or {}
+        action = params.get("action", "status")
         subcmd = _BRINGUP_ACTIONS.get(action)
         if subcmd is None:
             return ToolResult(content=(
@@ -94,8 +102,19 @@ class Go2WRealBringupTool:
         # 'start' stops-old-first then returns after launching (SLAM readies async);
         # a longer timeout covers stack teardown on 'stop'.
         timeout = 120 if subcmd in ("start", "stop") else 60
+        # DEFAULT-MAP BRINGUP (2026-07-14): resolve an optional pre-built map for
+        # start (explicit wins; 从零/none/'' = plain; default = zeno_office when
+        # its PCD exists). stop/up/down never take a map arg.
+        argv = ["bash", script, subcmd]
+        resolved_map = None
+        if subcmd == "start":
+            from zeno.vcli.worlds.go2w_real_maps import resolve_bringup_map
+
+            resolved_map = resolve_bringup_map(params.get("map"))
+            if resolved_map:
+                argv.append(resolved_map)
         try:
-            r = subprocess.run(["bash", script, subcmd], capture_output=True,
+            r = subprocess.run(argv, capture_output=True,
                                text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             return ToolResult(content=(
@@ -106,9 +125,14 @@ class Go2WRealBringupTool:
         if r.returncode != 0:
             return ToolResult(content=(
                 f"nav.sh {subcmd} FAILED (exit={r.returncode}).\n{out}"), is_error=True)
-        hint = ("\n(stack starting — SLAM ready in ~40-60s; poll "
-                "go2w_real_bringup(action='status') until topics show rates)"
-                if subcmd == "start" else "")
+        if subcmd == "start":
+            mode = (f"预建图 {resolved_map} 重定位(地点跨重启有效)"
+                    if resolved_map else "从零建图(地点仅本会话有效)")
+            hint = (f"\n模式:{mode}\n(stack starting — SLAM ready in ~40-60s; "
+                    "poll go2w_real_bringup(action='status') until topics show "
+                    "rates)")
+        else:
+            hint = ""
         return ToolResult(content=f"nav.sh {subcmd}:\n{out}{hint}")
 
     @staticmethod

@@ -28,11 +28,13 @@ The ledger is owned by the embodiment and rides the driver as
 seam shared with explore/route/viz/course, because VGG GoalExecutor contexts
 carry no world services but always wire ``base``.
 
-HONEST LIMIT (capability card says it too): every pose lives in the CURRENT
-SLAM map frame — a nav-stack restart rebuilds the map and silently invalidates
-all remembered places (重启导航栈后地点失效). Persistent places need the
-relocalization roadmap item; until then the skills say so instead of driving
-to stale coordinates in a new frame.
+PERSISTENCE (2026-07-14, relocalization LIVE): when running on a PRE-BUILT map
+(nav.sh start <map> -> arise_slam localization), the map frame is STABLE across
+restarts, so NAMED marks now persist to ~/maps/<map>/places.json and reload at
+session setup (预建图模式下地点跨重启有效). Breadcrumbs + origin stay session-
+only. In FRESH-MAPPING mode (no active map) the frame is rebuilt each run, so
+marks remain session-only — the card teaches this split. Whether a map is active
+is nav.sh's current_map.txt handshake (go2w_real_maps.current_map()).
 """
 
 from __future__ import annotations
@@ -137,6 +139,20 @@ class PoseLedger:
         oplog("places", "ledger",
               f"mark '{label}' = ({pose[0]:.2f},{pose[1]:.2f})")
         return label
+
+    def load_marks(self, marks: dict[str, tuple[float, float, float]]) -> None:
+        """Merge persisted NAMED marks into the ledger (pre-built map load).
+
+        Additive: origin + breadcrumbs (session-only) are untouched; a loaded
+        name overwrites a same-named session mark. Every value is coerced to a
+        float triple — a malformed entry is skipped, never raised.
+        """
+        for name, triple in (marks or {}).items():
+            try:
+                pose = (float(triple[0]), float(triple[1]), float(triple[2]))
+            except (TypeError, ValueError, IndexError):
+                continue
+            self._marks[str(name)] = pose
 
     # -- resolution ---------------------------------------------------------
     def resolve(self, name: str | None, current_xy: tuple[float, float],
@@ -289,12 +305,31 @@ class RealMarkPlaceSkill:
         label = ledger.mark(self._parse_name(sources, text), pose)
         oplog("skill", "mark_place",
               f"'{label}' = ({pose[0]:.2f},{pose[1]:.2f},{pose[2]:.2f}rad)")
+        # PERSISTENCE (2026-07-14): on a pre-built map (localization mode) the
+        # map frame is STABLE across restarts, so a named mark can survive to
+        # ~/maps/<map>/places.json. In fresh-mapping mode (no active map) the
+        # frame is rebuilt each run, so marks stay session-only — the honest
+        # limit the card teaches. current_map() is nav.sh's handshake.
+        from zeno.vcli.worlds.go2w_real_maps import current_map, save_places
+
+        active_map = current_map()
+        persisted = False
+        if active_map is not None:
+            persisted = save_places(active_map, ledger.marks)
+            oplog("skill", "mark_place",
+                  f"'{label}' persist -> map={active_map} ok={persisted}")
+        if persisted:
+            tail = f"(预建图 {active_map};已持久化,跨重启有效)"
+        else:
+            tail = "(当前 SLAM 地图坐标;从零建图模式下重启导航栈后地点失效)"
         return SkillResult(success=True, result_data={
             "name": label,
             "x": round(pose[0], 2), "y": round(pose[1], 2),
             "yaw": round(pose[2], 3),
+            "persisted": persisted,
+            "map": active_map,
             "message": (f"已记住地点“{label}” = ({pose[0]:.2f}, {pose[1]:.2f})"
-                        f"(当前 SLAM 地图坐标;重启导航栈后地点失效)")})
+                        + tail)})
 
 
 @skill(aliases=["goto_place", "回到起点", "回到刚才的位置", "回到刚才", "回去",
