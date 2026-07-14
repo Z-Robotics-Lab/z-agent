@@ -785,6 +785,70 @@ def _repl_native_enabled() -> bool:
     )
 
 
+def _dashboard_enabled() -> bool:
+    """P4 info-density dashboard TUI — default OFF (stage-1 opt-in via env).
+
+    VECTOR_DASHBOARD / ZENO_DASHBOARD in {1,true,on,yes} launches the full-screen
+    three-region panel instead of the scrollback REPL. Default OFF while the TUI
+    matures; will flip to default-ON once the turn region + history land.
+    """
+    return _env("DASHBOARD", "").strip().lower() in ("1", "true", "on", "yes")
+
+
+def _read_estop(app_state: dict[str, Any] | None) -> bool:
+    """Best-effort E-stop-latched read for the dashboard status panel (display-only)."""
+    try:
+        agent = (app_state or {}).get("agent")
+        base = getattr(agent, "_base", None) if agent is not None else None
+        fn = getattr(base, "estop_latched", None)
+        return bool(fn()) if callable(fn) else False
+    except Exception:  # noqa: BLE001 — a status read must never break the UI
+        return False
+
+
+def _run_dashboard(app_state: dict[str, Any], registry: Any, session: Any) -> None:
+    """P4 stage 1 — launch the full-screen dashboard (opt-in via VECTOR_DASHBOARD).
+
+    Display-only shell: the status panel reads the SAME cached live-status hook
+    the model plans from; the turn region + worker execution land in stage 2 (a
+    submit currently echoes into the turn region). The scrollback REPL is the
+    default; this is a reversible alternate shape.
+    """
+    from prompt_toolkit.styles import Style as _PTStyle
+    from prompt_toolkit.styles import merge_styles
+
+    from zeno.vcli.dashboard import Dashboard, dashboard_style_rules
+
+    perms = app_state.get("permissions")
+
+    def _identity() -> dict[str, Any]:
+        agent = app_state.get("agent")
+        base = getattr(agent, "_base", None) if agent else None
+        return {
+            "model": str(app_state.get("model", "?")),
+            "base": getattr(base, "name", app_state.get("world", "")) if base else str(app_state.get("world", "")),
+            "tools": len(registry.list_tools()) if registry else 0,
+            "msgs": len(getattr(session, "_entries", []) or []),
+            "permissions": "auto" if getattr(perms, "no_permission", False) else "manual",
+        }
+
+    def _status() -> dict[str, Any]:
+        return {"live_status": _live_status_cached(app_state) or "", "estop": _read_estop(app_state)}
+
+    def _submit(text: str) -> None:
+        dash.append_turn_line(f"  \u203a {text}")
+        dash.append_turn_line("  (\u56de\u5408\u6267\u884c\u5c06\u5728 P4 \u9636\u6bb52\u63a5\u5165)")
+
+    dash = Dashboard(
+        status_provider=_status,
+        identity_provider=_identity,
+        on_submit=_submit,
+        completer=ZenoCompleter(),
+        style=merge_styles([PT_STYLE, _PTStyle.from_dict(dashboard_style_rules())]),
+    )
+    dash.run()
+
+
 def _persistent_composer_enabled() -> bool:
     """P3.7 persistent composer — default ON; VECTOR_COMPOSER_SYNC in
     {1,true,on,yes} restores the alternating prompt (reversible escape hatch,
@@ -3469,6 +3533,12 @@ def main(argv: list[str] | None = None) -> None:
     from collections import deque as _deque_init
     app_state.setdefault("trace_history", _deque_init(maxlen=5))
     set_current_reader(interject_reader)
+
+    # P4: the info-density dashboard TUI (opt-in; default scrollback REPL below).
+    if _dashboard_enabled():
+        _run_dashboard(app_state, registry, session)
+        return
+
 
     def _engine_turn(user_input: str) -> None:
         """ONE engine turn (native -> legacy routing -> unified) — the REPL
