@@ -235,7 +235,21 @@ class OpenAICompatBackend:
         base_url: str = "https://openrouter.ai/api/v1",
         max_retries: int = 3,
     ) -> None:
-        self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        # Explicit timeouts (field: "CLI 经常卡死"): the SDK default is 600s and
+        # its own retries stack ON TOP of our _max_retries loop below, so on a
+        # flaky real-robot network a single turn could hang for tens of minutes
+        # and read as a freeze. Bound it: 15s to connect, 120s of read silence
+        # (long enough for reasoning-model think gaps, short enough to fail
+        # honestly), and disable the SDK's internal retries so OUR bounded loop
+        # is the ONLY retry path (no multiplicative hang).
+        import httpx
+
+        self._client = openai.OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=httpx.Timeout(120.0, connect=15.0),
+            max_retries=0,
+        )
         self._model = model
         self._base_url = base_url
         self._max_retries = max_retries

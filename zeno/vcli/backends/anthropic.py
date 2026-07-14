@@ -29,8 +29,17 @@ class AnthropicBackend:
         base_url: str | None = None,
         max_retries: int = 3,
     ) -> None:
-        # OAuth tokens (sk-ant-oat*) work as regular api_key via x-api-key header
-        kwargs: dict[str, Any] = {"api_key": api_key}
+        # OAuth tokens (sk-ant-oat*) work as regular api_key via x-api-key header.
+        # Explicit timeouts + no SDK-internal retries (field: "CLI 经常卡死") so a
+        # flaky network fails honestly in bounded time instead of hanging on the
+        # SDK's 600s default stacked on top of our _max_retries loop below.
+        import httpx
+
+        kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "timeout": httpx.Timeout(120.0, connect=15.0),
+            "max_retries": 0,
+        }
         if base_url:
             kwargs["base_url"] = base_url
         self._client = anthropic.Anthropic(**kwargs)

@@ -3212,8 +3212,28 @@ def run_one_turn(args: Any) -> int:
     return _emit(report, agent=getattr(engine, "_vgg_agent", None))
 
 
+def _install_hang_diagnostics() -> None:
+    """Ctrl-\\ (SIGQUIT) dumps ALL thread stacks — a zero-cost hang probe.
+
+    Field: "CLI 经常卡死". If a turn ever freezes, one keypress prints where
+    every thread is stuck (the worker's LLM call, a driver read, prompt_toolkit)
+    to stderr, turning an opaque hang into an actionable trace. Best-effort:
+    unavailable on platforms without SIGQUIT.
+    """
+    try:
+        import faulthandler
+        import signal
+
+        faulthandler.enable()
+        if hasattr(signal, "SIGQUIT"):
+            faulthandler.register(signal.SIGQUIT, all_threads=True, chain=True)
+    except Exception:  # noqa: BLE001 — diagnostics are best-effort, never fatal
+        pass
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    _install_hang_diagnostics()
 
     # --- macOS mjpython re-exec guard (must be before any credential/agent init) ---
     _maybe_reexec_under_mjpython(args)
