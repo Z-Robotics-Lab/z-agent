@@ -23,6 +23,8 @@ never parsed as markup.
 """
 from __future__ import annotations
 
+import re
+
 from typing import Any, Callable
 
 from prompt_toolkit.application import Application
@@ -266,50 +268,84 @@ class ZenoComposer:
         normalized = plain.replace(" · ", " | ")
         return [part.strip() for part in normalized.split(" | ") if part.strip()]
 
-    def _footer_lines(self, width: int) -> list[str]:
+    _STALE_ODOM_S = 3.0  # odom older than this reads as a warning (display-only)
+
+    def _part_style(self, part: str) -> str:
+        """P3.8 footer typography: one style class per part FAMILY.
+
+        ⚙ activity (what Zeno is doing now) · ⌖ pose truth (with an amber
+        stale flag when the odometry read is old — the operator must see a
+        dead feed at a glance) · quiet identity/counters. Display-only.
+        """
+        if part.startswith("⚙"):
+            return "class:composer.footer.activity"
+        if part.startswith("⌖") or "pose" in part or "odom" in part:
+            m = re.search(r"odom age\s*=?\s*(\d+(?:\.\d+)?)s", part)
+            if m:
+                try:
+                    if float(m.group(1)) > self._STALE_ODOM_S:
+                        return "class:composer.footer.pose.stale"
+                except ValueError:
+                    pass
+            return "class:composer.footer.pose"
+        if re.match(r"^(base|arm|world|model|tools|msgs):", part):
+            return "class:composer.footer.meta"
+        return "class:composer.footer.status"
+
+    def _footer_fragment_lines(self, width: int) -> list[list[tuple[str, str]]]:
+        """Wrap styled footer parts (same width discipline as before P3.8)."""
         available = max(1, int(width) - get_cwidth(_FOOTER_PADDING))
-        parts = self._status_parts()
-        lines: list[str] = []
-        current = ""
-
-        for part in parts:
-            candidate = part if not current else f"{current} · {part}"
-            if get_cwidth(candidate) <= available:
-                current = candidate
+        styled = [(self._part_style(p), p) for p in self._status_parts()]
+        sep = ("class:composer.footer.sep", " · ")
+        sep_w = get_cwidth(sep[1])
+        lines: list[list[tuple[str, str]]] = []
+        cur: list[tuple[str, str]] = []
+        cur_w = 0
+        for style, part in styled:
+            part_w = get_cwidth(part)
+            if cur and cur_w + sep_w + part_w <= available:
+                cur.extend((sep, (style, part)))
+                cur_w += sep_w + part_w
                 continue
-
-            if current:
-                lines.append(current)
-                current = ""
+            if not cur and part_w <= available:
+                cur, cur_w = [(style, part)], part_w
+                continue
+            if cur:
+                lines.append(cur)
+                cur, cur_w = [], 0
                 if len(lines) >= _FOOTER_MAX_LINES:
                     break
-
-            if get_cwidth(part) <= available:
-                current = part
-                continue
-
+                if part_w <= available:
+                    cur, cur_w = [(style, part)], part_w
+                    continue
             chunks = _split_at_cell_width(part, available)
             for chunk in chunks[:-1]:
-                lines.append(chunk)
+                lines.append([(style, chunk)])
                 if len(lines) >= _FOOTER_MAX_LINES:
                     break
             if len(lines) >= _FOOTER_MAX_LINES:
                 break
-            current = chunks[-1]
-
-        if current and len(lines) < _FOOTER_MAX_LINES:
-            lines.append(current)
+            cur, cur_w = [(style, chunks[-1])], get_cwidth(chunks[-1])
+        if cur and len(lines) < _FOOTER_MAX_LINES:
+            lines.append(cur)
         return lines
 
+    def _footer_lines(self, width: int) -> list[str]:
+        """Plain-text view of the wrapped footer (compat: content unchanged)."""
+        return [
+            "".join(text for _style, text in line)
+            for line in self._footer_fragment_lines(width)
+        ]
+
     def footer_fragments(self, width: int | None = None) -> list[tuple[str, str]]:
-        """Render responsive, priority-ordered live status without fake controls."""
-        lines = self._footer_lines(width or self._terminal_width())
+        """Responsive, priority-ordered live status — now with per-part styling."""
+        fragment_lines = self._footer_fragment_lines(width or self._terminal_width())
         fragments: list[tuple[str, str]] = []
-        for index, line in enumerate(lines):
+        for index, line in enumerate(fragment_lines):
             if index:
                 fragments.append(("", "\n"))
             fragments.append(("class:composer.footer.indent", _FOOTER_PADDING))
-            fragments.append(("class:composer.footer.status", line))
+            fragments.extend(line)
         return fragments
 
     def _build_key_bindings(self) -> KeyBindings:

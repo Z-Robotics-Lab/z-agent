@@ -272,8 +272,8 @@ def test_footer_stale_odom_gets_warning_style() -> None:
 
     composer = _mk(lambda: HTML("⌖ pose x=0.00 y=0.00 yaw=0.0deg · odom age 7.4s"))
     styles = _footer_styles(composer)
-    pose_style = next(s for s, t in styles if "pose" in t)
-    assert "stale" in pose_style  # 里程计过期要一眼看出来
+    odom_style = next(s for s, t in styles if "odom" in t)
+    assert "stale" in odom_style and "pose" in odom_style  # 过期一眼可见,仍属位姿族
 
 
 def test_footer_fresh_odom_not_stale_styled() -> None:
@@ -281,8 +281,8 @@ def test_footer_fresh_odom_not_stale_styled() -> None:
 
     composer = _mk(lambda: HTML("⌖ pose x=0.00 y=0.00 yaw=0.0deg · odom age 0.2s"))
     styles = _footer_styles(composer)
-    pose_style = next(s for s, t in styles if "pose" in t)
-    assert "stale" not in pose_style
+    odom_style = next(s for s, t in styles if "odom" in t)
+    assert "stale" not in odom_style
 
 
 def test_footer_plain_text_content_unchanged_by_styling() -> None:
