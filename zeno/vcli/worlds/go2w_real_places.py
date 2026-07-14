@@ -314,9 +314,20 @@ class RealGotoPlaceSkill:
     parameters = {
         "name": {"type": "string", "default": "刚才", "required": False,
                  "description": "起点 | 刚才 | <place name from mark_place>"},
+        "precise": {"type": "boolean", "default": False, "required": False,
+                    "description": ("manipulation-grade docking: after coarse "
+                                    "arrival, servo to ~8cm + the place's "
+                                    "recorded heading (精准进站)")},
     }
     preconditions: list = []
     effects = {"base_state": "moved"}
+
+    @staticmethod
+    def _parse_precise(sources: tuple, text: str) -> bool:
+        for src in sources:
+            if isinstance(src, dict) and "precise" in src:
+                return bool(src["precise"])
+        return any(w in text for w in ("精准", "精确", "进站", "dock"))
 
     @staticmethod
     def _parse_name(sources: tuple, text: str, ledger: PoseLedger) -> str:
@@ -390,6 +401,27 @@ class RealGotoPlaceSkill:
         data = {"name": name, "kind": kind,
                 "x": round(tx, 2), "y": round(ty, 2),
                 "verify_hint": f"at({tx:.2f}, {ty:.2f}, tol=1.0)"}
+        precise = self._parse_precise(sources, text)
+        if ok and precise and callable(getattr(base, "dock_to", None)):
+            # Manipulation-grade fine stage (CEO 2026-07-14): servo the last
+            # ~30cm to ~8cm + the place's RECORDED heading — the arm needs a
+            # repeatable base pose, and marks store yaw for exactly this.
+            tyaw = float(target[2]) if len(target) >= 3 else None
+            docked = bool(base.dock_to(tx, ty, yaw=tyaw))
+            p = base.get_position()
+            data["docked"] = docked
+            data["verify_hint"] = f"at({tx:.2f}, {ty:.2f}, tol=0.15)"
+            oplog("skill", "goto_place",
+                  f"dock '{name}' -> {'DOCKED' if docked else 'DOCK FAILED'} "
+                  f"at ({p[0]:.2f},{p[1]:.2f})")
+            if docked:
+                data["message"] = (
+                    f"已精准进站“{name}” ({p[0]:.2f}, {p[1]:.2f}, ±8cm+朝向);"
+                    f"verify with at({tx:.2f}, {ty:.2f}, tol=0.15)")
+                return SkillResult(success=True, result_data=data)
+            return SkillResult(success=False, result_data=data, error_message=(
+                f"粗导航已到“{name}”附近但精准进站失败(当前 "
+                f"({p[0]:.2f}, {p[1]:.2f}))— 站位可能被挡,或急停锁存"))
         if ok:
             data["message"] = (f"已回到“{name}” ({tx:.2f}, {ty:.2f});"
                                f"verify with at({tx:.2f}, {ty:.2f}, tol=1.0)")
