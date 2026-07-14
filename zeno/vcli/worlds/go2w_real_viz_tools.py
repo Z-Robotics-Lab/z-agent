@@ -20,6 +20,7 @@ dedupes to ok.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Callable
 
 from zeno.hardware.ros2.go2w_hw_overlay import OverlayLauncher
@@ -30,6 +31,15 @@ _VIEWS: dict[str, str] = {
     "main": "rviz",
     "explore": "rviz-explore",
     "route": "rviz-route",
+}
+
+#: STANDALONE-SCRIPT views: view name -> a script the OverlayLauncher runs
+#: DIRECTLY (empty mode), NOT a nav.sh subcommand. The 3D View3D stream
+#: (彩色预建图 + 实时位姿, Foxglove) is built by the go2w-nuc half; contract-
+#: first here (2026-07-14). Reuses the SAME OverlayLauncher machinery — dedupe
+#: + close_all work identically — so the two viz stacks share one lifecycle.
+_SCRIPT_VIEWS: dict[str, str] = {
+    "3d": "~/go2w-nuc/scripts/view3d.sh",
 }
 
 
@@ -53,19 +63,43 @@ class VizOverlaySession:
     def launchers(self) -> dict[str, OverlayLauncher]:
         return self._launchers
 
-    def _launcher(self, mode: str) -> OverlayLauncher:
-        if mode not in self._launchers:
-            self._launchers[mode] = OverlayLauncher(
-                mode, nav_sh=self._nav_sh, popen_factory=self._popen_factory)
-        return self._launchers[mode]
+    def _launcher(self, key: str, script: str | None = None) -> OverlayLauncher:
+        """The launcher table entry for *key* (a nav.sh mode OR a script view).
+
+        A standalone-script view (e.g. '3d') passes *script*: the launcher's
+        nav_sh IS that script and its mode is EMPTY, so argv is ['bash',
+        <script>] — the OverlayLauncher runs it directly. nav.sh-mode views
+        pass no script and behave exactly as before.
+        """
+        if key not in self._launchers:
+            if script is not None:
+                self._launchers[key] = OverlayLauncher(
+                    "", nav_sh=os.path.expanduser(script),
+                    popen_factory=self._popen_factory)
+            else:
+                self._launchers[key] = OverlayLauncher(
+                    key, nav_sh=self._nav_sh,
+                    popen_factory=self._popen_factory)
+        return self._launchers[key]
 
     def open(self, view: str) -> tuple[str, str]:
         """Open *view* -> (status, detail); status: opened | already_open |
         bad_view | error. Dedupe: an already-running view is ok, not a relaunch."""
+        script = _SCRIPT_VIEWS.get(view)
+        if script is not None:
+            # Script view ('3d'): key the launcher table by the VIEW name (its
+            # mode is empty, so keying by mode would collide across scripts).
+            launcher = self._launcher(view, script=script)
+            return self._open_launcher(launcher)
         mode = _VIEWS.get(view)
         if mode is None:
-            return "bad_view", f"unknown view {view!r}; valid: {sorted(_VIEWS)}"
+            return "bad_view", (
+                f"unknown view {view!r}; valid: "
+                f"{sorted(set(_VIEWS) | set(_SCRIPT_VIEWS))}")
         launcher = self._launcher(mode)
+        return self._open_launcher(launcher)
+
+    def _open_launcher(self, launcher: OverlayLauncher) -> tuple[str, str]:
         if launcher.is_running():
             return "already_open", f"already running (pid {launcher.pid})"
         launched, detail = launcher.launch()
@@ -90,11 +124,12 @@ class VizOverlaySession:
 @tool(
     name="go2w_real_viz",
     description=(
-        "Open or close RViz on the robot's desktop so the operator can watch "
-        "(Moonlight/local screen). action: open (view: main|explore|route — "
-        "match the running planner), close (closes all views). Non-blocking; "
-        "RViz runs as a background child. Opening an already-open view is ok "
-        "(dedupe). 给操作者打开/关闭 RViz 可视化。"),
+        "Open or close a visualization on the robot's desktop so the operator "
+        "can watch (Moonlight/local screen). action: open (view: main|explore|"
+        "route = RViz, match the running planner; 3d = the Foxglove 3D View3D "
+        "stream — 彩色预建图 + 实时位姿), close (closes all views). Non-blocking; "
+        "runs as a background child. Opening an already-open view is ok "
+        "(dedupe). 给操作者打开/关闭可视化(RViz 或 3D 视图)。"),
     read_only=False,
     permission="allow",
 )
@@ -104,7 +139,8 @@ class Go2WRealVizTool:
         "properties": {
             "action": {"type": "string", "enum": ["open", "close"],
                        "default": "open"},
-            "view": {"type": "string", "enum": sorted(_VIEWS),
+            "view": {"type": "string",
+                     "enum": sorted(set(_VIEWS) | set(_SCRIPT_VIEWS)),
                      "default": "main"},
         },
     }

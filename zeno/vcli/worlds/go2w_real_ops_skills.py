@@ -38,6 +38,7 @@ from zeno.vcli.worlds.go2w_real_skills import _base_of
 _VIEW_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("explore", "explore"), ("探索", "explore"),
     ("route", "route"), ("路线", "route"), ("路径", "route"),
+    ("3d", "3d"), ("三维", "3d"), ("3维", "3d"),
 )
 
 
@@ -64,14 +65,15 @@ class RealVizSkill:
 
     name = "open_viz"
     description = (
-        "Open RViz on the robot's desktop for the operator (Moonlight/local "
-        "screen) as a plannable STEP: view main|explore|route — match the "
-        "running planner. Shares the go2w_real_viz tool's overlay session: "
-        "opening an already-open view reports ok (never double-launches). "
-        "打开 RViz 可视化(main/explore/route 视图)。")
+        "Open a visualization on the robot's desktop for the operator "
+        "(Moonlight/local screen) as a plannable STEP: view main|explore|route "
+        "= RViz (match the running planner); 3d = the Foxglove 3D View3D stream "
+        "(彩色预建图 + 实时位姿). Shares the go2w_real_viz tool's overlay "
+        "session: opening an already-open view reports ok (never double-"
+        "launches). 打开可视化(main/explore/route RViz 或 3d 三维视图)。")
     parameters = {
         "view": {"type": "string", "default": "main", "required": False,
-                 "description": "main | explore | route"},
+                 "description": "main | explore | route | 3d"},
     }
     preconditions: list = []
     effects = {"viz": "open"}

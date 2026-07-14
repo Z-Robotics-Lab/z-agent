@@ -360,6 +360,46 @@ class Go2WRealWorld:
             except Exception as exc:  # noqa: BLE001 — setup must not block the REPL
                 oplog("env", "session", f"driver connect FAILED: {exc}")
                 logger.warning("go2w_real: hardware connect failed: %s", exc)
+        # PRE-BUILT MAP places (2026-07-14): when a map is active (localization
+        # mode, nav.sh's current_map.txt handshake) the map frame is STABLE, so
+        # load the persisted named marks AND inject the built-in home/家 place
+        # from start_pose.txt line 1. Fresh-mapping ('none') / down stack leaves
+        # the ledger session-only. Best-effort — never blocks the REPL.
+        self._load_persistent_places(base)
+
+    @staticmethod
+    def _load_persistent_places(base: Any) -> None:
+        """Load ~/maps/<active>/places.json + inject home. Never raises."""
+        from zeno.vcli.worlds.go2w_real_diag import oplog
+
+        ledger = getattr(base, "pose_ledger", None) if base is not None else None
+        if ledger is None or not hasattr(ledger, "load_marks"):
+            return
+        try:
+            from zeno.vcli.worlds.go2w_real_maps import (
+                current_map,
+                home_place,
+                load_places,
+            )
+
+            active = current_map()
+            if active is None:
+                oplog("places", "setup", "no active map — session-only places")
+                return
+            marks = load_places(active)
+            home = home_place(active)
+            if home is not None:
+                # Built-in home ('home' + 家 alias) from start_pose.txt line 1;
+                # a persisted mark of the same name (unlikely) still wins below.
+                marks.setdefault("home", home)
+                marks.setdefault("家", home)
+            ledger.load_marks(marks)
+            oplog("places", "setup",
+                  f"map={active} loaded {len(marks)} place(s) "
+                  f"(home={'yes' if home else 'no'})")
+        except Exception as exc:  # noqa: BLE001 — persistence must not crash setup
+            oplog("places", "setup", f"place load FAILED: {exc}")
+            logger.warning("go2w_real: persistent places load failed: %s", exc)
 
     def on_operator_interrupt(self, agent: Any) -> str:
         """Ctrl+C during a blocking turn: cancel motion, keep the session alive.
@@ -572,7 +612,7 @@ class Go2WRealWorld:
   - stop_explore_skill: {}
   - route_via_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}  (FAR goal via far_planner)
   - stop_route_skill: {}
-  - bringup_skill: {"action": "start|restart|stop"}  (start=幂等,栈在跑则不动; restart=强制重建; posture belongs to standup/liedown)
+  - bringup_skill: {"action": "start|restart|stop", "map": "<地图名>|从零"}  (start=幂等,栈在跑则不动; map 省略=默认预建图 zeno_office 重定位[地点跨重启有效], map=从零/none=从零建图[地点仅本会话]; posture belongs to standup/liedown)
   - resume_skill: {}  (解除急停;stop 之后、任何运动之前)
   - turn_skill: {"direction": "left|right", "degrees": <float, default 90>}  (掉头=180; verify turned(~0.6*degrees))
   - open_viz_skill: {"view": "main|explore|route"}  (optional; default main — match the running planner)

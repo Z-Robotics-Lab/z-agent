@@ -85,7 +85,10 @@ def test_bringup_start_runs_nav_sh_and_waits_ready():
     skill, calls = _bringup(already=False)
     result = skill.execute({"action": "start"}, _ctx(base=_FakeHW()))
     assert result.success
-    assert calls and calls[0][0] == "bash" and calls[0][-1] == "start"
+    # Updated 2026-07-14 (default-map bringup): an unspecified start defaults to
+    # pre-built map mode when ~/maps/zeno_office/zeno_office.pcd exists, so argv
+    # may carry a trailing map name — the SUBCOMMAND is 'start' at argv[2].
+    assert calls and calls[0][0] == "bash" and calls[0][2] == "start"
 
 
 def test_bringup_start_is_idempotent_when_stack_already_ready():
