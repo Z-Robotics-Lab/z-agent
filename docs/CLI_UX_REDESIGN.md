@@ -69,6 +69,9 @@
   底栏 '回答中 · N 字'。
 - ✅ P3.11 性能（owner: 交互卡）：live-status 200ms TTL 缓存,footer 重绘不再每次
   碰真机驱动读——打字/执行期高频落盘不再卡。
+- ✅ P3.12 精致克制配色（owner 选定方向）：palette.py 单源色板(明度阶+品牌青提亮+
+  证据色柔化)；⌂ goal 强调；console highlight=False 去 rich 品红 repr 噪音。受契约约束
+  未做:verdict 卡片边框/时间右对齐(verdict/→verify 是验收 grep 契约行)。
 - ⏸ 未做：当前 transcript 是 Rich 静态 scrollback，旧行不再接收鼠标事件；
   真正“点击某个块原地展开”需要持久全屏 TUI 或 GUI，本轮不伪造可点击箭头。
   Ctrl+O 详略切换与 GUI（§6，WebSocket 需 CEO gate）仍待做。
