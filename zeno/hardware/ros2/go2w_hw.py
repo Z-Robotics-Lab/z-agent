@@ -94,6 +94,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
 
     # Topics / services (the robot's EXISTING interface — we add none).
     WAYPOINT_TOPIC: str = "/way_point"
+    GOALPOINT_TOPIC: str = "/goal_point"   # far_planner's goal input (park seam)
     TELEOP_TOPIC: str = "/teleop_cmd_vel"
     ODOM_TOPIC: str = "/state_estimation"
     _TRIGGER_SERVICES: tuple[str, ...] = (
@@ -124,6 +125,10 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # must keep driving the robot.
         self._own_goal: tuple[float, float, float] | None = None  # x, y, mono
         self._external_goal: tuple[float, float, float] | None = None
+        self._goalpoint_pub: Any = None
+        #: Last park order (x, y, mono): far_planner echoes /way_point at these
+        #: coords for a beat after parking — plumbing, not an operator click.
+        self._park_goal: tuple[float, float, float] | None = None
         #: Set/cleared by Go2WRouteManager while far_planner republishes
         #: /way_point toward its route — those frames are plumbing, not clicks.
         self.route_overlay_active: bool = False
@@ -194,6 +199,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             self._waypoint_pub = node.create_publisher(
                 PointStamped, self.WAYPOINT_TOPIC, reliable
             )
+            # Park seam: re-goal the resident far_planner to the CURRENT pose
+            # before any direct motion so its stale-goal republish loop can
+            # never fight our waypoint (single-author rule, field 2026-07-14).
+            self._goalpoint_pub = node.create_publisher(
+                PointStamped, self.GOALPOINT_TOPIC, reliable
+            )
             self._teleop_pub = node.create_publisher(Twist, self.TELEOP_TOPIC, reliable)
             node.create_subscription(Odometry, self.ODOM_TOPIC, self._on_odom, sensor)
             # Listen to our OWN /way_point so an operator RViz click (which
@@ -245,6 +256,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         """
         self._node = node
         self._waypoint_pub = node.create_publisher(None, self.WAYPOINT_TOPIC, 10)
+        self._goalpoint_pub = node.create_publisher(None, self.GOALPOINT_TOPIC, 10)
         self._teleop_pub = node.create_publisher(None, self.TELEOP_TOPIC, 10)
         node.create_subscription(None, self.ODOM_TOPIC, self._on_odom, 10)
         node.create_subscription(None, self.WAYPOINT_TOPIC, self._on_waypoint, 10)
@@ -367,6 +379,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # not this drive's business).
         self.nav_overridden = False
         prev_ext = self._external_goal
+        self.park_route_planner()  # single-author rule: silence far_planner
         self._publish_waypoint(x, y)
         logger.info("Go2WHardware: /way_point -> (%.2f, %.2f), timeout=%.0fs", x, y, timeout)
 
@@ -423,6 +436,33 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self.nav_cancel()
         return False
 
+    def park_route_planner(self) -> None:
+        """Silence the resident far_planner: re-goal it to the CURRENT pose.
+
+        far_planner republishes /way_point toward its last goal FOREVER — a
+        stale goal fights every direct move on the same channel (field
+        2026-07-14: 3m in a staggering 24s, then spin-in-place chasing a goal
+        BEHIND). Publishing /goal_point at our own position makes it
+        instantly 'reached' and silent. Harmless no-op when far_planner is
+        absent (no subscriber) or the driver is disconnected. Never raises.
+        """
+        if self._node is None or self._goalpoint_pub is None:
+            return
+        try:
+            from geometry_msgs.msg import PointStamped
+
+            px, py, _ = self._position
+            msg = PointStamped()
+            msg.header.frame_id = "map"
+            msg.header.stamp = self._node.get_clock().now().to_msg()
+            msg.point.x, msg.point.y, msg.point.z = float(px), float(py), 0.0
+            self._park_goal = (float(px), float(py), time.monotonic())
+            self._goalpoint_pub.publish(msg)
+            logger.debug("Go2WHardware: route planner parked at (%.2f, %.2f)",
+                         px, py)
+        except Exception:  # noqa: BLE001 — parking is best-effort protection
+            pass
+
     def _publish_waypoint(self, x: float, y: float) -> None:
         """Publish one PointStamped to /way_point in the map frame."""
         from geometry_msgs.msg import PointStamped
@@ -460,6 +500,12 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             return
         if self.route_overlay_active:
             return  # far_planner route plumbing, not an operator click
+        park = self._park_goal
+        if park is not None:
+            kx, ky, kt = park
+            if (time.monotonic() - kt <= 5.0
+                    and abs(x - kx) <= 0.05 and abs(y - ky) <= 0.05):
+                return  # far_planner echoing our park order — plumbing
         own = self._own_goal
         if own is not None:
             ox, oy, ot = own
@@ -562,6 +608,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         v = min(max(float(speed), 0.05), self.BLIND_REVERSE_SPEED_CAP)
         logger.info("Go2WHardware: BLIND reverse %.2fm @ %.2f m/s (rear is a "
                     "sensor blind zone — escape maneuver)", target, v)
+        self.park_route_planner()  # single-author rule: silence far_planner
         self._nav_abort.clear()
         sx, sy, _ = self._position
         self.move_anchor_xy = (sx, sy)
@@ -619,6 +666,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         logger.info("Go2WHardware: rotate %.1f deg @ %.2f rad/s (~%.1fs)",
                     math.degrees(delta_yaw_rad), rate, duration)
 
+        self.park_route_planner()  # single-author rule: silence far_planner
         self._nav_abort.clear()
         prev = float(self.get_heading())
         # Anchor AFTER the guards — a refused rotation must never re-anchor
@@ -684,6 +732,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
                            "coarse-navigate first", math.hypot(px - x, py - y),
                            self.DOCK_MAX_RANGE_M)
             return False
+        self.park_route_planner()  # single-author rule: silence far_planner
         try:
             self.nav_cancel()  # clear the latched waypoint — no planner fights
         except Exception:  # noqa: BLE001 — cancel is best-effort
