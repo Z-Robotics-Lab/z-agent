@@ -49,7 +49,22 @@ logger = logging.getLogger(__name__)
 
 # RouteConfig / RouteStatus are re-exported (imported above) so callers and tests
 # can import them from this module alongside Go2WRouteManager.
-_ACTIVE_STATES: frozenset[str] = frozenset({"launching", "active"})
+# 'resident' = an externally-owned far_planner we ADOPTED (pre-built-map mode
+# keeps one running via nav.sh zdog-route): active for goto gating + the
+# /way_point plumbing flag, but there is NO child of ours to watch or signal.
+_ACTIVE_STATES: frozenset[str] = frozenset({"launching", "active", "resident"})
+
+
+def _default_resident_probe() -> bool:
+    """Is a far_planner already running on this host? Best-effort False."""
+    try:
+        import subprocess as _sp
+
+        r = _sp.run(["pgrep", "-f", "far_planner"], capture_output=True,
+                    text=True, timeout=3)
+        return r.returncode == 0 and bool(r.stdout.strip())
+    except Exception:  # noqa: BLE001 — probe failure = assume not resident
+        return False
 
 
 class Go2WRouteManager:
@@ -72,9 +87,11 @@ class Go2WRouteManager:
         hw: Any,
         config: RouteConfig | None = None,
         popen_factory: Callable[..., Any] | None = None,
+        resident_probe: Callable[[], bool] | None = None,
     ) -> None:
         self._hw = hw
         self._config = config or RouteConfig()
+        self._resident_probe = resident_probe or _default_resident_probe
         self._launcher = OverlayLauncher(
             "route", nav_sh=self._config.nav_sh, popen_factory=popen_factory
         )
@@ -166,6 +183,19 @@ class Go2WRouteManager:
             self._reason = ""
             self._orphan_cancel_fired = False
             self._cancel_requested = False
+            # ADOPT a resident far_planner (pre-built-map mode keeps one
+            # running via nav.sh) instead of launching a duplicate. Probe
+            # errors degrade to the old self-launch path.
+            try:
+                resident = bool(self._resident_probe())
+            except Exception:  # noqa: BLE001 — probe must never block routing
+                resident = False
+            if resident:
+                self._state = "resident"
+                self._sync_overlay_flag_locked()
+                return True, (
+                    "far_planner 常驻已在运行(预建图模式)— 已收养该会话:"
+                    "直接 goto 发目标;stop_route 只清目标,绝不杀常驻进程")
             ok, msg = self._launcher.launch()
             if not ok:
                 return False, msg
@@ -268,6 +298,21 @@ class Go2WRouteManager:
                 self._fire_nav_cancel(sync=True)
             return True, f"no route session running (state={self.state()})"
 
+        with self._lock:
+            if self._state == "resident":
+                # NEVER-KILL-INFRA: the resident far_planner is not our child.
+                # Ending the session = clear the goal, leave the process be.
+                self._state = "stopped"
+                self._sync_overlay_flag_locked()
+                self._reason = "resident session ended (process left running)"
+                cancelled = None
+        if self._reason == "resident session ended (process left running)":
+            cancelled = self._fire_nav_cancel(sync=True)
+            msg = ("route session ended — 常驻 far_planner 保留(非本会话子进程,"
+                   f"不杀);/nav_cancel {'ok' if cancelled else 'FAILED'}")
+            if resume:
+                msg += "; " + self._guarded_resume()
+            return True, msg
         clean, rc = self._launcher.stop(self._config.stop_grace_s)
         with self._lock:
             if clean:
@@ -337,6 +382,10 @@ class Go2WRouteManager:
 
     def _refresh_locked(self) -> None:
         """Orphan detection: an active state with a dead child => stopped."""
+        if self._state == "resident":
+            # Adopted external far_planner — no child of ours to watch.
+            self._sync_overlay_flag_locked()
+            return
         if self._state not in _ACTIVE_STATES or self._launcher.is_running():
             self._sync_overlay_flag_locked()
             return

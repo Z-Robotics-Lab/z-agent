@@ -49,7 +49,7 @@ def test_resident_start_adopts_without_launching(tmp_path):
     assert ok is True, msg
     assert factory.calls == [], "resident far_planner must NOT be duplicated"
     assert mgr.state() == "resident"
-    assert mgr.is_active() is True
+    assert mgr.is_active is True
     assert "常驻" in msg or "resident" in msg.lower()
 
 
