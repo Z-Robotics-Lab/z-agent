@@ -853,11 +853,52 @@ def _run_dashboard(
         style=merge_styles([PT_STYLE, _PTStyle.from_dict(dashboard_style_rules())]),
     )
 
-    # The turn worker: a numbered header, then the UNCHANGED engine turn body,
-    # whose console output (rebound below) streams into the turn region.
+    # The turn worker: dashboard-side command handling (the REPL loop's slash/
+    # exit/! dispatch is bypassed here, so it must be mirrored), then the engine
+    # turn body whose console output (rebound below) streams into the region.
+    # Any turn-body error is captured to a crash log AND surfaced in-region so a
+    # failure is never silent (and, if it doesn't hard-kill, never wedges input).
     def _dash_turn(text: str) -> None:
+        t = (text or "").strip()
+        if not t:
+            return
+        if is_exit_command(t):
+            if dash._app is not None:
+                dash._app.exit()
+            return
+        if is_slash_command(t):
+            parts = t.split()
+            try:
+                _handle_slash_command(parts[0][1:], parts[1:], registry, session, app_state)
+            except Exception:  # noqa: BLE001 — a slash bug must not wedge input
+                _dash_log_crash()
+            return
+        if t.startswith("!"):
+            dash.append_turn_line("  [dim]! shell — 仪表盘暂不支持,请用 scrollback CLI[/]")
+            return
         dash.start_turn(text)
-        engine_turn(text)
+        try:
+            engine_turn(text)
+        except KeyboardInterrupt:
+            _operator_interrupt(app_state)
+        except Exception:  # noqa: BLE001 — capture, surface, never wedge input
+            _dash_log_crash()
+            dash.append_turn_line(
+                "  [#e8897d]回合出错[/] [dim]— 详见 ~/.zeno/dashboard-crash.log[/]"
+            )
+
+    def _dash_log_crash() -> None:
+        import traceback
+
+        try:
+            from zeno.vcli.paths import zeno_home
+
+            p = zeno_home() / "dashboard-crash.log"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(traceback.format_exc() + "\n" + "-" * 60 + "\n")
+        except Exception:  # noqa: BLE001 — diagnostics are best-effort
+            pass
 
     _runner = TurnRunner(
         run_turn=_dash_turn,
