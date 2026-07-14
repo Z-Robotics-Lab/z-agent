@@ -553,6 +553,86 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self.set_velocity(0.0, 0.0, 0.0)
         return not cancelled
 
+    # --- Docking (manipulation-grade precision arrival, CEO 2026-07-14) ---
+    DOCK_TOL_M: float = 0.08           # position tolerance at the station
+    DOCK_YAW_TOL_RAD: float = 0.05     # ~3° heading tolerance
+    DOCK_SPEED: float = 0.15           # slow omni servo (well under guard 0.6)
+    DOCK_YAW_RATE: float = 0.4         # slow yaw servo
+    DOCK_MAX_RANGE_M: float = 1.0      # docking is a last-metre maneuver
+
+    def dock_to(self, x: float, y: float, yaw: float | None = None,
+                timeout: float = 30.0) -> bool:
+        """Precision servo to map-frame (x, y[, yaw]) — the fine stage AFTER
+        coarse navigation, for manipulation stations.
+
+        Omni body-frame velocities on the direct teleop channel at 5 Hz,
+        computed each tick from live odometry (the pure-localization prior
+        map keeps the map frame honest): P-servo toward the target, clamped
+        to DOCK_SPEED / DOCK_YAW_RATE, until within DOCK_TOL_M (and the
+        target heading within DOCK_YAW_TOL_RAD when *yaw* is given).
+
+        Guards: refuses beyond DOCK_MAX_RANGE_M (coarse nav first), refuses
+        on the E-stop latch, clears any latched waypoint (nav_cancel) so the
+        planner cannot fight the servo, honors _nav_abort (stop/Ctrl+C).
+        Anchors move_anchor_xy AFTER the guards (moved() oracle).
+        """
+        if not (math.isfinite(x) and math.isfinite(y)
+                and (yaw is None or math.isfinite(yaw))):
+            raise ValueError("Go2WHardware.dock_to: non-finite target")
+        if self._node is None or self._teleop_pub is None:
+            logger.warning("Go2WHardware.dock_to: not connected")
+            return False
+        if self.estop_latched:
+            logger.warning("Go2WHardware.dock_to: E-stop latched — refusing")
+            return False
+        px, py, _ = self._position
+        if math.hypot(px - x, py - y) > self.DOCK_MAX_RANGE_M:
+            logger.warning("Go2WHardware.dock_to: target %.2fm away (> %.1fm) — "
+                           "coarse-navigate first", math.hypot(px - x, py - y),
+                           self.DOCK_MAX_RANGE_M)
+            return False
+        try:
+            self.nav_cancel()  # clear the latched waypoint — no planner fights
+        except Exception:  # noqa: BLE001 — cancel is best-effort
+            pass
+        self.move_anchor_xy = (px, py)
+        self._nav_abort.clear()
+        logger.info("Go2WHardware: docking to (%.2f, %.2f%s)", x, y,
+                    f", yaw={yaw:.2f}" if yaw is not None else "")
+        gain_v, gain_w = 1.2, 1.5
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._nav_abort.is_set():
+                logger.info("Go2WHardware: docking cancelled by operator")
+                self.set_velocity(0.0, 0.0, 0.0)
+                return False
+            px, py, _ = self._position
+            cur_yaw = float(self._heading)
+            dx, dy = x - px, y - py
+            dist = math.hypot(dx, dy)
+            yaw_err = 0.0
+            if yaw is not None:
+                yaw_err = math.atan2(math.sin(yaw - cur_yaw),
+                                     math.cos(yaw - cur_yaw))
+            if dist <= self.DOCK_TOL_M and abs(yaw_err) <= self.DOCK_YAW_TOL_RAD:
+                self.set_velocity(0.0, 0.0, 0.0)
+                logger.info("Go2WHardware: docked (dist=%.3fm yaw_err=%.3frad)",
+                            dist, yaw_err)
+                return True
+            # map-frame delta -> body frame (omni: translate + rotate together)
+            bx = math.cos(-cur_yaw) * dx - math.sin(-cur_yaw) * dy
+            by = math.sin(-cur_yaw) * dx + math.cos(-cur_yaw) * dy
+            vx = _clamp(gain_v * bx, self.DOCK_SPEED)
+            vy = _clamp(gain_v * by, self.DOCK_SPEED)
+            wz = _clamp(gain_w * yaw_err, self.DOCK_YAW_RATE)
+            if dist <= self.DOCK_TOL_M:
+                vx = vy = 0.0  # position done — finish the heading only
+            self.set_velocity(vx, vy, wz)
+            time.sleep(self.TELEOP_PERIOD_S)
+        self.set_velocity(0.0, 0.0, 0.0)
+        logger.warning("Go2WHardware: docking timed out")
+        return False
+
     def stop(self) -> None:
         """Emergency-safe stop: publish one zero Twist; never raise.
 

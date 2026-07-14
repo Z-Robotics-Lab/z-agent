@@ -29,6 +29,11 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   until arrival. go2w_real_where reads the live pose. For RELATIVE moves
   ("往前走 2 米", "back up one meter") use the move_relative skill
   (direction + distance); it computes the map waypoint from live odometry.
+- PRECISION DOCKING (manipulation stations) — goto_place with precise=true
+  (or say 精准进站/精确/dock): after coarse arrival the base servos the last
+  ~30cm to ~8cm AND the place's recorded heading — use it whenever the arm
+  needs a repeatable base pose. Requires a marked place (mark_place stores
+  heading too). Coarse goto stays the default for ordinary travel.
 - REVERSE IS BLIND — the lidar faces FORWARD (pitched 20° down): behind the
   robot there is NO obstacle perception (后方盲区), so driving is FORWARD-ONLY.
   A short backward request (<= 1.5 m) runs as a slow blind-crawl ESCAPE
