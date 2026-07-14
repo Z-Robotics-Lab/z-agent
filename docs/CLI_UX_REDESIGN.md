@@ -64,6 +64,9 @@
 - ✅ P3.9 降噪+composer 收口（owner 真机取证 2026-07-13 深夜）：流式模式卡片行
   省略（ⓘ 保留）、插队回显 4→2 行、tool_use 时长诚实档、● 答案表格真渲染、
   composer 空态 placeholder+全宽轨线。
+- ✅ P3.10（owner 真机反馈）：placeholder 移入上轨线（输入行前不再有常驻文字）；
+  ReasoningStreamer 句界流式 ┆ 落盘（chat+native 同款,off 静默,sync 保 P3.6 预览）;
+  底栏 '回答中 · N 字'。
 - ⏸ 未做：当前 transcript 是 Rich 静态 scrollback，旧行不再接收鼠标事件；
   真正“点击某个块原地展开”需要持久全屏 TUI 或 GUI，本轮不伪造可点击箭头。
   Ctrl+O 详略切换与 GUI（§6，WebSocket 需 CEO gate）仍待做。
