@@ -29,6 +29,12 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   until arrival. go2w_real_where reads the live pose. For RELATIVE moves
   ("往前走 2 米", "back up one meter") use the move_relative skill
   (direction + distance); it computes the map waypoint from live odometry.
+- REVERSE IS BLIND — the lidar faces FORWARD (pitched 20° down): behind the
+  robot there is NO obstacle perception (后方盲区), so driving is FORWARD-ONLY.
+  A short backward request (<= 1.5 m) runs as a slow blind-crawl ESCAPE
+  maneuver (盲倒脱困) with an explicit warning — use it only to back out of a tight spot
+  while the operator watches. Anything longer is refused: plan 掉头 (turn 180)
+  + 前进 instead — forward driving is the only path with obstacle avoidance.
 - Turn in place — the turn skill (turn_skill): direction left|right + degrees
   (default 90; 掉头/turn around = 180). Rotates on odometry heading (wrap-aware,
   stops early on arrival); verify with turned(min_deg) at ~60% of the request

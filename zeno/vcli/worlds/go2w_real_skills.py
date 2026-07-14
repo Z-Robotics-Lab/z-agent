@@ -64,6 +64,10 @@ _RELATIVE_DIRECTIONS: dict[str, float] = {
     "left": math.pi / 2,
     "right": -math.pi / 2,
 }
+#: Blind-escape reverse cap (CEO safety ruling 2026-07-13): the Mid-360 is
+#: front-mounted, pitched 20° down-forward — the rear is a sensor blind zone.
+#: Short reverses crawl blind on the teleop channel; longer must turn around.
+_BLIND_REVERSE_MAX_M: float = 1.5
 _DIRECTION_SYNONYMS: dict[str, str] = {
     "前": "forward", "前进": "forward", "向前": "forward", "往前": "forward",
     "后": "backward", "后退": "backward", "向后": "backward", "往后": "backward",
@@ -242,6 +246,22 @@ class RealMoveRelativeSkill:
             oplog("skill", "move_relative", f"BLOCKED latched; {direction} {distance}m")
             return SkillResult(success=False, diagnosis_code="estop_latched",
                                error_message=hint)
+        # FORWARD-ONLY POLICY (CEO safety ruling 2026-07-13 evening): backward
+        # is never a planner drive — the rear is a lidar blind zone, and the
+        # nav stack is forward-only in the same change set. Short reverses are
+        # a slow BLIND ESCAPE on the direct teleop channel; anything longer
+        # must turn around and drive forward, where obstacle avoidance exists.
+        if direction == "backward" and callable(getattr(base, "reverse_blind", None)):
+            if distance > _BLIND_REVERSE_MAX_M:
+                oplog("skill", "move_relative",
+                      f"REFUSED blind reverse {distance}m > {_BLIND_REVERSE_MAX_M}m")
+                return SkillResult(
+                    success=False, diagnosis_code="reverse_too_far",
+                    error_message=(
+                        f"后退{distance:g}米被拒绝:雷达朝前下倾,后方是盲区,"
+                        f"盲倒上限{_BLIND_REVERSE_MAX_M:g}米。请改为掉头"
+                        f"(turn 180)再前进{distance:g}米——正向行驶才有避障。"))
+            return self._blind_escape(base, context, distance)
         # Session memory: origin (once) + departure breadcrumb (刚才的位置).
         record_departure(context, "move_relative")
         pos = base.get_position()
@@ -304,6 +324,41 @@ class RealMoveRelativeSkill:
             f"did not reach ({tx:.2f}, {ty:.2f}); at ({p[0]:.2f}, {p[1]:.2f})"
             + _stalled_hint(pos, p, direction=direction,
                             latched=bool(getattr(base, "estop_latched", False)))))
+
+    @staticmethod
+    def _blind_escape(base: Any, context: Any, distance: float) -> SkillResult:
+        """Slow straight blind reverse — an OFF-PLAN escape maneuver.
+
+        Runs on the direct teleop channel (driver.reverse_blind), never the
+        planner. The plan frame follows REALITY afterwards (intent position
+        re-anchors to the actual end pose; the course heading is untouched) —
+        an escape is a recovery, not a plan leg.
+        """
+        record_departure(context, "move_relative")
+        sp = base.get_position()
+        tracker = course_of(context)
+        if tracker is not None:
+            tracker.ensure(float(base.get_heading()))  # anchor-only; no change
+        oplog("skill", "move_relative",
+              f"BLIND reverse {distance}m from=({sp[0]:.2f},{sp[1]:.2f}) "
+              "(rear blind zone — escape crawl)")
+        ok = bool(base.reverse_blind(distance))
+        p = base.get_position()
+        disp = math.hypot(float(p[0]) - float(sp[0]), float(p[1]) - float(sp[1]))
+        if tracker is not None:
+            tracker.set_position(float(p[0]), float(p[1]))
+        data = {"direction": "backward", "distance_m": distance,
+                "displaced_m": round(disp, 2), "blind_escape": True}
+        if ok and disp >= distance * 0.5:
+            data["message"] = (
+                f"盲区倒车完成:后退{disp:.2f}米(请求{distance:g}米,慢速爬行)。"
+                f"注意:后方无避障,倒车仅作脱困;长距离请掉头前进。"
+                f"verify with moved({distance * 0.6:.1f})")
+            return SkillResult(success=True, result_data=data)
+        stall = _stalled_hint(sp, p) if disp < 0.05 else ""
+        return SkillResult(success=False, result_data=data, error_message=(
+            f"盲区倒车未完成(位移{disp:.2f}米/请求{distance:g}米)"
+            + (f" — {stall}" if stall else "")))
 
 
 @skill(aliases=["standup", "stand", "stand up", "起立", "站起来", "起来"], direct=True)

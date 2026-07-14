@@ -436,6 +436,57 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         self.set_velocity(0.0, 0.0, 0.0)
         return True
 
+    #: Blind-escape reverse speed ceiling. The Mid-360 is front-mounted and
+    #: pitched 20° down-forward — the robot is BLIND behind (CEO safety
+    #: ruling 2026-07-13): reverse is never a driving mode, only a short
+    #: escape crawl the operator watches with the E-stop in hand.
+    BLIND_REVERSE_SPEED_CAP: float = 0.3
+
+    def reverse_blind(self, distance_m: float, speed: float = 0.25) -> bool:
+        """Crawl STRAIGHT back *distance_m* metres on the direct teleop channel.
+
+        Escape-only maneuver — the planner never drives this robot backward
+        (nav stack is forward-only; rear = lidar blind zone). walk()-cadence
+        contract: linear-only Twist (vx<0) on /teleop_cmd_vel at 5 Hz, one
+        final zero then silence. Odometry-tracked EARLY stop when the
+        displacement covers the request; open-loop window capped at
+        distance/speed * 1.6 if odometry freezes. Honors _nav_abort
+        (cancel_navigation / Ctrl+C) and refuses on the E-stop latch.
+        Anchors move_anchor_xy so moved() grades the escape (Inv-1).
+        """
+        if not (math.isfinite(distance_m) and math.isfinite(speed)):
+            raise ValueError("Go2WHardware.reverse_blind: non-finite request")
+        if self._node is None or self._teleop_pub is None:
+            logger.warning("Go2WHardware.reverse_blind: not connected")
+            return False
+        if self.estop_latched:
+            logger.warning(
+                "Go2WHardware.reverse_blind: E-stop latched — refusing motion")
+            return False
+        target = abs(float(distance_m))
+        if target == 0.0:
+            return True
+        v = min(max(float(speed), 0.05), self.BLIND_REVERSE_SPEED_CAP)
+        logger.info("Go2WHardware: BLIND reverse %.2fm @ %.2f m/s (rear is a "
+                    "sensor blind zone — escape maneuver)", target, v)
+        self._nav_abort.clear()
+        sx, sy, _ = self._position
+        self.move_anchor_xy = (sx, sy)
+        deadline = time.monotonic() + (target / v) * 1.6
+        cancelled = False
+        while time.monotonic() < deadline:
+            if self._nav_abort.is_set():
+                logger.info("Go2WHardware: blind reverse cancelled by operator")
+                cancelled = True
+                break
+            self.set_velocity(-v, 0.0, 0.0)
+            time.sleep(self.TELEOP_PERIOD_S)
+            px, py, _ = self._position
+            if math.hypot(px - sx, py - sy) >= target:
+                break  # odometry-confirmed arrival — stop early
+        self.set_velocity(0.0, 0.0, 0.0)
+        return not cancelled
+
     def rotate(self, delta_yaw_rad: float, yaw_rate: float = 0.5) -> bool:
         """Rotate IN PLACE by *delta_yaw_rad* (signed: + = left/CCW, - = right/CW).
 

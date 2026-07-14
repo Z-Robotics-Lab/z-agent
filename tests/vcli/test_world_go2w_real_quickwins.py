@@ -237,9 +237,13 @@ def test_backward_fewshot_params_backward_one_meter():
     assert '"distance": 1' in seg
 
 
-def test_backward_fewshot_verifies_with_at():
+def test_backward_fewshot_verifies_with_moved():
+    """Reverse became a body-frame BLIND ESCAPE (CEO ruling 2026-07-13: the
+    lidar faces forward, the rear is unperceived) — displacement is the honest
+    oracle, not a map target the crawl never computes."""
     seg = _segment('Task: "后退1米"')
-    assert "at(" in seg, "the backward move verifies its arrival with at(...)"
+    assert "moved(" in seg, "the blind escape verifies displacement with moved(...)"
+    assert "at(" not in seg, "no map-target verify for a body-frame escape"
 
 
 def test_examples_within_char_budget():
