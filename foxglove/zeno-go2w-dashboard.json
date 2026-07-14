@@ -3,7 +3,7 @@
     "creator": "Zeno",
     "version": "3.0",
     "timestamp": "2026-07-14",
-    "description": "Go2W real-robot dashboard — prior map + live scan + nav chain + cameras (RGB/depth/semantic) + cmd-vs-actual honesty plots. Topics verified against ~/Z-Navigation-Stack + go2w-nuc sources; palette matches the Zeno CLI (#2dd4bf brand / #5cc98f ok / #f0b849 warn / #e8897d bad)."
+    "description": "Go2W real-robot dashboard — prior map + live scan + nav chain + cameras (RGB/depth/semantic) + cmd-vs-actual honesty plots. Topics verified against ~/Z-Navigation-Stack + go2w-nuc sources; palette matches the Zeno CLI (#2dd4bf brand / #5cc98f ok / #f0b849 warn / #e8897d bad). Camera topics + /place_markers audited against the LIVE robot (ros2 topic list, 2026-07-14)."
   },
   "configById": {
     "3D!main": {
@@ -12,9 +12,22 @@
         "distance": 16,
         "phi": 48,
         "thetaOffset": -90,
-        "targetOffset": [0, 0, 0],
-        "target": [0, 0, 0],
-        "targetOrientation": [0, 0, 0, 1],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
         "fovy": 45,
         "near": 0.01,
         "far": 5000
@@ -27,8 +40,12 @@
         "syncCamera": false
       },
       "transforms": {
-        "frame:map": { "visible": true },
-        "frame:sensor": { "visible": true }
+        "frame:map": {
+          "visible": true
+        },
+        "frame:sensor": {
+          "visible": true
+        }
       },
       "topics": {
         "/prior_map_color": {
@@ -139,25 +156,64 @@
         "/viz_graph_topic": {
           "visible": true,
           "namespaces": {
-            "freespace_vgraph": { "visible": true },
-            "polygon_edge": { "visible": true },
-            "angle_direct": { "visible": false },
-            "boundary_edge": { "visible": false },
-            "boundary_vertex": { "visible": false },
-            "freespace_vertex": { "visible": false },
-            "frontier_vertex": { "visible": false },
-            "global_vertex": { "visible": false },
-            "global_vgraph": { "visible": false },
-            "localrange_vertex": { "visible": false },
-            "odom_edge": { "visible": false },
-            "to_goal_edge": { "visible": false },
-            "trajectory_edge": { "visible": false },
-            "trajectory_vertex": { "visible": false },
-            "updating_vertex": { "visible": false },
-            "vertex_angle": { "visible": false },
-            "vertices_matches": { "visible": false },
-            "visibility_edge": { "visible": false }
+            "freespace_vgraph": {
+              "visible": true
+            },
+            "polygon_edge": {
+              "visible": true
+            },
+            "angle_direct": {
+              "visible": false
+            },
+            "boundary_edge": {
+              "visible": false
+            },
+            "boundary_vertex": {
+              "visible": false
+            },
+            "freespace_vertex": {
+              "visible": false
+            },
+            "frontier_vertex": {
+              "visible": false
+            },
+            "global_vertex": {
+              "visible": false
+            },
+            "global_vgraph": {
+              "visible": false
+            },
+            "localrange_vertex": {
+              "visible": false
+            },
+            "odom_edge": {
+              "visible": false
+            },
+            "to_goal_edge": {
+              "visible": false
+            },
+            "trajectory_edge": {
+              "visible": false
+            },
+            "trajectory_vertex": {
+              "visible": false
+            },
+            "updating_vertex": {
+              "visible": false
+            },
+            "vertex_angle": {
+              "visible": false
+            },
+            "vertices_matches": {
+              "visible": false
+            },
+            "visibility_edge": {
+              "visible": false
+            }
           }
+        },
+        "/place_markers": {
+          "visible": true
         }
       },
       "layers": {
@@ -166,8 +222,16 @@
           "visible": true,
           "frameLocked": true,
           "label": "Grid",
-          "position": [0, 0, 0],
-          "rotation": [0, 0, 0],
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
           "color": "#1c2029",
           "size": 100,
           "divisions": 100,
@@ -189,9 +253,22 @@
         "distance": 28,
         "phi": 0,
         "thetaOffset": -90,
-        "targetOffset": [0, 0, 0],
-        "target": [0, 0, 0],
-        "targetOrientation": [0, 0, 0, 1],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
         "fovy": 45,
         "near": 0.01,
         "far": 5000
@@ -204,8 +281,12 @@
         "syncCamera": false
       },
       "transforms": {
-        "frame:map": { "visible": true },
-        "frame:sensor": { "visible": true }
+        "frame:map": {
+          "visible": true
+        },
+        "frame:sensor": {
+          "visible": true
+        }
       },
       "topics": {
         "/prior_map_color": {
@@ -250,6 +331,9 @@
           "visible": true,
           "color": "#5cc98f",
           "lineWidth": 0.08
+        },
+        "/place_markers": {
+          "visible": true
         }
       },
       "layers": {
@@ -258,8 +342,16 @@
           "visible": true,
           "frameLocked": true,
           "label": "Grid",
-          "position": [0, 0, 0],
-          "rotation": [0, 0, 0],
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
           "color": "#1c2029",
           "size": 100,
           "divisions": 100,
@@ -276,7 +368,7 @@
       "imageMode": {}
     },
     "Image!rgb": {
-      "cameraTopic": "/camera/image/compressed",
+      "cameraTopic": "/camera/camera/color/image_raw",
       "enabledMarkerTopics": [],
       "synchronize": false,
       "transformMarkers": false,
@@ -288,7 +380,7 @@
       "rotation": 0
     },
     "Image!depth": {
-      "cameraTopic": "/camera/depth/compressed",
+      "cameraTopic": "/camera/camera/depth/image_rect_raw",
       "enabledMarkerTopics": [],
       "synchronize": false,
       "transformMarkers": false,
@@ -314,9 +406,18 @@
     "Tab!cameras": {
       "activeTabIdx": 0,
       "tabs": [
-        { "title": "RGB", "layout": "Image!rgb" },
-        { "title": "深度", "layout": "Image!depth" },
-        { "title": "语义", "layout": "Image!semantic" }
+        {
+          "title": "RGB",
+          "layout": "Image!rgb"
+        },
+        {
+          "title": "深度",
+          "layout": "Image!depth"
+        },
+        {
+          "title": "语义",
+          "layout": "Image!semantic"
+        }
       ]
     },
     "Plot!linear": {
@@ -408,9 +509,18 @@
     "Tab!state": {
       "activeTabIdx": 0,
       "tabs": [
-        { "title": "位姿", "layout": "RawMessages!pose" },
-        { "title": "目标状态", "layout": "RawMessages!goalstatus" },
-        { "title": "探索", "layout": "RawMessages!explore" }
+        {
+          "title": "位姿",
+          "layout": "RawMessages!pose"
+        },
+        {
+          "title": "目标状态",
+          "layout": "RawMessages!goalstatus"
+        },
+        {
+          "title": "探索",
+          "layout": "RawMessages!explore"
+        }
       ]
     }
   },

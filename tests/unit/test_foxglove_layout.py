@@ -26,14 +26,14 @@ _KNOWN_TOPICS = {
     "/terrain_map", "/terrain_map_ext", "/added_obstacles", "/trajectory",
     "/free_paths", "/explored_areas", "/path", "/way_point", "/goal_point",
     "/state_estimation", "/navigation_boundary", "/nogo_boundary",
-    "/viz_graph_topic", "/camera/image/compressed", "/camera/depth/compressed",
+    "/viz_graph_topic", "/camera/camera/color/image_raw", "/camera/camera/depth/image_rect_raw",
     "/camera/semantic_image/compressed", "/cmd_vel", "/cmd_vel_safe",
-    "/imu/data", "/far_reach_goal_status", "/exploration_finish",
+    "/imu/data", "/far_reach_goal_status", "/exploration_finish", "/place_markers",
 }
 
 _MUST_SHOW = {
     "/prior_map_color", "/registered_scan", "/state_estimation", "/path",
-    "/way_point", "/goal_point", "/camera/image/compressed",
+    "/way_point", "/goal_point", "/camera/camera/color/image_raw",
 }
 
 
