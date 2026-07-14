@@ -1,0 +1,11 @@
+#!/bin/bash
+# dash — 在本 checkout 启动 Zeno 仪表盘 TUI(ZENO_DASHBOARD=1)。
+# 复刻 install-launcher.sh 的运行环境(provider/model/.env/ros_env),
+# 只是走全屏三区仪表盘而非 scrollback REPL。合并进 hw 后 `ZENO_DASHBOARD=1 zeno` 亦可。
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$HERE" || exit 1
+set -a; source .env 2>/dev/null; set +a
+export ZENO_PROVIDER="${ZENO_PROVIDER:-deepseek}"
+export DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-v4-pro}"
+[ -f "$HOME/go2w-nuc/bringup/ros_env.sh" ] && source "$HOME/go2w-nuc/bringup/ros_env.sh"
+exec env ZENO_DASHBOARD=1 "$HERE/.venv/bin/python" -m zeno.vcli.cli --world "${ZENO_WORLD:-go2w}" "$@"
