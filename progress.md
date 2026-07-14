@@ -39,7 +39,9 @@
 
 ## Next
 1. 真机执行上述 CEO 清单（本轮仅 hermetic 单测 + 离线冒烟，硬件闭环未做）。
-2. 关注/协调分支上并发的 operator RViz-goal detection 轮次何时转 GREEN，届时需要重新跑基线对比。
+2. operator RViz-goal detection 已 GREEN（09cc6e7）：驱动订阅自身 /way_point 分类 own-echo/route-plumbing/
+   EXTERNAL；navigate_to 遇操作者新目标提前让位（nav_overridden，不 nav_cancel）；navigate/move_relative/
+   goto_place 报 operator_override（让位+坐标，无 stall 提示）；状态行显 RViz手动目标；card 教操作者优先。真机闭环待现场。
 3. map-color-publisher.service 需在 NUC 上重启一次以拾取新代码（若尚未做）。
 
 ## Failed / 教训
