@@ -295,6 +295,25 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         except Exception:  # noqa: BLE001 — cancel must never raise
             pass
 
+    def clear_all_goals(self) -> None:
+        """THE clean slate (CEO 2026-07-14): kill every cached goal everywhere.
+
+        One call sweeps all four goal caches: ① aborts any in-flight
+        navigate/rotate/reverse/dock poll loop (_nav_abort), ② clears the
+        local planner's latched /way_point (/nav_cancel), ③ parks the
+        resident far_planner (stale route goals stop republishing), ④ drops
+        the recorded operator RViz goal. Deliberately does NOT touch the
+        E-stop latch — releasing an E-stop stays its own explicit action
+        (resume). Best-effort throughout; never raises.
+        """
+        self.cancel_navigation()          # ① in-flight loops + ② /nav_cancel
+        self.park_route_planner()         # ③ far_planner stale goals
+        try:
+            self.clear_external_goal()    # ④ operator-goal record
+        except Exception:  # noqa: BLE001 — sweep must never raise
+            pass
+        logger.info("Go2WHardware: ALL goals cleared (clean slate)")
+
     def odom_age_s(self) -> float | None:
         """Seconds since the last odometry ARRIVED — None if never received.
 
