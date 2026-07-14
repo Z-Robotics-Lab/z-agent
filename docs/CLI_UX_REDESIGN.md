@@ -61,6 +61,9 @@
   电机技能自动放行,少触发）；chat 流式文本不再逐字上屏（完稿落盘,心跳在底栏）。
 - ✅ P3.8 底栏排版（owner 真机反馈 2026-07-13）：⚙ 活动/⌖ 位姿/身份计数三区
   分色，odom age>3s 整片 amber 警示；执行期常驻+0.5s 自刷新；折行与文本不变。
+- ✅ P3.9 降噪+composer 收口（owner 真机取证 2026-07-13 深夜）：流式模式卡片行
+  省略（ⓘ 保留）、插队回显 4→2 行、tool_use 时长诚实档、● 答案表格真渲染、
+  composer 空态 placeholder+全宽轨线。
 - ⏸ 未做：当前 transcript 是 Rich 静态 scrollback，旧行不再接收鼠标事件；
   真正“点击某个块原地展开”需要持久全屏 TUI 或 GUI，本轮不伪造可点击箭头。
   Ctrl+O 详略切换与 GUI（§6，WebSocket 需 CEO gate）仍待做。
