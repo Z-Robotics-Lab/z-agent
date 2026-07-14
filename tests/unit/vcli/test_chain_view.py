@@ -265,3 +265,61 @@ def test_final_lines_escapes_goal_markup() -> None:
     from rich.text import Text
 
     Text.from_markup("\n".join(view.final_lines("确认 [/tmp/x] 已生成")))  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# P3.7 — transcript-sink mode (persistent composer: no Live, append-only)
+# ---------------------------------------------------------------------------
+
+
+def _make_sink_view():
+    lines: list[str] = []
+    activity: list[str] = []
+    view = ChainView(
+        live_factory=lambda r: (_ for _ in ()).throw(AssertionError("no Live in sink mode")),
+        transcript_sink=lines.append,
+        activity_sink=activity.append,
+    )
+    return view, lines, activity
+
+
+def test_sink_mode_never_creates_a_live_region() -> None:
+    view, lines, _a = _make_sink_view()
+    view.start()  # must NOT call the live factory
+    view.handle_event(NativeEvent(kind="tool_start", label="turn"))
+    view.stop()
+    assert view.start_count == 0
+
+
+def test_sink_mode_streams_goal_header_and_completed_nodes_once() -> None:
+    view, lines, _a = _make_sink_view()
+    view.begin_goal("往左转动30度")
+    view.handle_event(NativeEvent(kind="tool_start", label="turn", detail="(degrees=30)"))
+    assert not [l for l in lines if "turn(" in l]  # running node not yet printed
+    view.handle_event(NativeEvent(kind="tool_end", label="turn", ok=True))
+    view.handle_event(NativeEvent(kind="verify", label="turned(18)", ok=True))
+    view.handle_event(NativeEvent(kind="nudge", label="x", detail="先 verify"))
+    text = "\n".join(lines)
+    assert "⌂" in lines[0] and "往左转动30度" in lines[0]
+    assert "turn(degrees=30)".replace("(degrees=30)", "") in text  # tool line landed
+    assert "turned(18)" in text and "✓" in text
+    assert "先 verify" in text
+    # exactly once each — no duplicates on later events
+    assert sum(1 for l in lines if "turned(18)" in l) == 1
+    assert view.streamed_to_transcript is True
+
+
+def test_sink_mode_updates_activity_for_footer() -> None:
+    view, _l, activity = _make_sink_view()
+    view.handle_event(NativeEvent(kind="round", label="2"))
+    view.handle_event(NativeEvent(kind="reasoning", detail="想一下"))
+    view.handle_event(NativeEvent(kind="tool_start", label="navigate", detail=""))
+    joined = " ".join(activity)
+    assert "navigate" in joined
+    assert any("2" in a or "думать" not in a for a in activity)  # round visible in some form
+
+
+def test_default_mode_unchanged_no_sink_flag() -> None:
+    view, _lives = _make()
+    view.handle_event(NativeEvent(kind="tool_start", label="walk"))
+    assert view.streamed_to_transcript is False
