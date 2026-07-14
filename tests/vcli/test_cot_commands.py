@@ -259,4 +259,4 @@ def test_tool_activity_is_a_quiet_separate_visual_layer() -> None:
     assert rendered.plain == "  ◇ Tool · go2w_real_bringup(action=status)  ✓ 49.8s"
     styles = {str(span.style) for span in rendered.spans}
     assert "dim #738091" in styles
-    assert "bold green" in styles
+    assert "bold #5cc98f" in styles

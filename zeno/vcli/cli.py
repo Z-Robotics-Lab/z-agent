@@ -44,6 +44,7 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 
+from zeno.vcli import palette
 from zeno.vcli.backends import create_backend
 from zeno.vcli.banner import (
     centered_logo_lines,
@@ -77,7 +78,7 @@ from zeno.vcli.turn_status import TurnStatus
 from zeno.vcli.tools import CategorizedToolRegistry, ToolRegistry, discover_all_tools, discover_categorized_tools
 
 logger = logging.getLogger(__name__)
-console = Console()
+console = Console(highlight=False)  # P3.12: palette owns all color; no rich auto-repr highlight
 
 VERSION = "0.1.0"
 
@@ -104,8 +105,8 @@ def _persist_dir() -> Path:
     return zeno_dir
 
 
-TEAL = "#00b4b4"
-DIM_TEAL = "#006666"
+TEAL = palette.BRAND
+DIM_TEAL = palette.BRAND_DIM
 
 EXIT_COMMANDS: frozenset[str] = frozenset({"quit", "exit", "q"})
 
@@ -228,23 +229,23 @@ PT_STYLE = PTStyle.from_dict({
     "scrollbar.background": "bg:#0a0a1a",
     "scrollbar.button": "bg:#006666",
     # Compact coding-agent composer
-    "composer.prompt.brand": "#718096",
-    "composer.prompt.chevron": "bold #00b4b4",
+    "composer.prompt.brand": palette.TEXT_DIM,
+    "composer.prompt.chevron": f"bold {palette.BRAND}",
     "composer.input": "#e6edf3",
-    "composer.input.indent": "#718096",
-    "composer.rail": "#36545a",
-    "composer.footer": "#667085",
-    "composer.footer.status": "#718096",
-    "composer.footer.activity": "bold #00b4b4",
-    "composer.footer.pose": "#5fb8c4",
+    "composer.input.indent": palette.TEXT_DIM,
+    "composer.rail": palette.BRAND_DIM,
+    "composer.footer": palette.TEXT_DIM,
+    "composer.footer.status": palette.TEXT_DIM,
+    "composer.footer.activity": f"bold {palette.BRAND}",
+    "composer.footer.pose": palette.POSE,
     "composer.footer.pose.stale": "bold #d97706",
-    "composer.footer.meta": "#5b6472",
-    "composer.footer.sep": "#3a4048",
-    "composer.placeholder": "italic #4a5361",
-    "composer.rail.close": "#232a33",
+    "composer.footer.meta": palette.TEXT_FAINT,
+    "composer.footer.sep": palette.HAIRLINE,
+    "composer.placeholder": f"italic {palette.TEXT_FAINT}",
+    "composer.rail.close": palette.HAIRLINE,
     "composer.footer.indent": "",
-    "search-toolbar": "#7b8b9a",
-    "search-toolbar.prompt": "bold #00b4b4",
+    "search-toolbar": palette.TEXT_DIM,
+    "search-toolbar.prompt": f"bold {palette.BRAND}",
 })
 
 
@@ -462,7 +463,7 @@ def render_reasoning_preview(
     grid.add_column(width=1, no_wrap=True)
     grid.add_column(ratio=1, overflow="ellipsis", no_wrap=True)
 
-    header = Text("Thinking · preview", style="dim #738091")
+    header = Text("Thinking · preview", style=palette.TEXT_DIM)
     header.append(" · ", style="#46515e")
     header.append("/why 展开", style=f"bold {DIM_TEAL}")
     grid.add_row(Text("◌", style=f"bold {DIM_TEAL}"), header)
@@ -472,7 +473,7 @@ def render_reasoning_preview(
     for line in lines:
         grid.add_row(
             Text("┆", style="#3d555a"),
-            Text(line, style="italic #56606d", overflow="ellipsis", no_wrap=True),
+            Text(line, style=f"italic {palette.TEXT_FAINT}", overflow="ellipsis", no_wrap=True),
         )
     return grid
 
@@ -507,12 +508,12 @@ def render_tool_activity(
     except Exception:  # noqa: BLE001 — tool arguments are untrusted display text
         line.append(str(display_markup), style="dim")
     if is_error:
-        line.append("  ×", style="bold red")
+        line.append("  ×", style=f"bold {palette.BAD}")
     else:
-        line.append("  ✓", style="bold green")
+        line.append("  ✓", style=f"bold {palette.OK}")
     dur = fmt_duration(elapsed)
     if dur != "—":
-        line.append(f" {dur}", style="dim #657080")
+        line.append(f" {dur}", style=palette.TEXT_FAINT)
     return line
 
 
@@ -1101,11 +1102,11 @@ def _repl_attempt_native(
             else None
         )
         if not ok:
-            mark = "[red]✗[/]"
+            mark = f"[{palette.BAD}]✗[/]"
         elif evidence == "GROUNDED":
-            mark = "[green]✓[/]"
+            mark = f"[{palette.OK}]✓[/]"
         else:
-            mark = "[yellow]○[/]"
+            mark = f"[{palette.WARN}]○[/]"
         # P1.4 honest timing on the step line: measured only, never 0.0s.
         dur = fmt_duration(getattr(s, "duration_sec", 0.0))
         dur_part = f" [dim]{dur}[/]" if dur != "—" else ""
@@ -1115,7 +1116,7 @@ def _repl_attempt_native(
         )
 
     if report is not None:
-        color = "green" if verified else "yellow"
+        color = palette.OK if verified else palette.WARN
         console.print(
             f"  [{TEAL}]verdict[/] {report.evidence} "
             f"[{color}]verified={report.verified}[/] "
@@ -3587,7 +3588,7 @@ def main(argv: list[str] | None = None) -> None:
                     if _chunk and _reasoning_streamer is not None:
                         for _line in _reasoning_streamer.feed(str(_chunk)):
                             console.print(
-                                Text("  ┆ " + _line, style="dim italic")
+                                Text("  ┆ " + _line, style=f"italic {palette.TEXT_FAINT}")
                             )
                 status.thinking(time.monotonic() - _turn_started)
 
@@ -3935,7 +3936,7 @@ def main(argv: list[str] | None = None) -> None:
                 # P3.10: process already streamed live — flush the partial tail
                 # and skip the duplicate post-hoc preview (/why keeps the full).
                 for _line in _reasoning_streamer.flush():
-                    console.print(Text("  ┆ " + _line, style="dim italic"))
+                    console.print(Text("  ┆ " + _line, style=f"italic {palette.TEXT_FAINT}"))
             else:
                 reasoning_block = reasoning_transcript_block(
                     app_state["last_reasoning"],

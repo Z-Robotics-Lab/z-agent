@@ -28,7 +28,9 @@ from collections import deque
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator
 
-_TEAL = "#00b4b4"  # display-only brand constant (mirrors cli.TEAL)
+from zeno.vcli import palette as _p
+
+_TEAL = _p.BRAND  # display-only brand constant (mirrors cli.TEAL)
 
 # Evidence classes (mirrors zeno.vcli.verdict constants; strings on purpose —
 # this module renders report fields verbatim and must not import spine logic).
@@ -36,7 +38,7 @@ _GROUNDED = "GROUNDED"
 _RAN = "RAN"
 _FAILED = "FAILED"
 
-_EVIDENCE_COLOR = {_GROUNDED: "green", _RAN: "yellow", _FAILED: "red"}
+_EVIDENCE_COLOR = {_GROUNDED: _p.OK, _RAN: _p.WARN, _FAILED: _p.BAD}
 
 # W2.4 typed failure classes -> short human diagnosis (informational only).
 _DIAGNOSIS_HUMAN = {
@@ -131,7 +133,7 @@ def render_verdict_card(
         dur = fmt_duration(getattr(rec, "duration_sec", 0.0)) if rec else "—"
         color = _EVIDENCE_COLOR.get(s.evidence, "white")
         mark = "✓" if s.verify_result else "✗"
-        mark_color = "green" if s.verify_result else "red"
+        mark_color = _p.OK if s.verify_result else _p.BAD
         verify = (s.verify or "").strip() or "—"
         if len(verify) > max_verify_len:
             verify = verify[: max_verify_len - 1] + "…"
@@ -154,13 +156,13 @@ def render_verdict_card(
             )
 
     for i, text in explanations:
-        lines.append(f"    [yellow]ⓘ[/] [dim]第{i}步：{text}[/]")
+        lines.append(f"    [{_p.WARN}]ⓘ[/] [dim]第{i}步：{text}[/]")
     if not explanations and not bool(getattr(report, "verified", False)):
         # Every step grounded yet the turn is unverified: a turn-level gate
         # (e.g. STEP-15 coordinate gate / D17 object gate) rejected it. Explain
         # at the turn level; never second-guess the report.
         lines.append(
-            "    [yellow]ⓘ[/] [dim]各步均有落地证据，但回合级门槛未通过"
+            f"    [{_p.WARN}]ⓘ[/] [dim]各步均有落地证据，但回合级门槛未通过"
             "（如坐标与指令目标不符/对象门槛）——以 verdict 行为准。[/]"
         )
     return lines
@@ -212,7 +214,7 @@ def render_trace_detail(trace: Any) -> list[str]:
         sg = sub_by_name.get(getattr(s, "sub_goal_name", ""))
         verify = _escape_markup(getattr(sg, "verify", "") or "") if sg else ""
         ok = bool(getattr(s, "verify_result", False))
-        word = "[green]PASS[/]" if ok else "[red]FAIL[/]"
+        word = f"[{_p.OK}]PASS[/]" if ok else f"[{_p.BAD}]FAIL[/]"
         strategy = _escape_markup((getattr(s, "strategy", "") or "").strip() or "(观察)")
         actor = getattr(getattr(s, "actor_caused", None), "value", "—")
         dur = fmt_duration(getattr(s, "duration_sec", 0.0))
@@ -222,7 +224,7 @@ def render_trace_detail(trace: Any) -> list[str]:
         )
         fc = (getattr(s, "failure_class", "") or "").strip()
         if fc:
-            line += f" [red]{_escape_markup(fc)}[/]"
+            line += f" [{_p.BAD}]{_escape_markup(fc)}[/]"
         err = (getattr(s, "error", "") or "").strip()
         if err:
             line += f" [dim]{_escape_markup(err[:60])}[/]"
@@ -237,9 +239,11 @@ def render_trace_detail(trace: Any) -> list[str]:
                 lines.append(f"       [dim]{_escape_markup(pairs)}[/]")
     notes = getattr(getattr(trace, "goal_tree", None), "validation_notes", ()) or ()
     for note in notes:
-        lines.append(f"  [yellow]ⓘ[/] [dim]{_escape_markup(str(note))}[/]")
+        lines.append(f"  [{_p.WARN}]ⓘ[/] [dim]{_escape_markup(str(note))}[/]")
     n = len(getattr(trace, "steps", ()) or ())
-    outcome = "[green]ok[/]" if bool(getattr(trace, "success", False)) else "[red]not ok[/]"
+    outcome = (
+        f"[{_p.OK}]ok[/]" if bool(getattr(trace, "success", False)) else f"[{_p.BAD}]not ok[/]"
+    )
     total = fmt_duration(getattr(trace, "total_duration_sec", 0.0))
     lines.append(f"  [dim]Outcome:[/] {outcome} [dim]· {n} steps · total {total}[/]")
     return lines
@@ -428,7 +432,7 @@ class ChainView:
         if self._transcript_sink is None or self._goal_emitted:
             return
         self._goal_emitted = True
-        self._sink(f"  [bold {_TEAL}]⌂[/] {_escape_markup(str(goal))}")
+        self._sink(f"  [bold {_TEAL}]⌂ {_escape_markup(str(goal))}[/]")
 
     def _sink(self, line: str) -> None:
         if self._transcript_sink is None:
@@ -469,7 +473,7 @@ class ChainView:
                 if self._reasoning_streamer is None:
                     self._reasoning_streamer = ReasoningStreamer()
                 for _line in self._reasoning_streamer.feed(detail):
-                    self._sink(f"  [dim italic]┆ {_escape_markup(_line)}[/]")
+                    self._sink(f"  [italic {_p.TEXT_FAINT}]┆ {_escape_markup(_line)}[/]")
         elif kind == "text":
             self._text_tail = (self._text_tail + detail)[-72:]
         elif kind == "tool_start":
@@ -488,10 +492,10 @@ class ChainView:
             self._sink(self._render_one_node(node))
         elif kind == "nudge":
             self._nudges.append(detail or label)
-            self._sink(f"  [yellow]⟲[/] {_escape_markup(detail or label)}")
+            self._sink(f"  [{_p.WARN}]⟲[/] {_escape_markup(detail or label)}")
         elif kind == "interject":
             self._nudges.append("操作员插队 — 取消剩余步骤")
-            self._sink("  [yellow]⟲[/] 操作员插队 — 取消剩余步骤")
+            self._sink(f"  [{_p.WARN}]⟲[/] 操作员插队 — 取消剩余步骤")
         elif kind == "finish":
             self.finish_data = dict(getattr(event, "data", None) or {})
 
@@ -517,29 +521,29 @@ class ChainView:
             if ok is None:
                 state = "[dim]…[/]"
             elif ok:
-                state = "[green]✓[/]"
+                state = f"[{_p.OK}]✓[/]"
             else:
-                state = "[red]×[/]"
+                state = f"[{_p.BAD}]×[/]"
             err = node.get("err") or ""
-            err_part = f"  [red]{_escape_markup(err)}[/]" if err else ""
+            err_part = f"  [{_p.BAD}]{_escape_markup(err)}[/]" if err else ""
             return (
-                f"  [bold {_TEAL}]◇[/] [dim #738091]Tool[/] "
-                f"[#46515e]·[/] {label}{detail}  {state}{err_part}"
+                f"  [bold {_p.BRAND_DIM}]◇[/] [dim #738091]Tool[/] "
+                f"[{_p.HAIRLINE}]·[/] {label}{detail}  {state}{err_part}"
             )
         ok = node.get("ok")
         if ok is None:
-            mark = "[yellow]rejected[/]"
+            mark = f"[{_p.WARN}]rejected[/]"
         elif ok:
-            mark = "[green]✓[/]"
+            mark = f"[{_p.OK}]✓[/]"
         else:
-            mark = "[red]✗[/]"
-        return f"  [dim]└─ verify[/] {label} {mark}"
+            mark = f"[{_p.BAD}]✗[/]"
+        return f"  [{_p.HAIRLINE}]└─[/] [{_p.TEXT_DIM}]verify[/] {label} {mark}"
 
     def _chain_lines(self) -> list[str]:
         """Node + nudge lines shared by the live view and the persisted tree."""
         lines = [self._render_one_node(node) for node in self._nodes]
         for nudge in self._nudges:
-            lines.append(f"  [yellow]⟲[/] {_escape_markup(nudge)}")
+            lines.append(f"  [{_p.WARN}]⟲[/] {_escape_markup(nudge)}")
         return lines
 
     def final_lines(self, goal: str) -> list[str]:
@@ -554,7 +558,7 @@ class ChainView:
             return []
         rounds = f"  [dim]{self._round} rounds[/]" if self._round else ""
         return [
-            f"  [bold {_TEAL}]⌂[/] {_escape_markup(str(goal))}{rounds}",
+            f"  [bold {_TEAL}]⌂ {_escape_markup(str(goal))}[/]{rounds}",
             *self._chain_lines(),
         ]
 
