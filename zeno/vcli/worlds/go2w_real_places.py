@@ -461,6 +461,22 @@ class RealGotoPlaceSkill:
             data["message"] = (f"已回到“{name}” ({tx:.2f}, {ty:.2f});"
                                f"verify with at({tx:.2f}, {ty:.2f}, tol=1.0)")
             return SkillResult(success=True, result_data=data)
+        from zeno.vcli.worlds.go2w_real_skills import (
+            _operator_override,
+            _override_message,
+        )
+
+        override = _operator_override(base)
+        if override is not None:
+            ox, oy, _age = override
+            # Course intent already reset above (free navigation); nothing more.
+            oplog("skill", "goto_place",
+                  f"OPERATOR OVERRIDE -> ({ox:.2f},{oy:.2f})")
+            data["operator_goal_x"] = round(ox, 2)
+            data["operator_goal_y"] = round(oy, 2)
+            return SkillResult(
+                success=False, diagnosis_code="operator_override",
+                result_data=data, error_message=_override_message(ox, oy))
         return SkillResult(success=False, result_data=data, error_message=(
             f"did not reach '{name}' ({tx:.2f}, {ty:.2f}); "
             f"at ({p[0]:.2f}, {p[1]:.2f})"))
