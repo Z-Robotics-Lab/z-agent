@@ -35,13 +35,14 @@ from prompt_toolkit.formatted_text import (
     FormattedText,
     to_formatted_text,
 )
-from prompt_toolkit.filters import has_focus
+from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.history import History
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Dimension, Float, FloatContainer, HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.layout.mouse_handlers import MouseHandlers
+from prompt_toolkit.layout.processors import BeforeInput, ConditionalProcessor
 from prompt_toolkit.layout.screen import Screen, WritePosition
 from prompt_toolkit.styles import BaseStyle
 from prompt_toolkit.utils import get_cwidth
@@ -58,6 +59,10 @@ COMPOSER_PROMPT: AnyFormattedText = FormattedText(
     ]
 )
 _PROMPT_DISPLAY_WIDTH = get_cwidth(" " + COMPOSER_PROMPT_TEXT)
+
+# P3.9 composer polish: an empty input shows a quiet usage hint (display-only;
+# any keystroke replaces it — a BeforeInput processor gated on empty buffer).
+PLACEHOLDER_TEXT = "给 Zeno 下指令 · Enter 发送 · Alt+Enter 换行 · / 命令"
 _FOOTER_PADDING = "  "
 _FOOTER_MAX_LINES = 3
 
@@ -193,16 +198,35 @@ class ZenoComposer:
             dont_extend_height=True,
             style="class:composer.input",
             name="zeno-composer",
+            input_processors=[
+                ConditionalProcessor(
+                    BeforeInput(PLACEHOLDER_TEXT, style="class:composer.placeholder"),
+                    Condition(lambda: self.placeholder_visible()),
+                )
+            ],
         )
 
+        def _rail_fragments() -> FormattedText:
+            return FormattedText(
+                [("class:composer.rail", "─" * max(4, self._terminal_width()))]
+            )
+
+        def _subrail_fragments() -> FormattedText:
+            return FormattedText(
+                [("class:composer.rail.close", "─" * max(4, self._terminal_width()))]
+            )
+
         self.rail = Window(
-            content=FormattedTextControl(
-                FormattedText([("class:composer.rail", "─" * 24)]),
-                show_cursor=False,
-            ),
+            content=FormattedTextControl(_rail_fragments, show_cursor=False),
             height=1,
             dont_extend_height=True,
             style="class:composer.rail",
+        )
+        self.subrail = Window(
+            content=FormattedTextControl(_subrail_fragments, show_cursor=False),
+            height=1,
+            dont_extend_height=True,
+            style="class:composer.rail.close",
         )
         self.footer = Window(
             content=FormattedTextControl(self.footer_fragments, show_cursor=False),
@@ -211,7 +235,7 @@ class ZenoComposer:
             style="class:composer.footer",
         )
         self.container = HSplit(
-            [self.rail, self.text_area, self.search_toolbar, self.footer]
+            [self.rail, self.text_area, self.search_toolbar, self.subrail, self.footer]
         )
         root = FloatContainer(
             content=self.container,
@@ -244,6 +268,13 @@ class ZenoComposer:
             mouse_support=False,
             **kwargs,
         )
+
+    def placeholder_visible(self) -> bool:
+        """True iff the input is empty (the usage hint shows). Display-only."""
+        try:
+            return not bool(self.text_area.text)
+        except Exception:  # noqa: BLE001
+            return False
 
     def _terminal_width(self) -> int:
         app = get_app_or_none()

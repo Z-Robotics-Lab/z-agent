@@ -239,6 +239,8 @@ PT_STYLE = PTStyle.from_dict({
     "composer.footer.pose.stale": "bold #d97706",
     "composer.footer.meta": "#5b6472",
     "composer.footer.sep": "#3a4048",
+    "composer.placeholder": "italic #4a5361",
+    "composer.rail.close": "#232a33",
     "composer.footer.indent": "",
     "search-toolbar": "#7b8b9a",
     "search-toolbar.prompt": "bold #00b4b4",
@@ -273,6 +275,59 @@ def _open_message_grid(marker: str, body: Any, *, width: int, style: str) -> Tab
     return grid
 
 
+_MD_TABLE_LINE_RE = re.compile(r"^\s*\|.+\|\s*$")
+
+
+def _append_prose_with_tables(renderables: list, prose: Text, text: str) -> Text:
+    """Append prose, rendering markdown TABLE blocks as real rich tables.
+
+    P3.9 (owner field feedback): model answers carry markdown tables; raw
+    pipe rows in the transcript are unreadable. Two or more consecutive
+    ``| … |`` lines become a ``rich.markdown.Markdown`` renderable; everything
+    else keeps the existing path/inline-code highlighting. Display-only.
+    """
+    lines = str(text or "").split("\n")
+    buf: list[str] = []
+    table: list[str] = []
+
+    def _flush_buf() -> None:
+        if buf:
+            _append_highlighted_text(prose, "\n".join(buf) + ("\n" if table or True else ""))
+            buf.clear()
+
+    result_prose = prose
+    idx = 0
+    while idx <= len(lines):
+        line = lines[idx] if idx < len(lines) else None
+        if line is not None and _MD_TABLE_LINE_RE.match(line):
+            table.append(line)
+        else:
+            if len(table) >= 2:
+                _flush_buf()
+                renderables.append(result_prose)
+                try:
+                    renderables.append(Markdown("\n".join(table)))
+                except Exception:  # noqa: BLE001 — degrade to raw text
+                    fallback = Text()
+                    _append_highlighted_text(fallback, "\n".join(table))
+                    renderables.append(fallback)
+                result_prose = Text()
+
+                def _flush_buf() -> None:  # noqa: F811 — rebind onto new prose
+                    if buf:
+                        _append_highlighted_text(result_prose, "\n".join(buf) + "\n")
+                        buf.clear()
+            elif table:
+                buf.extend(table)
+            table = []
+            if line is not None:
+                buf.append(line)
+        idx += 1
+    if buf:
+        _append_highlighted_text(result_prose, "\n".join(buf))
+    return result_prose
+
+
 def render_response(text: str, width: int = 80) -> Table:
     """Render Zeno's response as an open coding-agent message.
 
@@ -290,7 +345,7 @@ def render_response(text: str, width: int = 80) -> Table:
     i = 0
     while i < len(parts):
         if i + 2 < len(parts) and (i % 3) == 0:
-            _append_highlighted_text(prose, parts[i])
+            prose = _append_prose_with_tables(renderables, prose, parts[i])
             i += 1
             lang = parts[i] or "text"
             code = parts[i + 1]
@@ -307,7 +362,7 @@ def render_response(text: str, width: int = 80) -> Table:
             )
             prose = Text()
         else:
-            _append_highlighted_text(prose, parts[i])
+            prose = _append_prose_with_tables(renderables, prose, parts[i])
             i += 1
     renderables.append(prose)
     body_parts = [
@@ -454,7 +509,9 @@ def render_tool_activity(
         line.append("  ×", style="bold red")
     else:
         line.append("  ✓", style="bold green")
-    line.append(f" {max(0.0, float(elapsed)):.1f}s", style="dim #657080")
+    dur = fmt_duration(elapsed)
+    if dur != "—":
+        line.append(f" {dur}", style="dim #657080")
     return line
 
 
@@ -941,7 +998,9 @@ def _repl_attempt_native(
             _interjected = bool(_ij_reader.has_pending())
         except Exception:  # noqa: BLE001
             _interjected = False
-    if _interjected:
+    if _interjected and _runner is None:
+        # sync mode keeps the pinned summary; under the persistent composer the
+        # queue echo + kernel ⟲ line already tell the story (P3.9 declutter).
         console.print("  [yellow]⏸ 插队 — 已取消当前动作,剩余步骤不再执行[/]")
 
     if trace is None or not _native_trace_acted(trace):
@@ -1040,7 +1099,9 @@ def _repl_attempt_native(
         # never interleave). Display-only, best-effort: a card failure must
         # never break the turn or mute the verdict line already printed.
         try:
-            for _card_line in render_verdict_card(report, trace):
+            for _card_line in render_verdict_card(
+                report, trace, include_rows=not chain_view.streamed_to_transcript
+            ):
                 console.print(_card_line)
         except Exception:  # noqa: BLE001 — display only
             pass

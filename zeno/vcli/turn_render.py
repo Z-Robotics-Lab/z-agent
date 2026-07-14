@@ -108,7 +108,9 @@ def _step_meta(trace: Any) -> dict[str, Any]:
     return out
 
 
-def render_verdict_card(report: Any, trace: Any = None, *, max_verify_len: int = 36) -> list[str]:
+def render_verdict_card(
+    report: Any, trace: Any = None, *, max_verify_len: int = 36, include_rows: bool = True
+) -> list[str]:
     """Render ``VerdictReport.per_step`` as indented card rows + ⓘ explanations.
 
     Pure projection: evidence/verify_result come from the report verbatim;
@@ -137,11 +139,15 @@ def render_verdict_card(report: Any, trace: Any = None, *, max_verify_len: int =
         action = _escape_markup((s.strategy or "").strip() or "(观察)")
         diag = _escape_markup((s.diagnosis or "").strip())
         diag_part = f" [dim]{diag}[/]" if diag else ""
-        lines.append(
-            f"    [dim]{i}[/]  {action}  [dim]verify[/] {verify} "
-            f"[{mark_color}]{mark}[/]  [{color}]{s.evidence}[/] "
-            f"[dim]actor={actor} · {dur}[/]{diag_part}"
-        )
+        if include_rows:
+            # P3.9: rows are pure duplication when the chain already streamed
+            # into the transcript — callers suppress them and keep only the
+            # ⓘ explanations (the card's unique value).
+            lines.append(
+                f"    [dim]{i}[/]  {action}  [dim]verify[/] {verify} "
+                f"[{mark_color}]{mark}[/]  [{color}]{s.evidence}[/] "
+                f"[dim]actor={actor} · {dur}[/]{diag_part}"
+            )
         if s.evidence != _GROUNDED:
             explanations.append(
                 (i, explain_step(s.evidence, actor, bool(s.verify_result), s.strategy, diag))

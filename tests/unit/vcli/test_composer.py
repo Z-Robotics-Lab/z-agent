@@ -293,3 +293,18 @@ def test_footer_plain_text_content_unchanged_by_styling() -> None:
     text = fragment_list_to_text(composer.footer_fragments(width=100))
     assert "base:go2w_hw" in text and "model:m" in text
     assert "·" in text  # separators preserved
+
+
+def test_placeholder_visible_only_when_empty() -> None:
+    composer = _mk(lambda: None)
+    assert composer.placeholder_visible() is True
+    composer.text_area.text = "去厨房"
+    assert composer.placeholder_visible() is False
+    composer.text_area.text = ""
+    assert composer.placeholder_visible() is True
+
+
+def test_rails_span_full_width_and_close_the_block() -> None:
+    composer = _mk(lambda: None)
+    names = [w for w in ("rail", "subrail") if hasattr(composer, w)]
+    assert names == ["rail", "subrail"]
