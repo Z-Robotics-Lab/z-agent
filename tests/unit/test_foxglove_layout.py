@@ -29,6 +29,7 @@ _KNOWN_TOPICS = {
     "/viz_graph_topic", "/camera/camera/color/image_raw", "/camera/camera/depth/image_rect_raw",
     "/camera/semantic_image/compressed", "/cmd_vel", "/cmd_vel_safe",
     "/imu/data", "/far_reach_goal_status", "/exploration_finish", "/place_markers",
+    "/realsense_depth_points",
 }
 
 _MUST_SHOW = {

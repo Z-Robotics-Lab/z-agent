@@ -3,7 +3,7 @@
     "creator": "Zeno",
     "version": "3.0",
     "timestamp": "2026-07-14",
-    "description": "Go2W real-robot dashboard — prior map + live scan + nav chain + cameras (RGB/depth/semantic) + cmd-vs-actual honesty plots. Topics verified against ~/Z-Navigation-Stack + go2w-nuc sources; palette matches the Zeno CLI (#2dd4bf brand / #5cc98f ok / #f0b849 warn / #e8897d bad). Camera topics + /place_markers audited against the LIVE robot (ros2 topic list, 2026-07-14)."
+    "description": "Go2W real-robot dashboard — prior map + live scan + nav chain + cameras (RGB/depth/semantic) + cmd-vs-actual honesty plots. Topics verified against ~/Z-Navigation-Stack + go2w-nuc sources; palette matches the Zeno CLI (#2dd4bf brand / #5cc98f ok / #f0b849 warn / #e8897d bad). Camera topics + /place_markers audited against the LIVE robot (ros2 topic list, 2026-07-14). + /realsense_depth_points RGB-D 真彩色点云(实机在发)."
   },
   "configById": {
     "3D!main": {
@@ -61,7 +61,7 @@
           "colorField": "z",
           "colorMode": "colormap",
           "colorMap": "turbo",
-          "pointSize": 3,
+          "pointSize": 5,
           "pointShape": "circle",
           "decayTime": 0
         },
@@ -214,6 +214,14 @@
         },
         "/place_markers": {
           "visible": true
+        },
+        "/realsense_depth_points": {
+          "visible": true,
+          "colorField": "rgb",
+          "colorMode": "rgb",
+          "pointSize": 2,
+          "pointShape": "circle",
+          "decayTime": 0
         }
       },
       "layers": {
