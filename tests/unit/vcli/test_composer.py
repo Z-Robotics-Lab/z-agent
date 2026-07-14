@@ -224,3 +224,72 @@ def test_toolbar_failure_is_display_only() -> None:
 def test_submission_projection_is_compact_multiline_and_markup_safe() -> None:
     rendered = render_submission("move [bold red]now[/]\nthen verify")
     assert rendered.plain == "› move [bold red]now[/]\n  then verify"
+
+
+# ---------------------------------------------------------------------------
+# P3.8 — footer typography: per-part style classes (owner ask 2026-07-13)
+# ---------------------------------------------------------------------------
+
+
+def _footer_styles(composer, width=120):
+    return [
+        (style, text)
+        for style, text in composer.footer_fragments(width=width)
+        if text.strip() and text != "\n"
+    ]
+
+
+def _mk(toolbar):
+    from prompt_toolkit.history import InMemoryHistory
+    from zeno.vcli.composer import ZenoComposer
+    from zeno.vcli.cli import ZenoCompleter
+
+    return ZenoComposer(
+        history=InMemoryHistory(), completer=ZenoCompleter(), toolbar=toolbar
+    )
+
+
+def test_footer_parts_carry_distinct_style_classes() -> None:
+    from prompt_toolkit.formatted_text import HTML
+
+    composer = _mk(lambda: HTML(
+        "⚙ navigate 执行中… | ⌖ pose x=1.96 y=-1.90 yaw=-6.5deg · odom age 0.1s | "
+        "base:go2w_hw | model:deepseek-v4-pro | tools:44 | msgs:12"
+    ))
+    styles = _footer_styles(composer)
+    style_of = {text.strip(): style for style, text in styles}
+    act = next(v for k, v in style_of.items() if k.startswith("⚙"))
+    pose = next(v for k, v in style_of.items() if "pose" in k)
+    meta = next(v for k, v in style_of.items() if k.startswith("base:"))
+    assert "activity" in act
+    assert "pose" in pose
+    assert "meta" in meta
+    assert act != pose != meta  # 分区配色,不再一坨 plain
+
+
+def test_footer_stale_odom_gets_warning_style() -> None:
+    from prompt_toolkit.formatted_text import HTML
+
+    composer = _mk(lambda: HTML("⌖ pose x=0.00 y=0.00 yaw=0.0deg · odom age 7.4s"))
+    styles = _footer_styles(composer)
+    pose_style = next(s for s, t in styles if "pose" in t)
+    assert "stale" in pose_style  # 里程计过期要一眼看出来
+
+
+def test_footer_fresh_odom_not_stale_styled() -> None:
+    from prompt_toolkit.formatted_text import HTML
+
+    composer = _mk(lambda: HTML("⌖ pose x=0.00 y=0.00 yaw=0.0deg · odom age 0.2s"))
+    styles = _footer_styles(composer)
+    pose_style = next(s for s, t in styles if "pose" in t)
+    assert "stale" not in pose_style
+
+
+def test_footer_plain_text_content_unchanged_by_styling() -> None:
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.formatted_text import fragment_list_to_text
+
+    composer = _mk(lambda: HTML("base:go2w_hw | model:m | tools:4 | msgs:2"))
+    text = fragment_list_to_text(composer.footer_fragments(width=100))
+    assert "base:go2w_hw" in text and "model:m" in text
+    assert "·" in text  # separators preserved
