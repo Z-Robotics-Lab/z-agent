@@ -243,3 +243,26 @@ def test_reasoning_streamer_sentence_and_width_flush() -> None:
     assert len(long) == 2 and all(len(l) <= 51 for l in long)
     assert st.flush() == ["x" * 30]
     assert st.flush() == []
+
+
+# ---------------------------------------------------------------------------
+# P3.13 — turn separator (scrollback visual rhythm between turns)
+# ---------------------------------------------------------------------------
+
+
+def test_turn_separator_has_seq_time_and_rule() -> None:
+    from zeno.vcli.turn_render import render_turn_separator
+
+    line = render_turn_separator(3, "14:22", width=60)
+    from rich.text import Text
+    plain = Text.from_markup(line).plain
+    assert "#3" in plain and "14:22" in plain
+    assert "─" in plain  # a horizontal rule
+    assert len(plain) <= 62  # bounded to width
+
+
+def test_turn_separator_never_raises_on_odd_width() -> None:
+    from zeno.vcli.turn_render import render_turn_separator
+
+    for w in (1, 5, 200):
+        assert isinstance(render_turn_separator(1, "00:00", width=w), str)

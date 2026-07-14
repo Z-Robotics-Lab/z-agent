@@ -72,6 +72,7 @@ from zeno.vcli.turn_render import (
     fmt_duration,
     render_trace_detail,
     render_turn_footer,
+    render_turn_separator,
     render_verdict_card,
 )
 from zeno.vcli.turn_status import TurnStatus
@@ -3640,6 +3641,16 @@ def main(argv: list[str] | None = None) -> None:
                 if turn_runner is not None and _cot_mode(app_state) != "off"
                 else None
             )
+            # P3.14: stream the ANSWER into the transcript as it arrives too
+            # (owner: chat 完稿才蹦一串). Under the persistent composer the Live
+            # panel is a NullLive, so without this the answer only appears at the
+            # end; here each paragraph lands live. Sync mode keeps the Live panel.
+            _answer_streamer = (
+                ReasoningStreamer(width=min(console.width - 4, 94))
+                if turn_runner is not None
+                else None
+            )
+            _answer_streamed = [False]
 
             def _status_content(text: str, elapsed: float, is_thinking: bool) -> Any:
                 message_width = min(console.width, 80)
@@ -3683,6 +3694,11 @@ def main(argv: list[str] | None = None) -> None:
                 if turn_runner is not None and chunk:
                     _answer_chars[0] += len(chunk)
                     turn_runner.set_activity(f"回答中 · {_answer_chars[0]} 字")
+                    # P3.14: land each finished paragraph in the transcript live.
+                    if _answer_streamer is not None:
+                        for _line in _answer_streamer.feed(chunk):
+                            console.print(Text("  " + _line, style=palette.TEXT))
+                            _answer_streamed[0] = True
                 status.update_text(chunk)
 
             def on_reasoning(_chunk: str) -> None:
@@ -4062,11 +4078,17 @@ def main(argv: list[str] | None = None) -> None:
             global _last_response
             if turn_result.text:
                 _last_response = turn_result.text.strip()
-                console.print()  # spacing before response
-                console.print(render_response(
-                    _last_response,
-                    width=min(console.width, 80),
-                ))
+                if _answer_streamed[0]:
+                    # P3.14: already streamed live paragraph-by-paragraph — just
+                    # flush the streamer's tail; re-rendering would duplicate it.
+                    for _line in (_answer_streamer.flush() if _answer_streamer else []):
+                        console.print(Text("  " + _line, style=palette.TEXT))
+                else:
+                    console.print()  # spacing before response
+                    console.print(render_response(
+                        _last_response,
+                        width=min(console.width, 80),
+                    ))
 
             # Auto-compact (summarize old context instead of truncating)
             if len(session._entries) > 50:
@@ -4131,6 +4153,7 @@ def main(argv: list[str] | None = None) -> None:
         app_state["turn_runner"] = turn_runner
         _stdout_stack.enter_context(_patch_stdout(raw=True))
 
+    _turn_seq = 0  # P3.13 scrollback turn counter (display-only)
     try:
         while True:
             # ---- Read input ----
@@ -4192,6 +4215,13 @@ def main(argv: list[str] | None = None) -> None:
                 continue
 
             # ---- Engine turn ----
+            # P3.13: a dim scrollback separator (#N · HH:MM) before each turn so
+            # a long history is scannable — display-only, printed on this thread
+            # ahead of the (possibly worker-run) turn output.
+            _turn_seq += 1
+            console.print(render_turn_separator(
+                _turn_seq, time.strftime("%H:%M"), min(console.width, 80)
+            ))
             # P3.7 persistent composer: hand the turn to the worker and
             # return to the prompt IMMEDIATELY (Claude-Code-style). Typing
             # while busy queues via the SAME kernel interject seam. Sync

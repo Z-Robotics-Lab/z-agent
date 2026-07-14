@@ -168,6 +168,23 @@ def render_verdict_card(
     return lines
 
 
+def render_turn_separator(seq: int, ts: str, width: int = 80) -> str:
+    """A dim scrollback separator between turns: ``──── #N · HH:MM ────────``.
+
+    Display-only visual rhythm (P3.13) — a quiet rule carrying the turn number
+    and wall-clock so a long scrollback is scannable. Bounded to ``width``.
+    """
+    width = max(8, int(width))
+    label = f" #{int(seq)} · {ts} "
+    lead = 4
+    tail = max(0, width - lead - len(label))
+    return (
+        f"[{_p.HAIRLINE}]{'─' * lead}[/]"
+        f"[{_p.TEXT_FAINT}]{label}[/]"
+        f"[{_p.HAIRLINE}]{'─' * tail}[/]"
+    )
+
+
 def render_turn_footer(
     *,
     route: str,
