@@ -67,6 +67,7 @@ from zeno.vcli.permissions import PermissionContext
 from zeno.vcli.prompt import build_system_prompt
 from zeno.vcli.turn_render import (
     ChainView,
+    ReasoningStreamer,
     fmt_duration,
     render_trace_detail,
     render_turn_footer,
@@ -3492,6 +3493,13 @@ def main(argv: list[str] | None = None) -> None:
             # tail inside the open thinking block (mode 'tail'/'full'), recorded
             # for /why, never appended to the session or the answer.
             _turn_reasoning: list[str] = []
+            # P3.10: live ┆ streaming under the persistent composer (off ->
+            # silent; sync mode keeps the P3.6 post-turn bounded preview).
+            _reasoning_streamer = (
+                ReasoningStreamer(width=min(console.width - 6, 92))
+                if turn_runner is not None and _cot_mode(app_state) != "off"
+                else None
+            )
 
             def _status_content(text: str, elapsed: float, is_thinking: bool) -> Any:
                 message_width = min(console.width, 80)
@@ -3529,7 +3537,12 @@ def main(argv: list[str] | None = None) -> None:
                 ),
             )
 
+            _answer_chars = [0]
+
             def on_text(chunk: str) -> None:
+                if turn_runner is not None and chunk:
+                    _answer_chars[0] += len(chunk)
+                    turn_runner.set_activity(f"回答中 · {_answer_chars[0]} 字")
                 status.update_text(chunk)
 
             def on_reasoning(_chunk: str) -> None:
@@ -3542,6 +3555,13 @@ def main(argv: list[str] | None = None) -> None:
                     turn_runner.set_activity(
                         f"thinking {time.monotonic() - _turn_started:.0f}s"
                     )
+                    # P3.10: the thinking PROCESS streams into the transcript as
+                    # ┆ lines while it happens (owner: '看不到 reasoning 的过程').
+                    if _chunk and _reasoning_streamer is not None:
+                        for _line in _reasoning_streamer.feed(str(_chunk)):
+                            console.print(
+                                Text("  ┆ " + _line, style="dim italic")
+                            )
                 status.thinking(time.monotonic() - _turn_started)
 
             def _format_tool_display(name: str, p: dict[str, Any]) -> str:
@@ -3884,13 +3904,19 @@ def main(argv: list[str] | None = None) -> None:
             # bounded preview; full prints everything. Display-only — never
             # session content.
             app_state["last_reasoning"] = "".join(_turn_reasoning)
-            reasoning_block = reasoning_transcript_block(
-                app_state["last_reasoning"],
-                mode=_cot_mode(app_state),
-                width=min(console.width, 80),
-            )
-            if reasoning_block is not None:
-                console.print(reasoning_block)
+            if _reasoning_streamer is not None:
+                # P3.10: process already streamed live — flush the partial tail
+                # and skip the duplicate post-hoc preview (/why keeps the full).
+                for _line in _reasoning_streamer.flush():
+                    console.print(Text("  ┆ " + _line, style="dim italic"))
+            else:
+                reasoning_block = reasoning_transcript_block(
+                    app_state["last_reasoning"],
+                    mode=_cot_mode(app_state),
+                    width=min(console.width, 80),
+                )
+                if reasoning_block is not None:
+                    console.print(reasoning_block)
 
             # Final response: open coding-agent message (no repeated frame/title).
             global _last_response

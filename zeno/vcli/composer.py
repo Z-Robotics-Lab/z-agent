@@ -35,14 +35,13 @@ from prompt_toolkit.formatted_text import (
     FormattedText,
     to_formatted_text,
 )
-from prompt_toolkit.filters import Condition, has_focus
+from prompt_toolkit.filters import has_focus
 from prompt_toolkit.history import History
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Dimension, Float, FloatContainer, HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.layout.mouse_handlers import MouseHandlers
-from prompt_toolkit.layout.processors import BeforeInput, ConditionalProcessor
 from prompt_toolkit.layout.screen import Screen, WritePosition
 from prompt_toolkit.styles import BaseStyle
 from prompt_toolkit.utils import get_cwidth
@@ -198,18 +197,19 @@ class ZenoComposer:
             dont_extend_height=True,
             style="class:composer.input",
             name="zeno-composer",
-            input_processors=[
-                ConditionalProcessor(
-                    BeforeInput(PLACEHOLDER_TEXT, style="class:composer.placeholder"),
-                    Condition(lambda: self.placeholder_visible()),
-                )
-            ],
         )
 
         def _rail_fragments() -> FormattedText:
-            return FormattedText(
-                [("class:composer.rail", "─" * max(4, self._terminal_width()))]
-            )
+            width = max(4, self._terminal_width())
+            if self.placeholder_visible():
+                hint = f" {PLACEHOLDER_TEXT} "
+                pad = max(2, width - get_cwidth(hint) - 2)
+                return FormattedText([
+                    ("class:composer.rail", "──"),
+                    ("class:composer.placeholder", hint),
+                    ("class:composer.rail", "─" * pad),
+                ])
+            return FormattedText([("class:composer.rail", "─" * width)])
 
         def _subrail_fragments() -> FormattedText:
             return FormattedText(

@@ -250,6 +250,45 @@ def render_trace_detail(trace: Any) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+class ReasoningStreamer:
+    """Flush reasoning chunks into transcript-sized lines (P3.10).
+
+    Sentence-boundary (。！？!?\n) or ~width overflow flushes one line; the
+    live process becomes visible ┆ lines instead of a post-hoc blob. Pure
+    accumulator — display-only, caller decides where lines go.
+    """
+
+    _BOUNDS = "。！？!?\n"
+
+    def __init__(self, width: int = 96) -> None:
+        self._buf = ""
+        self._width = max(20, int(width))
+
+    def feed(self, chunk: str) -> list[str]:
+        self._buf += str(chunk or "")
+        out: list[str] = []
+        while True:
+            cut = -1
+            for i, ch in enumerate(self._buf):
+                if ch in self._BOUNDS:
+                    cut = i
+                    break
+                if i + 1 >= self._width:
+                    cut = i
+                    break
+            if cut < 0:
+                break
+            line = self._buf[: cut + 1].strip()
+            self._buf = self._buf[cut + 1 :]
+            if line:
+                out.append(line)
+        return out
+
+    def flush(self) -> list[str]:
+        line, self._buf = self._buf.strip(), ""
+        return [line] if line else []
+
+
 def _escape_markup(text: str) -> str:
     """Escape Rich markup in model/user-authored text (display safety)."""
     try:
@@ -312,6 +351,7 @@ class ChainView:
         self._activity_sink = activity_sink
         self.streamed_to_transcript = False
         self._goal_emitted = False
+        self._reasoning_streamer: ReasoningStreamer | None = None
 
     # -- lifecycle ------------------------------------------------------
 
@@ -423,6 +463,13 @@ class ChainView:
             self._reasoning_tail = (self._reasoning_tail + detail)[
                 -max(self._reasoning_tail_chars * 2, 320) :
             ]
+            # P3.10 sink mode: the thinking PROCESS streams into the transcript
+            # as ┆ lines (sentence-bounded), instead of vanishing until /why.
+            if self._transcript_sink is not None and self._show_reasoning_tail:
+                if self._reasoning_streamer is None:
+                    self._reasoning_streamer = ReasoningStreamer()
+                for _line in self._reasoning_streamer.feed(detail):
+                    self._sink(f"  [dim italic]┆ {_escape_markup(_line)}[/]")
         elif kind == "text":
             self._text_tail = (self._text_tail + detail)[-72:]
         elif kind == "tool_start":

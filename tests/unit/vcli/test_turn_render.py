@@ -231,3 +231,15 @@ def test_card_survives_missing_trace_metadata() -> None:
     lines = render_verdict_card(report, None)
     text = "\n".join(lines)
     assert "GROUNDED" in text and "—" in text
+
+
+def test_reasoning_streamer_sentence_and_width_flush() -> None:
+    from zeno.vcli.turn_render import ReasoningStreamer
+
+    st = ReasoningStreamer(width=50)
+    assert st.feed("用户要左转30度。turn 技能即可，") == ["用户要左转30度。"]
+    assert st.feed("verify turned(18)。") == ["turn 技能即可，verify turned(18)。"]
+    long = st.feed("x" * 130)
+    assert len(long) == 2 and all(len(l) <= 51 for l in long)
+    assert st.flush() == ["x" * 30]
+    assert st.flush() == []

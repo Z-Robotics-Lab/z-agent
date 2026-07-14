@@ -323,3 +323,20 @@ def test_default_mode_unchanged_no_sink_flag() -> None:
     view, _lives = _make()
     view.handle_event(NativeEvent(kind="tool_start", label="walk"))
     assert view.streamed_to_transcript is False
+
+
+def test_sink_mode_streams_reasoning_lines_live() -> None:
+    view, lines, _a = _make_sink_view()
+    view.handle_event(NativeEvent(kind="reasoning", detail="用户要左转30度。"))
+    view.handle_event(NativeEvent(kind="reasoning", detail="turn 技能即可，verify"))
+    view.handle_event(NativeEvent(kind="reasoning", detail=" turned(18)。"))
+    joined = "\n".join(lines)
+    assert "┆" in joined and "左转30度" in joined  # 句界即时落盘
+    assert "turned(18)" in joined
+
+
+def test_sink_mode_reasoning_respects_off() -> None:
+    got: list[str] = []
+    view = ChainView(transcript_sink=got.append, show_reasoning_tail=False)
+    view.handle_event(NativeEvent(kind="reasoning", detail="想。"))
+    assert not [l for l in got if "┆" in l]
