@@ -24,6 +24,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Callable
 
+import contextlib
 import re
 
 from rich.cells import cell_len, chop_cells
@@ -720,6 +721,13 @@ def _repl_native_enabled() -> bool:
     )
 
 
+def _persistent_composer_enabled() -> bool:
+    """P3.7 persistent composer — default ON; VECTOR_COMPOSER_SYNC in
+    {1,true,on,yes} restores the alternating prompt (reversible escape hatch,
+    the same pattern as VECTOR_REPL_NATIVE)."""
+    return _env("COMPOSER_SYNC", "").strip().lower() not in ("1", "true", "on", "yes")
+
+
 def _intent_actionable(engine: Any, user_input: str) -> bool:
     """OPTIMIZATION HINT (NOT a correctness fork — rule 1; mirrors cli.py routing).
 
@@ -843,13 +851,28 @@ def _repl_attempt_native(
     # still carries only the pinned step/verdict lines. Header keeps the
     # PTY-pinned words "native working". Single-Live discipline: the view is
     # STOPPED before any error line / post-turn print (turn_status.py rationale).
-    chain_view = ChainView(
-        live_factory=lambda renderable: Live(
-            renderable, console=console, refresh_per_second=8, transient=True
-        ),
-        show_reasoning_tail=_cot_mode(app_state) != "off",
-        status_provider=lambda: _live_status_for_display(app_state),
-    )
+    from zeno.vcli.turn_runner import runner_from
+
+    _runner = runner_from(app_state)
+    if _runner is not None:
+        # P3.7 persistent composer: NO Live region (patch_stdout owns the
+        # terminal) — completed chain nodes stream straight into the
+        # transcript above the composer; activity feeds the composer footer.
+        chain_view = ChainView(
+            transcript_sink=lambda line: console.print(line),
+            activity_sink=_runner.set_activity,
+            show_reasoning_tail=_cot_mode(app_state) != "off",
+            status_provider=lambda: _live_status_for_display(app_state),
+        )
+        chain_view.begin_goal(user_input)
+    else:
+        chain_view = ChainView(
+            live_factory=lambda renderable: Live(
+                renderable, console=console, refresh_per_second=8, transient=True
+            ),
+            show_reasoning_tail=_cot_mode(app_state) != "off",
+            status_provider=lambda: _live_status_for_display(app_state),
+        )
     if app_state is not None:
         app_state["last_chain_view"] = chain_view  # /why reads the reasoning buffer
     try:
@@ -939,7 +962,10 @@ def _repl_attempt_native(
     # transcript — the transient live view's final state re-printed as a
     # ⌂ tree, BEFORE the pinned step/verdict block. Display-only, best-effort.
     try:
-        _tree_lines = chain_view.final_lines(user_input)
+        _tree_lines = (
+            [] if chain_view.streamed_to_transcript
+            else chain_view.final_lines(user_input)
+        )
         if _tree_lines:
             console.print()
             for _tree_line in _tree_lines:
@@ -3294,9 +3320,14 @@ def main(argv: list[str] | None = None) -> None:
     history_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_toolbar() -> HTML:
+        # P3.7: the runner's short activity string leads the footer while a
+        # turn executes, so the operator always sees what Zeno is doing.
+        _act = str(getattr(app_state.get("turn_runner"), "activity", "") or "")
         agent_now = app_state.get("agent")
         current_model = app_state.get("model", "?")
         parts: list[str] = []
+        if _act:
+            parts.append(f"⚙ {_act}")
         live_status = _live_status_toolbar_fragment(app_state)
         if live_status:
             # Keep live truth first so narrow terminals show pose/odom before
@@ -3344,6 +3375,530 @@ def main(argv: list[str] | None = None) -> None:
     app_state.setdefault("trace_history", _deque_init(maxlen=5))
     set_current_reader(interject_reader)
 
+    def _engine_turn(user_input: str) -> None:
+        """ONE engine turn (native -> legacy routing -> unified) — the REPL
+        loop body, extracted VERBATIM for P3.7 (persistent composer): the
+        TurnRunner executes it on a worker thread while the composer input
+        stays live (`continue` became `return`; output prints above the
+        composer via patch_stdout). Sync mode calls it inline, unchanged."""
+        # ---- Engine turn ----
+        if engine is None:
+            console.print(f"[yellow]No API key. Use /login to authenticate first.[/]")
+            return
+
+        # CUTOVER (2026-06-19, owner-approved): native-attempt-then-fallback is the
+        # REPL's DEFAULT turn path, so bare `zeno` + natural language runs the
+        # redesign's NATIVE TOOL-USE producer (CLAUDE.md North Star "Acceptance
+        # interface"). For an action-shaped turn, ATTEMPT native first; if it
+        # DISPATCHED an action it OWNS the turn (its honest verdict is rendered).
+        # If it took NO action (could not route — e.g. "启动 go2 仿真", embodiment
+        # switch, chat) FALL THROUGH to the UNCHANGED legacy routing below, so sim
+        # launch + NL embodiment switch keep working via the untouched tool_use
+        # path. VECTOR_REPL_NATIVE=0 forces the pure-legacy REPL (reversible).
+        # native OWNS navigation too (CEO architecture call 2026-06-19: the
+        # model-driven producer is the correct design; the hardcoded legacy planner
+        # is being strangled, not retreated to). Obstacle-AVOIDANCE for native nav
+        # (route through the nav-stack instead of the open-loop walk) and LATENCY
+        # are tracked native improvements (see docs/ARCHITECTURE.md), NOT reasons to
+        # fall back to legacy.
+        if _repl_native_enabled() and _intent_actionable(engine, user_input):
+            try:
+                _native_owned = _repl_attempt_native(
+                    engine, user_input, session, app_state, console
+                )
+            except KeyboardInterrupt:
+                _operator_interrupt(app_state)
+                _native_owned = True  # turn handled; REPL stays alive
+            if _native_owned:
+                return
+            # native took NO action -> fall through to legacy routing (unchanged).
+
+        try:
+            # Single in-place progress region for the whole turn. A reasoning
+            # model (DeepSeek) streams NO text for several seconds while it
+            # thinks; the region shows one calm "thinking…" status that resolves
+            # into the streamed answer — it is paused/cleared before any
+            # tool-execution line is printed so live regions never stack and the
+            # prompt is not duplicated.
+            _turn_started = time.monotonic()
+            # P1.2 CoT: the turn's reasoning chunks (DeepSeek-style
+            # reasoning models). DISPLAY BUFFER ONLY — rendered as a dim
+            # tail inside the open thinking block (mode 'tail'/'full'), recorded
+            # for /why, never appended to the session or the answer.
+            _turn_reasoning: list[str] = []
+
+            def _status_content(text: str, elapsed: float, is_thinking: bool) -> Any:
+                message_width = min(console.width, 80)
+                if is_thinking:
+                    tail = ""
+                    if _turn_reasoning and _cot_mode(app_state) != "off":
+                        tail = (
+                            "".join(_turn_reasoning)[-160:].replace("\n", " ").strip()
+                        )
+                    return render_live_thinking(
+                        elapsed=elapsed,
+                        reasoning_tail=tail,
+                        width=message_width,
+                    )
+                return render_response(text, width=message_width)
+
+            class _NullLive:
+                def start(self, refresh: bool = True) -> None: ...
+                def stop(self) -> None: ...
+                def update(self, renderable: Any, refresh: bool = True) -> None: ...
+
+            status = TurnStatus(
+                content_factory=_status_content,
+                # P3.7: no Live under the persistent composer (patch_stdout owns
+                # the terminal) — the footer heartbeat replaces the spinner.
+                live_factory=(
+                    (lambda renderable: _NullLive())
+                    if turn_runner is not None
+                    else (lambda renderable: Live(
+                        renderable,
+                        console=console,
+                        refresh_per_second=8,
+                        transient=True,
+                    ))
+                ),
+            )
+
+            def on_text(chunk: str) -> None:
+                status.update_text(chunk)
+
+            def on_reasoning(_chunk: str) -> None:
+                # P1.2: capture the reasoning chunk for the live thinking block
+                # tail + /why (display buffer only — never answer text),
+                # and keep the "thinking…" status alive with the timer.
+                if _chunk:
+                    _turn_reasoning.append(str(_chunk))
+                if turn_runner is not None:
+                    turn_runner.set_activity(
+                        f"thinking {time.monotonic() - _turn_started:.0f}s"
+                    )
+                status.thinking(time.monotonic() - _turn_started)
+
+            def _format_tool_display(name: str, p: dict[str, Any]) -> str:
+                """Context-aware tool call display."""
+                if name == "file_read":
+                    path = p.get("file_path", "")
+                    short = path.split("/")[-1] if "/" in path else path
+                    offset = p.get("offset", 0)
+                    limit = p.get("limit", "")
+                    loc = f":{offset}-{offset + limit}" if offset and limit else ""
+                    return f"[dim]read[/] {short}{loc}"
+                if name == "file_edit":
+                    path = p.get("file_path", "")
+                    short = path.split("/")[-1] if "/" in path else path
+                    old = str(p.get("old_string", ""))[:30]
+                    new = str(p.get("new_string", ""))[:30]
+                    return f"[dim]edit[/] {short}: [red]{old}[/] [dim]→[/] [green]{new}[/]"
+                if name == "file_write":
+                    path = p.get("file_path", "")
+                    short = path.split("/")[-1] if "/" in path else path
+                    return f"[dim]write[/] {short}"
+                if name == "bash":
+                    cmd = str(p.get("command", ""))[:60]
+                    return f"[dim]$[/] {cmd}"
+                if name == "navigate":
+                    room = p.get("room", "?")
+                    return f"[dim]navigate →[/] {room}"
+                if name == "explore":
+                    return "[dim]explore[/] starting background exploration"
+                if name in ("walk", "turn", "stand", "sit", "lie_down", "stop"):
+                    parts = [name]
+                    if p.get("direction"):
+                        parts.append(str(p["direction"]))
+                    if p.get("distance"):
+                        parts.append(f"{p['distance']}m")
+                    if p.get("angle"):
+                        parts.append(f"{p['angle']}°")
+                    return "[dim]" + " ".join(parts) + "[/]"
+                if name == "skill_reload":
+                    return f"[dim]reload[/] {p.get('skill_name', '?')}"
+                if name == "scene_graph_query":
+                    qt = p.get("query_type", "?")
+                    room = p.get("room", "")
+                    return f"[dim]scene_graph[/] {qt}" + (f" ({room})" if room else "")
+                if name in ("ros2_topics", "ros2_nodes"):
+                    action = p.get("action", "?")
+                    topic = p.get("topic", p.get("node", ""))
+                    return f"[dim]{name}[/] {action}" + (f" {topic}" if topic else "")
+                if name == "ros2_log":
+                    return f"[dim]log[/] {p.get('log_name', '?')}"
+                if name in ("glob", "grep"):
+                    pattern = p.get("pattern", "")[:40]
+                    return f"[dim]{name}[/] {pattern}"
+                if name == "nav_state":
+                    return "[dim]nav_state[/]"
+                if name == "terrain_status":
+                    return "[dim]terrain_status[/]"
+                if name == "start_simulation":
+                    st = p.get("sim_type", "go2")
+                    return f"[dim]sim start[/] {st}"
+                # Fallback: generic display
+                if p:
+                    items = [f"{k}={str(v)[:20]}" for k, v in list(p.items())[:2]]
+                    return f"[dim]{name}[/]({', '.join(items)})"
+                return f"[dim]{name}[/]"
+
+            def _format_result_summary(name: str, result: Any) -> str:
+                """Extract key info from tool result for display."""
+                if result.is_error:
+                    content = result.content or ""
+                    # Show first line of error + suggested action
+                    lines = content.split("\n")
+                    msg = lines[0][:60]
+                    suggested = next((l for l in lines if l.startswith("Suggested:")), "")
+                    if suggested:
+                        return f"  [dim]{msg}[/]\n    [yellow]{suggested}[/]"
+                    return f"  [dim]{msg}[/]"
+
+                meta = result.metadata if hasattr(result, "metadata") else {}
+                if not meta:
+                    return ""
+
+                # Navigate: show arrival info
+                if name == "navigate":
+                    room = meta.get("room", "")
+                    state = meta.get("robot_state_after", {})
+                    pos = state.get("position", [])
+                    if room and pos:
+                        return f"  [dim]▸ 到达 {room} ({pos[0]}, {pos[1]})[/]"
+                    if room:
+                        return f"  [dim]▸ 到达 {room}[/]"
+                # Explore: show status
+                if name == "explore":
+                    status = meta.get("status", "")
+                    rooms = meta.get("rooms_visited", meta.get("all_rooms", []))
+                    if rooms:
+                        return f"  [dim]▸ {len(rooms)} rooms discovered[/]"
+                # Where am i
+                if name == "where_am_i":
+                    room = meta.get("room", "")
+                    pos = meta.get("position", [])
+                    if room:
+                        return f"  [dim]▸ {room} ({pos[0]}, {pos[1]})[/]" if pos else f"  [dim]▸ {room}[/]"
+                # Motor skills: show post-state
+                state = meta.get("robot_state_after", {})
+                if state:
+                    room = state.get("room", "")
+                    pos = state.get("position", [])
+                    if room and pos:
+                        return f"  [dim]▸ pos=({pos[0]}, {pos[1]}) room={room}[/]"
+
+                return ""
+
+            _tool_displays: dict[str, str] = {}
+
+            def on_tool_start(name: str, p: dict[str, Any]) -> None:
+                _tool_start_times[name] = time.monotonic()
+                _tool_displays[name] = _format_tool_display(name, p)
+
+            def on_tool_end(name: str, result: Any) -> None:
+                elapsed = time.monotonic() - _tool_start_times.pop(name, time.monotonic())
+                display = _tool_displays.pop(name, name)
+                summary = _format_result_summary(name, result)
+                # Pause the live region BEFORE printing — printing into an active
+                # Live interleaves with its redraw and re-stacks the box frame.
+                with status.paused():
+                    console.print(
+                        render_tool_activity(
+                            display,
+                            is_error=bool(result.is_error),
+                            elapsed=elapsed,
+                        )
+                    )
+                    if summary:
+                        console.print(summary)
+
+                # Hook explore event callback after sim/explore tools run
+                if name in ("start_simulation", "explore"):
+                    _setup_explore_events(console)
+
+            # --- Routing (Stage 5, S5.4 cut-over) ---
+            # The keyword gate is now an OPTIMIZATION HINT, not a correctness
+            # fork: classify_intent (the single, observable decision the unified
+            # controller uses) decides only the RENDERING shape here.
+            #   * vgg route  -> the async plan renderer below (CLI stays
+            #     responsive; this IS the unified plan path: vgg_decompose ->
+            #     vgg_execute, deterministic verify + replan).
+            #   * tool_use route -> run_turn_unified, which produces the answer
+            #     via the ReAct loop AND closes the loop with a verified
+            #     answer-only trace (chat is verified too; the moat is intact).
+            # VECTOR_LEGACY_TURN=1 restores the exact pre-cutover fork
+            # (vgg_decompose-then-run_turn) for one release as a fallback.
+            _legacy_turn = _env("LEGACY_TURN") == "1"
+            if _legacy_turn:
+                goal_tree = engine.vgg_decompose(user_input)
+            else:
+                goal_tree = (
+                    engine.vgg_decompose(user_input)
+                    if engine.classify_intent(user_input).use_vgg
+                    else None
+                )
+            if goal_tree is not None:
+                # Show plan BEFORE execution
+                console.print()
+                console.print(f"  [{TEAL}]>[/] [bold]VGG[/] {goal_tree.goal}")
+                for i, sg in enumerate(goal_tree.sub_goals, 1):
+                    dep = f" (after {', '.join(sg.depends_on)})" if sg.depends_on else ""
+                    strat = f" [dim]via {sg.strategy}[/]" if sg.strategy else ""
+                    console.print(f"  [{TEAL}]>[/]   [{i}/{len(goal_tree.sub_goals)}] {sg.name} — {sg.description}{strat}{dep}")
+                console.print()
+
+                # Reset step counter for callback
+                _vgg_step_idx[0] = 0
+                _vgg_total[0] = len(goal_tree.sub_goals)
+                # Refresh the verify-predicate map the per-step view renderer
+                # reads (INC8) — keyed by sub_goal name for this plan.
+                _vgg_verify_by_name.clear()
+                _vgg_verify_by_name.update(
+                    {sg.name: sg.verify for sg in goal_tree.sub_goals}
+                )
+
+                # Execute async — CLI remains responsive
+                # `_user_input` freezes the triggering command at def-time
+                # (B023): this closure runs on a BACKGROUND thread after the
+                # REPL has read the NEXT input, so a free capture of the loop
+                # variable `user_input` would record the wrong user turn.
+                def _on_vgg_complete(
+                    trace: Any, _user_input: str = user_input
+                ) -> None:
+                    # P1.5: VGG turns join the same bounded /trace history.
+                    try:
+                        _hist = app_state.get("trace_history")
+                        if _hist is None:
+                            from collections import deque as _deque
+
+                            _hist = _deque(maxlen=5)
+                            app_state["trace_history"] = _hist
+                        _hist.append(trace)
+                    except Exception:  # noqa: BLE001 — display convenience
+                        pass
+                    n_steps = len(trace.steps)
+                    n_ok = sum(1 for s in trace.steps if s.success)
+                    dur = trace.total_duration_sec
+                    # Evidence gate: a successful run only counts as *verified*
+                    # when its steps actually consume a live verify-namespace
+                    # oracle (world-agnostic now — the robot bypass is gone).
+                    # oracle_names single-sourced from the SAME namespace
+                    # GoalVerifier uses. Fail CLOSED (not verified) on any error
+                    # so the moat never silently passes.
+                    try:
+                        from zeno.vcli.cognitive.trace_store import (
+                            evidence_passed,
+                            verify_oracle_names,
+                        )
+                        _oracle_names = verify_oracle_names(
+                            getattr(engine, "_vgg_agent", None), engine
+                        )
+                        _evidence = evidence_passed(trace, _oracle_names)
+                    except Exception:  # noqa: BLE001
+                        _evidence = False
+                    if trace.success and _evidence:
+                        console.print(f"  [{TEAL}]>[/] [green]all {n_steps} steps done[/] [dim]{dur:.1f}s[/]")
+                    elif trace.success:
+                        console.print(f"  [{TEAL}]>[/] [yellow]completed without verifiable evidence[/] — {n_steps} steps ran [dim]{dur:.1f}s[/]")
+                    elif n_ok > 0:
+                        console.print(f"  [{TEAL}]>[/] [yellow]{n_ok}/{n_steps} steps done[/], rest failed [dim]{dur:.1f}s[/]")
+                    else:
+                        console.print(f"  [{TEAL}]>[/] [red]task failed[/] — 0/{n_steps} steps succeeded [dim]{dur:.1f}s[/]")
+
+                    # Observation surface (INC8): show the full verified loop
+                    # — goal tree + per-step PASS/FAIL + any replan notes +
+                    # outcome — from the run snapshot (pure EXPORT VIEW; never
+                    # re-derived from frozen types). Best-effort display.
+                    try:
+                        from zeno.vcli.cognitive.observation import (
+                            render_run_snapshot,
+                        )
+                        snapshot = engine.vgg_run_snapshot(trace)
+                        for snap_line in render_run_snapshot(snapshot).splitlines():
+                            # markup=False: literal [PASS]/[FAIL] markers.
+                            console.print(f"  {snap_line}", style="dim", markup=False)
+                    except Exception:  # noqa: BLE001 — display only
+                        pass
+
+                    # P2 unified turn footer (VGG path: tokens untracked ->
+                    # omitted; wall-clock from the trace, honest-only).
+                    try:
+                        console.print(
+                            render_turn_footer(
+                                route="vgg",
+                                model=str(app_state.get("model", "") or ""),
+                                wall_sec=float(dur or 0.0),
+                            )
+                        )
+                    except Exception:  # noqa: BLE001 — display only
+                        pass
+
+                    # Record in session
+                    step_summary = "\n".join(
+                        f"  {s.sub_goal_name}: {'ok' if s.success else 'FAILED'}"
+                        + (f" ({s.error})" if s.error else "")
+                        for s in trace.steps
+                    )
+                    session.append_user(_user_input)
+                    session.append_assistant(
+                        f"[VGG executed]\nGoal: {trace.goal_tree.goal}\n"
+                        f"Result: {'success' if trace.success else 'partial failure'}\n"
+                        f"Steps:\n{step_summary}"
+                    )
+
+                # Runs on a background thread (CLI stays responsive) EXCEPT
+                # when a GUI viewer is live UNDER MJPYTHON (macOS) — only
+                # there GLFW is main-thread-only, so it executes
+                # synchronously on this thread and the prompt returns once
+                # the arm finishes. Linux/Windows keep the background
+                # thread even with a viewer (REPL stays responsive).
+                engine.vgg_execute_async(goal_tree, on_complete=_on_vgg_complete)
+                return  # next input (immediately when headless)
+
+            # --- Normal tool_use path ---
+            # Pause the live region around any interactive permission prompt so
+            # the prompt is not drawn into (and duplicated by) the live region.
+            def _ask_permission_paused(n: str, p: dict[str, Any]) -> str:
+                with status.paused():
+                    return ask_permission(n, p)
+
+            # Suppress ROS2/subprocess log noise during engine turn
+            _saved_stderr = sys.stderr
+            try:
+                sys.stderr = open(os.devnull, "w")
+            except OSError:
+                pass
+            # TYPED INTERJECT window around the blocking chat/tool turn: the
+            # run_turn loop has no kernel-side boundary check (chat rounds
+            # are short); a line typed here queues and runs as the NEXT turn.
+            interject_reader.start()
+            try:
+                status.start()  # one live region for the whole turn
+                if _legacy_turn:
+                    # Legacy fallback (VECTOR_LEGACY_TURN=1): the open ReAct loop
+                    # with no closed-loop verify — kept one release.
+                    turn_result: TurnResult = engine.run_turn(
+                        user_message=user_input,
+                        session=session,
+                        agent=app_state.get("agent"),
+                        on_text=on_text,
+                        on_tool_start=on_tool_start,
+                        on_tool_end=on_tool_end,
+                        ask_permission=_ask_permission_paused,
+                        app_state=app_state,
+                        on_reasoning=on_reasoning,
+                    )
+                else:
+                    # Unified controller: the ReAct loop produces the answer
+                    # (streaming, permissions, tool hooks, P0 stop all preserved
+                    # by run_turn underneath) and the harness wraps it in a
+                    # verified answer-only trace — closing the loop for chat too.
+                    turn_result = engine.run_turn_unified(
+                        user_message=user_input,
+                        session=session,
+                        agent=app_state.get("agent"),
+                        on_text=on_text,
+                        on_tool_start=on_tool_start,
+                        on_tool_end=on_tool_end,
+                        ask_permission=_ask_permission_paused,
+                        app_state=app_state,
+                        on_reasoning=on_reasoning,
+                    )
+            except KeyboardInterrupt:
+                _operator_interrupt(app_state)
+                return  # keep the REPL loop alive
+            finally:
+                # Stop/clear the single region BEFORE printing the final answer,
+                # so live output never stacks and the prompt is not duplicated.
+                interject_reader.stop()  # window closes before any prompt
+                status.stop()
+                sys.stderr = _saved_stderr
+
+            # P1.2 CoT: record this turn's reasoning for /why. Tail leaves a
+            # bounded preview; full prints everything. Display-only — never
+            # session content.
+            app_state["last_reasoning"] = "".join(_turn_reasoning)
+            reasoning_block = reasoning_transcript_block(
+                app_state["last_reasoning"],
+                mode=_cot_mode(app_state),
+                width=min(console.width, 80),
+            )
+            if reasoning_block is not None:
+                console.print(reasoning_block)
+
+            # Final response: open coding-agent message (no repeated frame/title).
+            global _last_response
+            if turn_result.text:
+                _last_response = turn_result.text.strip()
+                console.print()  # spacing before response
+                console.print(render_response(
+                    _last_response,
+                    width=min(console.width, 80),
+                ))
+
+            # Auto-compact (summarize old context instead of truncating)
+            if len(session._entries) > 50:
+                before, after = session.compact(keep_recent=12)
+                console.print(f"[dim]  compacted {before} -> {after} entries (old context summarized)[/dim]")
+
+            # P2 unified turn footer (route · model · tokens · wall-clock;
+            # unknown parts omitted — same grammar as the native/VGG paths).
+            _u = turn_result.usage
+            console.print(
+                render_chat_footer(
+                    in_tokens=getattr(_u, "input_tokens", 0) if _u else 0,
+                    out_tokens=getattr(_u, "output_tokens", 0) if _u else 0,
+                    wall_sec=time.monotonic() - _turn_started,
+                )
+            )
+            console.print()
+
+        except KeyboardInterrupt:
+            # One Ctrl-C aborts the running task and returns to the prompt;
+            # arm the pending-exit so an immediate second Ctrl-C quits (R2-4).
+            interrupt_pending = True
+            console.print("\n[yellow]Interrupted.[/yellow] [dim](Ctrl-C again or 'quit' to exit)[/dim]")
+        except Exception as exc:
+            err_str = str(exc)
+            if "429" in err_str or "rate_limit" in err_str:
+                current_model = app_state.get("model", "?")
+                console.print(f"[yellow]  Rate limited on {current_model}.[/]")
+                console.print(f"[dim]  Try: /model claude-haiku-4-5 (lower rate limit)[/dim]")
+            elif "401" in err_str or "authentication" in err_str.lower():
+                console.print(f"[yellow]  Authentication failed. Use /login to reconfigure.[/]")
+            elif "404" in err_str or "not_found" in err_str:
+                console.print(f"[yellow]  Model not found: {app_state.get('model', '?')}[/]")
+                console.print(f"[dim]  Try: /model claude-haiku-4-5[/dim]")
+            else:
+                console.print(f"[red]Error:[/] {exc}")
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
+
+    # P3.7 persistent composer (owner ask 2026-07-13): the input NEVER
+    # yields the terminal. Turns run on the TurnRunner worker; stdout is
+    # patched so worker prints land ABOVE the live composer; typing while
+    # busy routes into the kernel-polled interject queue (cancel-and-replace
+    # semantics unchanged). VECTOR_COMPOSER_SYNC=1 restores the alternating
+    # prompt (reversible escape hatch).
+    turn_runner = None
+    _stdout_stack = contextlib.ExitStack()
+    if _persistent_composer_enabled():
+        from prompt_toolkit.patch_stdout import patch_stdout as _patch_stdout
+
+        from zeno.vcli.turn_runner import ComposerInterjectQueue, TurnRunner
+
+        _ij_queue = ComposerInterjectQueue()
+        app_state["interject"] = _ij_queue  # kernel-facing duck type (no stdin thread)
+        set_current_reader(_ij_queue)  # ask_permission suspend/resume: safe no-ops
+        turn_runner = TurnRunner(
+            run_turn=_engine_turn,
+            interject_queue=_ij_queue,
+            echo=lambda m: console.print(f"  [yellow]{m}[/]"),
+        )
+        app_state["turn_runner"] = turn_runner
+        _stdout_stack.enter_context(_patch_stdout(raw=True))
+
     try:
         while True:
             # ---- Read input ----
@@ -3361,6 +3916,11 @@ def main(argv: list[str] | None = None) -> None:
                 except EOFError:
                     break
                 except KeyboardInterrupt:
+                    if turn_runner is not None and turn_runner.busy:
+                        # P3.7: ^C while a turn runs = cancel that turn (same
+                        # seam as before); the composer stays up, no exit arm.
+                        _operator_interrupt(app_state)
+                        continue
                     if interrupt_pending:
                         break  # second consecutive Ctrl-C -> exit cleanly
                     interrupt_pending = True
@@ -3400,485 +3960,19 @@ def main(argv: list[str] | None = None) -> None:
                 continue
 
             # ---- Engine turn ----
-            if engine is None:
-                console.print(f"[yellow]No API key. Use /login to authenticate first.[/]")
+            # P3.7 persistent composer: hand the turn to the worker and
+            # return to the prompt IMMEDIATELY (Claude-Code-style). Typing
+            # while busy queues via the SAME kernel interject seam. Sync
+            # escape hatch (VECTOR_COMPOSER_SYNC=1) runs inline as before.
+            if turn_runner is not None:
+                turn_runner.submit(user_input)
                 continue
-
-            # CUTOVER (2026-06-19, owner-approved): native-attempt-then-fallback is the
-            # REPL's DEFAULT turn path, so bare `zeno` + natural language runs the
-            # redesign's NATIVE TOOL-USE producer (CLAUDE.md North Star "Acceptance
-            # interface"). For an action-shaped turn, ATTEMPT native first; if it
-            # DISPATCHED an action it OWNS the turn (its honest verdict is rendered).
-            # If it took NO action (could not route — e.g. "启动 go2 仿真", embodiment
-            # switch, chat) FALL THROUGH to the UNCHANGED legacy routing below, so sim
-            # launch + NL embodiment switch keep working via the untouched tool_use
-            # path. VECTOR_REPL_NATIVE=0 forces the pure-legacy REPL (reversible).
-            # native OWNS navigation too (CEO architecture call 2026-06-19: the
-            # model-driven producer is the correct design; the hardcoded legacy planner
-            # is being strangled, not retreated to). Obstacle-AVOIDANCE for native nav
-            # (route through the nav-stack instead of the open-loop walk) and LATENCY
-            # are tracked native improvements (see docs/ARCHITECTURE.md), NOT reasons to
-            # fall back to legacy.
-            if _repl_native_enabled() and _intent_actionable(engine, user_input):
-                try:
-                    _native_owned = _repl_attempt_native(
-                        engine, user_input, session, app_state, console
-                    )
-                except KeyboardInterrupt:
-                    _operator_interrupt(app_state)
-                    _native_owned = True  # turn handled; REPL stays alive
-                if _native_owned:
-                    continue
-                # native took NO action -> fall through to legacy routing (unchanged).
-
-            try:
-                # Single in-place progress region for the whole turn. A reasoning
-                # model (DeepSeek) streams NO text for several seconds while it
-                # thinks; the region shows one calm "thinking…" status that resolves
-                # into the streamed answer — it is paused/cleared before any
-                # tool-execution line is printed so live regions never stack and the
-                # prompt is not duplicated.
-                _turn_started = time.monotonic()
-                # P1.2 CoT: the turn's reasoning chunks (DeepSeek-style
-                # reasoning models). DISPLAY BUFFER ONLY — rendered as a dim
-                # tail inside the open thinking block (mode 'tail'/'full'), recorded
-                # for /why, never appended to the session or the answer.
-                _turn_reasoning: list[str] = []
-
-                def _status_content(text: str, elapsed: float, is_thinking: bool) -> Any:
-                    message_width = min(console.width, 80)
-                    if is_thinking:
-                        tail = ""
-                        if _turn_reasoning and _cot_mode(app_state) != "off":
-                            tail = (
-                                "".join(_turn_reasoning)[-160:].replace("\n", " ").strip()
-                            )
-                        return render_live_thinking(
-                            elapsed=elapsed,
-                            reasoning_tail=tail,
-                            width=message_width,
-                        )
-                    return render_response(text, width=message_width)
-
-                status = TurnStatus(
-                    content_factory=_status_content,
-                    live_factory=lambda renderable: Live(
-                        renderable,
-                        console=console,
-                        refresh_per_second=8,
-                        transient=True,
-                    ),
-                )
-
-                def on_text(chunk: str) -> None:
-                    status.update_text(chunk)
-
-                def on_reasoning(_chunk: str) -> None:
-                    # P1.2: capture the reasoning chunk for the live thinking block
-                    # tail + /why (display buffer only — never answer text),
-                    # and keep the "thinking…" status alive with the timer.
-                    if _chunk:
-                        _turn_reasoning.append(str(_chunk))
-                    status.thinking(time.monotonic() - _turn_started)
-
-                def _format_tool_display(name: str, p: dict[str, Any]) -> str:
-                    """Context-aware tool call display."""
-                    if name == "file_read":
-                        path = p.get("file_path", "")
-                        short = path.split("/")[-1] if "/" in path else path
-                        offset = p.get("offset", 0)
-                        limit = p.get("limit", "")
-                        loc = f":{offset}-{offset + limit}" if offset and limit else ""
-                        return f"[dim]read[/] {short}{loc}"
-                    if name == "file_edit":
-                        path = p.get("file_path", "")
-                        short = path.split("/")[-1] if "/" in path else path
-                        old = str(p.get("old_string", ""))[:30]
-                        new = str(p.get("new_string", ""))[:30]
-                        return f"[dim]edit[/] {short}: [red]{old}[/] [dim]→[/] [green]{new}[/]"
-                    if name == "file_write":
-                        path = p.get("file_path", "")
-                        short = path.split("/")[-1] if "/" in path else path
-                        return f"[dim]write[/] {short}"
-                    if name == "bash":
-                        cmd = str(p.get("command", ""))[:60]
-                        return f"[dim]$[/] {cmd}"
-                    if name == "navigate":
-                        room = p.get("room", "?")
-                        return f"[dim]navigate →[/] {room}"
-                    if name == "explore":
-                        return "[dim]explore[/] starting background exploration"
-                    if name in ("walk", "turn", "stand", "sit", "lie_down", "stop"):
-                        parts = [name]
-                        if p.get("direction"):
-                            parts.append(str(p["direction"]))
-                        if p.get("distance"):
-                            parts.append(f"{p['distance']}m")
-                        if p.get("angle"):
-                            parts.append(f"{p['angle']}°")
-                        return "[dim]" + " ".join(parts) + "[/]"
-                    if name == "skill_reload":
-                        return f"[dim]reload[/] {p.get('skill_name', '?')}"
-                    if name == "scene_graph_query":
-                        qt = p.get("query_type", "?")
-                        room = p.get("room", "")
-                        return f"[dim]scene_graph[/] {qt}" + (f" ({room})" if room else "")
-                    if name in ("ros2_topics", "ros2_nodes"):
-                        action = p.get("action", "?")
-                        topic = p.get("topic", p.get("node", ""))
-                        return f"[dim]{name}[/] {action}" + (f" {topic}" if topic else "")
-                    if name == "ros2_log":
-                        return f"[dim]log[/] {p.get('log_name', '?')}"
-                    if name in ("glob", "grep"):
-                        pattern = p.get("pattern", "")[:40]
-                        return f"[dim]{name}[/] {pattern}"
-                    if name == "nav_state":
-                        return "[dim]nav_state[/]"
-                    if name == "terrain_status":
-                        return "[dim]terrain_status[/]"
-                    if name == "start_simulation":
-                        st = p.get("sim_type", "go2")
-                        return f"[dim]sim start[/] {st}"
-                    # Fallback: generic display
-                    if p:
-                        items = [f"{k}={str(v)[:20]}" for k, v in list(p.items())[:2]]
-                        return f"[dim]{name}[/]({', '.join(items)})"
-                    return f"[dim]{name}[/]"
-
-                def _format_result_summary(name: str, result: Any) -> str:
-                    """Extract key info from tool result for display."""
-                    if result.is_error:
-                        content = result.content or ""
-                        # Show first line of error + suggested action
-                        lines = content.split("\n")
-                        msg = lines[0][:60]
-                        suggested = next((l for l in lines if l.startswith("Suggested:")), "")
-                        if suggested:
-                            return f"  [dim]{msg}[/]\n    [yellow]{suggested}[/]"
-                        return f"  [dim]{msg}[/]"
-
-                    meta = result.metadata if hasattr(result, "metadata") else {}
-                    if not meta:
-                        return ""
-
-                    # Navigate: show arrival info
-                    if name == "navigate":
-                        room = meta.get("room", "")
-                        state = meta.get("robot_state_after", {})
-                        pos = state.get("position", [])
-                        if room and pos:
-                            return f"  [dim]▸ 到达 {room} ({pos[0]}, {pos[1]})[/]"
-                        if room:
-                            return f"  [dim]▸ 到达 {room}[/]"
-                    # Explore: show status
-                    if name == "explore":
-                        status = meta.get("status", "")
-                        rooms = meta.get("rooms_visited", meta.get("all_rooms", []))
-                        if rooms:
-                            return f"  [dim]▸ {len(rooms)} rooms discovered[/]"
-                    # Where am i
-                    if name == "where_am_i":
-                        room = meta.get("room", "")
-                        pos = meta.get("position", [])
-                        if room:
-                            return f"  [dim]▸ {room} ({pos[0]}, {pos[1]})[/]" if pos else f"  [dim]▸ {room}[/]"
-                    # Motor skills: show post-state
-                    state = meta.get("robot_state_after", {})
-                    if state:
-                        room = state.get("room", "")
-                        pos = state.get("position", [])
-                        if room and pos:
-                            return f"  [dim]▸ pos=({pos[0]}, {pos[1]}) room={room}[/]"
-
-                    return ""
-
-                _tool_displays: dict[str, str] = {}
-
-                def on_tool_start(name: str, p: dict[str, Any]) -> None:
-                    _tool_start_times[name] = time.monotonic()
-                    _tool_displays[name] = _format_tool_display(name, p)
-
-                def on_tool_end(name: str, result: Any) -> None:
-                    elapsed = time.monotonic() - _tool_start_times.pop(name, time.monotonic())
-                    display = _tool_displays.pop(name, name)
-                    summary = _format_result_summary(name, result)
-                    # Pause the live region BEFORE printing — printing into an active
-                    # Live interleaves with its redraw and re-stacks the box frame.
-                    with status.paused():
-                        console.print(
-                            render_tool_activity(
-                                display,
-                                is_error=bool(result.is_error),
-                                elapsed=elapsed,
-                            )
-                        )
-                        if summary:
-                            console.print(summary)
-
-                    # Hook explore event callback after sim/explore tools run
-                    if name in ("start_simulation", "explore"):
-                        _setup_explore_events(console)
-
-                # --- Routing (Stage 5, S5.4 cut-over) ---
-                # The keyword gate is now an OPTIMIZATION HINT, not a correctness
-                # fork: classify_intent (the single, observable decision the unified
-                # controller uses) decides only the RENDERING shape here.
-                #   * vgg route  -> the async plan renderer below (CLI stays
-                #     responsive; this IS the unified plan path: vgg_decompose ->
-                #     vgg_execute, deterministic verify + replan).
-                #   * tool_use route -> run_turn_unified, which produces the answer
-                #     via the ReAct loop AND closes the loop with a verified
-                #     answer-only trace (chat is verified too; the moat is intact).
-                # VECTOR_LEGACY_TURN=1 restores the exact pre-cutover fork
-                # (vgg_decompose-then-run_turn) for one release as a fallback.
-                _legacy_turn = _env("LEGACY_TURN") == "1"
-                if _legacy_turn:
-                    goal_tree = engine.vgg_decompose(user_input)
-                else:
-                    goal_tree = (
-                        engine.vgg_decompose(user_input)
-                        if engine.classify_intent(user_input).use_vgg
-                        else None
-                    )
-                if goal_tree is not None:
-                    # Show plan BEFORE execution
-                    console.print()
-                    console.print(f"  [{TEAL}]>[/] [bold]VGG[/] {goal_tree.goal}")
-                    for i, sg in enumerate(goal_tree.sub_goals, 1):
-                        dep = f" (after {', '.join(sg.depends_on)})" if sg.depends_on else ""
-                        strat = f" [dim]via {sg.strategy}[/]" if sg.strategy else ""
-                        console.print(f"  [{TEAL}]>[/]   [{i}/{len(goal_tree.sub_goals)}] {sg.name} — {sg.description}{strat}{dep}")
-                    console.print()
-
-                    # Reset step counter for callback
-                    _vgg_step_idx[0] = 0
-                    _vgg_total[0] = len(goal_tree.sub_goals)
-                    # Refresh the verify-predicate map the per-step view renderer
-                    # reads (INC8) — keyed by sub_goal name for this plan.
-                    _vgg_verify_by_name.clear()
-                    _vgg_verify_by_name.update(
-                        {sg.name: sg.verify for sg in goal_tree.sub_goals}
-                    )
-
-                    # Execute async — CLI remains responsive
-                    # `_user_input` freezes the triggering command at def-time
-                    # (B023): this closure runs on a BACKGROUND thread after the
-                    # REPL has read the NEXT input, so a free capture of the loop
-                    # variable `user_input` would record the wrong user turn.
-                    def _on_vgg_complete(
-                        trace: Any, _user_input: str = user_input
-                    ) -> None:
-                        # P1.5: VGG turns join the same bounded /trace history.
-                        try:
-                            _hist = app_state.get("trace_history")
-                            if _hist is None:
-                                from collections import deque as _deque
-
-                                _hist = _deque(maxlen=5)
-                                app_state["trace_history"] = _hist
-                            _hist.append(trace)
-                        except Exception:  # noqa: BLE001 — display convenience
-                            pass
-                        n_steps = len(trace.steps)
-                        n_ok = sum(1 for s in trace.steps if s.success)
-                        dur = trace.total_duration_sec
-                        # Evidence gate: a successful run only counts as *verified*
-                        # when its steps actually consume a live verify-namespace
-                        # oracle (world-agnostic now — the robot bypass is gone).
-                        # oracle_names single-sourced from the SAME namespace
-                        # GoalVerifier uses. Fail CLOSED (not verified) on any error
-                        # so the moat never silently passes.
-                        try:
-                            from zeno.vcli.cognitive.trace_store import (
-                                evidence_passed,
-                                verify_oracle_names,
-                            )
-                            _oracle_names = verify_oracle_names(
-                                getattr(engine, "_vgg_agent", None), engine
-                            )
-                            _evidence = evidence_passed(trace, _oracle_names)
-                        except Exception:  # noqa: BLE001
-                            _evidence = False
-                        if trace.success and _evidence:
-                            console.print(f"  [{TEAL}]>[/] [green]all {n_steps} steps done[/] [dim]{dur:.1f}s[/]")
-                        elif trace.success:
-                            console.print(f"  [{TEAL}]>[/] [yellow]completed without verifiable evidence[/] — {n_steps} steps ran [dim]{dur:.1f}s[/]")
-                        elif n_ok > 0:
-                            console.print(f"  [{TEAL}]>[/] [yellow]{n_ok}/{n_steps} steps done[/], rest failed [dim]{dur:.1f}s[/]")
-                        else:
-                            console.print(f"  [{TEAL}]>[/] [red]task failed[/] — 0/{n_steps} steps succeeded [dim]{dur:.1f}s[/]")
-
-                        # Observation surface (INC8): show the full verified loop
-                        # — goal tree + per-step PASS/FAIL + any replan notes +
-                        # outcome — from the run snapshot (pure EXPORT VIEW; never
-                        # re-derived from frozen types). Best-effort display.
-                        try:
-                            from zeno.vcli.cognitive.observation import (
-                                render_run_snapshot,
-                            )
-                            snapshot = engine.vgg_run_snapshot(trace)
-                            for snap_line in render_run_snapshot(snapshot).splitlines():
-                                # markup=False: literal [PASS]/[FAIL] markers.
-                                console.print(f"  {snap_line}", style="dim", markup=False)
-                        except Exception:  # noqa: BLE001 — display only
-                            pass
-
-                        # P2 unified turn footer (VGG path: tokens untracked ->
-                        # omitted; wall-clock from the trace, honest-only).
-                        try:
-                            console.print(
-                                render_turn_footer(
-                                    route="vgg",
-                                    model=str(app_state.get("model", "") or ""),
-                                    wall_sec=float(dur or 0.0),
-                                )
-                            )
-                        except Exception:  # noqa: BLE001 — display only
-                            pass
-
-                        # Record in session
-                        step_summary = "\n".join(
-                            f"  {s.sub_goal_name}: {'ok' if s.success else 'FAILED'}"
-                            + (f" ({s.error})" if s.error else "")
-                            for s in trace.steps
-                        )
-                        session.append_user(_user_input)
-                        session.append_assistant(
-                            f"[VGG executed]\nGoal: {trace.goal_tree.goal}\n"
-                            f"Result: {'success' if trace.success else 'partial failure'}\n"
-                            f"Steps:\n{step_summary}"
-                        )
-
-                    # Runs on a background thread (CLI stays responsive) EXCEPT
-                    # when a GUI viewer is live UNDER MJPYTHON (macOS) — only
-                    # there GLFW is main-thread-only, so it executes
-                    # synchronously on this thread and the prompt returns once
-                    # the arm finishes. Linux/Windows keep the background
-                    # thread even with a viewer (REPL stays responsive).
-                    engine.vgg_execute_async(goal_tree, on_complete=_on_vgg_complete)
-                    continue  # next input (immediately when headless)
-
-                # --- Normal tool_use path ---
-                # Pause the live region around any interactive permission prompt so
-                # the prompt is not drawn into (and duplicated by) the live region.
-                def _ask_permission_paused(n: str, p: dict[str, Any]) -> str:
-                    with status.paused():
-                        return ask_permission(n, p)
-
-                # Suppress ROS2/subprocess log noise during engine turn
-                _saved_stderr = sys.stderr
-                try:
-                    sys.stderr = open(os.devnull, "w")
-                except OSError:
-                    pass
-                # TYPED INTERJECT window around the blocking chat/tool turn: the
-                # run_turn loop has no kernel-side boundary check (chat rounds
-                # are short); a line typed here queues and runs as the NEXT turn.
-                interject_reader.start()
-                try:
-                    status.start()  # one live region for the whole turn
-                    if _legacy_turn:
-                        # Legacy fallback (VECTOR_LEGACY_TURN=1): the open ReAct loop
-                        # with no closed-loop verify — kept one release.
-                        turn_result: TurnResult = engine.run_turn(
-                            user_message=user_input,
-                            session=session,
-                            agent=app_state.get("agent"),
-                            on_text=on_text,
-                            on_tool_start=on_tool_start,
-                            on_tool_end=on_tool_end,
-                            ask_permission=_ask_permission_paused,
-                            app_state=app_state,
-                            on_reasoning=on_reasoning,
-                        )
-                    else:
-                        # Unified controller: the ReAct loop produces the answer
-                        # (streaming, permissions, tool hooks, P0 stop all preserved
-                        # by run_turn underneath) and the harness wraps it in a
-                        # verified answer-only trace — closing the loop for chat too.
-                        turn_result = engine.run_turn_unified(
-                            user_message=user_input,
-                            session=session,
-                            agent=app_state.get("agent"),
-                            on_text=on_text,
-                            on_tool_start=on_tool_start,
-                            on_tool_end=on_tool_end,
-                            ask_permission=_ask_permission_paused,
-                            app_state=app_state,
-                            on_reasoning=on_reasoning,
-                        )
-                except KeyboardInterrupt:
-                    _operator_interrupt(app_state)
-                    continue  # keep the REPL loop alive
-                finally:
-                    # Stop/clear the single region BEFORE printing the final answer,
-                    # so live output never stacks and the prompt is not duplicated.
-                    interject_reader.stop()  # window closes before any prompt
-                    status.stop()
-                    sys.stderr = _saved_stderr
-
-                # P1.2 CoT: record this turn's reasoning for /why. Tail leaves a
-                # bounded preview; full prints everything. Display-only — never
-                # session content.
-                app_state["last_reasoning"] = "".join(_turn_reasoning)
-                reasoning_block = reasoning_transcript_block(
-                    app_state["last_reasoning"],
-                    mode=_cot_mode(app_state),
-                    width=min(console.width, 80),
-                )
-                if reasoning_block is not None:
-                    console.print(reasoning_block)
-
-                # Final response: open coding-agent message (no repeated frame/title).
-                global _last_response
-                if turn_result.text:
-                    _last_response = turn_result.text.strip()
-                    console.print()  # spacing before response
-                    console.print(render_response(
-                        _last_response,
-                        width=min(console.width, 80),
-                    ))
-
-                # Auto-compact (summarize old context instead of truncating)
-                if len(session._entries) > 50:
-                    before, after = session.compact(keep_recent=12)
-                    console.print(f"[dim]  compacted {before} -> {after} entries (old context summarized)[/dim]")
-
-                # P2 unified turn footer (route · model · tokens · wall-clock;
-                # unknown parts omitted — same grammar as the native/VGG paths).
-                _u = turn_result.usage
-                console.print(
-                    render_chat_footer(
-                        in_tokens=getattr(_u, "input_tokens", 0) if _u else 0,
-                        out_tokens=getattr(_u, "output_tokens", 0) if _u else 0,
-                        wall_sec=time.monotonic() - _turn_started,
-                    )
-                )
-                console.print()
-
-            except KeyboardInterrupt:
-                # One Ctrl-C aborts the running task and returns to the prompt;
-                # arm the pending-exit so an immediate second Ctrl-C quits (R2-4).
-                interrupt_pending = True
-                console.print("\n[yellow]Interrupted.[/yellow] [dim](Ctrl-C again or 'quit' to exit)[/dim]")
-            except Exception as exc:
-                err_str = str(exc)
-                if "429" in err_str or "rate_limit" in err_str:
-                    current_model = app_state.get("model", "?")
-                    console.print(f"[yellow]  Rate limited on {current_model}.[/]")
-                    console.print(f"[dim]  Try: /model claude-haiku-4-5 (lower rate limit)[/dim]")
-                elif "401" in err_str or "authentication" in err_str.lower():
-                    console.print(f"[yellow]  Authentication failed. Use /login to reconfigure.[/]")
-                elif "404" in err_str or "not_found" in err_str:
-                    console.print(f"[yellow]  Model not found: {app_state.get('model', '?')}[/]")
-                    console.print(f"[dim]  Try: /model claude-haiku-4-5[/dim]")
-                else:
-                    console.print(f"[red]Error:[/] {exc}")
-                if args.verbose:
-                    import traceback
-                    traceback.print_exc()
+            _engine_turn(user_input)
 
     finally:
+        if turn_runner is not None:
+            turn_runner.wait_idle(5.0)  # best-effort drain before teardown
+        _stdout_stack.close()
         set_current_reader(None)
         interject_reader.stop()
         session.save()

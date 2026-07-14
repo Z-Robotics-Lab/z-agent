@@ -274,6 +274,8 @@ class ChainView:
         self,
         live_factory: Callable[[Any], Any] | None = None,
         *,
+        transcript_sink: Callable[[str], None] | None = None,
+        activity_sink: Callable[[str], None] | None = None,
         reasoning_tail_chars: int = 160,
         max_nudges: int = 3,
         show_reasoning_tail: bool = True,
@@ -296,6 +298,14 @@ class ChainView:
         self._nudges: deque[str] = deque(maxlen=max(1, int(max_nudges)))
         self._text_tail = ""
         self.finish_data: dict[str, Any] = {}
+        # P3.7 persistent-composer mode: append-only transcript streaming.
+        # With a transcript_sink the view NEVER creates a Live region —
+        # completed nodes print above the always-on composer as they happen;
+        # the short activity string feeds the composer footer.
+        self._transcript_sink = transcript_sink
+        self._activity_sink = activity_sink
+        self.streamed_to_transcript = False
+        self._goal_emitted = False
 
     # -- lifecycle ------------------------------------------------------
 
@@ -311,6 +321,8 @@ class ChainView:
     def start(self) -> None:
         if self._running or self._live_factory is None:
             return
+        if self._transcript_sink is not None:
+            return  # sink mode (P3.7): append-only transcript, never a Live
         # Display is best-effort: a console that cannot host a live region
         # (e.g. a non-rich test double, a dumb pipe) degrades to NO live view —
         # events still accumulate and every post-turn line prints as normal.
@@ -365,6 +377,30 @@ class ChainView:
             except Exception:  # noqa: BLE001
                 pass
 
+    def begin_goal(self, goal: str) -> None:
+        """Sink mode: print the ⌂ goal header once, at turn start (P3.7)."""
+        if self._transcript_sink is None or self._goal_emitted:
+            return
+        self._goal_emitted = True
+        self._sink(f"  [bold {_TEAL}]⌂[/] {_escape_markup(str(goal))}")
+
+    def _sink(self, line: str) -> None:
+        if self._transcript_sink is None:
+            return
+        try:
+            self._transcript_sink(line)
+            self.streamed_to_transcript = True
+        except Exception:  # noqa: BLE001 — display only
+            pass
+
+    def _tell_activity(self, text: str) -> None:
+        if self._activity_sink is None:
+            return
+        try:
+            self._activity_sink(str(text))
+        except Exception:  # noqa: BLE001 — display only
+            pass
+
     def _consume(self, event: Any) -> None:
         kind = getattr(event, "kind", None)
         if not kind:
@@ -375,6 +411,7 @@ class ChainView:
         if kind == "round":
             self._refresh_live_status()
             self._round = label
+            self._tell_activity(f"round {label} · thinking…")
         elif kind == "reasoning":
             self._reasoning.append(detail)
             self._reasoning_tail = (self._reasoning_tail + detail)[
@@ -384,18 +421,24 @@ class ChainView:
             self._text_tail = (self._text_tail + detail)[-72:]
         elif kind == "tool_start":
             self._nodes.append({"kind": "tool", "label": label, "detail": detail, "ok": None})
+            self._tell_activity(f"{label} 执行中…")
         elif kind == "tool_end":
             for node in reversed(self._nodes):
                 if node["kind"] == "tool" and node["label"] == label and node["ok"] is None:
                     node["ok"] = bool(ok)
                     node["err"] = detail if ok is False else ""
+                    self._sink(self._render_one_node(node))
                     break
         elif kind == "verify":
-            self._nodes.append({"kind": "verify", "label": label, "detail": detail, "ok": ok})
+            node = {"kind": "verify", "label": label, "detail": detail, "ok": ok}
+            self._nodes.append(node)
+            self._sink(self._render_one_node(node))
         elif kind == "nudge":
             self._nudges.append(detail or label)
+            self._sink(f"  [yellow]⟲[/] {_escape_markup(detail or label)}")
         elif kind == "interject":
             self._nudges.append("操作员插队 — 取消剩余步骤")
+            self._sink("  [yellow]⟲[/] 操作员插队 — 取消剩余步骤")
         elif kind == "finish":
             self.finish_data = dict(getattr(event, "data", None) or {})
 
@@ -412,35 +455,36 @@ class ChainView:
 
     # -- rendering ------------------------------------------------------
 
+    def _render_one_node(self, node: dict[str, Any]) -> str:
+        """Render ONE chain node (shared: live view / persisted tree / sink)."""
+        label = _escape_markup(node.get("label", ""))
+        if node["kind"] == "tool":
+            detail = _escape_markup(node.get("detail", ""))
+            ok = node.get("ok")
+            if ok is None:
+                state = "[dim]…[/]"
+            elif ok:
+                state = "[green]✓[/]"
+            else:
+                state = "[red]×[/]"
+            err = node.get("err") or ""
+            err_part = f"  [red]{_escape_markup(err)}[/]" if err else ""
+            return (
+                f"  [bold {_TEAL}]◇[/] [dim #738091]Tool[/] "
+                f"[#46515e]·[/] {label}{detail}  {state}{err_part}"
+            )
+        ok = node.get("ok")
+        if ok is None:
+            mark = "[yellow]rejected[/]"
+        elif ok:
+            mark = "[green]✓[/]"
+        else:
+            mark = "[red]✗[/]"
+        return f"  [dim]└─ verify[/] {label} {mark}"
+
     def _chain_lines(self) -> list[str]:
         """Node + nudge lines shared by the live view and the persisted tree."""
-        lines: list[str] = []
-        for node in self._nodes:
-            label = _escape_markup(node.get("label", ""))
-            if node["kind"] == "tool":
-                detail = _escape_markup(node.get("detail", ""))
-                ok = node.get("ok")
-                if ok is None:
-                    state = "[dim]…[/]"
-                elif ok:
-                    state = "[green]✓[/]"
-                else:
-                    state = "[red]×[/]"
-                err = node.get("err") or ""
-                err_part = f"  [red]{_escape_markup(err)}[/]" if err else ""
-                lines.append(
-                    f"  [bold {_TEAL}]◇[/] [dim #738091]Tool[/] "
-                    f"[#46515e]·[/] {label}{detail}  {state}{err_part}"
-                )
-            else:  # verify
-                ok = node.get("ok")
-                if ok is None:
-                    mark = "[yellow]rejected[/]"
-                elif ok:
-                    mark = "[green]✓[/]"
-                else:
-                    mark = "[red]✗[/]"
-                lines.append(f"  [dim]└─ verify[/] {label} {mark}")
+        lines = [self._render_one_node(node) for node in self._nodes]
         for nudge in self._nudges:
             lines.append(f"  [yellow]⟲[/] {_escape_markup(nudge)}")
         return lines
