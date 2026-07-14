@@ -3996,7 +3996,16 @@ def main(argv: list[str] | None = None) -> None:
             # TYPED INTERJECT window around the blocking chat/tool turn: the
             # run_turn loop has no kernel-side boundary check (chat rounds
             # are short); a line typed here queues and runs as the NEXT turn.
-            interject_reader.start()
+            # COMPOSER GUARD (field freeze 2026-07-14): under the persistent
+            # composer (P3.7) prompt_toolkit owns stdin for the whole session
+            # and typed interjects arrive via ComposerInterjectQueue — starting
+            # the stdin THREAD here made two readers fight over the terminal
+            # and the composer's input parser froze after the turn. The thread
+            # window is CLASSIC-REPL-only: only when app_state still points at
+            # the thread reader itself.
+            _thread_window = app_state.get("interject") is interject_reader
+            if _thread_window:
+                interject_reader.start()
             try:
                 status.start()  # one live region for the whole turn
                 if _legacy_turn:
@@ -4035,7 +4044,8 @@ def main(argv: list[str] | None = None) -> None:
             finally:
                 # Stop/clear the single region BEFORE printing the final answer,
                 # so live output never stacks and the prompt is not duplicated.
-                interject_reader.stop()  # window closes before any prompt
+                if _thread_window:
+                    interject_reader.stop()  # window closes before any prompt
                 status.stop()
                 sys.stderr = _saved_stderr
 
