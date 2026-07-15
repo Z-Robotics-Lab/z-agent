@@ -4,15 +4,17 @@
 叙事在 commit message 里；本文件只留当前状态。
 
 ## Works（已验证 / 单测 GREEN）
-- **CLI UI 立体化：状态机进度条 + behavior tree 树轨（本轮，设计工作流 w378ob0re 综合）**。
-  纯显示层（turn_render.py），非 CEO 门槛。① **状态机=三态填充进度条**：`●待命 ━→ ●规划 ━→ ▶执行
-  ┄→ ○验证 ┄→ ○完成`——已完成(●绿)/当前(▶亮)/未到(○暗)三态视觉分明（旧版 done 与 pending 同色不可辨），
-  实线 `━→` 填充轨 vs 虚线 `┄→` 未达轨；sink 每进新阶段重发一次，叠在 scrollback 里天然是填充动画；
-  `▶完成` 到终点转绿；分支(恢复/让位)用 reached_rank **冻结**在最后真实阶段、绝不假装前进（挂琥珀 `⑂`）。
-  连接器把钉死的 `→` 熔进 `━→/┄→`，零测试破坏。② **behavior tree=生根树**：`├─ ◇ Tool` 挂 ⌂ 主干、
-  `│  └─ verify` 深一层缩进真正成为工具子节点（旧版扁平、verify 像兄弟）；流式恒 `├─`（append-only 不知末child，
-  诚实开放），final_lines 才闭合末节点 `└─`。诚实：只画已发生节点、无伪造未来/百分比/时长（守 Inv-1）。
-  测：+tri-state 进度/+分支冻结/+树轨嵌套/+末节点闭合/+sink 树轨，共 5 新；123 显示测 GREEN（含 .venv 全依赖）。
+- **CLI UI 立体化：braille 加载进度条 + 精简圆点树（本轮，设计工作流 w378ob0re + owner 定稿）**。
+  纯显示层（turn_render.py），非 CEO 门槛。v1 三态箭头条(`●━→▶┄→○`)被 owner 否("箭头/方块圆圈不好看、
+  没进度条感")，改 AskUserQuestion 出 5 套真实渲染让其拍板→选定：① **状态机=braille 加载条 + N/5 计数**：
+  `⣿⣿⣿⣿⣿⣿⣀⣀⣀⣀⣀⣀⣀⣀⣀  执行 3/5`——统一 braille 字形(⣿ 已填/⣀ 未填,15 格=5 阶段×3)按 阶段/5 比例填充,
+  只显当前阶段名 + 诚实 N/5(固定 5 阶段机,非伪百分比);sink 每进新阶段重发,scrollback 里填充向右推进;
+  `完成 5/5` 转绿;分支(恢复/让位)用 reached_rank **冻结**计数在最后真实阶段、绝不假进(挂琥珀 `⑂`)。
+  ② **behavior tree=精简圆点**：`├─ ● name` 挂 ⌂ 主干(去掉旧 `◇ Tool·` 杂讯)、状态 ✓/×/… 右对齐到固定列
+  成清单(CJK 宽度用 rich cell_len,长名优雅溢出)、`│  └ verify …` 深一层缩进为工具子节点;流式恒 `├─`
+  (append-only 不知末 child,诚实开放),final_lines 才闭合末节点 `└─`。诚实:只画已发生节点、无伪造未来/
+  百分比/时长(守 Inv-1)。测:owner 定新设计→更新旧钉死字形(▶/◇Tool·/5阶段名/→)的断言到 braille+● 契约;
+  120 显示测 GREEN(含 .venv 全依赖);4 场景(顺利/失败恢复/操作员让位/超长)真实渲染肉眼验收。真机 sink 待现场。
 - **routed 导航不再让 agent 重规划**：routed stall 不 abort 而 RE-NUDGE far_planner（park+重发 /goal_point），
   同一次调用继续开；只有 overall timeout(120s)/操作员/far_reach 到达才结束，MAX_RENUDGE=8 兜底。navigate_to
   信 far_planner /far_reach_goal_status（到达=里程计 OR far_reach 且里程计 1m 内，绝不 far_reach 单独，守 Inv-1）。

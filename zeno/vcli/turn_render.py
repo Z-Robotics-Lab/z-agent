@@ -214,47 +214,44 @@ def derive_turn_state(kind: str, prev: str) -> str:
     return _KIND_STATE.get(str(kind), prev)
 
 
+#: braille loading-bar width (5 stages × 3 cells = clean thirds; owner-chosen
+#: 2026-07-15 over the arrow/tri-state spine — 更规整 + 加载小点进度条感).
+_BAR_CELLS = 15
+
+
 def render_state_machine(current: str, reached_rank: int | None = None) -> str:
-    """The 5-phase spine as a tri-state FILLING progress track (display-only).
+    """The 5-phase machine as a braille LOADING bar + an honest N/5 count.
 
     The destination (完成) is a fixed control-flow certainty — every turn runs
-    待命→规划→执行→验证→完成 — so the spine is a legitimate progress bar, not a
-    predicted plan. Each stage renders in one of three visually distinct states,
-    so "how far along" is legible at a glance (the old flat spine dimmed done and
-    pending identically — you could not tell distance-travelled from -remaining):
+    待命→规划→执行→验证→完成 — so the bar is a legitimate progress bar, not a
+    predicted plan: it fills ``(stage)/5`` of a KNOWN 5-phase machine (no
+    fabricated percentage). Owner picked (2026-07-15) a uniform braille fill
+    (⣿ done · ⣀ empty) + the current stage name + N/5 over the earlier
+    arrow/tri-state spine — 规整(one glyph family, no arrows/mixed shapes) with
+    a real loading-bar feel; re-emitted once per stage in the sink, the fill
+    marches right down the scrollback.
 
-      done     ●<label>   filled node (OK green) + dim label; solid ━→ rail-in
-      current  ▶<label>   bold brand arrow (recolored green at the terminal 完成)
-      pending  ○<label>   hollow node + faint label; dotted ┄→ rail-in
-
-    ``reached_rank`` is the furthest main-line rank the turn has reached. It lets
-    a BRANCH state (恢复 / 让位 — off the main line, rank -1) FREEZE the fill at
-    the last real stage instead of collapsing to all-pending: the branch never
-    fake-advances toward 完成, it just hangs an amber ⑂ tag on the right. The ▶
-    of the current stage and the literal → fused into every connector are
-    preserved verbatim (acceptance/tests pin them).
+    ``reached_rank`` is the furthest main-line rank reached. On a BRANCH state
+    (恢复 / 让位 — off the main line, rank -1) it FREEZES the fill/count at the
+    last real stage instead of collapsing to 0/5: the branch never fake-advances
+    toward 完成, it just hangs an amber ⑂ tag on the right. The count is green at
+    the terminal 完成 and amber on a branch.
     """
     cur = _MAINLINE_RANK.get(current, -1)
     branch = current in _BRANCH_LABEL
-    # The "front" of the fill: the current stage on the main line, or the frozen
-    # last-reached stage when we are off on a branch.
+    steps = len(_MAINLINE)  # 5
+    # The "front" of the fill: current stage on the main line, or the frozen
+    # last-reached stage on a branch.
     front = cur if cur >= 0 else (reached_rank if reached_rank is not None else -1)
-    at_done = current == STATE_DONE
-
-    cells: list[str] = []
-    for i, (_st, label) in enumerate(_MAINLINE):
-        if i == front:
-            tint = _p.WARN if branch else (_p.OK if at_done else _p.BRAND)
-            cells.append(f"[bold {tint}]▶{label}[/]")                  # current / frozen front
-        elif i < front:
-            cells.append(f"[{_p.OK}]●[/][{_p.TEXT_DIM}]{label}[/]")     # done
-        else:
-            cells.append(f"[{_p.TEXT_FAINT}]○{label}[/]")              # pending
-    out = cells[0]
-    for i in range(1, len(cells)):
-        solid = (i - 1) < front                                        # laid track behind the front
-        conn = f"[{_p.BRAND_DIM}]━→[/]" if solid else f"[{_p.HAIRLINE}]┄→[/]"
-        out += f" {conn} {cells[i]}"
+    done = max(0, min(steps, front + 1))           # stages completed-through (1-based)
+    filled = _BAR_CELLS * done // steps
+    bar = (
+        f"[{_p.OK}]{'⣿' * filled}[/]"
+        f"[{_p.HAIRLINE}]{'⣀' * (_BAR_CELLS - filled)}[/]"
+    )
+    label = _MAINLINE[front][1] if 0 <= front < steps else _MAINLINE[0][1]
+    tint = _p.WARN if branch else (_p.OK if current == STATE_DONE else _p.BRAND)
+    out = f"{bar}  [bold {tint}]{label}[/] [{_p.TEXT_DIM}]{done}/{steps}[/]"
     if branch:
         out += f"  [{_p.WARN}]⑂ {_BRANCH_LABEL[current]}[/]"
     return out
@@ -684,42 +681,62 @@ class ChainView:
 
     # -- rendering ------------------------------------------------------
 
-    def _render_one_node(self, node: dict[str, Any], last: bool = False) -> str:
-        """Render ONE chain node with tree rails (shared: live / persisted / sink).
+    #: display column (from line start) where a node's status glyph aligns, so
+    #: the tree reads as a tidy checklist (owner-chosen 精简圆点 style 2026-07-15).
+    _STATUS_COL = 44
 
-        The flat chain becomes a rooted tree hanging off the ⌂ goal trunk: a tool
-        is a depth-1 branch (``├─``, or ``└─`` only when known to be the trailing
-        branch — which only ``final_lines`` can know), and its verify nests one
-        level UNDER it at depth-2 (``│  └─``) so the check visibly belongs to the
-        tool instead of floating as a sibling at the same indent. Append-only can
-        never know the last child at stream time, so the live/sink path always
-        emits the open ``├─`` (honest — more may follow)."""
+    @staticmethod
+    def _pad_status(body: str, status: str, col: int = _STATUS_COL) -> str:
+        """Right-align ``status`` to display column ``col`` after ``body`` (Rich
+        markup); ≥2 spaces always, graceful overflow when the body is long. CJK
+        width via rich's cell accounting so Chinese names never shear the column."""
+        try:
+            from rich.text import Text
+
+            w = Text.from_markup(body).cell_len
+        except Exception:  # noqa: BLE001 — display helper, never fatal
+            w = len(body)
+        return f"{body}{' ' * max(2, col - w)}{status}"
+
+    def _render_one_node(self, node: dict[str, Any], last: bool = False) -> str:
+        """Render ONE chain node as a rooted-tree branch (live / persisted / sink).
+
+        Owner-chosen 精简圆点 (2026-07-15): drop the ◇ Tool · furniture — a tool
+        is a status-colored ● node hanging off the ⌂ trunk at depth-1 (``├─``, or
+        ``└─`` only when known to be the trailing branch — which only
+        ``final_lines`` can know); its verify nests one level UNDER it at depth-2
+        (``│  └``), so the check visibly belongs to the tool instead of floating
+        as a sibling. The status glyph right-aligns to a fixed column so the tree
+        reads as a tidy checklist. Append-only can never know the last child at
+        stream time, so the live/sink path always emits the open ``├─`` (honest —
+        more may follow)."""
         H = _p.HAIRLINE
         label = _escape_markup(node.get("label", ""))
         if node["kind"] == "tool":
             detail = _escape_markup(node.get("detail", ""))
             ok = node.get("ok")
             if ok is None:
-                state = "[dim]…[/]"
+                dot, status = _p.BRAND_DIM, "[dim]…[/]"
             elif ok:
-                state = f"[{_p.OK}]✓[/]"
+                dot, status = _p.OK, f"[{_p.OK}]✓[/]"
             else:
-                state = f"[{_p.BAD}]×[/]"
-            err = node.get("err") or ""
-            err_part = f"  [{_p.BAD}]{_escape_markup(err)}[/]" if err else ""
+                dot, status = _p.BAD, f"[{_p.BAD}]×[/]"
             tee = "└─" if last else "├─"
-            return (
-                f"  [{H}]{tee}[/] [bold {_p.BRAND_DIM}]◇[/] [dim #738091]Tool[/] "
-                f"[{H}]·[/] {label}{detail}  {state}{err_part}"
-            )
+            body = f"  [{H}]{tee}[/] [{dot}]●[/] {label}{detail}"
+            line = self._pad_status(body, status)
+            err = node.get("err") or ""
+            if err:
+                line += f"  [{_p.BAD}]{_escape_markup(err)}[/]"
+            return line
         ok = node.get("ok")
         if ok is None:
-            mark = f"[{_p.WARN}]rejected[/]"
+            status = f"[{_p.WARN}]rejected[/]"
         elif ok:
-            mark = f"[{_p.OK}]✓[/]"
+            status = f"[{_p.OK}]✓[/]"
         else:
-            mark = f"[{_p.BAD}]✗[/]"
-        return f"  [{H}]│  └─[/] [{_p.TEXT_DIM}]verify[/] {label} {mark}"
+            status = f"[{_p.BAD}]✗[/]"
+        body = f"  [{H}]│  └[/] [{_p.TEXT_DIM}]verify[/] {label}"
+        return self._pad_status(body, status)
 
     def _render_nudge(self, text: str, last: bool = False) -> str:
         """A recovery/interject annotation on the trunk (⟲, amber, depth-1)."""

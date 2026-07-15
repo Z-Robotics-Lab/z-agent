@@ -113,20 +113,21 @@ def test_tool_and_verify_nodes_render_chain() -> None:
 
 
 def test_tool_nodes_use_the_quiet_activity_layer() -> None:
+    # Owner-chosen 精简圆点 (2026-07-15): drop the ◇ Tool · furniture — a tool is
+    # a status-colored ● node carrying just the skill name.
     from rich.text import Text
 
     view, _ = _make()
     view.handle_event(
         NativeEvent(kind="tool_start", label="turn", detail="(direction=left)")
     )
-    running = _text(view)
-    running_plain = Text.from_markup(running).plain
-    assert "◇" in running_plain and "Tool · turn" in running_plain
+    running_plain = Text.from_markup(_text(view)).plain
+    assert "●" in running_plain and "turn" in running_plain
 
     view.handle_event(NativeEvent(kind="tool_end", label="turn", ok=True))
-    finished = _text(view)
-    assert "◇" in finished and "✓" in finished
-    assert "[dim #738091]Tool[/]" in finished
+    finished_plain = Text.from_markup(_text(view)).plain
+    assert "●" in finished_plain and "✓" in finished_plain
+    assert "Tool" not in finished_plain  # the old ◇ Tool · furniture is gone
 
 
 def test_failed_verify_renders_cross() -> None:
@@ -271,10 +272,10 @@ def test_tree_rails_nest_verify_under_its_tool() -> None:
     view.handle_event(NativeEvent(kind="tool_end", label="navigate", ok=True))
     view.handle_event(NativeEvent(kind="verify", label="at_place('home')", ok=True))
     lines = view.render_lines()
-    tool_line = next(l for l in lines if "◇" in l and "navigate" in l)
+    tool_line = next(l for l in lines if "●" in l and "navigate" in l)
     verify_line = next(l for l in lines if "verify" in l and "at_place" in l)
     assert Text.from_markup(tool_line).plain.lstrip().startswith("├─")  # tool on the trunk
-    assert "│  └─" in Text.from_markup(verify_line).plain               # verify nested deeper
+    assert "│  └" in Text.from_markup(verify_line).plain                # verify nested deeper
 
 
 def test_final_lines_closes_trailing_bare_tool_with_elbow() -> None:
@@ -286,7 +287,7 @@ def test_final_lines_closes_trailing_bare_tool_with_elbow() -> None:
     view, _ = _make()
     view.handle_event(NativeEvent(kind="tool_start", label="stand"))
     view.handle_event(NativeEvent(kind="tool_end", label="stand", ok=True))
-    tool_line = next(l for l in view.final_lines("站起来") if "◇" in l and "stand" in l)
+    tool_line = next(l for l in view.final_lines("站起来") if "●" in l and "stand" in l)
     assert "└─" in Text.from_markup(tool_line).plain
 
 
@@ -301,8 +302,8 @@ def test_sink_mode_streams_tree_rails() -> None:
     view.handle_event(NativeEvent(kind="tool_end", label="navigate", ok=True))
     view.handle_event(NativeEvent(kind="verify", label="at_place('home')", ok=True))
     plain = Text.from_markup("\n".join(lines)).plain
-    assert "├─" in plain and "◇" in plain  # tool on the trunk
-    assert "│  └─" in plain                 # verify nested under it
+    assert "├─" in plain and "●" in plain  # tool on the trunk
+    assert "│  └" in plain                  # verify nested under it
 
 
 def test_final_lines_escapes_goal_markup() -> None:
@@ -404,12 +405,12 @@ def test_sink_mode_streams_state_machine_forward_once_per_stage() -> None:
     view.handle_event(NativeEvent(kind="tool_end", label="goto_place", ok=True))
     view.handle_event(NativeEvent(kind="finish"))                           # DONE
 
-    spine = [l for l in lines if "规划" in l and "执行" in l]  # every state line = full spine
-    assert any("▶规划" in l for l in spine)
-    assert any("▶执行" in l for l in spine)
-    assert any("▶验证" in l for l in spine)
-    assert any("▶完成" in l for l in spine)
+    spine = [l for l in lines if "⣿" in l or "⣀" in l]  # state-bar lines carry the braille track
+    assert any("规划" in l and "2/5" in l for l in spine)
+    assert any("执行" in l and "3/5" in l for l in spine)
+    assert any("验证" in l and "4/5" in l for l in spine)
+    assert any("完成" in l and "5/5" in l for l in spine)
     assert len(spine) == 4, (
-        f"state spine streams once per forward stage (monotonic), got {len(spine)}")
+        f"state bar streams once per forward stage (monotonic), got {len(spine)}")
     final = view.final_lines("走到 z lab 门口")
-    assert any("▶完成" in l for l in final), "terminal state persists in the tree"
+    assert any("完成" in l and "5/5" in l for l in final), "terminal state persists in the tree"

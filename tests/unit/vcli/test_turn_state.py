@@ -61,21 +61,26 @@ def test_unknown_kind_keeps_prev_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_state_machine_shows_full_mainline() -> None:
+def test_state_machine_shows_current_stage_and_count() -> None:
+    # Owner-chosen braille loading bar (2026-07-15): names the CURRENT stage + an
+    # honest N/5 position in the fixed 5-phase machine (not all 5 labels, no
+    # arrows). ACTING is the 3rd phase → 3/5.
     from rich.text import Text
 
     plain = Text.from_markup(render_state_machine(STATE_ACTING)).plain
-    for label in ("待命", "规划", "执行", "验证", "完成"):
-        assert label in plain
-    assert "→" in plain
+    assert "执行" in plain          # current stage named
+    assert "3/5" in plain           # honest position in the known 5-phase machine
+    assert "⣿" in plain and "⣀" in plain  # braille loading bar: filled + empty cells
 
 
-def test_state_machine_highlights_current() -> None:
-    # The current state must be visually distinct (bold marker) from the rest.
-    acting = render_state_machine(STATE_ACTING)
-    verifying = render_state_machine(STATE_VERIFYING)
-    assert acting != verifying  # highlight moved
-    assert "▶" in acting  # a current-state marker
+def test_state_machine_bar_fills_as_stage_advances() -> None:
+    from rich.text import Text
+
+    acting = Text.from_markup(render_state_machine(STATE_ACTING)).plain
+    verifying = Text.from_markup(render_state_machine(STATE_VERIFYING)).plain
+    assert acting != verifying                       # bar/label/count advance
+    assert "执行" in acting and "验证" in verifying
+    assert verifying.count("⣿") > acting.count("⣿")  # more filled at the later stage
 
 
 def test_state_machine_branch_state_annotated() -> None:
@@ -85,35 +90,25 @@ def test_state_machine_branch_state_annotated() -> None:
     assert "恢复" in plain
 
 
-def test_state_machine_is_tristate_progress_track() -> None:
-    """DELTA 2 (2026-07-15): done/current/pending are three VISUALLY distinct
-    states (the old flat spine dimmed done and pending identically). A stage
-    already passed carries a filled ● node; the current stage the pinned ▶; a
-    not-yet-reached stage a hollow ○. The connector still fuses the pinned →
-    and splits into a solid ━→ laid-track behind the front and a dotted ┄→
-    not-yet-track ahead — the fill you read as a progress bar."""
+def test_state_machine_terminal_is_fully_filled() -> None:
     from rich.text import Text
 
-    plain = Text.from_markup(render_state_machine(STATE_ACTING)).plain
-    assert "●待命" in plain and "●规划" in plain  # passed stages -> filled node
-    assert "▶执行" in plain                        # current -> pinned arrow
-    assert "○验证" in plain and "○完成" in plain   # pending -> hollow node
-    assert "━→" in plain                           # solid laid-track (behind the front)
-    assert "┄→" in plain                           # dotted not-yet-track (ahead)
-    assert "→" in plain                            # the pinned connector arrow survives
+    done = Text.from_markup(render_state_machine(STATE_DONE)).plain
+    assert "完成" in done and "5/5" in done
+    assert "⣿" in done and "⣀" not in done  # terminal: the whole bar is filled
 
 
 def test_state_machine_branch_freezes_at_reached_rank() -> None:
-    """A branch (恢复/让位) is OFF the main line, so it FREEZES the fill at the
-    last real stage reached instead of collapsing to all-pending — it must never
-    fake-advance toward 完成; the amber ⑂ tag hangs on the right."""
+    """A branch (恢复/让位) is OFF the main line, so it FREEZES the fill/count at
+    the last real stage reached — it must never fake-advance toward 完成; the
+    amber ⑂ tag hangs on the right."""
     from rich.text import Text
 
     # reached VERIFYING(rank 3) then branched to RECOVERING
     plain = Text.from_markup(render_state_machine("RECOVERING", reached_rank=3)).plain
-    assert "●执行" in plain      # stages before the frozen front are filled
-    assert "▶验证" in plain      # frozen front held at the last real stage
-    assert "○完成" in plain      # never fake-advances to the destination
+    assert "验证" in plain       # frozen at the last real stage
+    assert "4/5" in plain        # count frozen — never fake-advances to 5/5
+    assert "⣀" in plain          # bar not full (didn't reach 完成)
     assert "⑂ 恢复" in plain
 
 
