@@ -85,6 +85,7 @@ def connected_hw(monkeypatch: pytest.MonkeyPatch):
     with patch.dict("sys.modules", _ros_module_stubs()):
         hw = mod.Go2WHardware()
         hw._install_node_for_test(node)
+        hw._operator_override_enabled = True  # fixtures test the override LOGIC
         yield mod, hw, node, pubs, clients
 
 
@@ -269,3 +270,37 @@ def test_own_goal_echo_during_navigate_does_not_override(connected_hw) -> None:
 
     assert ok is True
     assert hw.nav_overridden is False
+
+
+# ---------------------------------------------------------------------------
+# Kill switch — operator override is DEFAULT OFF (owner 2026-07-14)
+# ---------------------------------------------------------------------------
+
+
+def test_operator_override_default_off(monkeypatch) -> None:
+    """No ZENO_OPERATOR_OVERRIDE -> the seam is inert (the broken yield that
+    wedged the robot and lied verified=True never fires)."""
+    monkeypatch.delenv("ZENO_OPERATOR_OVERRIDE", raising=False)
+    from zeno.hardware.ros2 import go2w_hw as mod
+
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        hw = mod.Go2WHardware()
+    assert hw._operator_override_enabled is False
+
+
+def test_disabled_ignores_external_waypoint(connected_hw) -> None:
+    """With the seam OFF, even a clear operator /way_point is ignored — no
+    external_goal, so navigate_to never yields and no phantom goal is surfaced."""
+    _mod, hw, _node, _pubs, _clients = connected_hw
+    hw._operator_override_enabled = False  # the shipped default
+    hw._on_waypoint(_wp_msg(9.0, 9.0))
+    assert hw.external_goal_info() is None
+
+
+def test_env_reenables_override(monkeypatch) -> None:
+    monkeypatch.setenv("ZENO_OPERATOR_OVERRIDE", "1")
+    from zeno.hardware.ros2 import go2w_hw as mod
+
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        hw = mod.Go2WHardware()
+    assert hw._operator_override_enabled is True

@@ -125,6 +125,17 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # must keep driving the robot.
         self._own_goal: tuple[float, float, float] | None = None  # x, y, mono
         self._external_goal: tuple[float, float, float] | None = None
+        # Operator RViz-goal detection — DEFAULT OFF (owner 2026-07-14, field:
+        # the yield semantics are broken — agent parks far_planner, then yields
+        # to a sniffed goal NOBODY drives, wedging the robot AND lying
+        # verified=True on a goal it never reached). The whole seam is inert
+        # unless ZENO_OPERATOR_OVERRIDE is truthy; a real fix is the layer-2
+        # explicit control-authority handoff (docs/CLI_UX_REDESIGN.md P5).
+        import os as _os
+        self._operator_override_enabled: bool = (
+            _os.environ.get("ZENO_OPERATOR_OVERRIDE", "").strip().lower()
+            in ("1", "true", "on", "yes")
+        )
         self._goalpoint_pub: Any = None
         #: Last park order (x, y, mono): far_planner echoes /way_point at these
         #: coords for a beat after parking — plumbing, not an operator click.
@@ -512,6 +523,8 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         navigate_to can yield and the status line can surface it. Executor-thread
         callback: tiny, never raises.
         """
+        if not self._operator_override_enabled:
+            return  # DEFAULT OFF (owner 2026-07-14) — no yield, no phantom goal
         try:
             x = float(msg.point.x)
             y = float(msg.point.y)

@@ -74,6 +74,7 @@ def park_hw(monkeypatch: pytest.MonkeyPatch):
     with patch.dict("sys.modules", _ros_module_stubs()):
         hw = mod.Go2WHardware()
         hw._install_node_for_test(node)
+        hw._operator_override_enabled = True  # fixtures test the override LOGIC
         yield mod, hw, published, clk
 
 
