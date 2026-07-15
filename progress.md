@@ -3,7 +3,15 @@
 更新：2026-07-15。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
-- **丝滑 + 状态机可见(本轮,工作流 wv23zizqc 定向)**:框架结论=押注 native(VGG 保留休眠,
+- **routed 导航不再让 agent 重规划(本轮,现场反馈)**:owner 现场"走几步停下来重新plan"=
+  navigate_to routed 时 stall(30s 仍太短,机器人在杂乱室内爬行/卡)abort→返回 did-not-reach→
+  agent 重发 goto_place/navigate churn。改:routed 时 stall **不再 abort**,而是 RE-NUDGE far_planner
+  (park 重置 + 重发 /goal_point 搜新路线)、同一次调用里继续开;只有 overall timeout(120s)/操作员/
+  far_reach 到达才结束;MAX_RENUDGE=8 兜底诚实失败。**一次 goto_place = 一口气开到 marker,agent 不重规划**。
+  状态机 DELTA 1 现场已可见(待命→规划→执行→验证→完成)。测:+routed stall 触发 re-nudge 而非 abort;
+  145 pass。**残余卡顿天花板仍是导航栈地形(obstacleHeightThre=0.1m,95% 零长度局部路径)=CEO 门槛**,
+  agent 侧只能去掉 agent 重规划、去不掉机器人在障碍处的物理停顿。
+- **丝滑 + 状态机可见(上一轮,工作流 wv23zizqc 定向)**:框架结论=押注 native(VGG 保留休眠,
   不复活其分解器)。① navigate_to routed 时订阅并信 far_planner 的 /far_reach_goal_status
   (到达=里程计 OR far_reach 且里程计在 1m 内,绝不 far_reach 单独,守 Inv-1),routed stall 窗口
   10s→30s(far_planner 正常重规划抖动不再被误判卡住掐断)——修掉"z lab 门口走 1.19m 就 did-not-reach

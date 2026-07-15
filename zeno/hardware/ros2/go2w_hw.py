@@ -85,13 +85,15 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
     ARRIVAL_RADIUS_M: float = 0.4      # real-oracle arrival tolerance
     STALL_TIMEOUT_S: float = 10.0      # DIRECT /way_point: no-progress abort
     STALL_EPS_M: float = 0.1           # min distance decrease counted as progress
-    # ROUTED via far_planner: it replans continuously and localPlanner emits many
-    # zero-length local /path frames (legitimate — bag 2026-07-15: 95% zero-length
-    # yet net progress). A routed drive pauses far longer than a direct waypoint
-    # before it is truly stuck, so be patient AND trust far_planner's OWN arrival
-    # oracle instead of a 10s odometry guess (that guess aborted 'z lab 门口' after
-    # 1.19m, forcing a skill-hop to route_via).
-    STALL_TIMEOUT_ROUTED_S: float = 30.0
+    # ROUTED via far_planner: NEVER abort a routed drive on odometry stall — that
+    # bubbles failure to the agent, which re-plans + re-issues the goal (owner
+    # 2026-07-15: '走几步停下来重新plan' churn). Instead, after ROUTED_RENUDGE_S of
+    # no progress, RE-NUDGE far_planner to search a FRESH route (park -> re-publish
+    # the goal) and keep driving in the SAME call. Only the overall timeout /
+    # operator abort / far_reach arrival end a routed drive; MAX_RENUDGE bounds a
+    # truly-blocked goal to an honest failure instead of churning to the timeout.
+    ROUTED_RENUDGE_S: float = 12.0
+    MAX_RENUDGE: int = 8
     FAR_REACH_RADIUS_M: float = 1.0    # far_reach counts as arrival only with odom this close (Inv-1)
     FAR_REACH_FRESH_S: float = 2.0     # a reach frame older than this is stale
 
@@ -412,9 +414,13 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         far_planner plan a global path AND own /way_point (single author). With no
         far_planner (fresh-mapping) we fall back to a direct /way_point (nobody to
         fight). Either way we then watch /state_estimation until the robot is
-        within ARRIVAL_RADIUS_M (True), the timeout expires, or progress stalls
-        for ``stall_timeout`` s. On stop/stall/timeout we /nav_cancel AND (when
-        routed) park far_planner so it does not keep driving to an abandoned goal.
+        within ARRIVAL_RADIUS_M (True) or far_planner's own reach oracle fires
+        (routed, with odom sanity), or the overall timeout expires. A ROUTED drive
+        NEVER aborts on a stall — it RE-NUDGES far_planner for a fresh route and
+        keeps driving in this one call, so the agent never re-plans mid-drive
+        (owner 2026-07-15). A DIRECT (/way_point) drive still aborts on the
+        ``stall_timeout`` odometry stall. Operator abort / overall timeout park
+        far_planner so it does not keep driving to an abandoned goal.
 
         Returns True only on odometry-verified arrival (the real oracle).
         """
@@ -467,12 +473,13 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         if stall_timeout is not None:
             stall_win = stall_timeout
         elif routed:
-            stall_win = self.STALL_TIMEOUT_ROUTED_S
+            stall_win = self.ROUTED_RENUDGE_S   # re-nudge interval, NOT an abort
         else:
-            stall_win = self.STALL_TIMEOUT_S
+            stall_win = self.STALL_TIMEOUT_S    # direct: honest abort
         start = time.monotonic()
         last_dist = float("inf")
         stall_accum = 0.0
+        renudge_count = 0
         last_progress_cb = start
 
         while time.monotonic() - start < timeout:
@@ -522,14 +529,33 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
                 stall_accum += period
             last_dist = dist
             if stall_accum >= stall_win:
-                logger.warning(
-                    "Go2WHardware: stalled %.1fs at dist=%.2fm — cancelling",
-                    stall_accum, dist,
-                )
-                self.nav_cancel()
                 if routed:
+                    # Do NOT abort — the agent would re-plan. Re-nudge far_planner
+                    # to search a FRESH route (park resets it, re-publish the goal)
+                    # and KEEP driving in this same call. One goto_place = one
+                    # continuous drive to the marker (owner's ask).
+                    renudge_count += 1
+                    if renudge_count > self.MAX_RENUDGE:
+                        logger.warning("Go2WHardware: %d re-nudges, still stuck at "
+                                       "dist=%.2fm — honest give-up", renudge_count, dist)
+                        self.nav_cancel()
+                        self.park_route_planner()
+                        return False
+                    logger.info("Go2WHardware: routed stall %.0fs at dist=%.2fm — "
+                                "re-nudge #%d (fresh far_planner route)",
+                                stall_accum, dist, renudge_count)
                     self.park_route_planner()
-                return False
+                    time.sleep(0.3)
+                    self._publish_goalpoint(x, y)
+                    stall_accum = 0.0
+                    last_dist = float("inf")  # clean progress baseline for the new route
+                else:
+                    logger.warning(
+                        "Go2WHardware: stalled %.1fs at dist=%.2fm — cancelling",
+                        stall_accum, dist,
+                    )
+                    self.nav_cancel()
+                    return False
 
         logger.warning("Go2WHardware: navigate_to timeout — cancelling latch")
         self.nav_cancel()

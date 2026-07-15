@@ -174,6 +174,24 @@ def test_routed_far_reach_alone_is_not_arrival_when_odom_far(park_hw):
     assert ok is False, "far_reach with odom 5m away must NOT count as arrival"
 
 
+def test_routed_stall_re_nudges_far_planner_instead_of_aborting(park_hw):
+    """Owner 2026-07-15: a routed drive must NOT abort on stall (that bubbles
+    failure to the agent, which re-plans — the '走几步停下来重新plan' churn). It
+    RE-NUDGES far_planner (re-publishes the goal for a fresh route) and keeps
+    driving in the SAME call; only MAX_RENUDGE / overall timeout ends it."""
+    mod, hw, pubs, _clk = park_hw
+    HW = mod.Go2WHardware
+    hw._position = (0.0, 0.0, 0.0)  # frozen: never progresses -> perpetual stall
+    hw._goalpoint_pub.get_subscription_count.return_value = 1  # routed
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        ok = hw.navigate_to(5.0, 0.0, timeout=HW.ROUTED_RENUDGE_S * 3)
+    target_pubs = [g for g in pubs.get("/goal_point", [])
+                   if g == (pytest.approx(5.0), pytest.approx(0.0))]
+    assert len(target_pubs) >= 2, \
+        "routed stall must RE-NUDGE (re-publish the goal), not abort on first stall"
+    assert ok is False, "a perpetually-frozen goal still fails honestly (timeout)"
+
+
 def test_park_echo_on_waypoint_is_not_an_operator_click(park_hw):
     """far_planner briefly republishes /way_point AT the park coords — those
     frames are plumbing, never an operator RViz goal."""
