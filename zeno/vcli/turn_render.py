@@ -204,6 +204,10 @@ _MAINLINE = [
 ]
 _BRANCH_LABEL = {STATE_RECOVERING: "恢复", STATE_YIELDED: "让位"}
 
+#: mainline forward rank — sink mode emits the state spine once per NEW stage
+#: reached (monotonic forward), so a multi-step act/verify loop does not churn.
+_MAINLINE_RANK = {st: i for i, (st, _label) in enumerate(_MAINLINE)}
+
 
 def derive_turn_state(kind: str, prev: str) -> str:
     """One NativeEvent kind -> the turn's current state (display-only)."""
@@ -448,6 +452,7 @@ class ChainView:
 
         self._round = ""
         self._current_state = STATE_IDLE  # P5 layer-0 state machine
+        self._max_state_rank = -1         # highest mainline stage streamed (sink)
         self._nodes: list[dict[str, Any]] = []
         self._reasoning: list[str] = []
         self._reasoning_tail: str = ""
@@ -554,6 +559,15 @@ class ChainView:
         except Exception:  # noqa: BLE001 — display only
             pass
 
+    def _emit_state_line(self) -> None:
+        """Sink mode: stream the execution state spine + control-authority badge
+        (P5 layer-0). Pure projection — the states already happen; this only makes
+        待命→规划→执行→验证→完成 visible in the composer transcript path, which
+        never calls render_lines(). Never touches verify/verdict."""
+        self._refresh_live_status()
+        badge = render_authority(derive_authority(self._live_status))
+        self._sink(f"  {badge}   [dim]{render_state_machine(self._current_state)}[/dim]")
+
     def _tell_activity(self, text: str) -> None:
         if self._activity_sink is None:
             return
@@ -568,6 +582,15 @@ class ChainView:
             return
         # P5 layer-0: advance the display-only execution state machine.
         self._current_state = derive_turn_state(kind, self._current_state)
+        # Sink mode (the persistent-composer path — the one the field actually
+        # runs) never calls render_lines(), so the state spine used to be
+        # invisible. Stream it once per NEW forward stage reached (待命→规划→执行
+        # →验证→完成). Pure projection; never re-derives verify.
+        if self._transcript_sink is not None:
+            rank = _MAINLINE_RANK.get(self._current_state, -1)
+            if rank > self._max_state_rank:
+                self._max_state_rank = rank
+                self._emit_state_line()
         label = str(getattr(event, "label", "") or "")
         detail = str(getattr(event, "detail", "") or "")
         ok = getattr(event, "ok", None)
@@ -670,9 +693,11 @@ class ChainView:
         if not self._nodes and not self._nudges:
             return []
         rounds = f"  [dim]{self._round} rounds[/]" if self._round else ""
+        badge = render_authority(derive_authority(self._live_status))
         return [
             f"  [bold {_TEAL}]⌂ {_escape_markup(str(goal))}[/]{rounds}",
             *self._chain_lines(),
+            f"  {badge}   [dim]{render_state_machine(self._current_state)}[/dim]",
         ]
 
     def render_lines(self) -> list[str]:

@@ -340,3 +340,30 @@ def test_sink_mode_reasoning_respects_off() -> None:
     view = ChainView(transcript_sink=got.append, show_reasoning_tail=False)
     view.handle_event(NativeEvent(kind="reasoning", detail="想。"))
     assert not [l for l in got if "┆" in l]
+
+
+def test_sink_mode_streams_state_machine_forward_once_per_stage() -> None:
+    """DELTA 1 (2026-07-15): the persistent-composer sink path never calls
+    render_lines(), so the P5 state spine used to be invisible in the field. It
+    must now stream ONCE per NEW forward stage (规划→执行→验证→完成), monotonic —
+    an act→verify→act loop must NOT re-emit 执行 — and the terminal state must
+    persist in final_lines()."""
+    view, lines, _a = _make_sink_view()
+    view.begin_goal("走到 z lab 门口")
+    view.handle_event(NativeEvent(kind="round", label="1"))                 # PLANNING
+    view.handle_event(NativeEvent(kind="tool_start", label="goto_place"))   # ACTING
+    view.handle_event(NativeEvent(kind="tool_end", label="goto_place", ok=True))
+    view.handle_event(NativeEvent(kind="verify", label="at(6.46,-0.45)", ok=True))  # VERIFYING
+    view.handle_event(NativeEvent(kind="tool_start", label="goto_place"))   # ACTING again (back)
+    view.handle_event(NativeEvent(kind="tool_end", label="goto_place", ok=True))
+    view.handle_event(NativeEvent(kind="finish"))                           # DONE
+
+    spine = [l for l in lines if "规划" in l and "执行" in l]  # every state line = full spine
+    assert any("▶规划" in l for l in spine)
+    assert any("▶执行" in l for l in spine)
+    assert any("▶验证" in l for l in spine)
+    assert any("▶完成" in l for l in spine)
+    assert len(spine) == 4, (
+        f"state spine streams once per forward stage (monotonic), got {len(spine)}")
+    final = view.final_lines("走到 z lab 门口")
+    assert any("▶完成" in l for l in final), "terminal state persists in the tree"

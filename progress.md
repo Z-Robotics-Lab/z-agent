@@ -3,7 +3,18 @@
 更新：2026-07-15。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
-- **回家/走2米零位移 根因 + Fix B(本轮,bag 实锤)**:navigate_to 的 park_route_planner
+- **丝滑 + 状态机可见(本轮,工作流 wv23zizqc 定向)**:框架结论=押注 native(VGG 保留休眠,
+  不复活其分解器)。① navigate_to routed 时订阅并信 far_planner 的 /far_reach_goal_status
+  (到达=里程计 OR far_reach 且里程计在 1m 内,绝不 far_reach 单独,守 Inv-1),routed stall 窗口
+  10s→30s(far_planner 正常重规划抖动不再被误判卡住掐断)——修掉"z lab 门口走 1.19m 就 did-not-reach
+  → 横跳 route_via"。② route_via 描述收窄=只对无名远坐标,有名字用 goto_place、别拿它重试 goto_place。
+  ③ 状态机 DELTA 1:sink 模式(现场用的持久 composer 路径,从不调 render_lines)现在每到新阶段
+  流式打印状态脊 待命→规划→执行→验证→完成(单调前向、每阶段一次)+ 控制权徽章,final_lines 持久化终态。
+  纯显示不碰 verify。测:+far_reach 到达/Inv-1 拒绝、+sink 状态机单调;115+125 pass。
+  **行为树 DELTA 2 下一轮**(NativeEvent 加 additive plan_node + 计划前导 → sequence 树)。
+  **真机丝滑天花板**:95% 零长度局部路径根子在导航栈地形(obstacleHeightThre=0.1m)=CEO 门槛,
+  agent 侧破不了,只有它才是"完全丝滑"关键,待 owner 拍板。
+- **回家/走2米零位移 根因 + Fix B(上一轮,bag 实锤)**:navigate_to 的 park_route_planner
   (07-14 加,泊 far_planner=发 /goal_point=当前位姿)**适得其反** —— bag 证明泊住的 far_planner
   在 0.1s 内把 /way_point 覆盖回≈当前位姿(幽灵点 -0.26,-0.13),localPlanner 每次刚规划好
   101 点路径就被夺成"已到达"→零长度路径→冻住(2465 零长 vs 19 真路径)。**Fix B**:far_planner

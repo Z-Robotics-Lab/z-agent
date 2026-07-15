@@ -83,8 +83,17 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
     # up to ~1 m short in base terms (the CEO's "不准确"). Floor is
     # goalReachedThreshold + 0.2 frame skew + noise, so keep >= 0.35.
     ARRIVAL_RADIUS_M: float = 0.4      # real-oracle arrival tolerance
-    STALL_TIMEOUT_S: float = 10.0      # no-progress window before aborting
+    STALL_TIMEOUT_S: float = 10.0      # DIRECT /way_point: no-progress abort
     STALL_EPS_M: float = 0.1           # min distance decrease counted as progress
+    # ROUTED via far_planner: it replans continuously and localPlanner emits many
+    # zero-length local /path frames (legitimate — bag 2026-07-15: 95% zero-length
+    # yet net progress). A routed drive pauses far longer than a direct waypoint
+    # before it is truly stuck, so be patient AND trust far_planner's OWN arrival
+    # oracle instead of a 10s odometry guess (that guess aborted 'z lab 门口' after
+    # 1.19m, forcing a skill-hop to route_via).
+    STALL_TIMEOUT_ROUTED_S: float = 30.0
+    FAR_REACH_RADIUS_M: float = 1.0    # far_reach counts as arrival only with odom this close (Inv-1)
+    FAR_REACH_FRESH_S: float = 2.0     # a reach frame older than this is stale
 
     # --- Operator RViz-goal classification ---
     #: A /way_point echo matching our own publish within this window (and ~coords)
@@ -95,6 +104,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
     # Topics / services (the robot's EXISTING interface — we add none).
     WAYPOINT_TOPIC: str = "/way_point"
     GOALPOINT_TOPIC: str = "/goal_point"   # far_planner's goal input (park seam)
+    REACH_TOPIC: str = "/far_reach_goal_status"  # far_planner's own arrival oracle (std_msgs/Bool)
     TELEOP_TOPIC: str = "/teleop_cmd_vel"
     ODOM_TOPIC: str = "/state_estimation"
     _TRIGGER_SERVICES: tuple[str, ...] = (
@@ -140,6 +150,10 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         #: Last park order (x, y, mono): far_planner echoes /way_point at these
         #: coords for a beat after parking — plumbing, not an operator click.
         self._park_goal: tuple[float, float, float] | None = None
+        # far_planner's own reach oracle (std_msgs/Bool) — routed navigate_to
+        # trusts it (WITH odometry sanity) rather than a 10s odometry-stall guess.
+        self._far_reach: bool = False
+        self._far_reach_ts: float = 0.0
         #: Set/cleared by Go2WRouteManager while far_planner republishes
         #: /way_point toward its route — those frames are plumbing, not clicks.
         self.route_overlay_active: bool = False
@@ -198,6 +212,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             from rclpy.qos import QoSProfile, ReliabilityPolicy
             from geometry_msgs.msg import PointStamped, Twist
             from nav_msgs.msg import Odometry
+            from std_msgs.msg import Bool
             from std_srvs.srv import Trigger
 
             if not rclpy.ok():
@@ -224,6 +239,9 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             node.create_subscription(
                 PointStamped, self.WAYPOINT_TOPIC, self._on_waypoint, reliable
             )
+            # far_planner's own arrival oracle — routed navigate_to trusts it
+            # (with odometry sanity) instead of a 10s odometry-stall guess.
+            node.create_subscription(Bool, self.REACH_TOPIC, self._on_far_reach, reliable)
             for svc in self._TRIGGER_SERVICES:
                 self._clients[svc] = node.create_client(Trigger, svc)
 
@@ -433,7 +451,14 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
 
         self._nav_abort.clear()
         period = 1.0 / max(poll_hz, 1.0)
-        stall_win = self.STALL_TIMEOUT_S if stall_timeout is None else stall_timeout
+        # Routed drives replan continuously — give them a MUCH longer no-progress
+        # window so a normal far_planner pause is not mistaken for a stuck robot.
+        if stall_timeout is not None:
+            stall_win = stall_timeout
+        elif routed:
+            stall_win = self.STALL_TIMEOUT_ROUTED_S
+        else:
+            stall_win = self.STALL_TIMEOUT_S
         start = time.monotonic()
         last_dist = float("inf")
         stall_accum = 0.0
@@ -469,6 +494,15 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
                 logger.info("Go2WHardware: arrived (dist=%.2fm)", dist)
                 if routed:
                     self.park_route_planner()  # settle far_planner at the goal
+                return True
+            # far_planner says it reached AND odometry agrees we are close: trust
+            # its oracle (far_planner's arrival radius can exceed ours). NEVER
+            # far_reach alone — the odom gate below preserves the Inv-1 moat.
+            if (routed and self._far_planner_reached()
+                    and dist < self.FAR_REACH_RADIUS_M):
+                logger.info("Go2WHardware: far_planner reached (dist=%.2fm, odom ok)",
+                            dist)
+                self.park_route_planner()
                 return True
 
             if dist < last_dist - self.STALL_EPS_M:
@@ -626,6 +660,22 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
     def clear_external_goal(self) -> None:
         """Consume/forget the recorded operator goal (idempotent)."""
         self._external_goal = None
+
+    def _on_far_reach(self, msg: Any) -> None:
+        """far_planner's std_msgs/Bool reach status. Executor-thread callback —
+        tiny, never raises. navigate_to reads it (with odometry sanity) only."""
+        try:
+            self._far_reach = bool(msg.data)
+            self._far_reach_ts = time.monotonic()
+        except Exception:  # noqa: BLE001 — malformed frame, ignore
+            pass
+
+    def _far_planner_reached(self) -> bool:
+        """True when far_planner RECENTLY asserted it reached its goal. Never the
+        sole arrival oracle — navigate_to also requires odometry within
+        FAR_REACH_RADIUS_M so a stale/other-goal reach cannot fake arrival."""
+        return (self._far_reach
+                and (time.monotonic() - self._far_reach_ts) <= self.FAR_REACH_FRESH_S)
 
     # ------------------------------------------------------------------
     # Direct velocity — /teleop_cmd_vel, clamped, >=4 Hz cadence

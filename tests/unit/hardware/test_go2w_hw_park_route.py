@@ -146,6 +146,34 @@ def test_dock_parks_route_planner(park_hw):
     assert pubs.get("/goal_point"), "docking must silence the route planner"
 
 
+def test_routed_far_reach_counts_as_arrival_with_odom_sanity(park_hw):
+    """Smoothness (2026-07-15): routed via far_planner, its own reach oracle +
+    odometry within FAR_REACH_RADIUS_M ends the drive as arrived — even past
+    ARRIVAL_RADIUS_M (far_planner's arrival radius can exceed ours). This is what
+    keeps 'walk to the marker' from false-aborting into a route_via skill-hop."""
+    mod, hw, _pubs, clk = park_hw
+    hw._position = (4.3, 0.0, 0.0)  # 0.7m from goal: past ARRIVAL (0.4), within FAR_REACH (1.0)
+    hw._goalpoint_pub.get_subscription_count.return_value = 1  # routed
+    hw._far_reach = True
+    hw._far_reach_ts = clk.monotonic()  # fresh
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        ok = hw.navigate_to(5.0, 0.0, timeout=5.0)
+    assert ok is True, "far_planner reach + odom-close must count as arrival"
+
+
+def test_routed_far_reach_alone_is_not_arrival_when_odom_far(park_hw):
+    """Inv-1 moat: far_reach is NEVER the sole arrival oracle. With odometry far
+    from the goal, a stale / other-goal reach frame cannot fake arrival."""
+    mod, hw, _pubs, clk = park_hw
+    hw._position = (0.0, 0.0, 0.0)  # 5m from goal, never moves
+    hw._goalpoint_pub.get_subscription_count.return_value = 1
+    hw._far_reach = True
+    hw._far_reach_ts = clk.monotonic()
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        ok = hw.navigate_to(5.0, 0.0, timeout=1.0)
+    assert ok is False, "far_reach with odom 5m away must NOT count as arrival"
+
+
 def test_park_echo_on_waypoint_is_not_an_operator_click(park_hw):
     """far_planner briefly republishes /way_point AT the park coords — those
     frames are plumbing, never an operator RViz goal."""

@@ -56,11 +56,14 @@ class RealRouteViaSkill:
 
     name = "route_via"
     description = (
-        "Send the REAL Go2W to a FAR map coordinate (x, y) via far_planner GLOBAL "
-        "route planning: plans a route around obstacles to a distant goal, then "
-        "drives there (blocks until odometry-verified arrival). Use for long "
-        "cross-map goals where a straight waypoint would get stuck; for short "
-        "line-of-sight hops use navigate. 用 far_planner 规划全局路线到远处目标。")
+        "Send the REAL Go2W to a FAR RAW map COORDINATE (x, y) that has NO named "
+        "mark, via far_planner GLOBAL route planning (plans around obstacles, "
+        "blocks until odometry-verified arrival). NOTE: goto_place ALREADY routes "
+        "named places/marks through far_planner the SAME way — so use goto_place "
+        "for anything with a name, and do NOT use route_via to RETRY a goto_place "
+        "that reported 'did not reach' (that is a nav timeout — retry goto_place in "
+        "place). route_via is only for a bare distant coordinate. "
+        "用 far_planner 规划全局路线到无名远坐标;有名字的地点一律用 goto_place。")
     parameters = {
         "x": {"type": "number", "required": True, "description": "map-frame x (m)"},
         "y": {"type": "number", "required": True, "description": "map-frame y (m)"},
