@@ -130,3 +130,25 @@ def test_park_without_node_is_safe():
     with patch.dict("sys.modules", _ros_module_stubs()):
         hw = mod.Go2WHardware()
         hw.park_route_planner()  # disconnected: silent no-op, never raises
+
+
+def test_park_echo_survives_far_planner_forever_republish(park_hw):
+    """far_planner republishes the park goal FOREVER (its own docstring). The
+    park-echo suppression must NOT expire on a timer — a /way_point matching the
+    park coords is plumbing no matter how long after the park.
+
+    Field 2026-07-14 (owner RViz): the old 5s window let a stale park echo (which
+    far_planner keeps emitting) flip to a phantom operator goal after 5s, so
+    navigate_to yielded to its OWN park point (-0.27,-0.04) forever — every
+    '前进2米' wedged in a '操作者手动指定' yield loop the operator never triggered.
+    """
+    mod, hw, _pubs, clk = park_hw
+    hw._position = (-0.27, -0.04, 0.0)
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        hw.park_route_planner()
+    clk.sleep(6.0)  # far past the OLD 5s park-echo window
+    msg = MagicMock()
+    msg.point.x, msg.point.y = -0.27, -0.04  # far_planner STILL republishing park goal
+    hw._on_waypoint(msg)
+    assert hw.external_goal_info() is None, \
+        "far_planner's forever-republished park echo must never become external"

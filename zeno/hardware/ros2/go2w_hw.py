@@ -521,9 +521,18 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             return  # far_planner route plumbing, not an operator click
         park = self._park_goal
         if park is not None:
-            kx, ky, kt = park
-            if (time.monotonic() - kt <= 5.0
-                    and abs(x - kx) <= 0.05 and abs(y - ky) <= 0.05):
+            kx, ky, _kt = park
+            # far_planner republishes the park goal FOREVER (park_route_planner
+            # docstring), so this suppression must NOT expire on a timer — a
+            # /way_point at the park coords is plumbing however long after the
+            # park. Field 2026-07-14 (owner RViz): the old 5s window let a stale
+            # park echo flip to a PHANTOM operator goal, so navigate_to yielded
+            # to its OWN park point forever ('前进2米' wedged in a yield loop the
+            # operator never triggered). Coords-only match; _park_goal is
+            # refreshed by every navigate/rotate/reverse/dock, so this only ever
+            # shadows the CURRENT park position, never a real operator click
+            # elsewhere.
+            if abs(x - kx) <= 0.05 and abs(y - ky) <= 0.05:
                 return  # far_planner echoing our park order — plumbing
         own = self._own_goal
         if own is not None:
