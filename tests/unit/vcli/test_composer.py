@@ -308,3 +308,19 @@ def test_rails_span_full_width_and_close_the_block() -> None:
     composer = _mk(lambda: None)
     names = [w for w in ("rail", "subrail") if hasattr(composer, w)]
     assert names == ["rail", "subrail"]
+
+
+def test_footer_authority_badge_colored_by_who_drives() -> None:
+    # P5 layer-0: the control-authority badge (AGENT/OPERATOR/ESTOP) leads the
+    # footer and is colored by who is driving.
+    from prompt_toolkit.formatted_text import HTML
+
+    for badge, cls in (
+        ("● AGENT", "auth.agent"),
+        ("✋ OPERATOR", "auth.operator"),
+        ("■ ESTOP", "auth.estop"),
+    ):
+        composer = _mk(lambda b=badge: HTML(f"{b} | ⌖ pose x=1 · odom age 0.1s | model:m"))
+        styles = _footer_styles(composer)
+        auth_style = next(s for s, t in styles if t.strip().endswith(badge.split()[1]))
+        assert cls in auth_style, (badge, auth_style)

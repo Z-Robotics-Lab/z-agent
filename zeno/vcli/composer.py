@@ -308,6 +308,12 @@ class ZenoComposer:
         stale flag when the odometry read is old — the operator must see a
         dead feed at a glance) · quiet identity/counters. Display-only.
         """
+        if part.startswith("●") or " AGENT" in part:
+            return "class:composer.footer.auth.agent"
+        if part.startswith("✋") or "OPERATOR" in part:
+            return "class:composer.footer.auth.operator"
+        if part.startswith("■") or "ESTOP" in part:
+            return "class:composer.footer.auth.estop"
         if part.startswith("⚙"):
             return "class:composer.footer.activity"
         if part.startswith("⌖") or "pose" in part or "odom" in part:

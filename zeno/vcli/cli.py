@@ -67,6 +67,7 @@ from zeno.vcli.session import (
 from zeno.vcli.permissions import PermissionContext
 from zeno.vcli.prompt import build_system_prompt
 from zeno.vcli.turn_render import (
+    derive_authority,
     ChainView,
     ReasoningStreamer,
     fmt_duration,
@@ -3553,6 +3554,12 @@ def main(argv: list[str] | None = None) -> None:
         agent_now = app_state.get("agent")
         current_model = app_state.get("model", "?")
         parts: list[str] = []
+        # P5 layer-0: control-authority badge FIRST — the operator must always
+        # see who is driving (🤖 agent / operator / e-stop), inferred from the
+        # same live-status line. Display-only; execution/arbitration unchanged.
+        _live_raw = _live_status_cached(app_state) or ""
+        _marker, _auth, _ = derive_authority(_live_raw)
+        parts.append(f"{_marker} {_auth}")
         if _act:
             parts.append(f"⚙ {_act}")
         live_status = _live_status_toolbar_fragment(app_state)

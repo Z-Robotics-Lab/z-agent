@@ -168,6 +168,87 @@ def render_verdict_card(
     return lines
 
 
+# ---------------------------------------------------------------------------
+# P5 layer-0 — execution state machine + control-authority (display-only)
+# ---------------------------------------------------------------------------
+
+STATE_IDLE = "IDLE"
+STATE_PLANNING = "PLANNING"
+STATE_ACTING = "ACTING"
+STATE_VERIFYING = "VERIFYING"
+STATE_DONE = "DONE"
+STATE_RECOVERING = "RECOVERING"   # branch off the main line
+STATE_YIELDED = "YIELDED"         # branch: operator took over
+
+# NativeEvent kind -> state. Unknown kinds keep the previous state (a stream of
+# text chunks mid-plan must not bounce the state around).
+_KIND_STATE = {
+    "round": STATE_PLANNING,
+    "reasoning": STATE_PLANNING,
+    "text": STATE_PLANNING,
+    "tool_start": STATE_ACTING,
+    "tool_end": STATE_ACTING,
+    "verify": STATE_VERIFYING,
+    "nudge": STATE_RECOVERING,
+    "interject": STATE_YIELDED,
+    "finish": STATE_DONE,
+}
+
+# Main-line states in order + their Chinese labels (the state machine spine).
+_MAINLINE = [
+    (STATE_IDLE, "待命"),
+    (STATE_PLANNING, "规划"),
+    (STATE_ACTING, "执行"),
+    (STATE_VERIFYING, "验证"),
+    (STATE_DONE, "完成"),
+]
+_BRANCH_LABEL = {STATE_RECOVERING: "恢复", STATE_YIELDED: "让位"}
+
+
+def derive_turn_state(kind: str, prev: str) -> str:
+    """One NativeEvent kind -> the turn's current state (display-only)."""
+    return _KIND_STATE.get(str(kind), prev)
+
+
+def render_state_machine(current: str) -> str:
+    """The main-line state spine with ``current`` highlighted (▶ + brand).
+
+    A branch state (recovering / yielded) is appended after the spine so the
+    operator sees the robot left the happy path without hiding where it was.
+    """
+    parts: list[str] = []
+    for st, label in _MAINLINE:
+        if st == current:
+            parts.append(f"[bold {_p.BRAND}]▶{label}[/]")
+        else:
+            parts.append(f"[{_p.TEXT_FAINT}]{label}[/]")
+    spine = f"[{_p.HAIRLINE}] → [/]".join(parts)
+    if current in _BRANCH_LABEL:
+        spine += f"  [{_p.WARN}]⑂ {_BRANCH_LABEL[current]}[/]"
+    return spine
+
+
+def derive_authority(live_status: str, estopped: bool = False) -> tuple[str, str, str]:
+    """Control authority from the live-status line (display-only inference).
+
+    ESTOP wins; an operator RViz goal in the status line means the operator is
+    driving; otherwise the agent is. Returns (marker, label, palette-style).
+    """
+    s = str(live_status or "")
+    low = s.lower()
+    if estopped or "急停" in s or "estop" in low or "e-stop" in low:
+        return ("■", "ESTOP", _p.BAD)
+    if "手动目标" in s or "rviz" in low or "operator" in low:
+        return ("✋", "OPERATOR", _p.WARN)
+    return ("●", "AGENT", _p.BRAND)
+
+
+def render_authority(badge: tuple[str, str, str]) -> str:
+    """Render an authority badge (marker + label) in its palette color."""
+    marker, label, style = badge
+    return f"[bold {style}]{marker} {_escape_markup(label)}[/]"
+
+
 def render_turn_separator(seq: int, ts: str, width: int = 80) -> str:
     """A dim scrollback separator between turns: ``──── #N · HH:MM ────────``.
 
@@ -354,6 +435,7 @@ class ChainView:
         self.stop_count = 0
 
         self._round = ""
+        self._current_state = STATE_IDLE  # P5 layer-0 state machine
         self._nodes: list[dict[str, Any]] = []
         self._reasoning: list[str] = []
         self._reasoning_tail: str = ""
@@ -472,6 +554,8 @@ class ChainView:
         kind = getattr(event, "kind", None)
         if not kind:
             return
+        # P5 layer-0: advance the display-only execution state machine.
+        self._current_state = derive_turn_state(kind, self._current_state)
         label = str(getattr(event, "label", "") or "")
         detail = str(getattr(event, "detail", "") or "")
         ok = getattr(event, "ok", None)
@@ -585,6 +669,13 @@ class ChainView:
         lines = [
             f"  [bold {_TEAL}]native[/] working…{round_part}  [dim](Ctrl+C 安全中断)[/dim]"
         ]
+        # P5 layer-0: control-authority badge + execution state machine — the
+        # already-happening states made visible (display-only; execution
+        # unchanged). Authority is inferred from the same live-status line.
+        badge = render_authority(derive_authority(self._live_status))
+        lines.append(
+            f"  {badge}   [dim]{render_state_machine(self._current_state)}[/dim]"
+        )
         if self._live_status:
             lines.append(f"  [dim]⌖ {_escape_markup(self._live_status)}[/]")
         if self._show_reasoning_tail and self._reasoning_tail:
