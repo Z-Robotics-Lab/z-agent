@@ -477,7 +477,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         else:
             stall_win = self.STALL_TIMEOUT_S    # direct: honest abort
         start = time.monotonic()
-        last_dist = float("inf")
+        best_dist = float("inf")
         stall_accum = 0.0
         renudge_count = 0
         last_progress_cb = start
@@ -523,11 +523,17 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
                 self.park_route_planner()
                 return True
 
-            if dist < last_dist - self.STALL_EPS_M:
+            # Progress = getting CLOSER than we have EVER been this drive, NOT vs
+            # the previous 0.2s tick. The old per-tick check demanded dist drop
+            # >STALL_EPS_M every tick == >0.5 m/s, so a steady 0.1-0.4 m/s crawl was
+            # ALWAYS 'stalling' and got aborted/re-nudged despite real progress
+            # (owner 2026-07-15 stall-timing bug). A truly stuck robot never beats
+            # best_dist, so stall_accum still grows honestly.
+            if dist < best_dist - self.STALL_EPS_M:
                 stall_accum = 0.0
+                best_dist = dist
             else:
                 stall_accum += period
-            last_dist = dist
             if stall_accum >= stall_win:
                 if routed:
                     # Do NOT abort — the agent would re-plan. Re-nudge far_planner
@@ -548,7 +554,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
                     time.sleep(0.3)
                     self._publish_goalpoint(x, y)
                     stall_accum = 0.0
-                    last_dist = float("inf")  # clean progress baseline for the new route
+                    best_dist = float("inf")  # clean progress baseline for the new route
                 else:
                     logger.warning(
                         "Go2WHardware: stalled %.1fs at dist=%.2fm — cancelling",

@@ -174,6 +174,31 @@ def test_routed_far_reach_alone_is_not_arrival_when_odom_far(park_hw):
     assert ok is False, "far_reach with odom 5m away must NOT count as arrival"
 
 
+def test_slow_steady_crawl_does_not_false_stall(park_hw):
+    """Stall-timing bug (owner 2026-07-15): progress was measured vs the PREVIOUS
+    0.2s tick, so a steady 0.05 m/tick crawl (< STALL_EPS_M) was always 'stalling'
+    and aborted mid-drive. Now measured vs the CLOSEST-ever distance, so a slow but
+    steady approach keeps resetting the stall and ARRIVES."""
+    mod, hw, _pubs, clk = park_hw
+    HW = mod.Go2WHardware
+    hw._goalpoint_pub.get_subscription_count.return_value = 0  # direct: abort-on-stall path
+    hw._position = (0.0, 0.0, 0.0)
+    real_sleep = mod.time.sleep
+
+    def creeping_sleep(dt):  # 0.05m per poll toward (5,0): below STALL_EPS_M/tick
+        px, _py, _ = hw._position
+        hw._position = (min(px + 0.05, 5.0), 0.0, 0.0)
+        real_sleep(dt)
+
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        mod.time.sleep = creeping_sleep
+        try:
+            ok = hw.navigate_to(5.0, 0.0, timeout=HW.STALL_TIMEOUT_S * 3)
+        finally:
+            mod.time.sleep = real_sleep
+    assert ok is True, "a steady slow crawl must not false-stall — it should arrive"
+
+
 def test_routed_stall_re_nudges_far_planner_instead_of_aborting(park_hw):
     """Owner 2026-07-15: a routed drive must NOT abort on stall (that bubbles
     failure to the agent, which re-plans — the '走几步停下来重新plan' churn). It
