@@ -170,8 +170,45 @@ class PoseLedger:
         if not label or label in _RECALL_WORDS:
             got = self.recall(current_xy)
             return ("breadcrumb", got) if got else (None, None)
-        got = self._marks.get(label)
+        got = self._resolve_mark(label)
         return ("mark", got) if got else (None, None)
+
+    def _resolve_mark(
+            self, label: str) -> tuple[float, float, float] | None:
+        """Fuzzy-resolve a mark NAME to a pose; None when unknown OR ambiguous.
+
+        Tiers, first UNAMBIGUOUS hit wins: (1) exact, (2) case-insensitive
+        exact ('harry' -> 'Harry ...'), (3) case-insensitive substring either
+        direction ('harry' <-> 'Harry Z Lab 工位'; 'go 公司厨房' -> '公司厨房').
+        A tier matching >1 mark yields None — a place the robot DRIVES to must
+        never be a guess (Inv-1 parity): the caller then refuses and lists the
+        candidates so the operator disambiguates instead of rolling to the
+        wrong landmark.
+        """
+        label = str(label or "").strip()
+        if not label:
+            return None
+        if label in self._marks:                              # 1. exact
+            return self._marks[label]
+        low = label.lower()
+        ci = [v for k, v in self._marks.items() if k.lower() == low]
+        if len(ci) == 1:                                      # 2. case-fold
+            return ci[0]
+        if len(ci) >= 2:
+            return None
+        subs = [v for k, v in self._marks.items()             # 3. substring
+                if low in k.lower() or k.lower() in low]
+        return subs[0] if len(subs) == 1 else None
+
+    def match_candidates(self, label: str) -> list[str]:
+        """Names that fuzzily match *label* (case-insensitive substring, either
+        direction) — for a 'did you mean …?' refusal. Empty when nothing is
+        close. Exact/case-fold hits are included too (they're substrings)."""
+        low = str(label or "").strip().lower()
+        if not low:
+            return []
+        return [k for k in self._marks
+                if low in k.lower() or k.lower() in low]
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +232,43 @@ def places_of(context: Any) -> PoseLedger | None:
     if ledger is not None:
         return ledger
     return getattr(getattr(context, "base", None), "pose_ledger", None)
+
+
+def refresh_marks_from_disk(ledger: Any) -> int:
+    """Re-read ~/maps/<active>/places.json into *ledger* (additive merge).
+
+    Returns the number of named marks merged; 0 on no-ledger / no-active-map /
+    any error. NEVER raises — a stale-memory refresh must not break a skill.
+
+    WHY (field bug 2026-07-15): named places are written by a SEPARATE process
+    (``nav mark …``) and the active map can flip AFTER the REPL started, so the
+    one-shot setup load (:meth:`Go2WRealWorld._load_persistent_places`) goes
+    stale and the agent 'can't read any landmarks'. Every place query re-reads
+    the tiny JSON so the ledger always mirrors what ``nav mark list`` shows.
+    Additive: session origin/breadcrumbs and same-named session marks are
+    preserved except a disk mark of the same name wins (disk is the record).
+    """
+    if ledger is None or not hasattr(ledger, "load_marks"):
+        return 0
+    try:
+        from zeno.vcli.worlds.go2w_real_maps import (
+            current_map,
+            home_place,
+            load_places,
+        )
+
+        active = current_map()
+        if active is None:  # fresh-mapping / down stack -> session-only places
+            return 0
+        marks = load_places(active)
+        home = home_place(active)
+        if home is not None:
+            marks.setdefault("home", home)
+            marks.setdefault("家", home)
+        ledger.load_marks(marks)
+        return len(marks)
+    except Exception:  # noqa: BLE001 — memory refresh must never break a skill
+        return 0
 
 
 def _fresh_pose(base: Any) -> tuple[float, float, float] | None:
@@ -374,9 +448,14 @@ class RealGotoPlaceSkill:
                 if word in text:
                     return "起点"
             # A marked name quoted anywhere in the utterance wins over 刚才
-            # ('回到充电桩' must not resolve to a breadcrumb).
+            # ('回到充电桩' must not resolve to a breadcrumb). Case/space-loose
+            # so '回到harry z lab工位' still meets stored 'Harry Z Lab 工位'.
+            def _squash(s: str) -> str:
+                return "".join(str(s).lower().split())
+
+            sq_text = _squash(text)
             for label in ledger.marks:
-                if label and label in text:
+                if label and (label in text or _squash(label) in sq_text):
                     return label
         return "刚才"
 
@@ -390,6 +469,10 @@ class RealGotoPlaceSkill:
             return SkillResult(success=False, diagnosis_code="no_place_ledger",
                                error_message=("No place ledger (go2w_real "
                                               "world only)"))
+        # Mirror the on-disk store first: a name just written by `nav mark`
+        # (separate process) or a map activated after this REPL started would
+        # otherwise be invisible (field bug 2026-07-15).
+        refresh_marks_from_disk(ledger)
         pose = _fresh_pose(base)
         if pose is None:
             return SkillResult(
@@ -406,9 +489,13 @@ class RealGotoPlaceSkill:
             known = list(ledger.marks)
             if ledger.origin is not None:
                 known.insert(0, "起点")
+            # Fuzzy hit >1 mark (ambiguous) -> we refused ON PURPOSE rather than
+            # guess; name the near-misses so the operator says the full name.
+            cands = [c for c in ledger.match_candidates(name) if c != name]
+            hint = f"(近似:{'、'.join(cands)},请说全名) " if cands else ""
             return SkillResult(success=False, diagnosis_code="unknown_place",
                                error_message=(
-                f"无法解析地点 {name!r} — "
+                f"无法解析地点 {name!r} — " + hint
                 + (f"已知地点: {', '.join(known)}" if known
                    else "本会话尚未记录任何位置(先运动或 mark_place)")
                 + f";面包屑 {len(ledger.breadcrumbs)} 条"
@@ -480,3 +567,60 @@ class RealGotoPlaceSkill:
         return SkillResult(success=False, result_data=data, error_message=(
             f"did not reach '{name}' ({tx:.2f}, {ty:.2f}); "
             f"at ({p[0]:.2f}, {p[1]:.2f})"))
+
+
+@skill(aliases=["list_places", "有哪些地点", "有哪些地标", "能去哪些地标",
+                "能去哪些地方", "能去哪", "能去哪里", "可以去哪", "可以去哪里",
+                "列出地点", "列出地标", "地点列表", "地标列表", "known places",
+                "list places", "list landmarks", "where can i go"],
+       direct=True)
+class RealListPlacesSkill:
+    """List the ACTIVE map's navigable named places (re-read from disk)."""
+
+    name = "list_places"
+    description = (
+        "列出当前地图上所有可导航的已知地点/地标(名字 + 地图坐标),从 "
+        "~/maps/<地图>/places.json 实时读取(含刚用 nav mark 记的点)。回答"
+        "“你能去哪些地标 / 有哪些地点 / 可以去哪”。纯查询:不移动机器人、"
+        "不需要里程计。之后用 goto_place 前往其中任意名字(名字支持大小写/"
+        "子串模糊匹配)。")
+    parameters: dict = {}
+    preconditions: list = []
+    effects: dict = {}
+
+    def execute(self, params=None, context=None, **kw):
+        ledger = places_of(context)
+        if ledger is None:
+            return SkillResult(
+                success=False, diagnosis_code="no_place_ledger",
+                error_message="No place ledger (go2w_real world only)")
+        loaded = refresh_marks_from_disk(ledger)  # mirror nav-mark / map switch
+        marks = ledger.marks
+        specials: list[str] = []
+        if ledger.origin is not None:
+            specials.append("起点")
+        if ledger.breadcrumbs:
+            specials.append("刚才/上一个")
+        data: dict[str, Any] = {
+            "places": {k: [round(v[0], 2), round(v[1], 2), round(v[2], 3)]
+                       for k, v in marks.items()},
+            "count": len(marks),
+            "map_places_loaded": loaded,
+        }
+        if not marks:
+            msg = ("当前地图没有已标记的地点。用 nav mark(或说“记住这里叫"
+                   "<名字>”)记录后即可“去<名字>”。")
+            if specials:
+                msg += "现可直接说:" + "、".join(specials) + "。"
+            data["message"] = msg
+            oplog("skill", "list_places", "0 places")
+            return SkillResult(success=True, result_data=data)
+        listing = "、".join(
+            f"{k}({v[0]:.1f},{v[1]:.1f})" for k, v in marks.items())
+        msg = f"可去的地标(共 {len(marks)} 个):{listing}。"
+        if specials:
+            msg += "另可说:" + "、".join(specials) + "。"
+        msg += "说“去<名字>”前往(名字支持模糊匹配)。"
+        data["message"] = msg
+        oplog("skill", "list_places", f"{len(marks)} places")
+        return SkillResult(success=True, result_data=data)

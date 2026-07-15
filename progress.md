@@ -1,8 +1,17 @@
 # Zeno — progress
 
-更新：2026-07-14。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**（未 push/未动 main）。
+更新：2026-07-15。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
+- **agent 读不到地标 + 无模糊匹配（本轮，现场 bug）**：根因① `_load_persistent_places` 只在 world
+  setup 跑一次——`nav mark`（独立进程）写盘或地图后激活的点,内存 ledger 永远看不到;② `goto_place`
+  精确匹配,'harry'≠'Harry Z Lab 工位'。修:`go2w_real_places.refresh_marks_from_disk(ledger)` 在
+  where/goto_place/list_places 每次调用前实时重读 `~/maps/<map>/places.json`（加法合并,never-raise);
+  `PoseLedger._resolve_mark`=精确→大小写无关→无歧义子串,多候选(多个'…门口')则拒绝并列候选(绝不猜,
+  Inv-1);新 `RealListPlacesSkill`(别名 能去哪些地标/有哪些地点/…,纯查询、免里程计)答"能去哪",堵住
+  turn#4 乱用 glob/grep;capability card 教 list_places+模糊+勿 glob。测:test_world_go2w_real_places.py
+  +7(fuzzy/歧义拒绝/盘上 mid-session 可见/list_places/where 报盘上点),autouse fixture 隔离真盘保 hermetic。
+  `scripts/run-tests -k go2w_real` = 352 pass/19 skip/0 fail。
 - **`/clean` 双确认清空地点落地（本轮，INTEGRATOR 复核通过）**：z-agent 7fc37ee(RED)→3bd43d3(GREEN)
   + go2w-nuc 兄弟仓 6578ad4(3D 视图地点/home 标签)。
   ①`go2w_real_maps.clear_places(map)`：`os.replace(places.json→.bak)` 原子备份+清空（旧 bak 直接覆盖），

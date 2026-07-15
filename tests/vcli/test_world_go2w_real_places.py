@@ -130,6 +130,46 @@ def _goto_skill():
     return RealGotoPlaceSkill()
 
 
+def _list_skill():
+    from zeno.vcli.worlds.go2w_real_places import RealListPlacesSkill
+
+    return RealListPlacesSkill()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_place_disk(monkeypatch, tmp_path):
+    """Hermetic default: NO active map, so the live places.json mirror
+    (refresh_marks_from_disk, now called inside where/goto_place/list_places)
+    is a no-op and never touches the real ~/maps. A test opts into disk marks
+    via :func:`_seed_disk_map`, which re-points these AFTER this fixture runs.
+    """
+    import zeno.vcli.worlds.go2w_real_maps as M
+
+    monkeypatch.setattr(M, "MAPS_ROOT", tmp_path / "no_maps")
+    monkeypatch.setenv("GO2W_CURRENT_MAP_FILE",
+                       str(tmp_path / "no_current_map.txt"))  # missing -> None
+
+
+def _seed_disk_map(monkeypatch, tmp_path, places, map_name="zeno_office"):
+    """Write ~/maps/<map>/places.json + the current-map handshake in a temp
+    tree (mirrors nav.sh's disk contract); return the map name. Overrides the
+    autouse isolation so the skills read exactly *places* ({name: [x, y, yaw]}).
+    """
+    import json
+
+    import zeno.vcli.worlds.go2w_real_maps as M
+
+    root = tmp_path / "maps"
+    (root / map_name).mkdir(parents=True)
+    (root / map_name / "places.json").write_text(
+        json.dumps(places, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(M, "MAPS_ROOT", root)
+    cur = tmp_path / "current_map.txt"
+    cur.write_text(map_name, encoding="utf-8")
+    monkeypatch.setenv("GO2W_CURRENT_MAP_FILE", str(cur))
+    return map_name
+
+
 # ---------------------------------------------------------------------------
 # PoseLedger truth table — origin once, breadcrumb order+bound, 刚才 skips
 # current-pose duplicates, named marks
@@ -688,3 +728,98 @@ def test_capability_md_documents_global_awareness_and_the_limit():
     assert "重启导航栈后地点失效" in text, (
         "the card must say places DIE on nav-stack restart (relocalization "
         "is a roadmap item, not a shipped capability)")
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy name resolution + LIVE disk mirror + list_places
+#
+# Field bug (2026-07-15): the operator marked 10 places with `nav mark`, but
+# the agent 'read no landmarks' and '去找harry' refused — TWO defects:
+#   (1) the ledger loaded places.json ONCE at setup; marks written by the
+#       separate `nav mark` process (or a map activated later) never appeared;
+#   (2) goto_place matched names EXACTLY, so 'harry' != 'Harry Z Lab 工位'.
+# Fixes: refresh_marks_from_disk before every place query; case-insensitive +
+# substring resolution that REFUSES on ambiguity; a list_places query skill.
+# ---------------------------------------------------------------------------
+
+
+def test_goto_place_fuzzy_case_insensitive():
+    hw = _PlacesFakeHW(x=0.0, y=0.0)
+    hw.pose_ledger.mark("Harry Z Lab 工位", (1.06, -3.77, -2.93))
+    result = _goto_skill().execute({"name": "harry"}, _ctx(base=hw))
+    assert result.success, result.error_message
+    assert hw.nav_calls[-1] == (pytest.approx(1.06), pytest.approx(-3.77))
+
+
+def test_goto_place_fuzzy_substring():
+    hw = _PlacesFakeHW(x=0.0, y=0.0)
+    hw.pose_ledger.mark("公司厨房", (16.38, 12.43, -0.78))
+    result = _goto_skill().execute({"name": "厨房"}, _ctx(base=hw))
+    assert result.success, result.error_message
+    assert hw.nav_calls[-1] == (pytest.approx(16.38), pytest.approx(12.43))
+
+
+def test_goto_place_ambiguous_name_refuses_and_names_candidates():
+    """Several '…门口' -> refuse and NAME them; a driven guess could roll the
+    robot to the wrong landmark (Inv-1 parity: never invent the resolution)."""
+    hw = _PlacesFakeHW(x=0.0, y=0.0)
+    hw.pose_ledger.ensure_origin((0.0, 0.0, 0.0))
+    for name, xy in {"z lab 门口": (6.46, -0.45, 0.0),
+                     "ceo办公室门口": (19.12, -14.94, 0.0),
+                     "装配间门口": (28.76, -6.92, 0.0)}.items():
+        hw.pose_ledger.mark(name, xy)
+    result = _goto_skill().execute({"name": "门口"}, _ctx(base=hw))
+    assert not result.success, "an ambiguous place must never drive"
+    assert hw.nav_calls == []
+    msg = str(result.error_message)
+    assert "装配间门口" in msg and "z lab 门口" in msg, (
+        "the refusal must name the near-miss candidates to disambiguate")
+
+
+def test_goto_place_reads_a_mark_written_to_disk_after_startup(
+        monkeypatch, tmp_path):
+    """The ROOT bug: a place nav-mark'd (separate process) AFTER the REPL
+    started is still reachable — goto_place re-reads places.json every call."""
+    _seed_disk_map(monkeypatch, tmp_path,
+                   {"Harry Z Lab 工位": [1.06, -3.77, -2.93]})
+    hw = _PlacesFakeHW(x=0.0, y=0.0)
+    assert hw.pose_ledger.marks == {}, "ledger starts empty (nothing preloaded)"
+    result = _goto_skill().execute({"name": "harry"}, _ctx(base=hw))
+    assert result.success, result.error_message
+    assert hw.nav_calls[-1] == (pytest.approx(1.06), pytest.approx(-3.77))
+
+
+def test_list_places_lists_the_disk_places(monkeypatch, tmp_path):
+    _seed_disk_map(monkeypatch, tmp_path,
+                   {"Harry Z Lab 工位": [1.06, -3.77, -2.93],
+                    "公司厨房": [16.38, 12.43, -0.78]})
+    hw = _PlacesFakeHW(x=0.0, y=0.0)
+    result = _list_skill().execute({}, _ctx(base=hw))
+    assert result.success, result.error_message
+    assert set(result.result_data["places"]) == {"Harry Z Lab 工位", "公司厨房"}
+    assert result.result_data["count"] == 2
+    assert "Harry Z Lab 工位" in result.result_data["message"]
+    assert hw.nav_calls == [], "listing places must never drive the robot"
+
+
+def test_list_places_works_without_odometry(monkeypatch, tmp_path):
+    """Listing landmarks is a pure map query — unlike where/goto it must NOT
+    require a live pose ('能去哪些地标' answers even before the stack is up)."""
+    _seed_disk_map(monkeypatch, tmp_path, {"公司厨房": [16.38, 12.43, -0.78]})
+    hw = _PlacesFakeHW(age=None)  # driver KNOWS odometry never arrived
+    result = _list_skill().execute({}, _ctx(base=hw))
+    assert result.success, result.error_message
+    assert "公司厨房" in result.result_data["message"]
+
+
+def test_where_reports_places_written_to_disk(monkeypatch, tmp_path):
+    """`where`'s '已标记地点' must reflect the on-disk store, not just the
+    (empty) in-memory ledger — the reported field symptom."""
+    from zeno.vcli.worlds.go2w_real_ops_skills import RealWhereSkill
+
+    _seed_disk_map(monkeypatch, tmp_path,
+                   {"Harry Z Lab 工位": [1.06, -3.77, -2.93]})
+    hw = _PlacesFakeHW(x=0.0, y=0.0)
+    result = RealWhereSkill().execute({}, _ctx(base=hw))
+    assert result.success, result.error_message
+    assert "Harry Z Lab 工位" in result.result_data.get("marked_places", [])

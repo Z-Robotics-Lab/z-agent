@@ -82,6 +82,15 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   odometry pose; goto_place(name) drives back to it. Every stored coordinate
   comes from odometry — you can trigger a mark but never author its values;
   mark_place refuses before odometry ever arrived (no fake (0,0,0) places).
+  (5) LIST places: list_places (能去哪些地标/有哪些地点/可以去哪) returns every
+  named place on the active map (name + coordinates), re-read LIVE from
+  ~/maps/<map>/places.json — a pure query needing NO odometry. ALWAYS answer
+  "能去哪些地点/地标" with list_places; NEVER glob/grep/file_read for places.json.
+  goto_place(name) matches a place name case-insensitively AND by substring
+  ("harry" -> "Harry Z Lab 工位"); an AMBIGUOUS match (e.g. several "…门口")
+  refuses and NAMES the candidates rather than driving to the wrong landmark.
+  Both list_places and goto_place re-read places.json on every call, so a place
+  just written by `nav mark` in another terminal is visible immediately.
   goto_place is free navigation: it resets the course intent and returns an
   at(x, y, tol=1.0) verify hint for the RESOLVED target — verify with that.
   PERSISTENCE: named places (mark_place) now PERSIST across restarts WHEN you

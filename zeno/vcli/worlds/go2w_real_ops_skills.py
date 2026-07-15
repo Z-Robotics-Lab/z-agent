@@ -32,7 +32,7 @@ from zeno.core.skill import skill
 from zeno.core.types import SkillResult
 from zeno.vcli.worlds.go2w_real_course import course_of
 from zeno.vcli.worlds.go2w_real_diag import oplog, wrap_angle
-from zeno.vcli.worlds.go2w_real_places import places_of
+from zeno.vcli.worlds.go2w_real_places import places_of, refresh_marks_from_disk
 from zeno.vcli.worlds.go2w_real_skills import _base_of
 
 _VIEW_KEYWORDS: tuple[tuple[str, str], ...] = (
@@ -172,6 +172,10 @@ class RealWhereSkill:
         # today's payload byte-identical.
         ledger = places_of(context)
         if ledger is not None:
+            # Mirror the on-disk place store so '已标记地点' reflects nav-mark
+            # writes / a map activated after the REPL started (field bug
+            # 2026-07-15) — not just this session's in-memory marks.
+            refresh_marks_from_disk(ledger)
             # This fresh pose is also the session's first chance to capture
             # the origin (回到起点 needs it even before any motion command).
             origin = ledger.ensure_origin(

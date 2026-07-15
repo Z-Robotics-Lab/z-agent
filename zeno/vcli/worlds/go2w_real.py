@@ -78,6 +78,7 @@ from zeno.vcli.worlds.go2w_real_course import CourseTracker
 from zeno.vcli.worlds.go2w_real_places import (
     PoseLedger,
     RealGotoPlaceSkill,
+    RealListPlacesSkill,
     RealMarkPlaceSkill,
 )
 from zeno.vcli.worlds.go2w_real_verify import (
@@ -159,6 +160,7 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealWhereSkill())
         self._skill_registry.register(RealMarkPlaceSkill())
         self._skill_registry.register(RealGotoPlaceSkill())
+        self._skill_registry.register(RealListPlacesSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -374,37 +376,22 @@ class Go2WRealWorld:
 
     @staticmethod
     def _load_persistent_places(base: Any) -> None:
-        """Load ~/maps/<active>/places.json + inject home. Never raises."""
+        """Eager first load of ~/maps/<active>/places.json into the ledger.
+
+        Delegates to :func:`refresh_marks_from_disk` — the SAME disk mirror now
+        runs before every place query (where/goto_place/list_places), so a mark
+        written mid-session by ``nav mark`` (separate process) or a map
+        activated after this REPL started is picked up automatically; this is
+        just the warm-start seed. Never raises.
+        """
         from zeno.vcli.worlds.go2w_real_diag import oplog
+        from zeno.vcli.worlds.go2w_real_places import refresh_marks_from_disk
 
         ledger = getattr(base, "pose_ledger", None) if base is not None else None
-        if ledger is None or not hasattr(ledger, "load_marks"):
+        if ledger is None:
             return
-        try:
-            from zeno.vcli.worlds.go2w_real_maps import (
-                current_map,
-                home_place,
-                load_places,
-            )
-
-            active = current_map()
-            if active is None:
-                oplog("places", "setup", "no active map — session-only places")
-                return
-            marks = load_places(active)
-            home = home_place(active)
-            if home is not None:
-                # Built-in home ('home' + 家 alias) from start_pose.txt line 1;
-                # a persisted mark of the same name (unlikely) still wins below.
-                marks.setdefault("home", home)
-                marks.setdefault("家", home)
-            ledger.load_marks(marks)
-            oplog("places", "setup",
-                  f"map={active} loaded {len(marks)} place(s) "
-                  f"(home={'yes' if home else 'no'})")
-        except Exception as exc:  # noqa: BLE001 — persistence must not crash setup
-            oplog("places", "setup", f"place load FAILED: {exc}")
-            logger.warning("go2w_real: persistent places load failed: %s", exc)
+        n = refresh_marks_from_disk(ledger)
+        oplog("places", "setup", f"loaded {n} persisted place(s) from active map")
 
     def on_operator_interrupt(self, agent: Any) -> str:
         """Ctrl+C during a blocking turn: cancel motion, keep the session alive.
