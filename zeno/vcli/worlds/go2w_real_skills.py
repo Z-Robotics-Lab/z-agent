@@ -188,7 +188,10 @@ class RealNavigateSkill:
         oplog("skill", "navigate", f"goal=({x:.2f},{y:.2f}) from=({start[0]:.2f},{start[1]:.2f})")
         ok = bool(base.navigate_to(x, y, timeout=CFG.nav_timeout_s))
         pos = base.get_position()
-        oplog("skill", "navigate", f"{'ARRIVED' if ok else 'FAILED'} at=({pos[0]:.2f},{pos[1]:.2f})")
+        via = ("far_planner(/goal_point)" if getattr(base, "last_nav_routed", None)
+               else "DIRECT(/way_point!)")
+        oplog("skill", "navigate",
+              f"{'ARRIVED' if ok else 'FAILED'} at=({pos[0]:.2f},{pos[1]:.2f}) via {via}")
         if ok:
             return SkillResult(success=True, result_data={
                 "message": f"arrived at ({pos[0]:.2f}, {pos[1]:.2f}); "

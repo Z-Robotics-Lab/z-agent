@@ -154,6 +154,11 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # trusts it (WITH odometry sanity) rather than a 10s odometry-stall guess.
         self._far_reach: bool = False
         self._far_reach_ts: float = 0.0
+        #: last navigate_to routing decision — True = routed via far_planner
+        #: /goal_point (agent did NOT touch /way_point); False = direct /way_point
+        #: fallback (no far_planner). Skills oplog it so an agent /way_point publish
+        #: is always auditable (owner 2026-07-15: agent must not fight /way_point).
+        self.last_nav_routed: bool | None = None
         #: Set/cleared by Go2WRouteManager while far_planner republishes
         #: /way_point toward its route — those frames are plumbing, not clicks.
         self.route_overlay_active: bool = False
@@ -440,14 +445,20 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # own /way_point. No far_planner subscribed (fresh-mapping) -> direct
         # /way_point, where nobody fights us.
         routed = self._far_planner_present()
+        self.last_nav_routed = routed
         if routed:
             self._publish_goalpoint(x, y)
             logger.info("Go2WHardware: /goal_point -> (%.2f, %.2f) via far_planner,"
                         " timeout=%.0fs", x, y, timeout)
         else:
             self._publish_waypoint(x, y)
-            logger.info("Go2WHardware: /way_point -> (%.2f, %.2f) (no far_planner),"
-                        " timeout=%.0fs", x, y, timeout)
+            # LOUD: the agent is publishing /way_point itself. Only legitimate in
+            # fresh-mapping mode (no far_planner). If this fires with far_planner
+            # up, the single-author rule is broken (owner's /way_point-flap bug).
+            logger.warning("Go2WHardware: DIRECT /way_point -> (%.2f, %.2f) — NO "
+                           "far_planner subscribed to /goal_point (fresh-mapping "
+                           "fallback; must NOT happen in pre-built-map mode)",
+                           x, y)
 
         self._nav_abort.clear()
         period = 1.0 / max(poll_hz, 1.0)

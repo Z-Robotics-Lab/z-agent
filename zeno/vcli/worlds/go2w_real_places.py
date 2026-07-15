@@ -520,6 +520,9 @@ class RealGotoPlaceSkill:
 
         ok = bool(base.navigate_to(tx, ty, timeout=CFG.nav_timeout_s))
         p = base.get_position()
+        oplog("skill", "goto_place",
+              f"{'ARRIVED' if ok else 'did-not-reach'} '{name}' via "
+              f"{'far_planner(/goal_point)' if getattr(base, 'last_nav_routed', None) else 'DIRECT(/way_point!)'}")
         data = {"name": name, "kind": kind,
                 "x": round(tx, 2), "y": round(ty, 2),
                 "verify_hint": f"at({tx:.2f}, {ty:.2f}, tol=1.0)"}
