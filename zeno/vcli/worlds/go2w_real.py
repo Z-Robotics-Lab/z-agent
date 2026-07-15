@@ -491,6 +491,23 @@ class Go2WRealWorld:
                 f" (drift {math.degrees(drift):+.1f}deg)"
             )
         line += f" | odom age {age:.1f}s"
+        # Battery (best-effort, display-only): appended only when the driver
+        # exposes a FRESH reading. No ROS source exists yet (Go2W battery lives in
+        # the WebRTC lowstate; /battery_state republish is a CEO-gated add) so the
+        # getters return None -> nothing appended, footer byte-identical. Plain
+        # text, no emoji (commit a4549aa). Never raises.
+        pct_fn = getattr(base, "get_battery_percentage", None)
+        volt_fn = getattr(base, "get_battery_voltage", None)
+        try:
+            pct = pct_fn() if callable(pct_fn) else None
+            if pct is not None:
+                frag = f" | 电量 {float(pct):.0f}%"
+                volt = volt_fn() if callable(volt_fn) else None
+                if volt is not None:
+                    frag += f" ({float(volt):.1f}V)"
+                line += frag
+        except Exception:  # noqa: BLE001 — status note is best-effort
+            pass
         # Operator RViz goal (CEO field ask 2026-07-14): surface a FRESH manual
         # goal every model call so the model knows the operator took over and
         # never fights it. Fresh = age < 180 s; older/absent -> nothing (a stale

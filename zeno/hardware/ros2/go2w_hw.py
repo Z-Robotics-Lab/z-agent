@@ -107,6 +107,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
     WAYPOINT_TOPIC: str = "/way_point"
     GOALPOINT_TOPIC: str = "/goal_point"   # far_planner's goal input (park seam)
     REACH_TOPIC: str = "/far_reach_goal_status"  # far_planner's own arrival oracle (std_msgs/Bool)
+    BATTERY_TOPIC: str = "/battery_state"        # sensor_msgs/BatteryState (republished lowstate; may be absent)
     TELEOP_TOPIC: str = "/teleop_cmd_vel"
     ODOM_TOPIC: str = "/state_estimation"
     _TRIGGER_SERVICES: tuple[str, ...] = (
@@ -156,6 +157,11 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # trusts it (WITH odometry sanity) rather than a 10s odometry-stall guess.
         self._far_reach: bool = False
         self._far_reach_ts: float = 0.0
+        #: battery (best-effort, display-only) — None until a /battery_state source
+        #: exists (Go2W battery lives in the WebRTC lowstate). Stale -> None too.
+        self._battery_pct: float | None = None
+        self._battery_volt: float | None = None
+        self._battery_mono: float | None = None
         #: last navigate_to routing decision — True = routed via far_planner
         #: /goal_point (agent did NOT touch /way_point); False = direct /way_point
         #: fallback (no far_planner). Skills oplog it so an agent /way_point publish
@@ -219,6 +225,7 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             from rclpy.qos import QoSProfile, ReliabilityPolicy
             from geometry_msgs.msg import PointStamped, Twist
             from nav_msgs.msg import Odometry
+            from sensor_msgs.msg import BatteryState
             from std_msgs.msg import Bool
             from std_srvs.srv import Trigger
 
@@ -249,6 +256,10 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
             # far_planner's own arrival oracle — routed navigate_to trusts it
             # (with odometry sanity) instead of a 10s odometry-stall guess.
             node.create_subscription(Bool, self.REACH_TOPIC, self._on_far_reach, reliable)
+            # Battery (best-effort). The topic may not exist yet (Go2W battery is
+            # in the WebRTC lowstate; /battery_state republish is a CEO-gated add):
+            # the subscription then stays idle -> getters None -> footer unchanged.
+            node.create_subscription(BatteryState, self.BATTERY_TOPIC, self._on_battery, sensor)
             for svc in self._TRIGGER_SERVICES:
                 self._clients[svc] = node.create_client(Trigger, svc)
 
@@ -719,6 +730,31 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         FAR_REACH_RADIUS_M so a stale/other-goal reach cannot fake arrival."""
         return (self._far_reach
                 and (time.monotonic() - self._far_reach_ts) <= self.FAR_REACH_FRESH_S)
+
+    def _on_battery(self, msg: Any) -> None:
+        """sensor_msgs/BatteryState — best-effort battery cache. Executor-thread
+        callback: tiny, never raises. ROS convention: percentage is 0.0-1.0
+        (tolerate a 0-100 republisher too)."""
+        try:
+            pct = float(msg.percentage)
+            self._battery_pct = pct * 100.0 if pct <= 1.0 else pct
+            self._battery_volt = float(msg.voltage)
+            self._battery_mono = time.monotonic()
+        except Exception:  # noqa: BLE001 — malformed frame, ignore
+            pass
+
+    def _battery_fresh(self) -> bool:
+        return (self._battery_mono is not None
+                and (time.monotonic() - self._battery_mono) <= 10.0)
+
+    def get_battery_percentage(self) -> float | None:
+        """Battery state-of-charge 0-100, or None (no source / stale). Display-only,
+        mirrors the odom-age honesty rule — NEVER fabricates a value."""
+        return self._battery_pct if self._battery_fresh() else None
+
+    def get_battery_voltage(self) -> float | None:
+        """Battery pack voltage (V), or None (no source / stale)."""
+        return self._battery_volt if self._battery_fresh() else None
 
     # ------------------------------------------------------------------
     # Direct velocity — /teleop_cmd_vel, clamped, >=4 Hz cadence
