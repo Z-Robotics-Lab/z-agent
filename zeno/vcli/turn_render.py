@@ -214,22 +214,50 @@ def derive_turn_state(kind: str, prev: str) -> str:
     return _KIND_STATE.get(str(kind), prev)
 
 
-def render_state_machine(current: str) -> str:
-    """The main-line state spine with ``current`` highlighted (▶ + brand).
+def render_state_machine(current: str, reached_rank: int | None = None) -> str:
+    """The 5-phase spine as a tri-state FILLING progress track (display-only).
 
-    A branch state (recovering / yielded) is appended after the spine so the
-    operator sees the robot left the happy path without hiding where it was.
+    The destination (完成) is a fixed control-flow certainty — every turn runs
+    待命→规划→执行→验证→完成 — so the spine is a legitimate progress bar, not a
+    predicted plan. Each stage renders in one of three visually distinct states,
+    so "how far along" is legible at a glance (the old flat spine dimmed done and
+    pending identically — you could not tell distance-travelled from -remaining):
+
+      done     ●<label>   filled node (OK green) + dim label; solid ━→ rail-in
+      current  ▶<label>   bold brand arrow (recolored green at the terminal 完成)
+      pending  ○<label>   hollow node + faint label; dotted ┄→ rail-in
+
+    ``reached_rank`` is the furthest main-line rank the turn has reached. It lets
+    a BRANCH state (恢复 / 让位 — off the main line, rank -1) FREEZE the fill at
+    the last real stage instead of collapsing to all-pending: the branch never
+    fake-advances toward 完成, it just hangs an amber ⑂ tag on the right. The ▶
+    of the current stage and the literal → fused into every connector are
+    preserved verbatim (acceptance/tests pin them).
     """
-    parts: list[str] = []
-    for st, label in _MAINLINE:
-        if st == current:
-            parts.append(f"[bold {_p.BRAND}]▶{label}[/]")
+    cur = _MAINLINE_RANK.get(current, -1)
+    branch = current in _BRANCH_LABEL
+    # The "front" of the fill: the current stage on the main line, or the frozen
+    # last-reached stage when we are off on a branch.
+    front = cur if cur >= 0 else (reached_rank if reached_rank is not None else -1)
+    at_done = current == STATE_DONE
+
+    cells: list[str] = []
+    for i, (_st, label) in enumerate(_MAINLINE):
+        if i == front:
+            tint = _p.WARN if branch else (_p.OK if at_done else _p.BRAND)
+            cells.append(f"[bold {tint}]▶{label}[/]")                  # current / frozen front
+        elif i < front:
+            cells.append(f"[{_p.OK}]●[/][{_p.TEXT_DIM}]{label}[/]")     # done
         else:
-            parts.append(f"[{_p.TEXT_FAINT}]{label}[/]")
-    spine = f"[{_p.HAIRLINE}] → [/]".join(parts)
-    if current in _BRANCH_LABEL:
-        spine += f"  [{_p.WARN}]⑂ {_BRANCH_LABEL[current]}[/]"
-    return spine
+            cells.append(f"[{_p.TEXT_FAINT}]○{label}[/]")              # pending
+    out = cells[0]
+    for i in range(1, len(cells)):
+        solid = (i - 1) < front                                        # laid track behind the front
+        conn = f"[{_p.BRAND_DIM}]━→[/]" if solid else f"[{_p.HAIRLINE}]┄→[/]"
+        out += f" {conn} {cells[i]}"
+    if branch:
+        out += f"  [{_p.WARN}]⑂ {_BRANCH_LABEL[current]}[/]"
+    return out
 
 
 def derive_authority(live_status: str, estopped: bool = False) -> tuple[str, str, str]:
@@ -560,13 +588,16 @@ class ChainView:
             pass
 
     def _emit_state_line(self) -> None:
-        """Sink mode: stream the execution state spine + control-authority badge
-        (P5 layer-0). Pure projection — the states already happen; this only makes
-        待命→规划→执行→验证→完成 visible in the composer transcript path, which
-        never calls render_lines(). Never touches verify/verdict."""
+        """Sink mode: stream the tri-state progress spine + control-authority
+        badge (P5 layer-0). Pure projection — the states already happen; this only
+        makes 待命→规划→执行→验证→完成 visible in the composer transcript path,
+        which never calls render_lines(). Never touches verify/verdict. (No outer
+        [dim] wrapper — the per-stage tri-state colors ARE the hierarchy now.)"""
         self._refresh_live_status()
         badge = render_authority(derive_authority(self._live_status))
-        self._sink(f"  {badge}   [dim]{render_state_machine(self._current_state)}[/dim]")
+        self._sink(
+            f"  {badge}   {render_state_machine(self._current_state, self._max_state_rank)}"
+        )
 
     def _tell_activity(self, text: str) -> None:
         if self._activity_sink is None:
@@ -582,15 +613,18 @@ class ChainView:
             return
         # P5 layer-0: advance the display-only execution state machine.
         self._current_state = derive_turn_state(kind, self._current_state)
-        # Sink mode (the persistent-composer path — the one the field actually
-        # runs) never calls render_lines(), so the state spine used to be
-        # invisible. Stream it once per NEW forward stage reached (待命→规划→执行
-        # →验证→完成). Pure projection; never re-derives verify.
-        if self._transcript_sink is not None:
-            rank = _MAINLINE_RANK.get(self._current_state, -1)
-            if rank > self._max_state_rank:
-                self._max_state_rank = rank
-                self._emit_state_line()
+        # Track the furthest main-line stage reached (monotonic) in EVERY mode —
+        # the progress track reads it to freeze the fill at the last real stage
+        # when we branch off (恢复/让位). Sink mode (the persistent-composer path,
+        # the one the field runs) additionally streams the spine once per NEW
+        # forward stage, because it never calls render_lines(). Pure projection;
+        # never re-derives verify.
+        rank = _MAINLINE_RANK.get(self._current_state, -1)
+        advanced = rank > self._max_state_rank
+        if advanced:
+            self._max_state_rank = rank
+        if self._transcript_sink is not None and advanced:
+            self._emit_state_line()
         label = str(getattr(event, "label", "") or "")
         detail = str(getattr(event, "detail", "") or "")
         ok = getattr(event, "ok", None)
@@ -627,11 +661,13 @@ class ChainView:
             self._nodes.append(node)
             self._sink(self._render_one_node(node))
         elif kind == "nudge":
-            self._nudges.append(detail or label)
-            self._sink(f"  [{_p.WARN}]⟲[/] {_escape_markup(detail or label)}")
+            text = detail or label
+            self._nudges.append(text)
+            self._sink(self._render_nudge(text))
         elif kind == "interject":
-            self._nudges.append("操作员插队 — 取消剩余步骤")
-            self._sink(f"  [{_p.WARN}]⟲[/] 操作员插队 — 取消剩余步骤")
+            text = "操作员插队 — 取消剩余步骤"
+            self._nudges.append(text)
+            self._sink(self._render_nudge(text))
         elif kind == "finish":
             self.finish_data = dict(getattr(event, "data", None) or {})
 
@@ -648,8 +684,17 @@ class ChainView:
 
     # -- rendering ------------------------------------------------------
 
-    def _render_one_node(self, node: dict[str, Any]) -> str:
-        """Render ONE chain node (shared: live view / persisted tree / sink)."""
+    def _render_one_node(self, node: dict[str, Any], last: bool = False) -> str:
+        """Render ONE chain node with tree rails (shared: live / persisted / sink).
+
+        The flat chain becomes a rooted tree hanging off the ⌂ goal trunk: a tool
+        is a depth-1 branch (``├─``, or ``└─`` only when known to be the trailing
+        branch — which only ``final_lines`` can know), and its verify nests one
+        level UNDER it at depth-2 (``│  └─``) so the check visibly belongs to the
+        tool instead of floating as a sibling at the same indent. Append-only can
+        never know the last child at stream time, so the live/sink path always
+        emits the open ``├─`` (honest — more may follow)."""
+        H = _p.HAIRLINE
         label = _escape_markup(node.get("label", ""))
         if node["kind"] == "tool":
             detail = _escape_markup(node.get("detail", ""))
@@ -662,9 +707,10 @@ class ChainView:
                 state = f"[{_p.BAD}]×[/]"
             err = node.get("err") or ""
             err_part = f"  [{_p.BAD}]{_escape_markup(err)}[/]" if err else ""
+            tee = "└─" if last else "├─"
             return (
-                f"  [bold {_p.BRAND_DIM}]◇[/] [dim #738091]Tool[/] "
-                f"[{_p.HAIRLINE}]·[/] {label}{detail}  {state}{err_part}"
+                f"  [{H}]{tee}[/] [bold {_p.BRAND_DIM}]◇[/] [dim #738091]Tool[/] "
+                f"[{H}]·[/] {label}{detail}  {state}{err_part}"
             )
         ok = node.get("ok")
         if ok is None:
@@ -673,13 +719,27 @@ class ChainView:
             mark = f"[{_p.OK}]✓[/]"
         else:
             mark = f"[{_p.BAD}]✗[/]"
-        return f"  [{_p.HAIRLINE}]└─[/] [{_p.TEXT_DIM}]verify[/] {label} {mark}"
+        return f"  [{H}]│  └─[/] [{_p.TEXT_DIM}]verify[/] {label} {mark}"
 
-    def _chain_lines(self) -> list[str]:
-        """Node + nudge lines shared by the live view and the persisted tree."""
+    def _render_nudge(self, text: str, last: bool = False) -> str:
+        """A recovery/interject annotation on the trunk (⟲, amber, depth-1)."""
+        tee = "└─" if last else "├─"
+        return f"  [{_p.HAIRLINE}]{tee}[/] [{_p.WARN}]⟲ {_escape_markup(text)}[/]"
+
+    def _chain_lines(self, close: bool = False) -> list[str]:
+        """Node + nudge lines shared by the live view and the persisted tree.
+
+        ``close`` (persisted tree only) promotes the visually-last trunk node to a
+        ``└─`` elbow so the finished tree reads as closed. A trailing verify
+        already closes its own subtree (``│  └─``); only a bare trailing tool (no
+        verify) or the last nudge needs promoting. The live/sink path leaves every
+        trunk node ``├─`` (open) — append-only can't know the last child."""
         lines = [self._render_one_node(node) for node in self._nodes]
-        for nudge in self._nudges:
-            lines.append(f"  [{_p.WARN}]⟲[/] {_escape_markup(nudge)}")
+        nudges = list(self._nudges)
+        if close and not nudges and self._nodes and self._nodes[-1]["kind"] == "tool":
+            lines[-1] = self._render_one_node(self._nodes[-1], last=True)
+        for k, nudge in enumerate(nudges):
+            lines.append(self._render_nudge(nudge, last=(close and k == len(nudges) - 1)))
         return lines
 
     def final_lines(self, goal: str) -> list[str]:
@@ -696,8 +756,8 @@ class ChainView:
         badge = render_authority(derive_authority(self._live_status))
         return [
             f"  [bold {_TEAL}]⌂ {_escape_markup(str(goal))}[/]{rounds}",
-            *self._chain_lines(),
-            f"  {badge}   [dim]{render_state_machine(self._current_state)}[/dim]",
+            *self._chain_lines(close=True),
+            f"  {badge}   {render_state_machine(self._current_state, self._max_state_rank)}",
         ]
 
     def render_lines(self) -> list[str]:
@@ -711,7 +771,7 @@ class ChainView:
         # unchanged). Authority is inferred from the same live-status line.
         badge = render_authority(derive_authority(self._live_status))
         lines.append(
-            f"  {badge}   [dim]{render_state_machine(self._current_state)}[/dim]"
+            f"  {badge}   {render_state_machine(self._current_state, self._max_state_rank)}"
         )
         if self._live_status:
             lines.append(f"  [dim]⌖ {_escape_markup(self._live_status)}[/]")

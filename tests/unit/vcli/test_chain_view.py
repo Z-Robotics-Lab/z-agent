@@ -259,6 +259,52 @@ def test_final_lines_empty_without_events() -> None:
     assert view.final_lines("g") == []
 
 
+def test_tree_rails_nest_verify_under_its_tool() -> None:
+    """DELTA 2 (2026-07-15): the flat chain becomes a rooted tree — a tool hangs
+    off the ⌂ trunk on a ├─ elbow, and its verify nests one level UNDER it on a
+    │  └─ rail, so the check visibly BELONGS to the tool instead of floating as a
+    sibling at the same indent."""
+    from rich.text import Text
+
+    view, _ = _make()
+    view.handle_event(NativeEvent(kind="tool_start", label="navigate", detail="(dest=home)"))
+    view.handle_event(NativeEvent(kind="tool_end", label="navigate", ok=True))
+    view.handle_event(NativeEvent(kind="verify", label="at_place('home')", ok=True))
+    lines = view.render_lines()
+    tool_line = next(l for l in lines if "◇" in l and "navigate" in l)
+    verify_line = next(l for l in lines if "verify" in l and "at_place" in l)
+    assert Text.from_markup(tool_line).plain.lstrip().startswith("├─")  # tool on the trunk
+    assert "│  └─" in Text.from_markup(verify_line).plain               # verify nested deeper
+
+
+def test_final_lines_closes_trailing_bare_tool_with_elbow() -> None:
+    """The PERSISTED tree closes: a trailing bare tool (no verify child) is
+    promoted from ├─ to a └─ elbow so the finished tree reads as closed. The
+    live/sink stream never does this (append-only can't know the last child)."""
+    from rich.text import Text
+
+    view, _ = _make()
+    view.handle_event(NativeEvent(kind="tool_start", label="stand"))
+    view.handle_event(NativeEvent(kind="tool_end", label="stand", ok=True))
+    tool_line = next(l for l in view.final_lines("站起来") if "◇" in l and "stand" in l)
+    assert "└─" in Text.from_markup(tool_line).plain
+
+
+def test_sink_mode_streams_tree_rails() -> None:
+    """The field path (sink) shows the same rooted tree: ├─ tools on the trunk,
+    │  └─ verify nested under each."""
+    from rich.text import Text
+
+    view, lines, _a = _make_sink_view()
+    view.begin_goal("回 home")
+    view.handle_event(NativeEvent(kind="tool_start", label="navigate", detail="(dest=home)"))
+    view.handle_event(NativeEvent(kind="tool_end", label="navigate", ok=True))
+    view.handle_event(NativeEvent(kind="verify", label="at_place('home')", ok=True))
+    plain = Text.from_markup("\n".join(lines)).plain
+    assert "├─" in plain and "◇" in plain  # tool on the trunk
+    assert "│  └─" in plain                 # verify nested under it
+
+
 def test_final_lines_escapes_goal_markup() -> None:
     view, _ = _make()
     view.handle_event(NativeEvent(kind="tool_start", label="walk"))

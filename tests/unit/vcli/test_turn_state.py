@@ -85,6 +85,38 @@ def test_state_machine_branch_state_annotated() -> None:
     assert "恢复" in plain
 
 
+def test_state_machine_is_tristate_progress_track() -> None:
+    """DELTA 2 (2026-07-15): done/current/pending are three VISUALLY distinct
+    states (the old flat spine dimmed done and pending identically). A stage
+    already passed carries a filled ● node; the current stage the pinned ▶; a
+    not-yet-reached stage a hollow ○. The connector still fuses the pinned →
+    and splits into a solid ━→ laid-track behind the front and a dotted ┄→
+    not-yet-track ahead — the fill you read as a progress bar."""
+    from rich.text import Text
+
+    plain = Text.from_markup(render_state_machine(STATE_ACTING)).plain
+    assert "●待命" in plain and "●规划" in plain  # passed stages -> filled node
+    assert "▶执行" in plain                        # current -> pinned arrow
+    assert "○验证" in plain and "○完成" in plain   # pending -> hollow node
+    assert "━→" in plain                           # solid laid-track (behind the front)
+    assert "┄→" in plain                           # dotted not-yet-track (ahead)
+    assert "→" in plain                            # the pinned connector arrow survives
+
+
+def test_state_machine_branch_freezes_at_reached_rank() -> None:
+    """A branch (恢复/让位) is OFF the main line, so it FREEZES the fill at the
+    last real stage reached instead of collapsing to all-pending — it must never
+    fake-advance toward 完成; the amber ⑂ tag hangs on the right."""
+    from rich.text import Text
+
+    # reached VERIFYING(rank 3) then branched to RECOVERING
+    plain = Text.from_markup(render_state_machine("RECOVERING", reached_rank=3)).plain
+    assert "●执行" in plain      # stages before the frozen front are filled
+    assert "▶验证" in plain      # frozen front held at the last real stage
+    assert "○完成" in plain      # never fake-advances to the destination
+    assert "⑂ 恢复" in plain
+
+
 # ---------------------------------------------------------------------------
 # derive_authority + render — AGENT / OPERATOR / ESTOP
 # ---------------------------------------------------------------------------
