@@ -22,6 +22,7 @@ from zeno.vcli.turn_render import (
     STATE_YIELDED,
     derive_authority,
     derive_turn_state,
+    spinner_frame,
     render_authority,
     render_state_machine,
 )
@@ -114,5 +115,14 @@ def test_render_authority_renders_only_the_fixed_label() -> None:
     # the raw live_status — so a spoofed status can inject NOTHING here.
     line = render_authority(derive_authority("pose [bold]x[/] · RViz手动目标 (0,0)"))
     plain = Text.from_markup(line).plain
-    assert plain.strip().endswith("OPERATOR")
+    assert plain.strip() == "OPERATOR"  # text-only badge, no emoji/marker
     assert "[bold]" not in plain  # live_status text never reaches the badge
+
+
+def test_spinner_frame_rotates_and_is_braille() -> None:
+    from zeno.vcli.turn_render import _SPINNER_FRAMES
+
+    frames = {spinner_frame(t / 10.0) for t in range(20)}
+    assert len(frames) > 1  # it actually rotates over time
+    assert frames <= set(_SPINNER_FRAMES)  # only braille spinner glyphs
+    assert spinner_frame(float("nan")) in _SPINNER_FRAMES  # never raises

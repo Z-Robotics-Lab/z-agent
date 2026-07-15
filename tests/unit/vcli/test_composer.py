@@ -253,12 +253,12 @@ def test_footer_parts_carry_distinct_style_classes() -> None:
     from prompt_toolkit.formatted_text import HTML
 
     composer = _mk(lambda: HTML(
-        "⚙ navigate 执行中… | ⌖ pose x=1.96 y=-1.90 yaw=-6.5deg · odom age 0.1s | "
+        "⠹ navigate 执行中… | ⌖ pose x=1.96 y=-1.90 yaw=-6.5deg · odom age 0.1s | "
         "base:go2w_hw | model:deepseek-v4-pro | tools:44 | msgs:12"
     ))
     styles = _footer_styles(composer)
     style_of = {text.strip(): style for style, text in styles}
-    act = next(v for k, v in style_of.items() if k.startswith("⚙"))
+    act = next(v for k, v in style_of.items() if k.startswith("⠹"))
     pose = next(v for k, v in style_of.items() if "pose" in k)
     meta = next(v for k, v in style_of.items() if k.startswith("base:"))
     assert "activity" in act
@@ -316,11 +316,11 @@ def test_footer_authority_badge_colored_by_who_drives() -> None:
     from prompt_toolkit.formatted_text import HTML
 
     for badge, cls in (
-        ("● AGENT", "auth.agent"),
-        ("✋ OPERATOR", "auth.operator"),
-        ("■ ESTOP", "auth.estop"),
+        ("AGENT", "auth.agent"),
+        ("OPERATOR", "auth.operator"),
+        ("ESTOP", "auth.estop"),
     ):
         composer = _mk(lambda b=badge: HTML(f"{b} | ⌖ pose x=1 · odom age 0.1s | model:m"))
         styles = _footer_styles(composer)
-        auth_style = next(s for s, t in styles if t.strip().endswith(badge.split()[1]))
+        auth_style = next(s for s, t in styles if t.strip() == badge)
         assert cls in auth_style, (badge, auth_style)

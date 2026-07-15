@@ -68,6 +68,7 @@ from zeno.vcli.permissions import PermissionContext
 from zeno.vcli.prompt import build_system_prompt
 from zeno.vcli.turn_render import (
     derive_authority,
+    spinner_frame,
     ChainView,
     ReasoningStreamer,
     fmt_duration,
@@ -3559,9 +3560,10 @@ def main(argv: list[str] | None = None) -> None:
         # same live-status line. Display-only; execution/arbitration unchanged.
         _live_raw = _live_status_cached(app_state) or ""
         _marker, _auth, _ = derive_authority(_live_raw)
-        parts.append(f"{_marker} {_auth}")
+        parts.append(_auth)  # text-only badge (no emoji/marker)
         if _act:
-            parts.append(f"⚙ {_act}")
+            # a quiet braille spinner reads as 'loading' while a turn runs
+            parts.append(f"{spinner_frame(time.monotonic())} {_act}")
         live_status = _live_status_toolbar_fragment(app_state)
         if live_status:
             # Keep live truth first so narrow terminals show pose/odom before

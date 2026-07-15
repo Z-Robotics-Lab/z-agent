@@ -244,9 +244,21 @@ def derive_authority(live_status: str, estopped: bool = False) -> tuple[str, str
 
 
 def render_authority(badge: tuple[str, str, str]) -> str:
-    """Render an authority badge (marker + label) in its palette color."""
-    marker, label, style = badge
-    return f"[bold {style}]{marker} {_escape_markup(label)}[/]"
+    """Render an authority badge — text-only (no emoji), palette-colored."""
+    _marker, label, style = badge
+    return f"[bold {style}]{_escape_markup(label)}[/]"
+
+
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+def spinner_frame(t: float) -> str:
+    """One braille spinner glyph for wall-clock ``t`` — a quiet rotating dot
+    that reads as 'loading' while a turn runs (replaces the ⚙ gear)."""
+    try:
+        return _SPINNER_FRAMES[int(float(t) * 10) % len(_SPINNER_FRAMES)]
+    except Exception:  # noqa: BLE001 — display helper, never fatal
+        return _SPINNER_FRAMES[0]
 
 
 def render_turn_separator(seq: int, ts: str, width: int = 80) -> str:
