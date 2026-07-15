@@ -27,10 +27,14 @@ from zeno.hardware.ros2.go2w_hw_overlay import OverlayLauncher
 from zeno.vcli.tools.base import ToolContext, ToolResult, tool
 
 #: view name (agent-facing) -> nav.sh subcommand (one overlay per view).
+#: 'route' now maps to the MAIN view: far_planner's displays (GlobalPath /
+#: Goalpoint / VGraph / ViewpointExtend) were merged into vehicle_simulator.rviz
+#: (2026-07-15), so there is no separate route RViz. Same key as 'main' -> the
+#: launcher dedupes them (opening 'route' when 'main' is up is a no-op).
 _VIEWS: dict[str, str] = {
     "main": "rviz",
     "explore": "rviz-explore",
-    "route": "rviz-route",
+    "route": "rviz",
 }
 
 #: STANDALONE-SCRIPT views: view name -> a script the OverlayLauncher runs

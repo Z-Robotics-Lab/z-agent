@@ -56,11 +56,13 @@ def test_viz_views_map_to_nav_sh_modes(tmp_path):
     assert not _run(tool, action="open", view="explore").is_error
     modes = [argv[2] for argv, _ in factory.calls]
     assert modes == ["rviz-explore"]
-    # route view uses a fresh tool (FakePopenFactory shares one proc)
+    # route view now maps to the MAIN 'rviz' mode: far_planner's displays were
+    # merged into vehicle_simulator.rviz (2026-07-15), so there is no separate
+    # rviz-route overlay. Fresh tool (FakePopenFactory shares one proc).
     factory2 = FakePopenFactory()
     tool2 = _tool(tmp_path, factory2)
     assert not _run(tool2, action="open", view="route").is_error
-    assert [argv[2] for argv, _ in factory2.calls] == ["rviz-route"]
+    assert [argv[2] for argv, _ in factory2.calls] == ["rviz"]
 
 
 def test_viz_double_open_reports_already_running(tmp_path):

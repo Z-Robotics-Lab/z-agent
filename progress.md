@@ -3,7 +3,18 @@
 更新：2026-07-15。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**（未 push/未动 main）。
 
 ## Works（已验证 / 单测 GREEN）
-- **agent 读不到地标 + 无模糊匹配（本轮，现场 bug）**：根因① `_load_persistent_places` 只在 world
+- **回家/走2米零位移 根因 + Fix B(本轮,bag 实锤)**:navigate_to 的 park_route_planner
+  (07-14 加,泊 far_planner=发 /goal_point=当前位姿)**适得其反** —— bag 证明泊住的 far_planner
+  在 0.1s 内把 /way_point 覆盖回≈当前位姿(幽灵点 -0.26,-0.13),localPlanner 每次刚规划好
+  101 点路径就被夺成"已到达"→零长度路径→冻住(2465 零长 vs 19 真路径)。**Fix B**:far_planner
+  订阅 /goal_point 时,navigate_to 发 /goal_point=目标 让 far_planner 独占 /way_point(单写者);
+  无 far_planner 回退直发 /way_point;stop/stall/timeout 时才 park(停 far_planner)。_far_planner_present()
+  用真 int 订阅数判定(mock 非 int→False→回退,老测试不动)。move_relative/goto_place 继承。
+  RViz:far_planner 4 个 display(GlobalPath/Goalpoint/VGraph/ViewpointExtend)并入
+  vehicle_simulator.rviz(20→24,零丢失);nav rviz-route→别名开主视图;zeno view=route→rviz。
+  测:test_go2w_hw_park_route 反转 07-14 park 断言;392 go2w_real/go2w_hw pass。
+  **真机闭环未验(下一步跑 nav_session_record.sh 复现确认)。**
+- **agent 读不到地标 + 无模糊匹配（上一轮,现场 bug）**：根因① `_load_persistent_places` 只在 world
   setup 跑一次——`nav mark`（独立进程）写盘或地图后激活的点,内存 ledger 永远看不到;② `goto_place`
   精确匹配,'harry'≠'Harry Z Lab 工位'。修:`go2w_real_places.refresh_marks_from_disk(ledger)` 在
   where/goto_place/list_places 每次调用前实时重读 `~/maps/<map>/places.json`（加法合并,never-raise);

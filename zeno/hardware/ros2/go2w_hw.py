@@ -382,13 +382,16 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         stall_timeout: float | None = None,
         on_progress: Callable[[float, float], None] | None = None,
     ) -> bool:
-        """Drive to map-frame (x, y): publish /way_point ONCE, poll odometry.
+        """Drive to map-frame (x, y), then poll odometry until arrival.
 
-        Latched pursuit — the local planner keeps chasing the single waypoint, so
-        we publish it exactly once and then watch /state_estimation until the
-        robot is within ARRIVAL_RADIUS_M (True), the timeout expires, or progress
-        stalls for ``stall_timeout`` seconds. On timeout/stall we clear the latch
-        via /nav_cancel so the robot does not keep driving to an abandoned goal.
+        Fix B (2026-07-15): if the resident far_planner is subscribed to
+        /goal_point we ROUTE THROUGH it — publish the goal on /goal_point and let
+        far_planner plan a global path AND own /way_point (single author). With no
+        far_planner (fresh-mapping) we fall back to a direct /way_point (nobody to
+        fight). Either way we then watch /state_estimation until the robot is
+        within ARRIVAL_RADIUS_M (True), the timeout expires, or progress stalls
+        for ``stall_timeout`` s. On stop/stall/timeout we /nav_cancel AND (when
+        routed) park far_planner so it does not keep driving to an abandoned goal.
 
         Returns True only on odometry-verified arrival (the real oracle).
         """
@@ -409,9 +412,24 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # not this drive's business).
         self.nav_overridden = False
         prev_ext = self._external_goal
-        self.park_route_planner()  # single-author rule: silence far_planner
-        self._publish_waypoint(x, y)
-        logger.info("Go2WHardware: /way_point -> (%.2f, %.2f), timeout=%.0fs", x, y, timeout)
+        # Fix B (bag-proven 2026-07-15): the resident far_planner is the SINGLE
+        # /way_point author. PARKING it (goal=current pose) to "silence" it
+        # BACKFIRED — a parked far_planner republishes /way_point at ~current
+        # pose within 0.1 s, OVERWRITING our target: localPlanner briefly found a
+        # 101-pose path, then got yanked to "already here" -> zero-length path ->
+        # frozen (往前走2米 stuck, 2465 zero-len paths vs 19 real in the bag). So
+        # we ROUTE THROUGH far_planner: publish the goal on /goal_point and let it
+        # own /way_point. No far_planner subscribed (fresh-mapping) -> direct
+        # /way_point, where nobody fights us.
+        routed = self._far_planner_present()
+        if routed:
+            self._publish_goalpoint(x, y)
+            logger.info("Go2WHardware: /goal_point -> (%.2f, %.2f) via far_planner,"
+                        " timeout=%.0fs", x, y, timeout)
+        else:
+            self._publish_waypoint(x, y)
+            logger.info("Go2WHardware: /way_point -> (%.2f, %.2f) (no far_planner),"
+                        " timeout=%.0fs", x, y, timeout)
 
         self._nav_abort.clear()
         period = 1.0 / max(poll_hz, 1.0)
@@ -424,6 +442,8 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         while time.monotonic() - start < timeout:
             if self._nav_abort.is_set():
                 logger.info("Go2WHardware: navigation cancelled by operator")
+                if routed:
+                    self.park_route_planner()  # halt far_planner (operator 停下)
                 return False
             time.sleep(period)
             # Operator RViz takeover: an external /way_point arrived AFTER this
@@ -447,6 +467,8 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
 
             if dist < self.ARRIVAL_RADIUS_M:
                 logger.info("Go2WHardware: arrived (dist=%.2fm)", dist)
+                if routed:
+                    self.park_route_planner()  # settle far_planner at the goal
                 return True
 
             if dist < last_dist - self.STALL_EPS_M:
@@ -460,10 +482,14 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
                     stall_accum, dist,
                 )
                 self.nav_cancel()
+                if routed:
+                    self.park_route_planner()
                 return False
 
         logger.warning("Go2WHardware: navigate_to timeout — cancelling latch")
         self.nav_cancel()
+        if routed:
+            self.park_route_planner()
         return False
 
     def park_route_planner(self) -> None:
@@ -507,6 +533,38 @@ class Go2WHardware(CameraMixin, TriggerServiceMixin):
         # an operator RViz click (own-echo suppression in _on_waypoint).
         self._own_goal = (float(x), float(y), time.monotonic())
         self._waypoint_pub.publish(msg)
+
+    def _publish_goalpoint(self, x: float, y: float) -> None:
+        """Publish one PointStamped to /goal_point — far_planner's route goal.
+
+        Fix B single-author seam (2026-07-15): far_planner plans a global route to
+        (x, y) and drives it by OWNING /way_point, so we do NOT publish /way_point
+        ourselves — that two-writer fight is exactly what froze the robot. Records
+        _own_goal for echo bookkeeping; the caller polls odometry for arrival.
+        """
+        from geometry_msgs.msg import PointStamped
+
+        msg = PointStamped()
+        msg.header.frame_id = "map"
+        msg.header.stamp = self._node.get_clock().now().to_msg()
+        msg.point.x = float(x)
+        msg.point.y = float(y)
+        msg.point.z = 0.0
+        self._own_goal = (float(x), float(y), time.monotonic())
+        self._goalpoint_pub.publish(msg)
+
+    def _far_planner_present(self) -> bool:
+        """True when a far_planner is subscribed to /goal_point (route through
+        it). rclpy returns a real int; require one (-> any non-int/absent count
+        is False = fall back to a direct /way_point, the single-writer case)."""
+        pub = self._goalpoint_pub
+        if pub is None:
+            return False
+        try:
+            count = pub.get_subscription_count()
+        except Exception:  # noqa: BLE001 — probe must not raise
+            return False
+        return isinstance(count, int) and count > 0
 
     # ------------------------------------------------------------------
     # Operator RViz-goal detection (own /way_point subscription)

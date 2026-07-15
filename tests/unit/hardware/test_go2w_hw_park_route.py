@@ -1,20 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2024-2026 Vector Robotics
 
-"""Single-waypoint-author rule — park the resident far_planner (RED first).
+"""far_planner is the single /way_point author — how the driver cooperates.
 
-Field disaster 2026-07-14 evening: the resident far_planner still held a
-stale goal (near home) and REPUBLISHED /way_point toward it forever — every
-move_relative then fought it on the same waypoint channel (dog staggered
-forward 3m in 24s; the next attempt spun in place because the stale goal sat
-BEHIND). The status line even showed the smoking gun: 'RViz手动目标
-(-0.08,-0.11)' that nobody clicked.
+History (both regimes bag-pinned):
+* 2026-07-14: the resident far_planner held a stale goal and REPUBLISHED
+  /way_point toward it forever, so every direct move fought it. First fix:
+  PARK far_planner (publish /goal_point=current pose) before our own /way_point.
+* 2026-07-15 bag: park-before-navigate BACKFIRES. A parked far_planner
+  republishes /way_point at ~current pose within 0.1s and OVERWRITES our target
+  (2465 zero-length paths vs 19 real; 往前走2米 frozen at the origin).
 
-Rule pinned here: before ANY direct motion (navigate_to / rotate /
-reverse_blind / dock_to) the driver PARKS the route planner — publishes
-/goal_point at the CURRENT pose, which far_planner immediately treats as
-reached and goes silent. Park frames echoing back on /way_point are
-plumbing, not operator clicks.
+Fix B pinned here:
+* navigate_to ROUTES THROUGH far_planner when it is subscribed to /goal_point —
+  publish the TARGET on /goal_point, let far_planner plan + own /way_point (we do
+  NOT publish /way_point). No far_planner subscribed -> direct /way_point
+  fallback. On stop/stall/timeout (routed) we park far_planner to halt it.
+* TELEOP motions (rotate / reverse_blind / dock_to) STILL park far_planner up
+  front — they drive on /teleop_cmd_vel, so there is no /way_point two-writer
+  fight; parking just stops far_planner driving underneath the teleop.
+* park_route_planner + its /way_point echo-suppression are unchanged.
 
 ROS-free: mock node fixture (same as the rotate/dock suites).
 """
@@ -78,15 +83,49 @@ def park_hw(monkeypatch: pytest.MonkeyPatch):
         yield mod, hw, published, clk
 
 
-def test_navigate_parks_route_planner_before_own_waypoint(park_hw):
+def test_navigate_routes_via_far_planner_goal_point(park_hw):
+    """Fix B: with far_planner subscribed, navigate publishes the TARGET on
+    /goal_point (far_planner routes + owns /way_point) — NOT a park-at-current,
+    and NOT our own /way_point. Reverses the 2026-07-14 park-before rule the bag
+    proved backfired."""
     mod, hw, pubs, _clk = park_hw
     hw._position = (2.0, 1.0, 0.0)
+    hw._goalpoint_pub.get_subscription_count.return_value = 1  # far_planner present
     with patch.dict("sys.modules", _ros_module_stubs()):
         hw.navigate_to(5.0, 1.0, timeout=0.5)
-    assert pubs.get("/goal_point"), "far_planner must be parked (goal_point)"
-    assert pubs["/goal_point"][0] == (pytest.approx(2.0), pytest.approx(1.0)), \
-        "park goal = CURRENT pose (far_planner treats it as reached -> silent)"
-    assert pubs["/way_point"], "own waypoint still published"
+    assert pubs.get("/goal_point"), "goal must be routed through far_planner"
+    assert pubs["/goal_point"][0] == (pytest.approx(5.0), pytest.approx(1.0)), \
+        "/goal_point carries the TARGET (not current pose — no park-before)"
+    assert not pubs.get("/way_point"), \
+        "we must NOT publish /way_point — far_planner owns it (single author)"
+
+
+def test_navigate_falls_back_to_waypoint_without_far_planner(park_hw):
+    """No far_planner subscribed (fresh-mapping) -> direct /way_point, nobody to
+    fight; the TARGET is never routed via /goal_point."""
+    mod, hw, pubs, _clk = park_hw
+    hw._position = (2.0, 1.0, 0.0)
+    hw._goalpoint_pub.get_subscription_count.return_value = 0  # no far_planner
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        hw.navigate_to(5.0, 1.0, timeout=0.5)
+    assert pubs.get("/way_point"), "fallback: publish our own /way_point"
+    assert pubs["/way_point"][0] == (pytest.approx(5.0), pytest.approx(1.0))
+    assert (pytest.approx(5.0), pytest.approx(1.0)) not in pubs.get("/goal_point", []), \
+        "no far_planner -> the target is never routed via /goal_point"
+
+
+def test_navigate_parks_far_planner_on_timeout(park_hw):
+    """A routed goal that never arrives -> on stall/timeout we park far_planner
+    (goal = CURRENT pose) so it does not keep driving to the abandoned goal."""
+    mod, hw, pubs, _clk = park_hw
+    hw._position = (2.0, 1.0, 0.0)  # never moves -> never arrives
+    hw._goalpoint_pub.get_subscription_count.return_value = 1
+    with patch.dict("sys.modules", _ros_module_stubs()):
+        hw.navigate_to(5.0, 1.0, timeout=0.5)
+    gp = pubs.get("/goal_point", [])
+    assert gp[0] == (pytest.approx(5.0), pytest.approx(1.0)), "first: the TARGET"
+    assert (pytest.approx(2.0), pytest.approx(1.0)) in gp, \
+        "then a park at CURRENT pose halts far_planner (reached -> silent)"
 
 
 def test_rotate_and_reverse_park_the_route_planner(park_hw):
