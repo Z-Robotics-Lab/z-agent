@@ -272,8 +272,8 @@ def test_perception_skills_wrap_read_only_and_concurrency_safe():
     tools = {t.name: t for t in wrap_skills(emb)}
     for name in ("find_object", "scene_query"):
         assert name in tools, f"{name} must wrap for the native loop"
-        assert tools[name].is_read_only(), name
-        assert tools[name].is_concurrency_safe(), name
+        assert tools[name].is_read_only({}), name
+        assert tools[name].is_concurrency_safe({}), name
 
 
 def test_perception_skill_names_avoid_native_traps():

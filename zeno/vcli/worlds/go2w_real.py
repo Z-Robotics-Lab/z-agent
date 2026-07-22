@@ -42,6 +42,10 @@ from typing import Any
 from zeno.core.skill import SkillContext, SkillRegistry
 from zeno.hardware.base import ensure_finite_nav_goal
 from zeno.vcli.worlds.base import DecomposeVocab
+from zeno.vcli.worlds.go2w_real_perception import (
+    RealFindObjectSkill,
+    RealSceneQuerySkill,
+)
 from zeno.vcli.worlds.go2w_real_skills import (
     RealExploreSkill,
     RealLieDownSkill,
@@ -115,6 +119,7 @@ class Go2WRealEmbodiment:
         from zeno.hardware.ros2.go2w_hw import Go2WHardware
         from zeno.hardware.ros2.go2w_hw_explore import Go2WExploreManager
         from zeno.hardware.ros2.go2w_hw_route import Go2WRouteManager
+        from zeno.perception.rynnbrain import RynnBrainClient
 
         self._base = Go2WHardware()
         # Overlay-session managers share the base driver (its node hosts the
@@ -136,11 +141,17 @@ class Go2WRealEmbodiment:
         # Managers ALSO ride the driver: the VGG GoalExecutor builds its own
         # SkillContext (no world services) but always wires base — skills fall
         # back to these attributes (first-REPL-contact fix, 2026-07-10).
+        # ONE RynnBrain perception client shared by the find_object /
+        # scene_query skills (视觉皮层: the workstation VLM service). Zero
+        # config (localhost / ZENO_RYNNBRAIN_URL); constructing it is
+        # offline-safe — no network until a perception skill calls it.
+        self._rynn = RynnBrainClient()
         self._base.explore_manager = self._explore
         self._base.route_manager = self._route
         self._base.viz_manager = self._viz
         self._base.course_tracker = self._course
         self._base.pose_ledger = self._places
+        self._base.rynn_client = self._rynn
         self._skill_registry = SkillRegistry()
         self._skill_registry.register(RealNavigateSkill())
         self._skill_registry.register(RealMoveRelativeSkill())
@@ -159,6 +170,8 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealWhereSkill())
         self._skill_registry.register(RealMarkPlaceSkill())
         self._skill_registry.register(RealGotoPlaceSkill())
+        self._skill_registry.register(RealFindObjectSkill())
+        self._skill_registry.register(RealSceneQuerySkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -173,7 +186,7 @@ class Go2WRealEmbodiment:
             bases={"go2w": self._base},
             services={"explore": self._explore, "route": self._route,
                       "viz": self._viz, "course": self._course,
-                      "places": self._places},
+                      "places": self._places, "rynn": self._rynn},
         )
 
     def _sync_robot_state(self) -> None:
@@ -198,6 +211,11 @@ class Go2WRealEmbodiment:
             "estop_latched": (
                 "E-stop/manual latch is engaged. Call resume_skill (解除急停) "
                 "before any motion; go2w_real_bringup does NOT clear it."
+            ),
+            "no_vlm": (
+                "RynnBrain perception service unreachable. Start it on the GPU "
+                "workstation (start_rynn.sh) or point ZENO_RYNNBRAIN_URL at it "
+                "(default http://127.0.0.1:8786). Non-vision steps still work."
             ),
         }
 
@@ -618,6 +636,15 @@ class Go2WRealWorld:
                                       "operator RViz goal, course intent — the "
                                       "clean slate. E-stop latch untouched. "
                                       "一键清除所有残留目标/缓存指令"),
+                "find_object_skill": ("Visually locate ONE object via the local "
+                                      "RynnBrain VLM: image side (左/中/右) + "
+                                      "horizontal bearing (deg, + = turn left) + "
+                                      "[0,1000] box. DECISION INPUT only — follow "
+                                      "with turn_skill and verify arrival by "
+                                      "at()/turned() odometry. 找物体(视觉定位)"),
+                "scene_query_skill": ("Ask the RynnBrain VLM a free question about "
+                                      "the camera view (thinking mode). DECISION "
+                                      "INPUT, never verification evidence. 场景问答"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
@@ -628,6 +655,7 @@ class Go2WRealWorld:
                 "turn_skill", "open_viz_skill", "where_skill",
                 "mark_place_skill", "goto_place_skill",
                 "clear_goals_skill",
+                "find_object_skill", "scene_query_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -646,7 +674,9 @@ class Go2WRealWorld:
   - where_skill: {}
   - mark_place_skill: {"name": "<地点名>"}  (optional; default auto 地点N — the pose comes from odometry, never from you)
   - goto_place_skill: {"name": "起点|刚才|<地点名>"}  (起点=session origin, 刚才=newest breadcrumb >=0.3m away)
-  - clear_goals_skill: {}  (清除所有残留目标+航向意图;不动急停锁存)""",
+  - clear_goals_skill: {}  (清除所有残留目标+航向意图;不动急停锁存)
+  - find_object_skill: {"description": "<real appearance, e.g. 'metal bowl'>"}  (贴实际外观措辞;结果=侧别+偏角,验收仍用 at()/turned())
+  - scene_query_skill: {"question": "<自由问题>"}  (思考模式问答;答案是决策输入不是验收证据)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
             # SUPPRESS the class-default '## Loop Example' (it teaches
             # detect_objects(), a phantom here — field forensics 2026-07-10).

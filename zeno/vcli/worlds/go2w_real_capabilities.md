@@ -110,9 +110,17 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   with ~0 travel means it never actually explored. WARNING: exploration drives
   into unknown space; glass walls are invisible to lidar — if the operator
   mentions glass, warn them and prefer navigate/route with their guidance.
-- Vision — NOT enabled yet on hardware (perception deps pending). Never
-  invent describe_scene()/detect_objects() predicates; if asked to "look",
-  say vision is coming and offer go2w_real_viz so the operator can see RViz.
+- Vision — ENABLED via the local RynnBrain VLM (workstation service).
+  find_object(description) visually locates ONE object: image side (左/中/右)
+  + horizontal bearing in degrees (positive = turn left) + a [0,1000] box.
+  Phrase targets by REAL appearance ("metal bowl" beats "black bowl" when the
+  bowl is metal-gray — the VLM is literal). scene_query(question) answers
+  free questions about the view (thinking mode, slower). Perception is
+  DECISION INPUT only: it never proves success — after turning toward the
+  bearing and approaching, verify with at()/moved()/turned() odometry, never
+  with the VLM's own words. Never invent perception verify predicates. If the
+  service is down (no_vlm), every non-vision path still works; the operator
+  starts it with start_rynn.sh on the GPU workstation.
 - Show the operator — go2w_real_viz(action=open[, view=main|explore|route|3d])
   opens a visualization on the robot's desktop (Moonlight-viewable) as a
   background child; action=close closes it. main|explore|route = RViz — open the
