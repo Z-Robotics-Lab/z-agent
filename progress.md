@@ -1,59 +1,60 @@
 # Zeno — progress
 
-更新：2026-07-14。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**（未 push/未动 main）。
+更新：2026-07-22。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-real**；本轮在其上开
+**hw-go2w-real-vision**（未 push/未动 main）：RynnBrain 视觉感知接入。
 
 ## Works（已验证 / 单测 GREEN）
-- **`/clean` 双确认清空地点落地（本轮，INTEGRATOR 复核通过）**：z-agent 7fc37ee(RED)→3bd43d3(GREEN)
-  + go2w-nuc 兄弟仓 6578ad4(3D 视图地点/home 标签)。
-  ①`go2w_real_maps.clear_places(map)`：`os.replace(places.json→.bak)` 原子备份+清空（旧 bak 直接覆盖），
-  返回删除数；无文件/目录缺失/OSError → 0，从不抛出。home/家 不在 places.json（源自 start_pose.txt），
-  清空后经 `home_place()` 自动复原。
-  ②`cli.py` `/clean` 处理器：内核不静态 import 世界(Inv-4)——懒加载 map seam；无活动地图/seam 不可用→
-  诚实拒绝；预览排除内置 home/家；确认1=精确输入地图名，确认2=y/N(默认N)，任何不匹配/EOF/Ctrl+C→
-  “已取消”，未删除任何东西；确认后清盘+清活会话 ledger 的非内置 marks+重载 home/家；已注册进
-  SLASH_COMMANDS+/help。
-  ③go2w-nuc `map_color_publisher.py` 新增 `/place_markers`(MarkerArray, latched)：每个保存地点蓝球+文字
-  标签，内置 home 金球+朝向箭头+标签；每次发布 DELETEALL 打头，id 按名字哈希稳定；5s 内跟随
-  places.json/start_pose.txt mtime 变化刷新。3d-map-view.json + connections.md 同步更新。只读复核，未改动。
-- **测试**：`bash scripts/run-tests tests/vcli/` = 6 fail/1201 pass/33 skip/1 xfail —— 6 个失败与既存基线
-  完全吻合（playground_-family/go2_perception/level66/go2_courtyard，环境性，非本轮引入）。
-  `tests/unit/vcli/`(排除 cv2 依赖两个文件) = 5 fail/1171 pass —— 均环境性(缺 PIL/cv2/mujoco 模块)，
-  与 /clean 无关。`tests/unit/hardware/` = 15 fail/297 pass/63 error —— 与既存基线吻合(sim
-  g1_room/go2w_hw_interrupt/go2w_hw_external_goal 计时 flake + 63 个 sim-env collect error，均
-  mujoco/环境性)。**/clean 相关代码 0 个新增失败**：`test_clean_places.py` 11/11 全绿，
-  `test_world_go2w_real_maps.py` 37/37 全绿。
-- **离线冒烟（本轮新做）**：tmp 目录 `clear_places` 往返验证——备份+清空生效，`home_place` 重载后
-  home 座标不受影响（1.0, 2.0, 0.5 存活）；`/clean` 单测已覆盖地图名不匹配/默认N/EOF 全部 abort 路径。
+- **RynnBrain 感知轮（本轮）**：ac74ffa(RED)→GREEN。真机世界长出眼睛——本地 RynnBrain 具身 VLM
+  （GPU 工作站服务，模型选择在其 start_rynn.sh 里）经 JSON 边车 http://127.0.0.1:8786 接入：
+  ①`zeno/perception/rynnbrain.py`：RynnBrainClient（httpx 现有依赖、零新库；`read_env("RYNNBRAIN_URL")`
+  ZENO_ 优先；坐标解析 parse_boxes/parse_points 为纯函数，[0,1000] 归一化；PIL 懒导入，JPEG q85/长边 640；
+  仅 transport 错误重试 1 次，4xx 不重试）。
+  ②`go2w_real_perception.py` 两只读技能（native LIVE 路径经 wrap_skills 可见——category 工具对 native
+  不可见，故必须是 SKILL）：`find_object(description)`→画面侧别(左/中/右)+水平偏角(度,左正,D435i
+  HFOV≈69°)+框；`scene_query(question)`→思考模式问答。取帧用 get_camera_image()（None-honest，
+  黑帧兜底永不喂 VLM）；帧龄>2s 在结果里警告。诚实失败梯：no_base/bad_params/camera_failed/
+  no_vlm(recovery_hints 指向 start_rynn.sh)/object_not_found(教改用真实外观措辞)。
+  ③接线：embodiment 持单客户端（services['rynn']+base.rynn_client 双缝）；vocab 三集合同步
+  （strategies/descriptions/params_help，set 全等测试通过）；capabilities.md Vision 段改为真实能力
+  （感知=决策输入，验收仍 at()/moved()/turned()，无 'look skill' 字样）。
+  ④措辞雷全部避开：MOTOR_KEYWORDS 七词不进 effects/description（wrap 后 is_read_only+
+  is_concurrency_safe，有测试钉死）；技能名避开 native 特判 navigate/detect。
+- **CEO 门裁决（owner 2026-07-22 批准本轮计划即过门）**：新跨进程接口=RynnBrain JSON 边车
+  http://127.0.0.1:8786（POST /infer{image b64,text,think}→{reply}，GET /health）；**零新依赖**
+  （httpx/numpy 现有，Pillow 在 [perception] tier）。服务端边车在 Learning_based_model 仓（用户侧），
+  与 ws://8782 同进程共存、共享推理锁；NUC 部署设 ZENO_RYNNBRAIN_URL=http://<工作站IP>:8786。
+- **测试**：`test_world_go2w_real_perception.py` 21/21 全绿（解析纯函数/方位数学 cx=750→右-17.25°/
+  三条诚实失败/思考透传/只读判定/接线/能力卡）。回归：tests/vcli -k go2w_real = 363 pass/3 fail——
+  3 个全是既存环境性 viz_3d（本工作站无 ~/go2w-nuc，干净树复现相同失败，非本轮引入）；
+  vocab/seam/lifecycle/verify_vocab_integrity 子集 97/97 全绿。
+- **E2E 冒烟（本轮新做）**：真 PNG 帧(448²)→JPEG 编码(≤640)→真 HTTP 往返(协议同款假模型)→解析→
+  方位(+13.7° 左)→教学文案，全链 PASS。
 
-## 并发未完成工作（本轮未动，NEVER-KILL-INFRA——不得干扰）
-- 分支上另有一轮并发 RED 提交 `3c46503`(operator RViz-goal detection，仅测试文件)落在 3bd43d3 之后，
-  加上工作区未提交的 `zeno/hardware/ros2/go2w_hw.py` 改动（疑似同一 in-progress 轮次的 GREEN 半成品）。
-  这不属于本次 /clean 复核范围，本轮完全未触碰、未 stash、未丢弃。`test_world_go2w_real_operator_override.py`
-  与 `test_go2w_hw_external_goal.py` 的失败是该未完成特性的 RED 测试，不是 /clean 引入的回归。
-
-## CEO 现场验收清单（真机，owner+E-stop 在手时执行 — 本轮未做，仅代码+离线验证）
-① `/clean` 全流程：无预建图时诚实拒绝 → 有预建图时预览 → 打错地图名/回车默认N/Ctrl+D 均安全中止 →
-  正确输入+y 后地点清空，`~/maps/<map>/places.json.bak` 生成，home/家 立即可用。
-② 3D 视图（Foxglove）实时验证：`/place_markers` 随地点增删/`places.json` mtime 变化 5s 内刷新。
-③ `zeno('记住这里叫X')` 后 3D 视图应秒现蓝球+标签“X”。
+## CEO 现场验收清单（真机，owner+E-stop 在手 — 本轮未做）
+① 工作站重启 start_rynn.sh（拾取 8786 边车），`curl http://127.0.0.1:8786/health` 应回 {"ok":true}。
+② NUC 上 export ZENO_RYNNBRAIN_URL=http://<工作站IP>:8786；d435i.service 在流。
+③ `zeno('看看金属碗在哪')`→find_object 报侧别+偏角；`zeno('桌上有什么')`→scene_query 思考问答。
+④ 组合链：find_object→turn 对准→靠近→at()/turned() 里程计判绿（感知永不自证）。
+⑤ 上一轮遗留：/clean 全流程 + /place_markers 3D 标签现场验收仍待执行。
 
 ## Next
-1. 真机执行上述 CEO 清单（本轮仅 hermetic 单测 + 离线冒烟，硬件闭环未做）。
-2. operator RViz-goal detection 已 GREEN（09cc6e7）：驱动订阅自身 /way_point 分类 own-echo/route-plumbing/
-   EXTERNAL；navigate_to 遇操作者新目标提前让位（nav_overridden，不 nav_cancel）；navigate/move_relative/
-   goto_place 报 operator_override（让位+坐标，无 stall 提示）；状态行显 RViz手动目标；card 教操作者优先。真机闭环待现场。
-3. map-color-publisher.service 需在 NUC 上重启一次以拾取新代码（若尚未做）。
+1. 真机执行上述清单（本轮 hermetic 21/21 + E2E 冒烟，硬件闭环未做）。
+2. native 错配修复轮（独立分支）：native 通用提示教 at_position 但本世界 deny 之（真谓词 at）、
+   native 丢世界 navigate 技能——感知教学在 native 靠技能 description 已覆盖，但整体错配待修。
+3. 深度融合阶段2：订 depth 话题→像素+深度→map 米制目标（bearing 伺服先跑通再上）。
+4. few-shot 预算：REAL_DECOMPOSE_EXAMPLES 6000 上限已满（5816/6000），感知 few-shot 主动省略
+   （descriptions+params_help 已承载教学）；若 legacy 分解实测不足再议腾挪。
 
 ## Failed / 教训
-- **既存失败（勿追，全环境性，与本轮无关）**：tests/vcli 6 个（playground_-family/go2_perception/
-  native_loop_devworld_pty/level66/go2_courtyard）+ tests/unit/vcli 5 个（PIL/cv2/mujoco 缺失）+
-  tests/unit/hardware sim g1_room/go2w_hw_interrupt 计时 flake + 63 个 sim-env collect error。
-- **结构债（既存）**：native_loop/engine/cli/goal_decomposer >800 硬上限(上游单体，cli.py 本轮加法
-  未改变超限状态，非本轮引入)；go2w_real 620+。
-- **真机 E2E 未验收**：/clean + 3D 地点标签只做了 hermetic 单测 + 离线冒烟，硬件闭环待 owner 现场执行。
+- **全量 `tests/vcli/` 在 4090 工作站被 OOM kill**（sim 栈导入 + 共存 Rynn/ROS 服务；团队基线机不同）
+  ——本轮以定向子集 + 干净树对照代替全量；勿在本机跑全量，分块跑。
+- **例子预算是硬闸**：三个测试钉 ≤6000 字符，append-only 纪律下新 few-shot 挤不进——先写紧凑版仍超,
+  最终省略并注释原因。
+- 既存环境性失败（勿追）：viz_3d ×3（本机无 ~/go2w-nuc）+ 上轮记录的 playground/PIL/mujoco 族。
 
 ## 关键背景
 - go2w=Isaac 数字孪生(HTTP 桥 127.0.0.1:8042)；go2w_real=真机(ROS_DOMAIN_ID=20,
   ~/Z-Navigation-Stack)。同 CLI，sim↔real 对称；verify 唯真值=/state_estimation(无 /gt)；测仅经
-  `scripts/run-tests`。预建图：`~/maps/zeno_office/`(places.json 持久化命名点，start_pose.txt 首行=home)。
-  nav.sh/map_color_publisher 在 go2w-nuc 仓（兄弟仓，独立提交）。
+  `scripts/run-tests`。预建图：`~/maps/zeno_office/`。nav.sh/map_color_publisher 在 go2w-nuc 兄弟仓。
+- 感知：RynnBrain 服务=用户侧 Learning_based_model/rynnbrain_test（start_rynn.sh 唯一入口，
+  ws:8782+http:8786 双协议同进程）；z-agent 侧只做 httpx 客户端+两只读技能，感知永不进 verify。
