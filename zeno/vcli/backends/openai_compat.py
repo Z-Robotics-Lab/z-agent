@@ -159,6 +159,22 @@ def convert_messages(
                             "tool_call_id": tr["tool_use_id"],
                             "content": tr.get("content", ""),
                         })
+                    # P1 prompt caching: a user message may carry tool_result blocks
+                    # AND a trailing text block — the live-status pose line the native
+                    # loop appends at the message TAIL (``_native_messages``) so the
+                    # cacheable prefix stays stable for DeepSeek's automatic context
+                    # cache. Preserve that text as a user message AFTER the tool
+                    # messages (a tool→user sequence is valid OpenAI shape) so the
+                    # model still sees the live pose; dropping it would blind DeepSeek
+                    # to the current pose. Byte-position: it stays LAST, so everything
+                    # before it remains a stable, cache-hittable prefix.
+                    text_blocks = [
+                        b for b in content
+                        if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+                    ]
+                    if text_blocks:
+                        joined = " ".join(b["text"] for b in text_blocks)
+                        openai_msgs.append({"role": "user", "content": joined})
                 else:
                     # Plain text blocks
                     text = " ".join(
@@ -209,14 +225,29 @@ def convert_messages(
 
 
 def parse_usage(raw_usage: Any) -> TokenUsage:
-    """Extract token usage from an OpenAI response."""
+    """Extract token usage from an OpenAI response.
+
+    ``cache_read_tokens`` is surfaced from whichever shape the provider uses so the
+    turn footer / P1 caching benchmark can READ the cache hit rate (short-board E1):
+
+    - OpenAI / OpenRouter: ``prompt_tokens_details.cached_tokens``.
+    - DeepSeek (the main backend): its OWN top-level ``prompt_cache_hit_tokens`` /
+      ``prompt_cache_miss_tokens`` fields — DeepSeek's automatic context cache reports
+      hits HERE, not in ``prompt_tokens_details``, so the earlier reader saw 0 cached
+      tokens on every DeepSeek turn even when the disk cache hit. Prefer the OpenAI
+      shape when present; fall back to the DeepSeek field.
+    """
     if raw_usage is None:
         return TokenUsage()
+    details = getattr(raw_usage, "prompt_tokens_details", None)
+    cached = (getattr(details, "cached_tokens", 0) or 0) if details is not None else 0
+    if not cached:
+        # DeepSeek automatic context caching: hits reported on the usage object itself.
+        cached = getattr(raw_usage, "prompt_cache_hit_tokens", 0) or 0
     return TokenUsage(
         input_tokens=getattr(raw_usage, "prompt_tokens", 0) or 0,
         output_tokens=getattr(raw_usage, "completion_tokens", 0) or 0,
-        cache_read_tokens=getattr(raw_usage, "prompt_tokens_details", None)
-        and getattr(raw_usage.prompt_tokens_details, "cached_tokens", 0) or 0,
+        cache_read_tokens=cached,
     )
 
 

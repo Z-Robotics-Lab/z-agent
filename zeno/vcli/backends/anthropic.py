@@ -109,7 +109,15 @@ class AnthropicBackend:
         max_tokens: int,
         on_text: Callable[[str], None] | None,
     ) -> LLMResponse:
-        """Stream from Anthropic API, accumulate text + tool_use, return LLMResponse."""
+        """Stream from Anthropic API, accumulate text + tool_use, return LLMResponse.
+
+        P1 prompt caching (research report §3 P1): ``system`` / ``tools`` / ``messages``
+        are passed THROUGH verbatim, so any ``cache_control`` breakpoints the caller
+        set (the native loop marks the static system block, the tool list, and the
+        rotating history-prefix block) reach the API and drive server-side caching.
+        ``usage.cache_read_input_tokens`` / ``cache_creation_input_tokens`` below report
+        the hit/write so the turn footer + benchmark can measure the saving.
+        """
         text_parts: list[str] = []
         tool_use_blocks: list[Any] = []
 

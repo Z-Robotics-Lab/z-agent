@@ -5,6 +5,21 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 不动 main。叙事在 commit message 里；本文件只留当前状态。两条工作线的 Works 并列保留（导航/UI 在下半，感知在上半）。
 
 ## Works（已验证 / 单测 GREEN）
+- **P1 native 主路径接 prompt 缓存（能力线，研究报告 §3 P1 / 短板 E1，2026-07-29）**：native 每轮全量重发
+  ~200 行静态 system prompt(~2216 tok) + 全套 tool schema(~794 tok) + 增长历史，全价重算。三处 cache_control
+  断点（≤4）：① `_native_system_prompt` 静态块打点；② `_native_tool_schemas` 最后一个工具打点（Anthropic
+  缓存整个 tools 数组）；③ `_native_messages` 在尾消息**最后一个稳定块**打**轮转**历史断点。关键：把每轮变的
+  live-status 位姿行**从 system 块搬到消息尾部**（断点之后）——原来它夹在静态 system 与历史之间，任何中途变动
+  都会击穿其后全部前缀缓存（Anthropic 断点与 DeepSeek 磁盘前缀缓存皆然）；搬到最末=整段前缀稳定可缓存，位姿
+  仍是模型最后读到的最新一行。openai_compat（DeepSeek 主力后端）：static system 前缀本就自动命中；`parse_usage`
+  补读 DeepSeek 顶层 `prompt_cache_hit_tokens`（原只读 OpenAI 形状→DeepSeek 命中恒显示 0）；`convert_messages`
+  修混合 tool_result+text 尾消息（原会丢弃 live 文本→DeepSeek 看不到位姿）。Anthropic 后端纯透传 cache_control。
+  **量化（代表性 manip 世界）**：静态前缀 ~3011 tok/轮；6 轮 turn cold=18066 tok→warm~=5268(**省 ~70%**)，
+  10 轮省 ~78%（Anthropic 缓存读 0.1x/写 1.25x 计）。**实测活体延迟须 owner 在真栈上跑**（本 agent 红线禁运动/
+  无 API key）：`zeno -p "<多回合指令>"` 改前/后各 2 次，读回合延迟 + usage.cache_read_input_tokens。测：hermetic
+  prefix-稳定性 + 断点落位 + token-省量 + DeepSeek usage/convert 共 15 测新增(test_prompt_cache.py)、pose-hooks
+  4 测改钉 live→消息尾；tests/unit/vcli 1215 pass（3 既存 cv2/macOS env fail 无关）。**Inv-1 零触碰**（纯计费/
+  传输层，verify 语义不动）。
 - **manip 管线 bug①② + 分级 bringup（2026-07-29）**：① 退出安全 cancel（真机 rclpy/DDS domain 20 活体验证）：
   Go2WManipBridge.connect() 在 add_node（注册 runtime.shutdown atexit）**之后**注册 _atexit_cancel → atexit LIFO
   先跑我们的 cancel（context 仍活、spin 线程仍在 flush）、只对在飞任务发一次（send_task 置位/cancel_task 清位）；

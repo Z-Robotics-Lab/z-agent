@@ -1238,16 +1238,20 @@ def run_turn_native(
             _event("interject", label="pre-round")
             cancel_current_motion(app_state)
             break
-        messages = _to_messages(session)
         _narration.clear()  # fresh "thinking" tail per round-trip
         # Global-awareness hook B: re-read the world's live status line NOW —
-        # immediately before this model call — and append it as ONE marked
-        # system-side block. EPHEMERAL by construction: rebuilt per iteration
-        # (replace, never accumulate) and never appended to the session, so a
-        # moving robot's stale pose can never linger in context. No hook ->
-        # ``system_prompt`` is passed UNCHANGED (byte-identical, pinned).
+        # immediately before this model call. EPHEMERAL by construction: rebuilt
+        # per iteration (replace, never accumulate) and never appended to the
+        # session, so a moving robot's stale pose can never linger in context.
+        # P1 prompt caching: the line is appended at the MESSAGE TAIL (after the
+        # history cache breakpoint), NOT as a system block — a volatile block
+        # sandwiched before the history would break the prefix cache on both
+        # backends. ``_native_messages`` also sets the rotating history breakpoint.
+        # No hook -> ``system_prompt`` UNCHANGED (byte-identical, pinned) and the
+        # messages carry only the stable-prefix breakpoint.
         live_block = _live_status_block(engine, agent)
-        system = system_prompt if live_block is None else [*system_prompt, live_block]
+        messages = _native_messages(session, live_block)
+        system = system_prompt
         _event("round", label=str(turns + 1))
         response: LLMResponse = backend.call(
             messages=messages,
@@ -1473,6 +1477,65 @@ def _live_status_block(engine: Any, agent: Any) -> dict[str, Any] | None:
     return {"type": "text", "text": _LIVE_STATUS_PREFIX + flat}
 
 
+def _native_messages(session: Any, live_block: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Assemble the API message list with the P1 history cache breakpoint + live tail.
+
+    Two things happen here, both in service of prompt caching (research report §3 P1 /
+    short-board E1) WITHOUT weakening the live-pose refresh the field asked for:
+
+    1. HISTORY CACHE BREAKPOINT — the conversation prefix (system + tools + all prior
+       messages) is byte-stable across a multi-round turn, so it is re-billed at full
+       input price every round-trip. We mark a cache breakpoint on the LAST STABLE
+       content block of the tail message. Anthropic then server-caches the whole prefix
+       up to there; the breakpoint ROTATES forward each round (the new tail), and the
+       prior round's cache entry supplies the read — incremental caching for the growing
+       history.
+
+    2. LIVE STATUS AT THE TAIL — the per-round live pose line used to be a ``system``
+       block (a volatile block SANDWICHED between the static system prompt and the
+       message history). Anything that changes mid-stream invalidates the cache for
+       EVERYTHING after it, so a volatile system block made the entire message history
+       un-cacheable on BOTH backends (Anthropic breakpoints and DeepSeek's prefix disk
+       cache alike). Moving it to the very END of the stream — appended AFTER the last
+       stable block, i.e. after the cache breakpoint — keeps the whole prefix stable and
+       cacheable while the pose is still the freshest, last thing the model reads before
+       it plans. The block never enters the session (still ephemeral, still one line).
+
+    Never mutates session-owned dicts: the tail message is deep-copied before we touch
+    its content (``to_messages`` aliases assistant tool_use blocks straight from the
+    session entries). No live block AND empty history -> byte-identical to ``_to_messages``.
+    """
+    messages = _to_messages(session)
+    if not messages:
+        return messages
+    content = messages[-1].get("content")
+    # A plain-STRING tail (the turn-1 user command, or a nudge) with NO live line to
+    # append: leave the whole list byte-identical. A string content block cannot carry
+    # cache_control, and the history is trivial at that point anyway (the system + tools
+    # breakpoints already cache the dominant cost) — so converting it to a block would
+    # only churn the wire shape for no caching gain. Once the tail is a tool_result LIST
+    # (turn 2+, where history is worth caching), the breakpoint below applies.
+    if isinstance(content, str) and live_block is None:
+        return messages
+    import copy
+
+    out = list(messages[:-1])
+    tail = copy.deepcopy(messages[-1])
+    # Normalize to a list of blocks so we can attach cache_control + append the live tail.
+    blocks: list[dict[str, Any]] = (
+        [{"type": "text", "text": content}] if isinstance(content, str) else list(content)
+    )
+    # Cache breakpoint on the LAST STABLE block (before we append the volatile live line).
+    if blocks:
+        blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+    if live_block is not None:
+        # Volatile — AFTER the breakpoint, so it is never part of the cached prefix.
+        blocks.append({"type": "text", "text": live_block["text"]})
+    tail["content"] = blocks
+    out.append(tail)
+    return out
+
+
 def _build_verifier(engine: Any, agent: Any) -> Any:
     """Build a live GoalVerifier over the engine's verify namespace.
 
@@ -1677,6 +1740,13 @@ def _native_tool_schemas(
         )
     schemas.append(_verify_tool_schema(oracle_names))
     schemas.append(_finish_tool_schema())
+    # P1 prompt caching: the tool schema block is STATIC for the turn (same motor tools
+    # + verify/finish every round-trip). One cache breakpoint on the LAST tool caches
+    # the ENTIRE tool definition list server-side (Anthropic caches the whole tools
+    # array up to and including the marked tool). Harmless to the OpenAI-compatible
+    # backend: ``convert_tools`` reads only name/description/input_schema.
+    if schemas:
+        schemas[-1] = {**schemas[-1], "cache_control": {"type": "ephemeral"}}
     return schemas
 
 
@@ -1875,7 +1945,15 @@ def _native_system_prompt(
         + object_vocab
         + locomotion_guidance
     )
-    return [{"type": "text", "text": text}]
+    # P1 prompt caching (research report §3 P1 / short-board E1): this ~200-line prompt
+    # is STATIC across the whole turn (rebuilt once per turn, same object every model
+    # round-trip) yet was re-billed at full input price on EVERY iteration. Mark it a
+    # cache breakpoint so the Anthropic backend server-caches it (the live-status pose
+    # line is NOT here — it is appended at the MESSAGE tail so this prefix stays byte-
+    # stable and cache-hittable). Harmless to the OpenAI-compatible backend:
+    # ``convert_system`` reads only ``["text"]`` and ignores ``cache_control``; DeepSeek
+    # auto-caches this same static prefix on its own disk cache.
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
 def _build_tool_context(

@@ -132,15 +132,36 @@ def test_ttl_hook_raising_falls_back_to_default() -> None:
 
 
 class _SystemRecorder(FakeToolScriptBackend):
-    """Scripted backend that records the ``system`` blocks of every call."""
+    """Scripted backend that records the ``system`` + ``messages`` of every call.
+
+    P1 prompt caching relocated the per-round live-status pose line from a ``system``
+    block to the MESSAGE tail (after the history cache breakpoint) so the cacheable
+    prefix stays stable. So the live line is now asserted on ``messages[-1]``, and the
+    ``system`` is expected to be the SAME static object every round.
+    """
 
     def __init__(self, turns) -> None:
         super().__init__(turns)
         self.systems: list = []
+        self.messages: list = []
 
     def call(self, **kw):  # type: ignore[override]
         self.systems.append(kw["system"])
+        self.messages.append(kw["messages"])
         return super().call(**kw)
+
+
+def _tail_text(messages) -> str:
+    """The concatenated text of the LAST message's content blocks (where the live
+    status line now lives)."""
+    if not messages:
+        return ""
+    content = messages[-1].get("content")
+    if isinstance(content, str):
+        return content
+    return " ".join(
+        b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
+    )
 
 
 def _live_marker() -> str:
@@ -159,7 +180,7 @@ def _walk_script() -> list:
 
 def test_no_hook_native_system_prompt_byte_identical() -> None:
     """Absent hook: the native loop passes the system prompt UNCHANGED —
-    same object every iteration, no live-state block (sim worlds untouched)."""
+    same object every iteration, no live-state block anywhere (sim worlds untouched)."""
     backend = _SystemRecorder.from_tool_script(_walk_script())
     agent, _base = _make_agent(0.0, 0.0)
     eng = _make_engine(agent, backend)  # RobotWorld — no live_status_line hook
@@ -172,12 +193,16 @@ def test_no_hook_native_system_prompt_byte_identical() -> None:
     marker = _live_marker()
     for system in backend.systems:
         assert all(marker not in b.get("text", "") for b in system)
+    # And no live line leaked into the message tail either.
+    for messages in backend.messages:
+        assert marker not in _tail_text(messages)
 
 
 def test_live_status_line_refreshed_before_every_model_call() -> None:
-    """Hook B: ONE marked system-side block per call, re-read from the DRIVER
-    between iterations (the fake base moves; the next call sees the new pose),
-    never accumulating."""
+    """Hook B: ONE live-state block per call at the MESSAGE TAIL (P1 caching moved
+    it off ``system``), re-read from the DRIVER between iterations (the fake base
+    moves; the next call sees the new pose), never accumulating in the session, and
+    NEVER in the (now stable, cacheable) ``system``."""
     from zeno.vcli.worlds.robot import RobotWorld
 
     class _LiveWorld(RobotWorld):
@@ -192,20 +217,24 @@ def test_live_status_line_refreshed_before_every_model_call() -> None:
     eng.run_turn_native("walk then verify", session=_session())
 
     marker = _live_marker()
-    assert len(backend.systems) == 3
-    sizes = set()
+    assert len(backend.messages) == 3
+    # The system prompt stays the SAME static object every call, with NO live line —
+    # that is exactly what makes it a stable, server-cacheable prefix.
+    assert all(s is backend.systems[0] for s in backend.systems)
     for system in backend.systems:
-        live_blocks = [b for b in system if marker in b.get("text", "")]
-        assert len(live_blocks) == 1, "exactly ONE live-state block per model call"
-        sizes.add(len(system))
-    assert len(sizes) == 1, "the live block must REPLACE, never accumulate"
+        assert all(marker not in b.get("text", "") for b in system)
+    # The live line rides the message tail, exactly ONE per call, never accumulating.
+    for messages in backend.messages:
+        assert _tail_text(messages).count(marker) == 1, (
+            "exactly ONE live-state line per model call, at the message tail"
+        )
     # Iteration 1 sees the pre-walk pose; iteration 2 (after the walk moved the
     # driver 2 m) sees the NEW pose — the hook is re-read per model call.
-    first_live = [b for b in backend.systems[0] if marker in b.get("text", "")][0]
-    second_live = [b for b in backend.systems[1] if marker in b.get("text", "")][0]
-    assert "x=0.00" in first_live["text"]
-    assert "x=2.00" in second_live["text"]
-    assert first_live["text"] != second_live["text"]
+    first_live = _tail_text(backend.messages[0])
+    second_live = _tail_text(backend.messages[1])
+    assert "x=0.00" in first_live
+    assert "x=2.00" in second_live
+    assert first_live != second_live
 
 
 def test_live_status_hook_none_or_raising_adds_nothing() -> None:
@@ -229,11 +258,13 @@ def test_live_status_hook_none_or_raising_adds_nothing() -> None:
         eng.run_turn_native("walk then verify", session=_session())
         for system in backend.systems:
             assert all(marker not in b.get("text", "") for b in system)
+        for messages in backend.messages:
+            assert marker not in _tail_text(messages)
 
 
 def test_live_status_line_is_flattened_to_one_line() -> None:
     """A multi-line/whitespace-heavy hook return is flattened — the injection
-    stays ONE token-cheap system-side line by construction."""
+    stays ONE token-cheap message-tail line by construction."""
     from zeno.vcli.worlds.robot import RobotWorld
 
     class _SprawlingWorld(RobotWorld):
@@ -247,6 +278,7 @@ def test_live_status_line_is_flattened_to_one_line() -> None:
     eng.run_turn_native("walk then verify", session=_session())
 
     marker = _live_marker()
-    live = [b for b in backend.systems[0] if marker in b.get("text", "")][0]
-    assert "\n" not in live["text"]
-    assert "pose x=0.00 y=0.00 extra spaces" in live["text"]
+    tail = _tail_text(backend.messages[0])
+    assert marker in tail
+    assert "\n" not in tail
+    assert "pose x=0.00 y=0.00 extra spaces" in tail
