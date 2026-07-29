@@ -161,6 +161,26 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   current manip task at any phase and zeros the chassis — the arm-free safety stop.
   When the operator says "启动 mobile manip" / "起 manip": manip_bringup(action=
   'start') and give them the UI address http://127.0.0.1:8766 in your reply.
+- FETCH-AND-PLACE (端到端复合技能) — fetch_and_place(target, [target_place],
+  [basket], [dry_run]) runs ONE composite chain as an explicit STAGE EXECUTOR:
+  bringup 检查 → goto_place(target_place) → approach_object(target) → [手臂] 抓取
+  → goto_place(basket) → [手臂] 放入. It is FAIL-STOP: the first failing stage
+  halts the chain and the reply says WHICH stage failed, why, and the recovery
+  hint (前序完成的阶段无需重复). Each stage verifies with an EXISTING oracle —
+  navigation stages reuse at() (odometry), the approach stage reuses
+  approach_ready() (the FSM phase latch); the whole-skill verdict is the
+  CONJUNCTION of the end-state predicates (at(basket) AND approach_ready()) — the
+  spine grades it, this skill never self-authors verified. THE ARM GATE: the grasp
+  and place stages are OFF by default (they need ZENO_ARM_ENABLE=1 in the env) and
+  even when armed take a DRY-RUN plan-only path — they validate params + log the
+  plan and NEVER touch CAN/piper/the manipulator (current phase: 手臂未启用). With
+  the gate off the base half still runs (navigate + approach + drive to the
+  basket) and still verifies. WHOLE-CHAIN DRY-RUN: dry_run=True (or say
+  "演练/预演") rehearses the plan — it resolves stages and checks preconditions but
+  issues NO navigation goal and NO manip task (零 ROS 发布), returning the plan for
+  the operator to inspect ("去厨房拿水瓶(演练)"). basket defaults to the named
+  place 篮子; override with any known place name. Needs manip_bringup(action=
+  'start') up first (bringup 检查 stage refuses honestly otherwise).
 - Show the operator — go2w_real_viz(action=open[, view=main|explore|route|3d])
   opens a visualization on the robot's desktop (Moonlight-viewable) as a
   background child; action=close closes it. main|explore|route = RViz — open the

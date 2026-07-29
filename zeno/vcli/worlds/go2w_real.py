@@ -85,6 +85,7 @@ from zeno.vcli.worlds.go2w_real_manip_skills import (
     RealManipStatusSkill,
 )
 from zeno.vcli.worlds.go2w_real_manip_verify import make_approach_ready
+from zeno.vcli.worlds.go2w_real_fetch_skills import RealFetchAndPlaceSkill
 from zeno.vcli.worlds.go2w_real_course import CourseTracker
 from zeno.vcli.worlds.go2w_real_places import (
     PoseLedger,
@@ -191,6 +192,7 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealManipBringupSkill())
         self._skill_registry.register(RealManipStatusSkill())
         self._skill_registry.register(RealManipCancelSkill())
+        self._skill_registry.register(RealFetchAndPlaceSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
