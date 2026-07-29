@@ -17,22 +17,44 @@ the stable public API in v0.1.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from zeno.version import __version__
 from zeno.core.agent import Agent
 from zeno.core.skill import Skill
 from zeno.core.types import ExecutionResult, SkillResult
 
-try:
-    from zeno.hardware.so101.arm import SO101Arm as SO101
-except ImportError:
-    SO101 = None  # type: ignore[assignment, misc]
+# Optional hardware/sim entry points are loaded lazily (PEP 562). Importing them
+# eagerly dragged the whole MuJoCo → numpy stack (~57ms measured) into EVERY
+# `import zeno` — including the go2w_real CLI startup path, which never touches the
+# sim arm. Deferring keeps `from zeno import MuJoCoArm` working (and still resolving
+# to None when the optional deps are absent) without paying the cost at package load.
+_LAZY_OPTIONAL = {
+    "SO101": ("zeno.hardware.so101.arm", "SO101Arm"),
+    "MuJoCoArm": ("zeno.hardware.sim.mujoco_arm", "MuJoCoArm"),
+    "MuJoCoGripper": ("zeno.hardware.sim.mujoco_gripper", "MuJoCoGripper"),
+}
 
-try:
-    from zeno.hardware.sim.mujoco_arm import MuJoCoArm
-    from zeno.hardware.sim.mujoco_gripper import MuJoCoGripper
-except ImportError:
-    MuJoCoArm = None  # type: ignore[assignment, misc]
-    MuJoCoGripper = None  # type: ignore[assignment, misc]
+
+def __getattr__(name: str) -> Any:
+    """Resolve optional hardware symbols on first access (None if deps missing)."""
+    target = _LAZY_OPTIONAL.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr = target
+    try:
+        import importlib
+
+        value = getattr(importlib.import_module(module_name), attr)
+    except ImportError:
+        value = None  # optional sim/hardware deps absent — preserve legacy contract
+    globals()[name] = value  # cache so subsequent access skips __getattr__
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)
+
 
 __all__ = [
     "__version__",
