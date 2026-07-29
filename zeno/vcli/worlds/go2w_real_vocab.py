@@ -311,3 +311,8 @@ Response:
   ],
   "context_snapshot": ""
 }"""
+
+# Perception (2026-07-22): find_object/scene_query few-shots deliberately
+# OMITTED — the ~6000-char example budget is full (tests pin it), and the
+# strategy_descriptions + strategy_params_help lines in go2w_real.py already
+# teach the pattern (VLM output = decision input; verify stays odometry).
