@@ -5,6 +5,22 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 不动 main。叙事在 commit message 里；本文件只留当前状态。两条工作线的 Works 并列保留（导航/UI 在下半，感知在上半）。
 
 ## Works（已验证 / 单测 GREEN）
+- **manip 管线 bug①② + 分级 bringup（2026-07-29）**：① 退出安全 cancel（真机 rclpy/DDS domain 20 活体验证）：
+  Go2WManipBridge.connect() 在 add_node（注册 runtime.shutdown atexit）**之后**注册 _atexit_cancel → atexit LIFO
+  先跑我们的 cancel（context 仍活、spin 线程仍在 flush）、只对在飞任务发一次（send_task 置位/cancel_task 清位）；
+  send/cancel 用 _rclpy_ok() 守 context 已拆时静默返 False（不再喷 C 层 "context is invalid"）。活体：后台
+  `ros2 topic echo /z_manip/task/cancel` 收到 `data: true`，退出进程 stderr 全净（无 rcl 报错）。② verdict per_step
+  归因修正：原 chain[-1] 会把 approach 后补看的只读 find_object 记成 strategy；native_loop._effecting_strategy()
+  回溯到最后一个**生效(非只读)**技能，纯感知步回退 chain[-1]。③ manip_bringup 分级：start=感知+任务FSM+UI
+  **零运动风险**（manip start，不碰底盘链，回复必带 UI 地址 http://127.0.0.1:8766）；start_base=NUC 底盘链
+  (reactive-live) 单独运动使能动作（manip component restart reactive-control）；bringup=整栈冷启含底盘；每级带
+  motion_enabling/show_ui。approach 底盘链前置检查（注入式探针才 ssh，默认路径不 ssh NUC；确凿 down→no_base_chain
+  + recovery hint，未知→放行；stall/timeout 文案也指向 start_base）。persona/vocab/capabilities 同步。测 +20
+  hermetic（manip 59 + native _effecting 3 + 桥退出 6），99 pass。**疑点③ 源码实证已对上**：FSM _status_pub
+  用 latched_debug=RELIABLE+TRANSIENT_LOCAL depth=1，桥订阅同 QoS，匹配，无需改。
+  **遗留（安全阻断）**：z_manip_task 包在 4090 主机/容器均未 build（find share/z_manip_task=空），活体 FSM seam
+  E2E / zeno "FSM alive" 验收 / 全链 UX 预演需先在 4090 build+launch FSM（大节点面、含 coarse_nav，运动风险）
+  且确认 NUC 底盘链 down——超本轮零运动/禁 build 安全边界，留给 owner 现场窗口（脚本命令见下 Next）。
 - **打开rviz 本机弹窗 + GUI/查询类 verify 豁免（2026-07-29，真机 E2E PASS，CEO 授权）**：两处"agent
   不智能"根因。① ssh transport（nav host=无屏 NUC，opens_local_gui False）下 open_viz 不再返 remote_gui
   stub，而在 4090 本机 spawn `rviz2 -d <config>`：`_WorkstationRvizTransport` 复用 OverlayLauncher
@@ -122,6 +138,13 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 ⑤ 上一轮遗留：/clean 全流程 + /place_markers 3D 标签现场验收仍待执行。
 
 ## Next
+0. **manip 活体验收（owner 现场窗口，需先 build FSM）**：① 4090 build z_manip_task 工作区（colcon），
+   supervisor 起 FSM：`scripts/runtime/mobile_manipulation_supervisor.py`（flock 单例，包
+   `ros2 launch z_manip_task mobile_manipulation.launch.py`）；确认 NUC 底盘链 reactive-live DOWN（/cmd_vel
+   无最终电机消费者=物理不可动）。② 静态 seam E2E：桥连→approach 任务→`ros2 topic info -v /z_manip/task/status`
+   实证 QoS（源码已核 RELIABLE+TRANSIENT_LOCAL depth=1）→status 文档流进桥→cancel→FSM 回 idle。③ zeno 脚本
+   验收：`zeno -p "启动 mobile manip"`→回复含 http://127.0.0.1:8766 + manip_status FSM alive；
+   `zeno -p "取消manip任务"` 干净。④ 全链：导航栈→rviz→启动 mobile manip→状态确认，记每回合耗时。
 1. 真机执行上述感知清单（本轮 hermetic 21/21 + E2E 冒烟，硬件闭环未做）。
 2. native 错配修复轮（独立分支）：native 通用提示教 at_position 但本世界 deny 之（真谓词 at）、
    native 丢世界 navigate 技能——感知教学在 native 靠技能 description 已覆盖，但整体错配待修。
