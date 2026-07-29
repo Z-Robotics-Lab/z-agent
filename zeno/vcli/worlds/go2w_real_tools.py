@@ -16,6 +16,7 @@ import os
 import subprocess
 from typing import Any
 
+from zeno.hardware.ros2.nav_transport import nav_transport
 from zeno.vcli.tools.base import ToolContext, ToolResult, tool
 from zeno.vcli.worlds.go2w_real_diag import odom_fresh
 from zeno.vcli.worlds.go2w_real_skills import CFG, nav_sh_path
@@ -94,10 +95,15 @@ class Go2WRealBringupTool:
             fast = self._fast_status(_hw_of(context))
             if fast is not None:
                 return fast
-        script = nav_sh_path()
-        if not os.path.isfile(script):
+        # TRANSPORT: local subprocess on the NUC, or ssh from the 4090 to the NUC
+        # (GO2W_NAV_TRANSPORT). nav.sh start launches a systemd-run transient unit,
+        # so the ssh short-connection returns while the unit keeps running on the
+        # NUC — the module hides the local-vs-ssh split (no if-ssh here).
+        transport = nav_transport(nav_sh_path())
+        if not transport.is_remote and not os.path.isfile(transport.nav_sh):
             return ToolResult(content=(
-                f"nav.sh not found at {script} — set GO2W_NAV_SH to the nav.sh path"),
+                f"nav.sh not found at {transport.nav_sh} — set GO2W_NAV_SH to the "
+                "nav.sh path, or GO2W_NAV_TRANSPORT=ssh to drive the NUC remotely"),
                 is_error=True)
         # 'start' stops-old-first then returns after launching (SLAM readies async);
         # a longer timeout covers stack teardown on 'stop'.
@@ -105,14 +111,15 @@ class Go2WRealBringupTool:
         # DEFAULT-MAP BRINGUP (2026-07-14): resolve an optional pre-built map for
         # start (explicit wins; 从零/none/'' = plain; default = zeno_office when
         # its PCD exists). stop/up/down never take a map arg.
-        argv = ["bash", script, subcmd]
         resolved_map = None
+        map_args: tuple[str, ...] = ()
         if subcmd == "start":
             from zeno.vcli.worlds.go2w_real_maps import resolve_bringup_map
 
             resolved_map = resolve_bringup_map(params.get("map"))
             if resolved_map:
-                argv.append(resolved_map)
+                map_args = (resolved_map,)
+        argv = transport.command_argv(subcmd, *map_args)
         try:
             r = subprocess.run(argv, capture_output=True,
                                text=True, timeout=timeout)

@@ -22,6 +22,7 @@ from typing import Any, Callable
 
 from zeno.core.skill import skill
 from zeno.core.types import SkillResult
+from zeno.hardware.ros2.nav_transport import nav_transport
 from zeno.vcli.worlds.go2w_real_diag import odom_fresh, oplog
 from zeno.vcli.worlds.go2w_real_skills import nav_sh_path
 
@@ -148,7 +149,6 @@ class RealBringupSkill:
                             "action='restart' to force a rebuild)"),
                 "verify_hint": "stack_ready()"})
         nav_action = "start" if action == "restart" else action
-        script = nav_sh_path()
         # DEFAULT-MAP BRINGUP (2026-07-14): a start may carry a pre-built map.
         # Resolution lives in go2w_real_maps: explicit name wins; explicit
         # 从零/none/'' = plain fresh mapping; unspecified default = env
@@ -160,9 +160,11 @@ class RealBringupSkill:
 
             resolved_map = resolve_bringup_map(
                 map_param if map_specified else None)
-        argv = ["bash", script, nav_action]
-        if resolved_map:
-            argv.append(resolved_map)
+        # TRANSPORT: same local/ssh seam as the bringup TOOL, so the skill face
+        # of "启动导航栈" also drives the NUC remotely from the 4090 (no if-ssh).
+        transport = nav_transport(nav_sh_path())
+        map_args: tuple[str, ...] = (resolved_map,) if resolved_map else ()
+        argv = transport.command_argv(nav_action, *map_args)
         oplog("lifecycle", "bringup",
               f"nav.sh {nav_action} map={resolved_map or 'none'} launching...")
         try:

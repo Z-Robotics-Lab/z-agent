@@ -109,6 +109,12 @@ class RealVizSkill:
             return SkillResult(success=True, result_data={
                 "view": view, "status": status,
                 "message": f"RViz ({view}) is already open — nothing to do"})
+        if status == "remote_gui":
+            # ssh transport: the NUC is headless, so we correctly steered the
+            # operator to local viz on the 4090 rather than opening a dead
+            # window. The plan step is satisfied (honest guidance), not failed.
+            return SkillResult(success=True, result_data={
+                "view": view, "status": status, "message": detail})
         return SkillResult(success=False,
                            result_data={"view": view, "status": status},
                            error_message=f"could not open RViz ({view}): {detail}")

@@ -31,10 +31,11 @@ from __future__ import annotations
 import logging
 import math
 import os
-import signal
 import subprocess
 import threading
 from typing import Any, Callable
+
+from zeno.hardware.ros2.nav_transport import NavTransport, nav_transport
 
 logger = logging.getLogger(__name__)
 
@@ -101,15 +102,26 @@ class OverlayLauncher:
         nav_sh: str | None = None,
         popen_factory: Callable[..., Any] | None = None,
         log_dir: str | None = None,
+        transport: NavTransport | None = None,
     ) -> None:
         self._mode = str(mode)
         raw = nav_sh or os.environ.get("GO2W_NAV_SH", "").strip() or _DEFAULT_NAV_SH
+        # Keep the RAW path (unexpanded ~) — the ssh transport hands it to the
+        # REMOTE shell to expand; local expands it itself. self._nav_sh is the
+        # local view used for messages and the auto-transport existence probe.
+        self._script_raw = raw
         self._nav_sh = os.path.expanduser(raw)
+        # TRANSPORT: local subprocess vs ssh to the NUC. explore/route are
+        # FOREGROUND ros2-launch children (not transient units — confirmed in
+        # nav.sh), so teardown stays SIGINT-only; the transport adapts that to a
+        # remote `kill -INT <pid>` over ssh (see nav_transport).
+        self._transport = transport or nav_transport(self._nav_sh)
         self._popen = popen_factory or subprocess.Popen
         self._log_dir = os.path.expanduser(log_dir or _DEFAULT_LOG_DIR)
         self._lock = threading.RLock()
         self._proc: Any = None
         self._stop_requested = False
+        self._overlay_handle: Any = None
 
     # ------------------------------------------------------------------
     # Introspection
@@ -148,18 +160,17 @@ class OverlayLauncher:
                 return False, (
                     f"{self._mode} overlay already running (pid {self._proc.pid})"
                 )
-            if not os.path.isfile(self._nav_sh):
-                return False, (
-                    f"nav.sh not found at {self._nav_sh} — set GO2W_NAV_SH"
-                )
+            err = self._transport.overlay_preflight(self._script_raw)
+            if err:
+                return False, err
             # A standalone-script overlay (e.g. view3d.sh) has an EMPTY mode: the
-            # script IS the whole command, no nav.sh subcommand. Drop the empty
-            # arg so argv stays ['bash', <script>, extra...]. Named nav.sh modes
-            # (explore/route/rviz*) are byte-identical (additive, backward-compat).
-            argv = ["bash", self._nav_sh]
-            if self._mode:
-                argv.append(self._mode)
-            argv.extend(str(a) for a in extra_args)
+            # script IS the whole command, no nav.sh subcommand — the transport
+            # drops the empty arg. Local argv is byte-identical to the old
+            # ['bash', <script>, extra...]; ssh wraps it with a pidfile so
+            # teardown can kill -INT the exact remote ros2-launch PID.
+            self._overlay_handle = self._transport.new_overlay_handle()
+            argv = self._transport.overlay_argv(
+                self._script_raw, self._mode, self._overlay_handle, *extra_args)
             out = self._open_log()
             try:
                 self._proc = self._popen(
@@ -197,7 +208,9 @@ class OverlayLauncher:
             if proc.poll() is not None:
                 break
             try:
-                proc.send_signal(signal.SIGINT)
+                # local: SIGINT our child; ssh: kill -INT the remote ros2-launch
+                # PID (NEVER-KILL-INFRA, no orphaning) — the transport decides.
+                self._transport.overlay_interrupt(proc, self._overlay_handle)
             except (ProcessLookupError, OSError):
                 break  # already gone
             try:

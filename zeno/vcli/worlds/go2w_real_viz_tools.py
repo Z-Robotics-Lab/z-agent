@@ -24,6 +24,7 @@ import os
 from typing import Any, Callable
 
 from zeno.hardware.ros2.go2w_hw_overlay import OverlayLauncher
+from zeno.hardware.ros2.nav_transport import NavTransport, nav_transport
 from zeno.vcli.tools.base import ToolContext, ToolResult, tool
 
 #: view name (agent-facing) -> nav.sh subcommand (one overlay per view).
@@ -58,9 +59,15 @@ class VizOverlaySession:
     """
 
     def __init__(self, popen_factory: Callable[..., Any] | None = None,
-                 nav_sh: str | None = None) -> None:
+                 nav_sh: str | None = None,
+                 transport: NavTransport | None = None) -> None:
         self._popen_factory = popen_factory
         self._nav_sh = nav_sh
+        # RViz/3D views render on the NAV HOST's screen. Under ssh (nav host =
+        # headless NUC) there is no screen; the transport tells us to refuse the
+        # remote window and point the operator at Foxglove/RViz on the 4090.
+        self._transport = transport or nav_transport(
+            os.path.expanduser(nav_sh) if nav_sh else None)
         self._launchers: dict[str, OverlayLauncher] = {}
 
     @property
@@ -88,7 +95,17 @@ class VizOverlaySession:
 
     def open(self, view: str) -> tuple[str, str]:
         """Open *view* -> (status, detail); status: opened | already_open |
-        bad_view | error. Dedupe: an already-running view is ok, not a relaunch."""
+        remote_gui | bad_view | error. Dedupe: an already-running view is ok,
+        not a relaunch. Under ssh transport, refuse a remote (headless-NUC)
+        window and steer the operator to local viz on the 4090."""
+        if not self._transport.opens_local_gui:
+            return "remote_gui", (
+                f"可视化(RViz/3D 视图)在导航主机的屏幕上开窗,但当前 nav "
+                f"transport={self._transport.mode}(导航主机是无屏的 NUC)。"
+                "请在 4090 工作站本地打开 Foxglove 或 RViz —— 话题已经过 DDS "
+                "domain 20 跨机可见,不必在 NUC 上开窗。"
+                "(Foxglove: ws://<NUC>:8765;RViz: 用工作站 DDS profile 订阅 "
+                "/state_estimation、/registered_scan 等。)")
         script = _SCRIPT_VIEWS.get(view)
         if script is not None:
             # Script view ('3d'): key the launcher table by the VIEW name (its
@@ -176,6 +193,10 @@ class Go2WRealVizTool:
                 f"Moonlight or the local screen. {detail}"))
         if status == "already_open":
             return ToolResult(content=f"RViz ({view}) is already open. {detail}")
+        if status == "remote_gui":
+            # Not an error: we correctly declined to open a window on the
+            # headless NUC and told the operator where to look on the 4090.
+            return ToolResult(content=detail)
         if status == "bad_view":
             return ToolResult(content=detail, is_error=True)
         return ToolResult(content=f"could not open RViz ({view}): {detail}",

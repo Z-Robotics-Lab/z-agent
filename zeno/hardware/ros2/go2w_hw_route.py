@@ -56,13 +56,17 @@ _ACTIVE_STATES: frozenset[str] = frozenset({"launching", "active", "resident"})
 
 
 def _default_resident_probe() -> bool:
-    """Is a far_planner already running on this host? Best-effort False."""
-    try:
-        import subprocess as _sp
+    """Is a far_planner already running on the NAV HOST? Best-effort False.
 
-        r = _sp.run(["pgrep", "-f", "far_planner"], capture_output=True,
-                    text=True, timeout=3)
-        return r.returncode == 0 and bool(r.stdout.strip())
+    Routes through the nav transport so the probe follows nav.sh: a local
+    ``pgrep`` when the stack is local (the NUC), or ``ssh <host> pgrep`` when
+    driving it from the 4090 (a local pgrep on the 4090 would never see the
+    NUC's far_planner, wrongly self-launching a duplicate).
+    """
+    try:
+        from zeno.hardware.ros2.nav_transport import nav_transport
+
+        return nav_transport().resident_far_planner()
     except Exception:  # noqa: BLE001 — probe failure = assume not resident
         return False
 

@@ -32,6 +32,21 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
+@pytest.fixture(autouse=True)
+def _pin_local_nav_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermetic default: pin the nav.sh transport to LOCAL subprocess.
+
+    ``GO2W_NAV_TRANSPORT`` selects local subprocess vs ssh-to-the-NUC
+    (``zeno/hardware/ros2/nav_transport.py``); its default is ``auto`` (ssh when
+    no local nav.sh). Unit tests must never shell out over ssh and must see the
+    deterministic local ``bash <nav.sh> …`` argv, so every test starts pinned to
+    ``local``. Tests that exercise the ssh transport override this by setting the
+    env themselves (their ``setenv`` runs after this autouse setup and wins) or
+    by constructing ``SshNavTransport`` directly.
+    """
+    monkeypatch.setenv("GO2W_NAV_TRANSPORT", "local")
+
+
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
