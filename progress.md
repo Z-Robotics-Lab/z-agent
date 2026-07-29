@@ -52,6 +52,17 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 - **电量% + 电压上状态栏**：unitree_control.py 转发 lowstate bms → /battery_state（035abfb，owner 批）；zeno
   订阅显示 `电量 NN%`（无源/陈旧→不显示，绝不编数）。**真机需 colcon build + nav 重启生效，待验。**
 - **/clean 双确认清空地点**（INTEGRATOR 复核过）：clear_places 原子备份+清空，home 从 start_pose.txt 自动复原。
+- **bringup 双模 transport（Phase 2，c4a17ee）**：`zeno/hardware/ros2/nav_transport.py` 收敛 nav.sh 执行——
+  `GO2W_NAV_TRANSPORT=auto|local|ssh`（auto=本机有 nav.sh 则 local 否则 ssh；host=GO2W_NAV_SSH_HOST）。
+  bringup 工具/skill、OverlayLauncher、route 常驻探针、viz 都调它，不散落 if-ssh。短命令 local `bash nav.sh`
+  / ssh `ssh host 'bash ~/…/nav.sh'`（nav.sh start=systemd-run transient unit，ssh 短连接返回后 unit 续跑）；
+  overlay(explore/route 是前台 exec ros2 launch)ssh 拆卸=pidfile 记远端 PID→`ssh host kill -INT <pid>`
+  精确 SIGINT，守 NEVER-KILL-INFRA；viz ssh 下不远程开 RViz（NUC 无屏），提示 4090 本地 Foxglove/RViz。
+  单测 test_nav_transport（新）+ overlay/route/lifecycle/bringup 子集全绿。
+- **SSH bringup 真机 E2E（0963c00，PASS）**：`tests/e2e/e2e_nav_ssh_bringup.py` 走真工具+真 ssh transport,
+  4090 起停 NUC 栈，独立判据 4090 侧 `ros2 topic hz /state_estimation`。实测(狗未上电,预建图重定位)：
+  start map=zeno_office→NUC 起 zdog+zdog-route→/state_estimation 跨机 48Hz→where 读位姿→stop 干净拆栈,
+  NUC 事后零残留。只读:不发运动话题、finally 必 stop。可重复：`tests/e2e/run_e2e_nav_ssh_bringup.sh`。
 
 ## CEO 现场验收清单（真机，owner+E-stop 在手 — 本轮未做）
 ① 工作站重启 start_rynn.sh（拾取 8786 边车），`curl http://127.0.0.1:8786/health` 应回 {"ok":true}。
@@ -71,6 +82,11 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 6. **电量真机验证**：`colcon build --packages-select unitree_webrtc_ros` + `nav stop && nav start zeno_office`；
    看状态栏 `电量 NN%`；首帧 `lowstate keys=…` log 确认电压字段名，不对则按真机字段微调 _on_lowstate。
 7. operator RViz-goal detection 已 GREEN，真机闭环待现场。map-color-publisher.service 需 NUC 重启拾新代码。
+8. **ssh 默认地图解析是客户端侧（遗留）**：resolve_bringup_map 查本机 ~/maps，4090 无地图库→默认 start 走"从零"
+   而非 zeno_office（显式传 map 名可透传到 NUC 的 nav.sh 校验，E2E 即这么做）。Phase 3+ 若要 4090 默认预建图，
+   需把默认地图探测也走 transport（ssh ls ~/maps）或读 NUC 的 current_map 握手。
+9. **camera 话题命名（遗留，Phase 3 统一）**：go2w_hw_camera.py 订阅 /camera/camera/color/image_raw，
+   NUC 现发布在 /nuc/camera/color/image_raw——接视觉时统一。
 
 ## Failed / 教训
 - **全量 `tests/vcli/` 在 4090 工作站被 OOM kill**（sim 栈导入 + 共存 Rynn/ROS 服务；团队基线机不同）
