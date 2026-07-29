@@ -183,6 +183,116 @@ def test_stack_ready_predicate_is_fail_safe():
 
 
 # ---------------------------------------------------------------------------
+# stack_down() — the lifecycle TEARDOWN oracle (field gap 2026-07-29: '把导航栈
+# 关掉' RAN clean on the NUC but verified=False 0/1 grounded; no predicate could
+# express "栈已关"). It reads the SAME odometry-recency truth source as
+# stack_ready() and returns its exact NEGATIVE: odometry stale/never-received on
+# a LIVE driver => the publisher died => stack down. The actor can trigger the
+# stop but cannot author the odometry clock (Inv-1).
+# ---------------------------------------------------------------------------
+
+
+class _StackHW:
+    """Stand-in Go2WHardware exposing only the recency surface stack_down reads."""
+
+    def __init__(self, connected: bool = True, age: float | None = None) -> None:
+        self._connected = connected
+        self._age = age
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
+    def odom_age_s(self):
+        return self._age
+
+
+def _stack_down(base):
+    from zeno.vcli.worlds.go2w_real_verify import make_stack_down
+    return make_stack_down(SimpleNamespace(_base=base))
+
+
+def test_stack_down_true_when_odometry_is_stale():
+    # nav.sh stop tore the stack down: the odometry publisher died, so its age
+    # has crossed the 3 s recency threshold — the honest 'stack is down' signal.
+    assert _stack_down(_StackHW(connected=True, age=9.0))() is True
+
+
+def test_stack_down_true_when_odometry_never_received():
+    # A session whose stack was never up: connected driver, no odometry ever.
+    assert _stack_down(_StackHW(connected=True, age=None))() is True
+
+
+def test_stack_down_false_when_odometry_is_fresh():
+    # Stack still UP (fresh pose within 3 s) — stack_down must NOT fake-pass a
+    # teardown that did not happen. This is the exact negative of stack_ready().
+    assert _stack_down(_StackHW(connected=True, age=0.4))() is False
+
+
+def test_stack_down_is_fail_safe_without_a_driver():
+    # No base wired -> False: an unobservable oracle must never AFFIRM a
+    # teardown it cannot witness (fail-safe, never raises).
+    assert _stack_down(None)() is False
+
+
+def test_stack_down_false_when_driver_disconnected():
+    # Lost the odometry channel entirely -> cannot affirm the stack is down;
+    # this is NOT `not stack_ready()` (which would fake-pass here). Fail-safe.
+    assert _stack_down(_StackHW(connected=False, age=99.0))() is False
+
+
+def test_stack_down_never_raises_on_a_hostile_base():
+    class _Boom:
+        is_connected = True
+
+        def odom_age_s(self):
+            raise RuntimeError("driver exploded")
+
+    assert _stack_down(_Boom())() is False  # verifier sandbox: fail-safe, no raise
+
+
+def test_stack_down_is_the_negative_of_stack_ready_on_the_same_source():
+    # Both predicates read is_connected + odom_age_s; on a LIVE driver they
+    # partition every recency into exactly one of ready / down.
+    from zeno.vcli.worlds.go2w_real_verify import make_stack_down, make_stack_ready
+    for age in (0.0, 2.9, 3.0, 30.0, None):
+        base = _StackHW(connected=True, age=age)
+        ready = make_stack_ready(SimpleNamespace(_base=base))()
+        down = make_stack_down(SimpleNamespace(_base=base))()
+        assert ready != down, f"ready/down not complementary at age={age!r}"
+
+
+def test_stack_down_is_a_predicate_oracle():
+    # Marked so the verdict classifier grounds stack_down() like stack_ready().
+    from zeno.vcli.cognitive.evidence_classifier import PREDICATE_ORACLE_ATTR
+    fn = _stack_down(_StackHW())
+    assert getattr(fn, PREDICATE_ORACLE_ATTR, False) is True
+
+
+# ---------------------------------------------------------------------------
+# vocab: 关导航栈 grades on stack_down(), routes to bringup(stop), not liedown
+# ---------------------------------------------------------------------------
+
+
+def test_vocab_teaches_stack_down_verify_fn():
+    from zeno.vcli.worlds import resolve_world_named
+    vocab = resolve_world_named("go2w_real").decompose_vocab()
+    assert "stack_down" in vocab.verify_functions
+    assert "stack_down" in vocab.verify_fn_signatures
+    assert "stack_down()" in vocab.verify_fn_signatures["stack_down"]
+
+
+def test_stop_stack_fewshot_grades_on_stack_down_via_bringup_stop():
+    from zeno.vcli.worlds.go2w_real_vocab import REAL_DECOMPOSE_EXAMPLES
+    assert "把导航栈关掉" in REAL_DECOMPOSE_EXAMPLES
+    seg = REAL_DECOMPOSE_EXAMPLES.split("把导航栈关掉", 1)[1][:600]
+    assert "stack_down()" in seg          # verify the odometry actually died
+    assert "bringup_skill" in seg         # lifecycle strategy, not posture
+    assert '"action": "stop"' in seg      # teardown, not start
+    assert "standup_skill" not in seg and "liedown_skill" not in seg
+
+
+# ---------------------------------------------------------------------------
 # resume skill + estop-aware motion (field trace 2026-07-10: latched guard ->
 # 10s timeouts, wrong "blind spot" diagnosis, and no resume strategy at all)
 # ---------------------------------------------------------------------------

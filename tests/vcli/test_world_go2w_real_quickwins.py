@@ -247,4 +247,4 @@ def test_backward_fewshot_verifies_with_moved():
 
 
 def test_examples_within_char_budget():
-    assert len(_examples()) <= 6000, "REAL_DECOMPOSE_EXAMPLES over the ~6000 budget"
+    assert len(_examples()) <= 6400, "REAL_DECOMPOSE_EXAMPLES over the ~6400 budget"

@@ -613,7 +613,7 @@ def test_vocab_square_path_fewshot_teaches_compensated_legs():
     assert seg.count('"strategy"') == 2
     assert "course_locked()" in seg
     assert "bringup_skill" not in seg
-    assert len(ex) <= 6000, "REAL_DECOMPOSE_EXAMPLES over the ~6000 budget"
+    assert len(ex) <= 6400, "REAL_DECOMPOSE_EXAMPLES over the ~6400 budget"
 
 
 def test_capability_md_documents_course_compensation():

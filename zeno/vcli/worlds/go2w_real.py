@@ -91,6 +91,7 @@ from zeno.vcli.worlds.go2w_real_verify import (
     make_explore_finished,
     make_explored_progress,
     make_moved,
+    make_stack_down,
     make_stack_ready,
     make_turned,
 )
@@ -319,6 +320,7 @@ class Go2WRealWorld:
         }
         ns["route_reached"] = make_route_reached(agent)
         ns["stack_ready"] = make_stack_ready(agent)
+        ns["stack_down"] = make_stack_down(agent)
         ns["turned"] = make_turned(agent)
         ns["course_locked"] = make_course_locked(agent)
         # v2-extension point: verify — feature agents APPEND
@@ -564,6 +566,7 @@ class Go2WRealWorld:
                 "at", "moved", "explore_finished", "explored_progress",
                 "route_reached",  # v2 route mode (far_planner arrival oracle)
                 "stack_ready",    # lifecycle: odometry flowing = stack truly up
+                "stack_down",     # lifecycle: odometry died = stack truly down
                 "turned",         # v2 in-place rotation (odometry yaw, wrap-aware)
                 "course_locked",  # heading-intent tracking (drift-compensated turns)
             }),
@@ -585,6 +588,10 @@ class Go2WRealWorld:
                 "stack_ready": (
                     "stack_ready() -> bool"
                     "  # nav stack up: fresh /state_estimation odometry within 3s"),
+                "stack_down": (
+                    "stack_down() -> bool"
+                    "  # nav stack DOWN: /state_estimation odometry stale (>=3s) or "
+                    "never received — the teardown oracle for 关闭导航栈"),
                 "turned": (
                     "turned(min_deg: float = 30.0) -> bool"
                     "  # the LAST turn command rotated >= min_deg (odometry yaw "
@@ -614,7 +621,8 @@ class Go2WRealWorld:
                                      "/nav_cancel; never touches the E-stop latch)"),
                 "bringup_skill": ("Nav-stack LIFECYCLE: start (launch + block "
                                   "until SLAM-ready, verify stack_ready()) or "
-                                  "stop. 启动/关闭导航栈 — NOT standing up"),
+                                  "stop (tear the stack down, verify "
+                                  "stack_down()). 启动/关闭导航栈 — NOT standing up"),
                 "resume_skill": ("Release the E-stop/manual latch so motion works "
                                  "again — REQUIRED after stop_skill. 解除急停/恢复自主"),
                 "turn_skill": ("Turn IN PLACE by direction+degrees (左转/右转; "

@@ -216,3 +216,42 @@ def make_stack_ready(agent: Any) -> Callable[[], bool]:
             return False
 
     return predicate_oracle(stack_ready)
+
+
+def make_stack_down(agent: Any) -> Callable[[], bool]:
+    """Bind ``stack_down()`` — True iff odometry has STOPPED flowing (stack torn down).
+
+    The honest teardown oracle, the exact negative of the fact ``stack_ready()``
+    reads: the nav stack is "down" when the ``/state_estimation`` pose stream
+    everything else trusts has gone STALE (odom age >= 3 s) or was NEVER received.
+    It reads the SAME truth source (odometry arrival time on the LIVE driver) —
+    the actor can trigger a ``关导航栈`` but cannot author the odometry clock, so a
+    bringup-stop round grades on the stack actually dying, not on the skill's own
+    "stopped" self-report (field gap 2026-07-29: '把导航栈关掉' RAN clean on the
+    NUC but verified=False 0/1 grounded — decompose/verify had no predicate that
+    could express "栈已关").
+
+    Fail-safe False (no driver, driver not connected, or any error): a missing /
+    unobservable oracle must never fake-pass a teardown it cannot witness, and the
+    verifier sandbox never sees a raise. NOTE this is NOT ``not stack_ready()`` —
+    an unwired/disconnected base yields False here (we lost the odometry channel,
+    so we cannot AFFIRM the stack is down), True only when a LIVE, connected
+    driver confirms the odometry publisher has died.
+    """
+
+    def stack_down() -> bool:
+        base = getattr(agent, "_base", None) if agent is not None else None
+        if base is None:
+            return False
+        try:
+            if not getattr(base, "is_connected", False):
+                return False
+            # Same recency source as stack_ready(), read as its negative: a
+            # never-received (None) or stale (>= 3 s) odometry age means the
+            # publisher is gone -> the stack is DOWN. Fresh (< 3 s) -> still up.
+            age = base.odom_age_s() if hasattr(base, "odom_age_s") else None
+            return age is None or float(age) >= 3.0
+        except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
+            return False
+
+    return predicate_oracle(stack_down)

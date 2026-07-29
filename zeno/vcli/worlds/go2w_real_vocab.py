@@ -135,6 +135,33 @@ Response:
   "context_snapshot": ""
 }"""
 
+# Lifecycle STOP (field gap 2026-07-29: '把导航栈关掉' RAN clean on the NUC but
+# verified=False 0/1 grounded — decompose/verify had NO predicate that could
+# express "栈已关"). The stop few-shot grades on stack_down() (the odometry
+# actually died — the exact negative of stack_ready(), an unforgeable truth
+# source), NOT the skill's own "stopped" self-report. bringup(action=stop);
+# posture (躺下) stays with liedown, never bringup.
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "把导航栈关掉"   (stack LIFECYCLE teardown — verify odometry died, not a self-report; NOT lying down)
+Response:
+{
+  "goal": "把导航栈关掉",
+  "sub_goals": [
+    {
+      "name": "stop_stack",
+      "description": "关闭导航栈(生命周期;栈停后里程计停流,不是躺下)",
+      "verify": "stack_down()",
+      "strategy": "bringup_skill",
+      "timeout_sec": 60,
+      "depends_on": [],
+      "strategy_params": {"action": "stop"},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""
+
 # Motion goes STRAIGHT to motion skills — never via bringup (field trace
 # 2026-07-10: '往前走3米' routed through bringup(start) and restarted the
 # live stack). bringup appears ONLY when the goal is about the stack itself.
