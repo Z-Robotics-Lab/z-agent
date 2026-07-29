@@ -613,7 +613,9 @@ def test_vocab_square_path_fewshot_teaches_compensated_legs():
     assert seg.count('"strategy"') == 2
     assert "course_locked()" in seg
     assert "bringup_skill" not in seg
-    assert len(ex) <= 6400, "REAL_DECOMPOSE_EXAMPLES over the ~6400 budget"
+    # Budget raised 6400 -> 7000 (2026-07-29) for the Phase-4 manip approach
+    # few-shot (approach_object_skill / approach_ready()).
+    assert len(ex) <= 7000, "REAL_DECOMPOSE_EXAMPLES over the ~7000 budget"
 
 
 def test_capability_md_documents_course_compensation():

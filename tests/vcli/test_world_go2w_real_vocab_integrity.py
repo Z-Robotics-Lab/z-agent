@@ -57,7 +57,8 @@ _REAL_ORACLES = frozenset(
     {"at", "moved", "explore_finished", "explored_progress", "route_reached",
      "stack_ready", "stack_down",  # stack_down: lifecycle teardown oracle
      "turned",  # turned: v2 in-place rotation oracle
-     "course_locked"}  # course_locked: heading-intent (course) alignment
+     "course_locked",  # course_locked: heading-intent (course) alignment
+     "approach_ready"}  # approach_ready: manip servo->grasp handoff (FSM phase latch)
 )
 
 

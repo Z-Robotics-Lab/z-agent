@@ -343,3 +343,30 @@ Response:
 # OMITTED — the ~6000-char example budget is full (tests pin it), and the
 # strategy_descriptions + strategy_params_help lines in go2w_real.py already
 # teach the pattern (VLM output = decision input; verify stays odometry).
+
+# Manip approach (2026-07-29, Phase 4): "靠近那个XX" is a SINGLE
+# approach_object_skill step — the base visually servos to the servo->grasp
+# HANDOFF (~0.55m) and STOPS; the FSM auto-cancels at the handoff phase so the
+# arm NEVER engages (approach-only, this phase). Verify with approach_ready()
+# (the FSM's own phase latch), NEVER with perception. NO bringup step for the
+# nav stack — but the manip components must be up (recovery: manip_bringup).
+REAL_DECOMPOSE_EXAMPLES += """
+
+Task: "靠近那个红色的杯子"   (approach-only: base servos to the ~0.55m handoff then STOPS; arm never engages; verify approach_ready())
+Response:
+{
+  "goal": "靠近那个红色的杯子",
+  "sub_goals": [
+    {
+      "name": "approach_cup",
+      "description": "视觉伺服靠近红色杯子到交接距离(只靠近,到手臂交接相位自动取消,手臂全程不动)",
+      "verify": "approach_ready()",
+      "strategy": "approach_object_skill",
+      "timeout_sec": 120,
+      "depends_on": [],
+      "strategy_params": {"target": "红色杯子"},
+      "fail_action": ""
+    }
+  ],
+  "context_snapshot": ""
+}"""

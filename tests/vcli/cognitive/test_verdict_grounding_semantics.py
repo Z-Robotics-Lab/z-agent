@@ -52,6 +52,8 @@ _ORACLES = frozenset({
 _PRED_ROLES = frozenset({
     "at", "moved", "turned", "stack_ready", "route_reached", "explore_finished",
     "course_locked",  # heading-intent (course) alignment — bool predicate
+    "stack_down",     # lifecycle teardown oracle — bool predicate
+    "approach_ready", # manip servo->grasp handoff (FSM phase latch) — bool predicate
 })
 
 

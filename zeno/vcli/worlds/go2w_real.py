@@ -78,6 +78,13 @@ from zeno.vcli.worlds.go2w_real_route_skills import (
 )
 from zeno.vcli.worlds.go2w_real_route_tools import Go2WRealRouteTool
 from zeno.vcli.worlds.go2w_real_route_verify import make_route_reached
+from zeno.vcli.worlds.go2w_real_manip_skills import (
+    RealApproachObjectSkill,
+    RealManipBringupSkill,
+    RealManipCancelSkill,
+    RealManipStatusSkill,
+)
+from zeno.vcli.worlds.go2w_real_manip_verify import make_approach_ready
 from zeno.vcli.worlds.go2w_real_course import CourseTracker
 from zeno.vcli.worlds.go2w_real_places import (
     PoseLedger,
@@ -121,6 +128,7 @@ class Go2WRealEmbodiment:
         from zeno.hardware.ros2.go2w_hw import Go2WHardware
         from zeno.hardware.ros2.go2w_hw_explore import Go2WExploreManager
         from zeno.hardware.ros2.go2w_hw_route import Go2WRouteManager
+        from zeno.hardware.ros2.go2w_manip_bridge import Go2WManipBridge
         from zeno.perception.rynnbrain import RynnBrainClient
 
         self._base = Go2WHardware()
@@ -128,6 +136,9 @@ class Go2WRealEmbodiment:
         # oracle subscriptions; its Trigger helpers do the safety teardown).
         self._explore = Go2WExploreManager(self._base)
         self._route = Go2WRouteManager(self._base)
+        # Thin ROS client to the Z-Mobile-manip task FSM (three std_msgs topics;
+        # NO can0/arm/executor). Constructed offline; lazy-connects on first use.
+        self._manip = Go2WManipBridge()
         # ONE viz overlay session shared by the go2w_real_viz TOOL and the
         # open_viz SKILL — the two faces can never double-launch RViz.
         self._viz = VizOverlaySession()
@@ -150,6 +161,7 @@ class Go2WRealEmbodiment:
         self._rynn = RynnBrainClient()
         self._base.explore_manager = self._explore
         self._base.route_manager = self._route
+        self._base.manip_bridge = self._manip
         self._base.viz_manager = self._viz
         self._base.course_tracker = self._course
         self._base.pose_ledger = self._places
@@ -175,6 +187,10 @@ class Go2WRealEmbodiment:
         self._skill_registry.register(RealListPlacesSkill())
         self._skill_registry.register(RealFindObjectSkill())
         self._skill_registry.register(RealSceneQuerySkill())
+        self._skill_registry.register(RealApproachObjectSkill())
+        self._skill_registry.register(RealManipBringupSkill())
+        self._skill_registry.register(RealManipStatusSkill())
+        self._skill_registry.register(RealManipCancelSkill())
         # v2-extension point: skills — feature agents APPEND
         # `self._skill_registry.register(<Skill>())` lines ABOVE this marker
         # (one per line; never edit or reorder the existing registrations).
@@ -189,7 +205,8 @@ class Go2WRealEmbodiment:
             bases={"go2w": self._base},
             services={"explore": self._explore, "route": self._route,
                       "viz": self._viz, "course": self._course,
-                      "places": self._places, "rynn": self._rynn},
+                      "places": self._places, "rynn": self._rynn,
+                      "manip": self._manip},
         )
 
     def _sync_robot_state(self) -> None:
@@ -219,6 +236,23 @@ class Go2WRealEmbodiment:
                 "RynnBrain perception service unreachable. Start it on the GPU "
                 "workstation (start_rynn.sh) or point ZENO_RYNNBRAIN_URL at it "
                 "(default http://127.0.0.1:8786). Non-vision steps still work."
+            ),
+            "no_manip_stack": (
+                "Z-Mobile-manip task graph not reachable. Bring the components up "
+                "with manip_bringup(action='start') and check manip_status(); the "
+                "approach path also needs joint feedback (/piper/state) + the nav "
+                "stack for COARSE_NAV — see manip_status() failure/phase."
+            ),
+            "approach_failed": (
+                "The FSM fail-closed before the handoff. Read the reason with "
+                "manip_status() (failure/phase): missing joint feedback stalls it "
+                "at GROUNDING, COARSE_NAV needs the external nav stack, and a "
+                "grounding miss needs a re-phrased target (real appearance). "
+                "approach_object never enters an arm phase."
+            ),
+            "manip_busy": (
+                "A manip approach owns the chassis. Wait for it to finish, or abort "
+                "it with manip_cancel before driving (navigate/move_relative)."
             ),
         }
 
@@ -323,6 +357,7 @@ class Go2WRealWorld:
         ns["stack_down"] = make_stack_down(agent)
         ns["turned"] = make_turned(agent)
         ns["course_locked"] = make_course_locked(agent)
+        ns["approach_ready"] = make_approach_ready(agent)
         # v2-extension point: verify — feature agents APPEND
         # `ns["<fn>"] = make_<fn>(agent)` lines ABOVE this marker (factories
         # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
@@ -569,6 +604,7 @@ class Go2WRealWorld:
                 "stack_down",     # lifecycle: odometry died = stack truly down
                 "turned",         # v2 in-place rotation (odometry yaw, wrap-aware)
                 "course_locked",  # heading-intent tracking (drift-compensated turns)
+                "approach_ready", # manip: servo->grasp handoff reached (FSM phase latch)
             }),
             verify_fn_signatures={
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
@@ -600,6 +636,11 @@ class Go2WRealWorld:
                     "course_locked(tol_deg: float = 10.0) -> bool"
                     "  # heading within tol of the plan's INTENDED course "
                     "(drift-compensated relative plans); False when no course"),
+                "approach_ready": (
+                    "approach_ready() -> bool"
+                    "  # manip: the base reached the servo->grasp handoff "
+                    "(FSM left visual_servo, stopped at the standoff, arm-free) — "
+                    "latched from /z_manip/task/status; perception is NOT evidence"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "
@@ -657,6 +698,22 @@ class Go2WRealWorld:
                 "scene_query_skill": ("Ask the RynnBrain VLM a free question about "
                                       "the camera view (thinking mode). DECISION "
                                       "INPUT, never verification evidence. 场景问答"),
+                "approach_object_skill": (
+                    "Visually servo the CHASSIS up to a named object and STOP at "
+                    "the servo->grasp handoff (~0.55m). APPROACH-ONLY: auto-cancels "
+                    "at the handoff so the arm NEVER engages; verify "
+                    "approach_ready(). Needs the manip stack up. 靠近某物(不抓)"),
+                "manip_bringup_skill": (
+                    "Lifecycle for the Z-Mobile-manip vision components via the "
+                    "manip CLI (start|bringup|stop|status). Cannot actuate the "
+                    "manipulator (home/grasp are UI-only). 起停查 manip 组件"),
+                "manip_status_skill": (
+                    "Read the manip task FSM state (phase/depth/handoff readiness/"
+                    "failure) from its live status stream. DECISION INPUT, not "
+                    "verification. 查询 manip 状态"),
+                "manip_cancel_skill": (
+                    "Clean-cancel the manip task at any phase (zeros the chassis "
+                    "via the FSM safety action). The arm-free abort. 取消 manip 任务"),
             },
             strategies=frozenset({
                 "navigate_skill", "move_relative_skill",
@@ -668,6 +725,8 @@ class Go2WRealWorld:
                 "mark_place_skill", "goto_place_skill",
                 "clear_goals_skill",
                 "find_object_skill", "scene_query_skill",
+                "approach_object_skill", "manip_bringup_skill",
+                "manip_status_skill", "manip_cancel_skill",
             }),
             strategy_params_help="""\
   - navigate_skill: {"x": <map-frame meters float>, "y": <map-frame meters float>}
@@ -688,7 +747,11 @@ class Go2WRealWorld:
   - goto_place_skill: {"name": "起点|刚才|<地点名>"}  (起点=session origin, 刚才=newest breadcrumb >=0.3m away)
   - clear_goals_skill: {}  (清除所有残留目标+航向意图;不动急停锁存)
   - find_object_skill: {"description": "<real appearance, e.g. 'metal bowl'>"}  (贴实际外观措辞;结果=侧别+偏角,验收仍用 at()/turned())
-  - scene_query_skill: {"question": "<自由问题>"}  (思考模式问答;答案是决策输入不是验收证据)""",
+  - scene_query_skill: {"question": "<自由问题>"}  (思考模式问答;答案是决策输入不是验收证据)
+  - approach_object_skill: {"target": "<real appearance, e.g. '红色杯子'>"}  (只靠近到交接距离,手臂不参与;验收 approach_ready())
+  - manip_bringup_skill: {"action": "start|bringup|stop|status"}  (默认 status;起停 manip 视觉组件,CLI 不动手臂)
+  - manip_status_skill: {}  (读 manip 任务相位/深度/交接就绪;决策输入)
+  - manip_cancel_skill: {}  (任意相位干净取消 manip 任务;底盘归零)""",
             examples=REAL_DECOMPOSE_EXAMPLES,
             # SUPPRESS the class-default '## Loop Example' (it teaches
             # detect_objects(), a phantom here — field forensics 2026-07-10).

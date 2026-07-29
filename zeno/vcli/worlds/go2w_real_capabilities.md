@@ -133,6 +133,25 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   with the VLM's own words. Never invent perception verify predicates. If the
   service is down (no_vlm), every non-vision path still works; the operator
   starts it with start_rynn.sh on the GPU workstation.
+- Approach an object (VISUAL SERVO, base-only) — approach_object(target) drives
+  the CHASSIS up to a named object via the Z-Mobile-manip stack and STOPS at the
+  servo→grasp handoff (~0.55 m standoff), the moment before the arm would engage.
+  APPROACH-ONLY, current phase: the skill auto-cancels the manip task at the
+  handoff phase, so the ARM NEVER MOVES — you cannot pick, place, or actuate the
+  manipulator (that is a later phase, done from the manip UI beside the E-stop).
+  Blocks until handoff / failure / timeout; verify with approach_ready() (the
+  FSM's OWN phase latch — perception is decision input, NEVER proof). While an
+  approach owns the chassis, navigate / move_relative are refused (base mutex) —
+  abort with manip_cancel to drive. Needs the manip components up: if it reports
+  no_manip_stack, run manip_bringup(action='start') first. approach needs joint
+  feedback + the nav stack to actually move the base; if it stalls early, read
+  manip_status() (phase/failure) and tell the operator.
+- Manip components — manip_bringup(action=start|bringup|stop|status) starts/stops/
+  queries the Z-Mobile-manip vision+perception stack through the manip operator
+  CLI (this CLI can NEVER actuate the manipulator — arm-safe by construction).
+  manip_status reads the live task FSM state (phase, standoff depth, handoff
+  readiness, failure) as DECISION INPUT. manip_cancel cleanly aborts the current
+  manip task at any phase and zeros the chassis — the arm-free safety stop.
 - Show the operator — go2w_real_viz(action=open[, view=main|explore|route|3d])
   opens a visualization on the robot's desktop (Moonlight-viewable) as a
   background child; action=close closes it. main|explore|route = RViz — open the
@@ -157,7 +176,9 @@ VERIFY (ground truth = /state_estimation odometry; you cannot author it):
 at(x, y[, tol]) for arrivals, moved(min_m) for displacement, turned(min_deg)
 for in-place rotation, course_locked([tol_deg]) for heading-vs-intended-course
 alignment (False when no relative plan is in flight), explore_finished() /
-explored_progress() for exploration, route_reached() for far-planner goals.
+explored_progress() for exploration, route_reached() for far-planner goals,
+approach_ready() for the manip servo→grasp handoff (the FSM's own phase latch —
+approach_object is proven by this, never by what the camera reports).
 moved() grades the LAST move command (driver-anchored, like turned()): a
 completed move verifies True on the FIRST check — NEVER re-run a move to
 make verify pass; a second run physically drives the robot AGAIN. Zero

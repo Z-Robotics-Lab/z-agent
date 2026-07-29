@@ -247,4 +247,6 @@ def test_backward_fewshot_verifies_with_moved():
 
 
 def test_examples_within_char_budget():
-    assert len(_examples()) <= 6400, "REAL_DECOMPOSE_EXAMPLES over the ~6400 budget"
+    # Budget raised 6400 -> 7000 (2026-07-29) to seat the Phase-4 manip approach
+    # few-shot ("靠近那个XX" -> approach_object_skill, verify approach_ready()).
+    assert len(_examples()) <= 7000, "REAL_DECOMPOSE_EXAMPLES over the ~7000 budget"

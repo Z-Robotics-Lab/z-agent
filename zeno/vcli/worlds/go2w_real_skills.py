@@ -80,6 +80,7 @@ _DIRECTION_SYNONYMS: dict[str, str] = {
 from zeno.vcli.worlds.go2w_real_course import course_of, reset_course  # noqa: E402
 from zeno.vcli.worlds.go2w_real_diag import (  # noqa: E402
     _latched_hint,
+    _manip_busy_hint,
     _stalled_hint,
     oplog,
 )
@@ -173,6 +174,11 @@ class RealNavigateSkill:
             x, y = _target_xy(params, kw, context)
         except ValueError as e:
             return SkillResult(success=False, error_message=str(e))
+        busy = _manip_busy_hint(base)
+        if busy:
+            oplog("skill", "navigate", f"BLOCKED manip-busy; goal=({x:.2f},{y:.2f})")
+            return SkillResult(success=False, diagnosis_code="manip_busy",
+                               error_message=busy)
         hint = _latched_hint(base)
         if hint:
             oplog("skill", "navigate", f"BLOCKED latched; goal=({x:.2f},{y:.2f})")
@@ -285,6 +291,11 @@ class RealMoveRelativeSkill:
             return SkillResult(success=False, error_message=(
                 f"distance {distance!r} out of range (0, {CFG.relative_max_m}] m"))
 
+        busy = _manip_busy_hint(base)
+        if busy:
+            oplog("skill", "move_relative", f"BLOCKED manip-busy; {direction} {distance}m")
+            return SkillResult(success=False, diagnosis_code="manip_busy",
+                               error_message=busy)
         hint = _latched_hint(base)
         if hint:
             oplog("skill", "move_relative", f"BLOCKED latched; {direction} {distance}m")

@@ -22,6 +22,20 @@ def _latched_hint(base: Any) -> str | None:
     return None
 
 
+def _manip_busy_hint(base: Any) -> str | None:
+    """Fail-fast hint when a manip approach owns the chassis (base mutex).
+
+    ``approach_object`` sets ``base.manip_active`` for the life of a manip run so
+    the drive skills never fight the FSM's servo for the same chassis (protocol-
+    level mutex, this phase). Fail-open (None) when the flag is absent/False — an
+    older driver or an idle chassis drives exactly as before.
+    """
+    if getattr(base, "manip_active", False):
+        return ("a manip approach owns the chassis — navigation is refused until "
+                "it finishes; abort it with manip_cancel first")
+    return None
+
+
 def wrap_angle(angle: float) -> float:
     """Wrap an angle delta into (-pi, pi] — the shortest signed rotation.
 

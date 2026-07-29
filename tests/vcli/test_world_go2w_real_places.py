@@ -710,7 +710,9 @@ def test_vocab_fewshot_mark_place_carries_the_name():
 def test_examples_budget_holds():
     from zeno.vcli.worlds.go2w_real_vocab import REAL_DECOMPOSE_EXAMPLES as ex
 
-    assert len(ex) <= 6400, "REAL_DECOMPOSE_EXAMPLES over the ~6400 budget"
+    # Budget raised 6400 -> 7000 (2026-07-29) for the Phase-4 manip approach
+    # few-shot (approach_object_skill / approach_ready()).
+    assert len(ex) <= 7000, "REAL_DECOMPOSE_EXAMPLES over the ~7000 budget"
 
 
 def test_capability_md_documents_global_awareness_and_the_limit():
