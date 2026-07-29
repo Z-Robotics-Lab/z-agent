@@ -136,6 +136,7 @@ SLASH_COMMANDS: list[tuple[str, str, bool]] = [
     ("tools", "List all registered tools", False),
     ("agent", "Show Zeno's identity and capabilities", False),
     ("status", "Show hardware, tools, session info", False),
+    ("where", "Where am I? — robot pose / location (runs the where-am-i skill)", False),
     ("usage", "Show token usage this session", False),
     ("cot", "Model reasoning display  (/cot off|tail|full)", True),
     ("why", "Show the last turn's full reasoning", False),
@@ -609,6 +610,20 @@ def _append_highlighted_text(target: Text, raw: str) -> None:
         last = m.end()
     if last < len(raw):
         target.append(raw[last:])
+
+
+def _render_streamed_answer_line(line: str) -> Text:
+    """One streamed answer paragraph as styled Text for the live transcript.
+
+    Routes through the SAME ``_append_highlighted_text`` path ``render_response``
+    uses, so a paragraph streamed live is markdown-stripped (no raw ``**bold**``
+    or ``# heading`` leaking into the terminal — field 裸-markdown report) and
+    still gets path/inline-code colouring. Two-space indent matches the
+    post-turn render.
+    """
+    body = Text("  ", style=palette.TEXT)
+    _append_highlighted_text(body, line)
+    return body
 
 
 # Last response storage for /copy
@@ -1192,6 +1207,32 @@ def _repl_attempt_native(
 
 def is_slash_command(text: str) -> bool:
     return text.strip().startswith("/")
+
+
+# Skill-alias slashes: a slash that is a shortcut for a natural-language request,
+# routed through the NORMAL turn pipeline (intent router -> skill) rather than a
+# meta /command handler. Keeps one code path for the actual skill. Extend by
+# adding `"<slash>": "<nl phrase>"`.
+_SKILL_SLASH_ALIASES: dict[str, str] = {
+    "where": "where am i",  # -> go2/where_am_i skill (aliases: 'where', '我在哪')
+}
+
+
+def _rewrite_skill_slash(text: str) -> str | None:
+    """Map a skill-alias slash (e.g. ``/where``) to the NL phrase that routes to
+    that skill, so it runs as an ordinary turn. Returns None for anything that is
+    not a skill-alias slash (a normal /command or plain text). Trailing args are
+    appended, so ``/where lab`` -> ``where am i lab``."""
+    stripped = text.strip()
+    if not stripped.startswith("/"):
+        return None
+    parts = stripped[1:].split()
+    if not parts:
+        return None
+    phrase = _SKILL_SLASH_ALIASES.get(parts[0].lower())
+    if phrase is None:
+        return None
+    return f"{phrase} {' '.join(parts[1:])}".strip()
 
 
 def is_exit_command(text: str) -> bool:
@@ -2541,7 +2582,22 @@ def _handle_slash_command(
                 )
 
     else:
-        console.print(f"[yellow]  Unknown: /{cmd}[/]  (type / + Tab)")
+        # Unknown /command: suggest the closest real command (typo help) and
+        # remind the operator that plain natural language works too — a slash is
+        # never required to talk to Zeno.
+        import difflib  # noqa: PLC0415
+        _names = [n for n, _d, _a in SLASH_COMMANDS]
+        _close = difflib.get_close_matches(cmd.lower(), _names, n=1, cutoff=0.5)
+        if _close:
+            console.print(
+                f"[yellow]  未知命令 /{cmd}[/] — 你是不是想输入 "
+                f"[{TEAL}]/{_close[0]}[/]?  [dim](直接打自然语言也可以)[/]"
+            )
+        else:
+            console.print(
+                f"[yellow]  未知命令 /{cmd}[/]  "
+                f"[dim](/ + Tab 看全部命令;直接打自然语言也可以)[/]"
+            )
 
     return True
 
@@ -2691,27 +2747,105 @@ _QUIET_LOGGERS: tuple[str, ...] = (
 _COGNITIVE_LOGGER = _QUIET_LOGGERS[0]
 
 
+# Marker attribute on the root FileHandler we install, so repeated
+# _setup_logging calls are idempotent and the handler is recognisable later.
+_ZENO_FILE_LOG_FLAG = "_zeno_repl_file_log"
+
+
+def _repl_log_path() -> "Path":
+    """The REPL log file (``~/.zeno/logs/zeno.log``); parent created lazily."""
+    return paths.resolve_write("logs/zeno.log")
+
+
+def _attach_file_log_handler(root: logging.Logger) -> None:
+    """Install a rotating FileHandler on root ONCE (idempotent, best-effort).
+
+    This is the sink that keeps WARNING/ERROR OFF the terminal: with it present
+    the REPL never needs a console log handler, so a stray library WARNING (e.g.
+    ``openai_compat`` 'Connection error') lands in the file instead of being
+    painted straight into the prompt_toolkit prompt line (display 花屏 fix).
+    """
+    for h in root.handlers:
+        if getattr(h, _ZENO_FILE_LOG_FLAG, False):
+            return
+    try:
+        from logging.handlers import RotatingFileHandler  # noqa: PLC0415
+
+        handler = RotatingFileHandler(
+            _repl_log_path(), maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+        )
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        setattr(handler, _ZENO_FILE_LOG_FLAG, True)
+        root.addHandler(handler)
+    except Exception:  # noqa: BLE001 — logging setup must never crash the CLI
+        pass
+
+
+def _console_bound_stream_handlers(root: logging.Logger) -> "list[logging.Handler]":
+    """Root handlers that write to the real terminal (stderr/stdout).
+
+    Deliberately identity-matches the live process streams so a test harness's
+    StringIO/caplog handler (pytest's LogCaptureHandler) is never touched — only
+    handlers that would actually paint into the operator's prompt are considered.
+    """
+    terminals = {
+        sys.stderr, sys.stdout,
+        getattr(sys, "__stderr__", None), getattr(sys, "__stdout__", None),
+    }
+    return [
+        h for h in root.handlers
+        if not getattr(h, _ZENO_FILE_LOG_FLAG, False)
+        and isinstance(h, logging.StreamHandler)
+        and getattr(h, "stream", None) in terminals
+    ]
+
+
 def _setup_logging(verbose: bool) -> None:
     """Configure logging for the REPL entry path (CLI only).
 
-    --verbose -> root DEBUG; all noisy sub-package loggers restored to NOTSET so
-    they inherit the root level (full logging preserved).
+    The REPL runs under prompt_toolkit's ``patch_stdout``; a log line written to
+    the terminal by the stdlib default handler corrupts the input rail / border
+    (field 花屏 report). So logging is routed to ``~/.zeno/logs/zeno.log`` and, on
+    the non-verbose REPL, NO console handler is left on root — WARNING/ERROR are
+    recorded to the file, not painted into the prompt. Important failures still
+    reach the operator through the UI channels (rich step UI, error panels).
 
-    Non-verbose -> root WARNING; the sub-package loggers in _QUIET_LOGGERS are
-    pinned to ERROR so their INFO/WARNING lines don't flood the console.  Every
-    step failure is ALREADY surfaced in the rich step UI ("[FAIL] ..."); the
-    duplicate log lines are pure noise.  The quieting is scoped to those specific
+    --verbose -> root DEBUG; a stderr console handler is (re)added so a dev who
+    asked for logs sees them live; all noisy sub-package loggers restored to
+    NOTSET so they inherit the root level (full logging preserved).
+
+    Non-verbose -> root WARNING; terminal-bound console handlers are stripped
+    from root; the sub-package loggers in _QUIET_LOGGERS are pinned to ERROR.
+    Every step failure is ALREADY surfaced in the rich step UI ("[FAIL] ..."); the
+    duplicate log lines are pure noise. The quieting is scoped to those specific
     package prefixes — NOT the root logger — so real ERRORs still surface and the
-    engine/kernel loggers are unaffected.  Library code and the test suite never
+    engine/kernel loggers are unaffected. Library code and the test suite never
     call this function; it is the CLI entry path only.
     """
+    root = logging.getLogger()
+    _attach_file_log_handler(root)
     if verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        root.setLevel(logging.DEBUG)
+        # --verbose: also echo to the terminal (the dev explicitly asked to see
+        # logs). basicConfig adds a stderr StreamHandler only if root has none;
+        # add one explicitly when our file handler is the sole handler.
+        if not _console_bound_stream_handlers(root):
+            _console = logging.StreamHandler(sys.stderr)
+            _console.setFormatter(
+                logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+            )
+            root.addHandler(_console)
         # Undo any prior non-verbose quieting so --verbose always restores full logging.
         for name in _QUIET_LOGGERS:
             logging.getLogger(name).setLevel(logging.NOTSET)
     else:
-        logging.basicConfig(level=logging.WARNING)
+        root.setLevel(logging.WARNING)
+        # Non-verbose REPL: no terminal-bound handler survives, so nothing floods
+        # the prompt line (the file handler keeps the full record).
+        for h in _console_bound_stream_handlers(root):
+            root.removeHandler(h)
         for name in _QUIET_LOGGERS:
             logging.getLogger(name).setLevel(logging.ERROR)
 
@@ -3663,13 +3797,12 @@ def main(argv: list[str] | None = None) -> None:
             # tail inside the open thinking block (mode 'tail'/'full'), recorded
             # for /why, never appended to the session or the answer.
             _turn_reasoning: list[str] = []
-            # P3.10: live ┆ streaming under the persistent composer (off ->
-            # silent; sync mode keeps the P3.6 post-turn bounded preview).
-            _reasoning_streamer = (
-                ReasoningStreamer(width=min(console.width - 6, 92))
-                if turn_runner is not None and _cot_mode(app_state) != "off"
-                else None
-            )
+            # Reasoning is a DISPLAY buffer only: accumulated here for the
+            # post-turn bounded preview (◌ Thinking · preview · /why 展开) and for
+            # /why. It is deliberately NOT streamed ┆-line-by-line into the
+            # transcript — that flooded the field REPL with dozens of DeepSeek
+            # think lines (思考刷屏 report). The footer heartbeat ('thinking Ns')
+            # is the live indicator; the calm ≤2-line preview lands after the turn.
             # P3.14: stream the ANSWER into the transcript as it arrives too
             # (owner: chat 完稿才蹦一串). Under the persistent composer the Live
             # panel is a NullLive, so without this the answer only appears at the
@@ -3726,27 +3859,22 @@ def main(argv: list[str] | None = None) -> None:
                     # P3.14: land each finished paragraph in the transcript live.
                     if _answer_streamer is not None:
                         for _line in _answer_streamer.feed(chunk):
-                            console.print(Text("  " + _line, style=palette.TEXT))
+                            console.print(_render_streamed_answer_line(_line))
                             _answer_streamed[0] = True
                 status.update_text(chunk)
 
             def on_reasoning(_chunk: str) -> None:
-                # P1.2: capture the reasoning chunk for the live thinking block
-                # tail + /why (display buffer only — never answer text),
-                # and keep the "thinking…" status alive with the timer.
+                # P1.2: capture the reasoning chunk for the post-turn preview
+                # + /why (display buffer only — never answer text), and keep the
+                # "thinking…" heartbeat alive with the timer. The full think
+                # stream is NOT painted line-by-line (思考刷屏 fix); the calm
+                # ≤2-line preview is emitted once, after the turn.
                 if _chunk:
                     _turn_reasoning.append(str(_chunk))
                 if turn_runner is not None:
                     turn_runner.set_activity(
                         f"thinking {time.monotonic() - _turn_started:.0f}s"
                     )
-                    # P3.10: the thinking PROCESS streams into the transcript as
-                    # ┆ lines while it happens (owner: '看不到 reasoning 的过程').
-                    if _chunk and _reasoning_streamer is not None:
-                        for _line in _reasoning_streamer.feed(str(_chunk)):
-                            console.print(
-                                Text("  ┆ " + _line, style=f"italic {palette.TEXT_FAINT}")
-                            )
                 status.thinking(time.monotonic() - _turn_started)
 
             def _format_tool_display(name: str, p: dict[str, Any]) -> str:
@@ -4095,23 +4223,19 @@ def main(argv: list[str] | None = None) -> None:
                 status.stop()
                 sys.stderr = _saved_stderr
 
-            # P1.2 CoT: record this turn's reasoning for /why. Tail leaves a
-            # bounded preview; full prints everything. Display-only — never
-            # session content.
+            # P1.2 CoT: record this turn's FULL reasoning for /why, then emit ONE
+            # bounded post-turn block per the display mode — tail -> ◌ Thinking ·
+            # preview (≤2 lines) · /why 展开, full -> everything, off -> nothing.
+            # This is the ONLY reasoning that reaches scrollback (no live ┆ flood).
+            # Display-only — never session content.
             app_state["last_reasoning"] = "".join(_turn_reasoning)
-            if _reasoning_streamer is not None:
-                # P3.10: process already streamed live — flush the partial tail
-                # and skip the duplicate post-hoc preview (/why keeps the full).
-                for _line in _reasoning_streamer.flush():
-                    console.print(Text("  ┆ " + _line, style=f"italic {palette.TEXT_FAINT}"))
-            else:
-                reasoning_block = reasoning_transcript_block(
-                    app_state["last_reasoning"],
-                    mode=_cot_mode(app_state),
-                    width=min(console.width, 80),
-                )
-                if reasoning_block is not None:
-                    console.print(reasoning_block)
+            reasoning_block = reasoning_transcript_block(
+                app_state["last_reasoning"],
+                mode=_cot_mode(app_state),
+                width=min(console.width, 80),
+            )
+            if reasoning_block is not None:
+                console.print(reasoning_block)
 
             # Final response: open coding-agent message (no repeated frame/title).
             global _last_response
@@ -4121,7 +4245,7 @@ def main(argv: list[str] | None = None) -> None:
                     # P3.14: already streamed live paragraph-by-paragraph — just
                     # flush the streamer's tail; re-rendering would duplicate it.
                     for _line in (_answer_streamer.flush() if _answer_streamer else []):
-                        console.print(Text("  " + _line, style=palette.TEXT))
+                        console.print(_render_streamed_answer_line(_line))
                 else:
                     console.print()  # spacing before response
                     console.print(render_response(
@@ -4225,6 +4349,13 @@ def main(argv: list[str] | None = None) -> None:
             user_input = raw.strip()
             if not user_input:
                 continue
+
+            # ---- Skill-alias slash (e.g. /where) -> run as a normal turn ----
+            # Rewrite BEFORE the /command dispatch so the slash routes to its
+            # skill through the ordinary turn pipeline (no /command handler).
+            _skill_nl = _rewrite_skill_slash(user_input)
+            if _skill_nl is not None:
+                user_input = _skill_nl  # no longer a slash — falls to the turn path
 
             # ---- Exit ----
             if is_exit_command(user_input):
