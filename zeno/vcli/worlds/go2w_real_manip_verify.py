@@ -51,3 +51,26 @@ def make_approach_ready(agent: Any) -> Callable[[], bool]:
             return False
 
     return predicate_oracle(approach_ready)
+
+
+def make_manip_stack_up(agent: Any) -> Callable[[], bool]:
+    """Bind ``manip_stack_up()`` — True iff the task FSM is publishing status NOW.
+
+    Reads the live ROS-graph publisher count on ``/z_manip/task/status`` through
+    the bridge (a pure read; the bringup skill is responsible for having
+    connected the bridge). The actor can run ``manip start`` but cannot author
+    the FSM's own publisher into the DDS graph, so this is honest ground truth
+    (same contract as ``stack_ready()``). Fail-safe False without a bridge / on
+    error.
+    """
+
+    def manip_stack_up() -> bool:
+        bridge = _bridge_of(agent)
+        if bridge is None:
+            return False
+        try:
+            return int(bridge.status_publisher_count()) > 0
+        except Exception:  # noqa: BLE001 — verifier sandbox, fail-safe
+            return False
+
+    return predicate_oracle(manip_stack_up)

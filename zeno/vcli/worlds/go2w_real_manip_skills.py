@@ -456,12 +456,58 @@ class RealManipBringupSkill:
                 result_data={"action": action, "returncode": rc, "stdout": out},
                 error_message=f"manip {subcmd} rc={rc}: {err}")
         oplog("skill", "manip_bringup", f"{action} ok")
-        return SkillResult(success=True, result_data={
+        data = {
             "action": action,
             "stdout": out,
             "ui_url": MANIP_UI_URL if grade.show_ui else None,
             "motion_enabling": grade.motion_enabling,
-            "message": self._success_message(action, grade, out)})
+        }
+        message = self._success_message(action, grade, out)
+        if action in ("start", "bringup"):
+            # `manip start` returns when the containers are up, but the FSM node
+            # set takes tens of seconds to reach ready — probe the DDS graph
+            # (bounded) so the "已就绪" reply and the manip_stack_up() verify
+            # probe that follows stay honest.
+            confirmed = self._confirm_fsm_up(context)
+            data["fsm_confirmed"] = confirmed
+            data["verify_hint"] = "manip_stack_up()"
+            if confirmed is False:
+                message = (
+                    f"manip 组件已启动,但任务 FSM 在 "
+                    f"{int(self._FSM_CONFIRM_TIMEOUT_S)}s 内未确认就绪"
+                    f"(/z_manip/task/status 无 publisher)— 用 manip_status "
+                    f"复查;UI 地址 {MANIP_UI_URL}")
+        data["message"] = message
+        return SkillResult(success=True, result_data=data)
+
+    _FSM_CONFIRM_TIMEOUT_S = 60.0
+    _FSM_CONFIRM_POLL_S = 2.0
+
+    def _confirm_fsm_up(self, context) -> bool | None:
+        """Bounded wait for the task FSM's status publisher (DDS graph fact).
+
+        True = publisher seen; False = timed out (FSM not confirmed); None = no
+        bridge to probe (undeterminable — NOT a failure, the verify probe will
+        still read the graph at grade time if a bridge exists by then).
+        """
+        bridge = _manip_of(context)
+        if bridge is None:
+            return None
+        try:
+            connect = getattr(bridge, "connect", None)
+            if callable(connect):
+                connect()
+        except Exception:  # noqa: BLE001 — probe must never break bringup
+            return None
+        deadline = time.monotonic() + self._FSM_CONFIRM_TIMEOUT_S
+        while time.monotonic() < deadline:
+            try:
+                if int(bridge.status_publisher_count()) > 0:
+                    return True
+            except Exception:  # noqa: BLE001 — torn context etc.: undeterminable
+                return None
+            time.sleep(self._FSM_CONFIRM_POLL_S)
+        return False
 
     @staticmethod
     def _success_message(action: str, grade: _BringupGrade, out: str) -> str:

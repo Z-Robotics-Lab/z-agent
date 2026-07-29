@@ -467,6 +467,24 @@ class Go2WManipBridge:
                 return None
             return max(0.0, time.monotonic() - self._status_mono)
 
+    def status_publisher_count(self) -> int:
+        """Live publisher count on the task-status topic (ROS graph fact).
+
+        The FSM's own node is the only ``/z_manip/task/status`` publisher, so a
+        nonzero count proves the task stack is up RIGHT NOW — robust where the
+        latched doc alone is not (a doc cached in this process can outlive a
+        dead FSM). 0 when disconnected or the context is torn down; never
+        raises (verifier-facing).
+        """
+        with self._lock:
+            node = self._node
+        if node is None or not _rclpy_ok():
+            return 0
+        try:
+            return int(node.count_publishers(STATUS_TOPIC))
+        except Exception:  # noqa: BLE001 — verifier-facing, fail-safe
+            return 0
+
     def approach_reached(self) -> bool:
         """The Inv-1 approach-complete latch (set from the FSM status stream)."""
         with self._lock:

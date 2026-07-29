@@ -84,7 +84,10 @@ from zeno.vcli.worlds.go2w_real_manip_skills import (
     RealManipCancelSkill,
     RealManipStatusSkill,
 )
-from zeno.vcli.worlds.go2w_real_manip_verify import make_approach_ready
+from zeno.vcli.worlds.go2w_real_manip_verify import (
+    make_approach_ready,
+    make_manip_stack_up,
+)
 from zeno.vcli.worlds.go2w_real_fetch_skills import RealFetchAndPlaceSkill
 from zeno.vcli.worlds.go2w_real_course import CourseTracker
 from zeno.vcli.worlds.go2w_real_places import (
@@ -360,6 +363,7 @@ class Go2WRealWorld:
         ns["turned"] = make_turned(agent)
         ns["course_locked"] = make_course_locked(agent)
         ns["approach_ready"] = make_approach_ready(agent)
+        ns["manip_stack_up"] = make_manip_stack_up(agent)
         # v2-extension point: verify — feature agents APPEND
         # `ns["<fn>"] = make_<fn>(agent)` lines ABOVE this marker (factories
         # live in go2w_real_verify.py; predicates must be fail-safe, never raise).
@@ -612,6 +616,7 @@ class Go2WRealWorld:
                 "turned",         # v2 in-place rotation (odometry yaw, wrap-aware)
                 "course_locked",  # heading-intent tracking (drift-compensated turns)
                 "approach_ready", # manip: servo->grasp handoff reached (FSM phase latch)
+                "manip_stack_up", # manip lifecycle: task FSM publishing status (DDS graph fact)
             }),
             verify_fn_signatures={
                 "at": ("at(x: float, y: float, tol: float = 0.8) -> bool"
@@ -648,6 +653,11 @@ class Go2WRealWorld:
                     "  # manip: the base reached the servo->grasp handoff "
                     "(FSM left visual_servo, stopped at the standoff, arm-free) — "
                     "latched from /z_manip/task/status; perception is NOT evidence"),
+                "manip_stack_up": (
+                    "manip_stack_up() -> bool"
+                    "  # manip lifecycle: the task FSM is publishing "
+                    "/z_manip/task/status RIGHT NOW (live DDS-graph publisher "
+                    "count via the bridge) — proves manip_bringup start/bringup"),
             },
             strategy_descriptions={
                 "navigate_skill": ("Drive to ABSOLUTE map (x, y); blocks until "

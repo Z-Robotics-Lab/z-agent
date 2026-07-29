@@ -802,3 +802,86 @@ def test_manip_recovery_hints_present() -> None:
     hints = resolve_world_named("go2w_real").build_embodiment().recovery_hints()
     for code in ("no_manip_stack", "approach_failed", "manip_busy"):
         assert code in hints and hints[code]
+
+
+# ---------------------------------------------------------------------------
+# manip_stack_up predicate + bringup FSM confirmation (2026-07-29 night round)
+# ---------------------------------------------------------------------------
+from zeno.vcli.worlds.go2w_real_manip_verify import make_manip_stack_up
+
+
+class _CountBridge:
+    """Stand-in bridge for the DDS-graph publisher-count probe."""
+
+    def __init__(self, count: int = 1, raise_on_count: bool = False) -> None:
+        self.is_connected = False
+        self._count = count
+        self._raise = raise_on_count
+        self.connects = 0
+
+    def connect(self) -> None:
+        self.connects += 1
+        self.is_connected = True
+
+    def status_publisher_count(self) -> int:
+        if self._raise:
+            raise RuntimeError("torn context")
+        return self._count
+
+
+def _ctx_with(bridge: Any) -> Any:
+    return SimpleNamespace(services={"manip": bridge}, base=None)
+
+
+def test_manip_stack_up_true_when_status_has_a_publisher() -> None:
+    agent = SimpleNamespace(_manip=_CountBridge(count=2), _base=None)
+    assert make_manip_stack_up(agent)() is True
+
+
+def test_manip_stack_up_false_on_zero_missing_or_error() -> None:
+    assert make_manip_stack_up(
+        SimpleNamespace(_manip=_CountBridge(count=0), _base=None))() is False
+    assert make_manip_stack_up(SimpleNamespace(_manip=None, _base=None))() is False
+    assert make_manip_stack_up(None)() is False
+    raising = SimpleNamespace(_manip=_CountBridge(raise_on_count=True), _base=None)
+    assert make_manip_stack_up(raising)() is False
+
+
+def test_manip_bringup_start_confirms_fsm_and_carries_the_verify_hint() -> None:
+    br = _CountBridge(count=1)
+    res = RealManipBringupSkill(runner=_runner(), transport=_FakeTransport()).execute(
+        {"action": "start"}, _ctx_with(br))
+    assert res.success
+    assert res.result_data["verify_hint"] == "manip_stack_up()"
+    assert res.result_data["fsm_confirmed"] is True
+    assert br.connects >= 1
+    assert "http://127.0.0.1:8766" in res.result_data["message"]
+
+
+def test_manip_bringup_start_timeout_reports_unconfirmed_fsm(monkeypatch) -> None:
+    monkeypatch.setattr(RealManipBringupSkill, "_FSM_CONFIRM_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(RealManipBringupSkill, "_FSM_CONFIRM_POLL_S", 0.01)
+    br = _CountBridge(count=0)
+    res = RealManipBringupSkill(runner=_runner(), transport=_FakeTransport()).execute(
+        {"action": "start"}, _ctx_with(br))
+    # The CLI action itself succeeded; readiness is reported honestly instead.
+    assert res.success
+    assert res.result_data["fsm_confirmed"] is False
+    assert "未确认" in res.result_data["message"]
+    assert res.result_data["verify_hint"] == "manip_stack_up()"
+
+
+def test_manip_bringup_without_a_bridge_is_undeterminable_not_failed() -> None:
+    res = RealManipBringupSkill(runner=_runner(), transport=_FakeTransport()).execute(
+        {"action": "start"}, None)
+    assert res.success
+    assert res.result_data["fsm_confirmed"] is None
+    assert res.result_data["verify_hint"] == "manip_stack_up()"
+
+
+def test_manip_bringup_stop_carries_no_fsm_confirmation() -> None:
+    res = RealManipBringupSkill(runner=_runner(), transport=_FakeTransport()).execute(
+        {"action": "stop"}, None)
+    assert res.success
+    assert "verify_hint" not in res.result_data
+    assert "fsm_confirmed" not in res.result_data
