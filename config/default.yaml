@@ -29,6 +29,8 @@ llm:
     agent: "openai/gpt-4o"                    # agent mode default (reliable tool calling + vision)
     summarize: "anthropic/claude-haiku-4-5"
 
+# NOTE: 以下 arm 段是上游 vector_os_nano 的 SO-101 桌面臂残留 —— Go2W+Piper 真机不适用，
+# 待 Phase 5（抓取接入）重定义。暂不改值（避免语义漂移），仅标注留待重写。
 arm:
   type: "so101"
   port: "/dev/ttyACM0"         # or "COM3" on Windows
