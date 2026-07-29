@@ -525,6 +525,133 @@ def test_bridge_publish_returns_false_without_connection() -> None:
     assert b.send_task("x") is False
 
 
+# ---------------------------------------------------------------------------
+# bug① — process-exit cancel: ordered before rclpy teardown, quiet on a dead
+# context (no "rcl not initialized" noise), fires only for an in-flight task.
+# ---------------------------------------------------------------------------
+
+_BRIDGE_MOD = "zeno.hardware.ros2.go2w_manip_bridge"
+
+
+class _RecordPub:
+    """Recording publisher stand-in (counts publishes, keeps last msg.data)."""
+
+    def __init__(self) -> None:
+        self.published: list[Any] = []
+
+    def publish(self, msg: Any) -> None:
+        self.published.append(getattr(msg, "data", msg))
+
+
+@pytest.fixture
+def fake_std_msgs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inject a minimal std_msgs.msg so the publish path runs without ROS."""
+    import sys
+    import types
+
+    class _Bool:
+        def __init__(self) -> None:
+            self.data = False
+
+    class _String:
+        def __init__(self) -> None:
+            self.data = ""
+
+    pkg = types.ModuleType("std_msgs")
+    msg = types.ModuleType("std_msgs.msg")
+    msg.Bool = _Bool
+    msg.String = _String
+    pkg.msg = msg
+    monkeypatch.setitem(sys.modules, "std_msgs", pkg)
+    monkeypatch.setitem(sys.modules, "std_msgs.msg", msg)
+
+
+def test_bridge_cancel_quiet_when_context_down(
+    monkeypatch: pytest.MonkeyPatch, fake_std_msgs: None
+) -> None:
+    # A dead rclpy context (interpreter-exit race) must make cancel_task a QUIET
+    # no-op — return False WITHOUT publishing (so no C-layer "context invalid"
+    # onto stderr), even though a publisher is installed.
+    b = Go2WManipBridge()
+    cancel_pub = _RecordPub()
+    b._install_pubs_for_test(_RecordPub(), cancel_pub)
+    monkeypatch.setattr(f"{_BRIDGE_MOD}._rclpy_ok", lambda: False)
+    assert b.cancel_task() is False
+    assert cancel_pub.published == []
+
+
+def test_bridge_cancel_publishes_when_context_ok(
+    monkeypatch: pytest.MonkeyPatch, fake_std_msgs: None
+) -> None:
+    b = Go2WManipBridge()
+    cancel_pub = _RecordPub()
+    b._install_pubs_for_test(_RecordPub(), cancel_pub)
+    monkeypatch.setattr(f"{_BRIDGE_MOD}._rclpy_ok", lambda: True)
+    assert b.cancel_task() is True
+    assert cancel_pub.published == [True]
+
+
+def test_bridge_exit_hook_cancels_inflight_task(
+    monkeypatch: pytest.MonkeyPatch, fake_std_msgs: None
+) -> None:
+    # Simulate a live task then a process exit: the atexit hook sends ONE clean
+    # cancel while the context is still up, and clears the in-flight flag so a
+    # racing skill-finally cancel won't double-fire.
+    b = Go2WManipBridge()
+    req_pub, cancel_pub = _RecordPub(), _RecordPub()
+    b._install_pubs_for_test(req_pub, cancel_pub)
+    monkeypatch.setattr(f"{_BRIDGE_MOD}._rclpy_ok", lambda: True)
+    monkeypatch.setattr(f"{_BRIDGE_MOD}.time", SimpleNamespace(
+        sleep=lambda *_a, **_k: None, monotonic=lambda: 0.0))
+    assert b.send_task("approach the cup") is True
+    assert b._task_active is True
+    b._atexit_cancel()
+    assert cancel_pub.published == [True]
+    assert b._task_active is False
+    # Idempotent: a second hook call (or a skill-finally cancel) adds nothing.
+    b._atexit_cancel()
+    assert cancel_pub.published == [True]
+
+
+def test_bridge_exit_hook_noop_without_inflight_task(
+    monkeypatch: pytest.MonkeyPatch, fake_std_msgs: None
+) -> None:
+    b = Go2WManipBridge()
+    cancel_pub = _RecordPub()
+    b._install_pubs_for_test(_RecordPub(), cancel_pub)
+    monkeypatch.setattr(f"{_BRIDGE_MOD}._rclpy_ok", lambda: True)
+    # No task in flight -> the exit hook is a pure no-op (a clean run added no noise).
+    b._atexit_cancel()
+    assert cancel_pub.published == []
+
+
+def test_bridge_exit_hook_skips_when_context_down(
+    monkeypatch: pytest.MonkeyPatch, fake_std_msgs: None
+) -> None:
+    b = Go2WManipBridge()
+    cancel_pub = _RecordPub()
+    b._install_pubs_for_test(_RecordPub(), cancel_pub)
+    b._task_active = True
+    monkeypatch.setattr(f"{_BRIDGE_MOD}._rclpy_ok", lambda: False)
+    b._atexit_cancel()  # context already down -> silent, no publish
+    assert cancel_pub.published == []
+
+
+def test_bridge_successful_cancel_clears_inflight_flag(
+    monkeypatch: pytest.MonkeyPatch, fake_std_msgs: None
+) -> None:
+    # The normal skill-finally cancel clears the flag so the exit hook stays silent.
+    b = Go2WManipBridge()
+    cancel_pub = _RecordPub()
+    b._install_pubs_for_test(_RecordPub(), cancel_pub)
+    monkeypatch.setattr(f"{_BRIDGE_MOD}._rclpy_ok", lambda: True)
+    b._task_active = True
+    assert b.cancel_task() is True
+    assert b._task_active is False
+    b._atexit_cancel()
+    assert cancel_pub.published == [True]  # only the explicit cancel, no exit dup
+
+
 def test_bridge_speed_missing_is_none_and_toplevel_wins() -> None:
     b = Go2WManipBridge()
     b._on_status(_status_msg(phase="visual_search",

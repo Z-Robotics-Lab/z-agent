@@ -253,6 +253,29 @@ def _tool_verify_exempt(tool: Any) -> bool:
     return bool(getattr(tool, "verify_exempt", False))
 
 
+def _tool_is_effecting(tool: Any) -> bool:
+    """Whether *tool* CHANGES robot state (a motor/effecting skill) vs a read-only
+    query.
+
+    A read-only perception/query skill (``find_object`` / ``scene_query`` — decision
+    input, ``is_read_only`` True) that a model calls between the last action and the
+    verify must NOT be credited as the strategy the predicate grades: that is the
+    step-attribution bug where an ``approach_object`` run got logged in the verdict
+    as ``find_object`` because a locate call happened to be last in the chain. We
+    read the wrapper's structured ``is_read_only`` (motor-keyword contract); a tool
+    that lacks the accessor is treated as effecting (fail-safe: keep the old
+    chain[-1] behavior for a non-SkillWrapper tool)."""
+    if tool is None:
+        return False
+    accessor = getattr(tool, "is_read_only", None)
+    if not callable(accessor):
+        return True
+    try:
+        return not bool(accessor({}))
+    except Exception:  # noqa: BLE001 — attribution helper, never raise into a turn
+        return True
+
+
 def _skill_needs_arm(skill_tool: Any) -> bool:
     """Whether an armless body must NOT be offered *skill_tool* (the D175 manipulation gate).
 
@@ -837,6 +860,18 @@ class NativeStepRunner:
             self._place_awaiting_verify = True
         return result
 
+    def _effecting_strategy(self) -> str:
+        """The strategy name to attribute this (chain -> verify) step to.
+
+        The LAST effecting (motor) skill in the chain — skipping trailing read-only
+        perception queries so the verdict credits ``approach_object``, not a
+        ``find_object`` the model called afterward to re-observe. Falls back to the
+        raw last item for a perception-only chain (no effecting action) or empty."""
+        for name in reversed(self._chain):
+            if _tool_is_effecting(self._motor_tools.get(name)):
+                return name
+        return self._chain[-1] if self._chain else ""
+
     # ------------------------------------------------------------------
     # The verify-tool HANDLER — appends EXACTLY ONE StepRecord per pair
     # ------------------------------------------------------------------
@@ -879,7 +914,14 @@ class NativeStepRunner:
         # is None -> grade fail-closed UNCAUSED for a robot predicate.
         actor_caused = self._grade(expr)
 
-        strategy = self._chain[-1] if self._chain else ""
+        # Attribute the step to the last EFFECTING action in the chain, not merely
+        # the last dispatched skill: a read-only perception query (find_object /
+        # scene_query) that the model runs to re-observe between the action and the
+        # verify must not steal the strategy credit from the action the predicate
+        # actually grades (the approach_object→find_object mis-attribution). Fall
+        # back to the raw last item when the whole chain was read-only (a
+        # perception-only step) or empty.
+        strategy = self._effecting_strategy()
         step_name = f"native_step_{self._step_idx}"
         self._step_idx += 1
 

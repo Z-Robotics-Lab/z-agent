@@ -43,6 +43,7 @@ skill/verify/vocab/test paths import it offline).
 
 from __future__ import annotations
 
+import atexit
 import dataclasses
 import json
 import logging
@@ -114,6 +115,21 @@ def _num(value: Any) -> float | None:
         return None
 
 
+def _rclpy_ok() -> bool:
+    """True iff the rclpy context is initialized and NOT shut down.
+
+    Used to short-circuit a publish onto a torn-down context (interpreter exit
+    race): a False here means the graph is gone, so a publish would raise the
+    C-layer "rcl node's context is invalid" error and never reach the wire. Any
+    import/attr failure is treated as not-ok (fail-honest, never raise)."""
+    try:
+        import rclpy
+
+        return bool(rclpy.ok())
+    except Exception:  # noqa: BLE001 — context probe, never raise
+        return False
+
+
 def _dig_speed(doc: dict, key: str) -> float | None:
     """Read a measured-speed field: top level, else nested under ``visual_search``.
 
@@ -158,6 +174,13 @@ class Go2WManipBridge:
         # send_task. The actor can trigger a task but cannot author this fact.
         self._approach_reached = False
         self._last_instruction = ""
+        # In-flight-task guard for the process-exit safety cancel: True between a
+        # send_task and its matching cancel_task. The exit hook only re-sends a
+        # cancel when a task is still believed active, so a clean run adds no noise.
+        self._task_active = False
+        # atexit registration guard (ordered so our cancel runs BEFORE the shared
+        # runtime tears rclpy down — see connect()).
+        self._exit_hook_registered = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -215,6 +238,19 @@ class Go2WManipBridge:
                 get_ros2_runtime().add_node(node)
                 self._shared_runtime_used = True
                 self._connected = True
+                # Process-exit safety cancel, ordered BEFORE rclpy teardown.
+                # ``add_node`` (just above) registered the runtime's
+                # ``shutdown`` (rclpy.shutdown) with atexit; registering ours
+                # AFTER means atexit's LIFO runs OUR cancel FIRST — while the
+                # context is still valid and the spin thread still alive to
+                # flush it. This is the root fix for "zeno exit dropped the
+                # cancel + rcl-not-initialized": previously the approach skill's
+                # finally could race the interpreter and publish onto an
+                # already-shutdown context (no cancel out + a C-layer error on
+                # stderr). Now the FSM always gets a clean CANCELED on exit.
+                if not self._exit_hook_registered:
+                    atexit.register(self._atexit_cancel)
+                    self._exit_hook_registered = True
                 logger.info("Go2WManipBridge connected (domain from sourced ROS env)")
             except ImportError as exc:
                 logger.debug("Go2WManipBridge: ROS2 unavailable, offline: %s", exc)
@@ -241,6 +277,12 @@ class Go2WManipBridge:
             self._req_pub = None
             self._cancel_pub = None
             self._connected = False
+            if self._exit_hook_registered:
+                try:
+                    atexit.unregister(self._atexit_cancel)
+                except Exception:  # noqa: BLE001 — best-effort teardown
+                    pass
+                self._exit_hook_registered = False
 
     def _install_pubs_for_test(self, req_pub: Any, cancel_pub: Any) -> None:
         """Test seam: attach recording publishers without a real ROS node."""
@@ -270,12 +312,17 @@ class Go2WManipBridge:
             pub = self._req_pub
         if pub is None:
             return False
+        if not _rclpy_ok():
+            logger.debug("Go2WManipBridge: task/request skipped, context down")
+            return False
         try:
             from std_msgs.msg import String
 
             msg = String()
             msg.data = text
             pub.publish(msg)
+            with self._lock:
+                self._task_active = True
             logger.info("Go2WManipBridge: task/request -> %r", text)
             return True
         except Exception as exc:  # noqa: BLE001 — publish boundary, never crash
@@ -293,17 +340,54 @@ class Go2WManipBridge:
             pub = self._cancel_pub
         if pub is None:
             return False
+        if not _rclpy_ok():
+            # The context is already torn down (interpreter-exit race): a publish
+            # here would raise the C-layer "context is invalid" onto stderr and
+            # never reach the wire. Fail QUIET — the process-exit hook
+            # (_atexit_cancel) already sent the cancel before rclpy shut down.
+            logger.debug("Go2WManipBridge: task/cancel skipped, context down")
+            return False
         try:
             from std_msgs.msg import Bool
 
             msg = Bool()
             msg.data = True
             pub.publish(msg)
+            with self._lock:
+                self._task_active = False
             logger.info("Go2WManipBridge: task/cancel -> true")
             return True
         except Exception as exc:  # noqa: BLE001 — publish boundary, never crash
             logger.warning("Go2WManipBridge task/cancel publish failed: %s", exc)
             return False
+
+    def _atexit_cancel(self) -> None:
+        """Process-exit safety net: send ONE clean cancel while rclpy is still up.
+
+        Registered by :meth:`connect` AFTER the shared runtime's atexit shutdown,
+        so atexit's LIFO runs this FIRST — the context is still valid and the spin
+        thread still alive to flush. Only fires when a task is believed in-flight
+        (a clean run already cancelled). Best-effort and utterly silent on failure:
+        an exit hook must never raise or spew during interpreter teardown."""
+        try:
+            with self._lock:
+                active = self._task_active
+                pub = self._cancel_pub
+            if not active or pub is None or not _rclpy_ok():
+                return
+            from std_msgs.msg import Bool
+
+            msg = Bool()
+            msg.data = True
+            pub.publish(msg)
+            with self._lock:
+                self._task_active = False
+            logger.debug("Go2WManipBridge: exit-hook cancel -> true")
+            # Give the RELIABLE cancel a moment to reach the FSM before the shared
+            # runtime (next atexit) tears the executor + context down.
+            time.sleep(0.3)
+        except Exception:  # noqa: BLE001 — exit hook, swallow everything
+            pass
 
     # ------------------------------------------------------------------
     # ROS callbacks (executor thread — keep tiny, never raise)

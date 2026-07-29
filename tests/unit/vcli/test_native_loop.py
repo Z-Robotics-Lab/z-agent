@@ -719,6 +719,80 @@ def test_post_place_guard_is_bounded_never_wedges() -> None:
 
 
 # ---------------------------------------------------------------------------
+# bug② — step attribution: a (chain -> verify) step is credited to the last
+# EFFECTING action, not a trailing read-only perception query the model ran to
+# re-observe (the approach_object step logged as find_object in the verdict).
+# ---------------------------------------------------------------------------
+
+
+class _AttrToolDouble:
+    """A motor-tool double carrying the read-only contract native_loop reads."""
+
+    def __init__(self, name: str, read_only: bool = False) -> None:
+        self.name = name
+        self._ro = read_only
+
+    def is_read_only(self, params: dict) -> bool:
+        return self._ro
+
+    def execute(self, params, context):
+        from zeno.vcli.tools.base import ToolResult
+
+        return ToolResult(content=f"{self.name} ok")
+
+
+def _attr_runner():
+    from zeno.vcli.native_loop import NativeStepRunner
+
+    agent, _base = _make_agent(0.0, 0.0)
+    motor = {
+        "approach_object": _AttrToolDouble("approach_object", read_only=False),
+        "find_object": _AttrToolDouble("find_object", read_only=True),
+        "turn": _AttrToolDouble("turn", read_only=False),
+    }
+    verifier = SimpleNamespace(verify=lambda expr: True)
+    return NativeStepRunner(
+        agent, verifier, frozenset({"approach_ready"}), motor, SimpleNamespace()
+    )
+
+
+def test_verify_step_credits_last_effecting_action_not_trailing_perception() -> None:
+    runner = _attr_runner()
+    # approach ran, then a read-only find_object to re-observe, then the verify.
+    runner.dispatch_skill("approach_object", {"target": "metal bowl"})
+    runner.dispatch_skill("find_object", {"description": "metal bowl"})
+    runner.handle_verify("approach_ready()")
+    step = runner._steps[-1]
+    # bug②: NOT find_object — the predicate grades the approach, not the query.
+    assert step.strategy == "approach_object"
+    # The full chain is still recorded in the sub-goal description (both skills).
+    assert "find_object" in runner._sub_goals[-1].description
+
+
+def test_perception_only_step_still_attributes_to_the_query() -> None:
+    # A step whose whole chain was read-only (no effecting action) falls back to
+    # the last dispatched skill, so a pure find_object step still names find_object.
+    runner = _attr_runner()
+    runner.dispatch_skill("find_object", {"description": "metal bowl"})
+    runner.handle_verify("approach_ready()")
+    assert runner._steps[-1].strategy == "find_object"
+
+
+def test_effecting_strategy_helper_skips_trailing_read_only() -> None:
+    from zeno.vcli import native_loop
+
+    tools = {
+        "approach_object": _AttrToolDouble("approach_object", read_only=False),
+        "find_object": _AttrToolDouble("find_object", read_only=True),
+    }
+    assert native_loop._tool_is_effecting(tools["approach_object"]) is True
+    assert native_loop._tool_is_effecting(tools["find_object"]) is False
+    # A tool with no read-only accessor is treated as effecting (fail-safe).
+    assert native_loop._tool_is_effecting(SimpleNamespace(name="x")) is True
+    assert native_loop._tool_is_effecting(None) is False
+
+
+# ---------------------------------------------------------------------------
 # R274/E74 — degenerate-spin guard: a brain that keeps acting but NEVER verifies
 # (the R272/R273 perception/nav thrash, 0 verdicts, ~15min) is broken to an honest
 # fail EARLY, after one nudge to force a measurement. Distinct from finish-on-fail
