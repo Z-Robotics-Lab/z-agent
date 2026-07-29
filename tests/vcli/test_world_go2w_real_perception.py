@@ -22,6 +22,14 @@ Pinned here:
 * Neither skill may trip the motor-keyword detector (they must wrap as
   read-only + concurrency-safe tools) — the effects/description must avoid
   the 7 MOTOR_KEYWORDS.
+* Degenerate full-frame gate (real-dog measurement 2026-07-29): the 2B model
+  grounds ABSENT objects with one constant origin-anchored ~full-width box —
+  (0,0),(648,290) on the 640x480 D435i frame, identical for chair/keyboard/
+  person/bottle/monitor over a scene containing none of them. The old skill
+  trusted it and announced a fake "椅子在画面左侧 +12.1°". is_degenerate_box
+  must reject that signature under BOTH coordinate readings (nominal [0,1000]
+  and the sent-image pixel frame) and find_object must answer an honest
+  object_not_found — never a fabricated bearing.
 * Wiring: skills registered, vocab teaches both strategies, embodiment owns
   ONE shared client (services['rynn'] + driver fallback, the two-seam rule).
 
@@ -218,6 +226,80 @@ def test_find_object_client_via_driver_fallback():
     result = _find_skill().execute({"description": "bowl"}, _ctx(base=base))
     assert result.success
     assert client.locate_calls
+
+
+# ---------------------------------------------------------------------------
+# degenerate full-frame boxes — absent objects must NOT get a fake bearing
+# ---------------------------------------------------------------------------
+
+
+def test_sent_size_mirrors_encode_resize():
+    """sent_size is the single source of truth for the _encode_frame resize
+    rule — the gate judges pixel-space boxes against the image the model SAW."""
+    from zeno.perception.rynnbrain import sent_size
+
+    assert sent_size(640, 480) == (640, 480)   # D435i colour — sent as-is
+    assert sent_size(1280, 720) == (640, 360)  # halved down to the max dim
+
+
+def test_degenerate_box_real_dog_signature():
+    """THE measured failure: on a 640x480 frame, groundings of five absent
+    categories all returned the same origin-anchored full-width box
+    (0,0),(648,290) — full width in the model's pixel frame, NOT >=85% area
+    in either reading, so an area-only gate would miss it."""
+    from zeno.perception.rynnbrain import is_degenerate_box
+
+    assert is_degenerate_box(((0, 0), (648, 290)), (640, 480))
+
+
+def test_degenerate_box_normalized_full_frame():
+    """The documented-behaviour twin: a [0,1000]-normalized (near-)full-frame
+    box is just as informationless, with or without a known image size."""
+    from zeno.perception.rynnbrain import is_degenerate_box
+
+    assert is_degenerate_box(((0, 0), (1000, 1000)), (640, 480))
+    assert is_degenerate_box(((10, 15), (995, 990)), None)  # >=85% area
+
+
+def test_legit_boxes_are_not_degenerate():
+    from zeno.perception.rynnbrain import is_degenerate_box
+
+    wh = (640, 480)
+    assert not is_degenerate_box(((700, 300), (800, 500)), wh)  # right side
+    assert not is_degenerate_box(((450, 300), (550, 500)), wh)  # centre
+    assert not is_degenerate_box(((0, 0), (80, 120)), wh)       # corner object
+    assert not is_degenerate_box(((100, 100), (900, 700)), wh)  # big but real
+    assert not is_degenerate_box(((0, 0), (80, 1000)), wh)      # door/pillar
+
+
+def test_find_object_full_frame_box_is_object_not_found():
+    """Real-dog regression: the gate must refuse the degenerate box — honest
+    object_not_found, no side/bearing, and the message teaches the recovery
+    (scene_query to confirm presence / re-phrase by appearance)."""
+    client = FakeRynnClient("<object>(0,0),(648,290)</object>")
+    base = _CamFakeHW()
+    base._frame = np.zeros((480, 640, 3), dtype=np.uint8)  # real camera dims
+    result = _find_skill().execute(
+        {"description": "chair"}, _ctx(base=base, services={"rynn": client}))
+    assert not result.success
+    assert result.diagnosis_code == "object_not_found"
+    assert "scene_query" in str(result.error_message)
+
+
+def test_find_object_skips_degenerate_box_keeps_legit_candidate():
+    """Degenerate boxes are FILTERED, not fatal: a legit candidate in the
+    same reply must still produce a localization."""
+    client = FakeRynnClient("<object>(0,0),(648,290)</object> and "
+                            "<object>(700,300),(800,500)</object>")
+    base = _CamFakeHW()
+    base._frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = _find_skill().execute(
+        {"description": "black case"}, _ctx(base=base,
+                                            services={"rynn": client}))
+    assert result.success, result.error_message
+    data = result.result_data or {}
+    assert data.get("box") == [[700, 300], [800, 500]]
+    assert data.get("side") == "右"
 
 
 # ---------------------------------------------------------------------------

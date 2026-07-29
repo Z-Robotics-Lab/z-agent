@@ -54,6 +54,15 @@ _BOX_PROMPT = (
     "object bounding box. Constraints: x1,y1,x2,y2 ∈ [0,1000]. Response "
     "must be in the format: <object> (x1, y1), (x2, y2) </object>")
 
+# Degenerate "full-frame" grounding (real-dog measurement, 2026-07-29): the 2B
+# model answers groundings of ABSENT objects with one constant origin-anchored
+# box spanning the model's full image width — (0,0),(~648,~290) on the 640x480
+# D435i frame, identical for chair/keyboard/person/bottle/monitor over a scene
+# containing none of them. Such a box carries no localization signal.
+_DEGEN_AREA_FRAC = 0.85    # covers >= 85% of a frame reading
+_DEGEN_ANCHOR_FRAC = 0.02  # "origin-anchored": x1,y1 within 2% of the frame
+_DEGEN_SPAN_FRAC = 0.90    # "full width": x-span >= 90% of the frame width
+
 
 def parse_boxes(reply: str) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     """All ``(x1,y1),(x2,y2)`` box pairs in a reply ([0,1000] coords).
@@ -66,6 +75,46 @@ def parse_boxes(reply: str) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     return [(((int(m.group(1))), int(m.group(2))),
              (int(m.group(3)), int(m.group(4))))
             for m in _BOX_RE.finditer(reply)]
+
+
+def sent_size(width: int, height: int) -> tuple[int, int]:
+    """(W, H) of the JPEG actually sent to the service (_encode_frame rule)."""
+    if max(width, height) <= _MAX_DIM:
+        return width, height
+    scale = _MAX_DIM / max(width, height)
+    return int(width * scale), int(height * scale)
+
+
+def is_degenerate_box(
+    box: tuple[tuple[int, int], tuple[int, int]],
+    image_wh: tuple[int, int] | None = None,
+) -> bool:
+    """True when a grounding box is a full-frame refusal artifact.
+
+    Checked under TWO coordinate readings, because the degenerate mode emits
+    pixel coords of the model's input image while legit replies are
+    [0,1000]-normalized: the nominal (1000, 1000) frame and ``image_wh`` (the
+    sent JPEG size, see :func:`sent_size`). Degenerate iff, under either
+    reading, the box covers >= 85% of the frame area OR is origin-anchored
+    and spans >= 90% of the frame width. Reject-biased on purpose (this also
+    rejects a legit origin-anchored full-width band): a false "not found"
+    costs one re-query; a false bearing poisons every downstream decision.
+    """
+    (x1, y1), (x2, y2) = box
+    frames = [(1000.0, 1000.0)]
+    if image_wh is not None and image_wh[0] > 0 and image_wh[1] > 0:
+        frames.append((float(image_wh[0]), float(image_wh[1])))
+    for fw, fh in frames:
+        span_x = min(float(x2), fw) - max(float(x1), 0.0)
+        span_y = min(float(y2), fh) - max(float(y1), 0.0)
+        if span_x <= 0 or span_y <= 0:
+            continue
+        if span_x * span_y >= _DEGEN_AREA_FRAC * fw * fh:
+            return True
+        if (x1 <= _DEGEN_ANCHOR_FRAC * fw and y1 <= _DEGEN_ANCHOR_FRAC * fh
+                and span_x >= _DEGEN_SPAN_FRAC * fw):
+            return True
+    return False
 
 
 def parse_points(reply: str) -> list[tuple[int, int]]:
@@ -147,10 +196,8 @@ class RynnBrainClient:
                 "(pip install -e '.[perception]')") from exc
         pil_image = Image.fromarray(frame)
         w, h = pil_image.size
-        if max(w, h) > _MAX_DIM:
-            scale = _MAX_DIM / max(w, h)
-            pil_image = pil_image.resize(
-                (int(w * scale), int(h * scale)), Image.LANCZOS)
+        if sent_size(w, h) != (w, h):
+            pil_image = pil_image.resize(sent_size(w, h), Image.LANCZOS)
         buf = BytesIO()
         pil_image.save(buf, format="JPEG", quality=_JPEG_QUALITY)
         return base64.b64encode(buf.getvalue()).decode("ascii")

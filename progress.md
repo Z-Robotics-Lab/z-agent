@@ -1,10 +1,18 @@
 # Zeno — progress
 
-更新：2026-07-22（整合）。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-manip** =
+更新：2026-07-29。fork 自 upstream R715 (12f3e15)。集成分支 **hw-go2w-manip** =
 hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（RynnBrain 视觉感知，操作前置）合并。
 不动 main。叙事在 commit message 里；本文件只留当前状态。两条工作线的 Works 并列保留（导航/UI 在下半，感知在上半）。
 
 ## Works（已验证 / 单测 GREEN）
+- **find_object 全幅退化框拒识门（2026-07-29，RED→GREEN）**：实测 2B 对不在场物体
+  (chair/keyboard/person/bottle/monitor)恒返回同一原点锚定近全宽框 (0,0),(648,290)@640x480，技能曾据此
+  报假"椅子左侧+12.1°"。纯函数 `rynnbrain.is_degenerate_box(box, image_wh)` 按双坐标读法判退化
+  （名义[0,1000] + sent_size 像素帧；面积≥85% 或 原点锚定∧跨宽≥90%）——纯面积门在两读法下都抓不住实测框
+  (18.8%/60%)，原点+跨宽子句才是钥匙；`sent_size()` 收敛 _encode_frame 缩放规则为单一来源。find_object
+  过滤退化框：全退化→诚实 object_not_found（消息教先 scene_query 确认在场再换措辞）；混用余下合法框。
+  偏向拒识（假"未找到"一次重问可恢复，假方位污染后续决策）。测 +6=感知 27 绿、相关 vcli 133 绿；
+  9b-nf4 对不在场是否更诚实待真机 A/B（`RYNNBRAIN_MODEL_SPEC=9b-nf4` 重启服务即测）。
 - **stack_down() 关导航栈 verify oracle（2026-07-29，真机 E2E PASS）**：字段缺口=`zeno -p 把导航栈关掉`
   实测 NUC 栈关干净但 verdict=RAN verified=False(0/1 grounded)——decomposer/verify 无可表达"栈已关"的
   可 ground 谓词。世界层 APPEND-only 扩展（不动 verify 脊柱内核 vcli/cognitive/verdict）：
@@ -49,7 +57,7 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
   round1 `看看周围有什么`→native 路由 scene_query→真帧→"一个大的黑色箱子/black suitcase"（画面确为地毯上黑
   flight case）；round2 `找黑色的箱子在哪边`→find_object→side=左 +12.1°（箱子确在左上），79s。**两轮 verdict
   恒 RAN verified=False——视觉只作决策输入、Inv-1 未被污染**。已知限：2B 对不在场物体(椅子)返回全幅框→假定位
-  (由 Inv-1 兜底不作验收证据，待加拒识)。测：相机单测重写为按需契约 27 绿 + 感知 21 绿。
+  (由 Inv-1 兜底不作验收证据；2026-07-29 已加拒识门，见上)。测：相机单测重写为按需契约 27 绿 + 感知 21 绿。
   （早期离线冒烟：真 PNG(448²)→JPEG(≤640)→假模型 HTTP 往返→方位+13.7°，仍在。）
 - **CLI UI 立体化：braille 加载进度条 + 精简圆点树（导航/UI 线，设计工作流 w378ob0re + owner 定稿）**。
   纯显示层（turn_render.py），非 CEO 门槛。v1 三态箭头条(`●━→▶┄→○`)被 owner 否("箭头/方块圆圈不好看、

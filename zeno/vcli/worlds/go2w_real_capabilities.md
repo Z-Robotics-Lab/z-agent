@@ -123,8 +123,11 @@ WHAT YOU CAN DO (tools live in the go2w_real category):
   find_object(description) visually locates ONE object: image side (左/中/右)
   + horizontal bearing in degrees (positive = turn left) + a [0,1000] box.
   Phrase targets by REAL appearance ("metal bowl" beats "black bowl" when the
-  bowl is metal-gray — the VLM is literal). scene_query(question) answers
-  free questions about the view (thinking mode, slower). Perception is
+  bowl is metal-gray — the VLM is literal). When the target is NOT in view the
+  VLM tends to answer a meaningless full-frame box; find_object rejects that
+  and returns object_not_found instead of a fake bearing — on not-found, use
+  scene_query first to learn what IS in view, then re-phrase. scene_query(
+  question) answers free questions about the view (thinking mode, slower). Perception is
   DECISION INPUT only: it never proves success — after turning toward the
   bearing and approaching, verify with at()/moved()/turned() odometry, never
   with the VLM's own words. Never invent perception verify predicates. If the

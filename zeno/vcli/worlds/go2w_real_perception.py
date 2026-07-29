@@ -138,7 +138,8 @@ class RealFindObjectSkill:
             oplog("skill", "find_object", f"no_vlm: {exc}")
             return SkillResult(success=False, diagnosis_code="no_vlm",
                                error_message=f"RynnBrain unreachable: {exc}")
-        from zeno.perception.rynnbrain import parse_boxes
+        from zeno.perception.rynnbrain import (is_degenerate_box, parse_boxes,
+                                               sent_size)
 
         boxes = parse_boxes(reply)
         if not boxes:
@@ -148,6 +149,17 @@ class RealFindObjectSkill:
                 error_message=(f"RynnBrain could not locate '{desc}' "
                                f"(reply: {reply[:120]}). Re-phrase by real "
                                f"appearance (颜色/材质), or scene_query first"))
+        image_wh = sent_size(int(frame.shape[1]), int(frame.shape[0]))
+        boxes = [b for b in boxes if not is_degenerate_box(b, image_wh)]
+        if not boxes:
+            oplog("skill", "find_object", f"degenerate box: {desc!r}")
+            return SkillResult(
+                success=False, diagnosis_code="object_not_found",
+                error_message=(
+                    f"RynnBrain 对 '{desc}' 只返回全幅退化框 — 2B 模型对不在场"
+                    f"物体的典型应答, 按未找到处理(不给假方位)。场景里很可能没有"
+                    f"该物体: 先用 scene_query 确认在场物体, 再按真实外观"
+                    f"(颜色/材质)重新描述"))
         (x1, y1), (x2, y2) = boxes[0]
         cx = (x1 + x2) / 2.0
         side = _side_label(cx)
