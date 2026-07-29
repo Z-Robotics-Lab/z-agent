@@ -94,6 +94,31 @@ class SkillWrapperTool:
             getattr(skill, "__skill_verify_exempt__", False)
             or getattr(skill, "verify_exempt", False)
         )
+        # P3 capability claim (research report §3 P3): the named ACTUATOR RESOURCES
+        # this skill occupies while it runs, so the native producer's CapabilityLock
+        # can refuse two effecting skills fighting over the same base/arm. An explicit
+        # @skill(uses=[...]) (or a plain ``uses`` class attr) wins; otherwise DERIVE
+        # from the motor/arm metadata so every shipped skill is unchanged and correct:
+        # an arm/gripper skill claims {"arm", "gripper"}, another motor skill claims
+        # {"base"}, a read-only perception/query skill claims NOTHING (empty -> never
+        # locks, so read-only fan-out is free to run concurrently). Additive (Inv-7):
+        # a new frozen attribute with a safe default.
+        declared = getattr(skill, "__skill_uses__", None)
+        if declared is None:
+            declared = getattr(skill, "uses", None)
+        if declared is not None:
+            self._capabilities: frozenset[str] = frozenset(str(c) for c in declared)
+        elif self._requires_arm:
+            self._capabilities = frozenset({"arm", "gripper"})
+        elif self._is_motor:
+            self._capabilities = frozenset({"base"})
+        else:
+            self._capabilities = frozenset()
+
+    def capabilities(self, params: dict[str, Any] | None = None) -> frozenset[str]:
+        """The actuator resources this skill occupies while running (P3). Empty for a
+        read-only skill (it locks nothing). Read by the native loop's CapabilityLock."""
+        return self._capabilities
 
     # ------------------------------------------------------------------
     # Internal helpers

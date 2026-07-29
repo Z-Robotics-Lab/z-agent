@@ -42,9 +42,11 @@ from __future__ import annotations
 import ast
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
 from zeno.vcli.backends.types import LLMResponse
+from zeno.vcli.capability_lock import CapabilityLock
 from zeno.vcli.cognitive import actor_causation
 from zeno.vcli.cognitive.trace_store import verify_oracle_names
 from zeno.vcli.interject import cancel_current_motion, interject_pending
@@ -66,6 +68,14 @@ FINISH_TOOL = "finish"
 # A hard cap on native round-trips so a misbehaving model / script can never spin
 # forever. Mirrors the engine's _max_turns spirit; the loop also stops on finish.
 _MAX_NATIVE_TURNS = 24
+
+# P2 concurrent read-only fan-out (research report §3 P2). A turn's READ-ONLY tool
+# calls run in a bounded thread pool instead of one serial round-trip each. The
+# batch only forms at >=_MIN_CONCURRENT_READONLY eligible calls so a single-tool
+# turn stays byte-identical to the pre-P2 serial path; the pool is capped like the
+# kernel's _run_concurrent (engine.py) so a wide fan-out cannot exhaust threads.
+_MIN_CONCURRENT_READONLY = 2
+_MAX_CONCURRENT_TOOLS = 10
 
 # How many times the runner re-prompts a model that tries to finish/stop with an
 # action it never verified (D23). Bounded so a model that stubbornly refuses to
@@ -276,6 +286,45 @@ def _tool_is_effecting(tool: Any) -> bool:
         return True
 
 
+def _tool_is_read_only(tool: Any) -> bool:
+    """Whether *tool* is a READ-ONLY query eligible for the P2 concurrent batch.
+
+    The FAIL-SAFE reverse of ``_tool_is_effecting``: concurrency is opt-in, never
+    assumed. A tool that is None, lacks a callable ``is_read_only`` accessor, or whose
+    accessor raises is treated as EFFECTING and runs SERIALLY. Only a tool that
+    positively declares ``is_read_only({}) is True`` joins the parallel batch — so a
+    motor skill (``is_read_only`` False), the ``navigate`` tool (no accessor), or an
+    unknown name can never be dispatched concurrently."""
+    if tool is None:
+        return False
+    accessor = getattr(tool, "is_read_only", None)
+    if not callable(accessor):
+        return False
+    try:
+        return bool(accessor({}))
+    except Exception:  # noqa: BLE001 — classifier, never raise into a turn
+        return False
+
+
+def _tool_capabilities(tool: Any) -> frozenset[str]:
+    """The actuator resources *tool* occupies while running (P3 capability claim).
+
+    Reads a ``capabilities`` accessor (SkillWrapperTool) or a plain ``capabilities``
+    attribute (``_NativeBaseNavigateTool``). Empty for a read-only tool or a tool with
+    no declaration — an empty claim never locks, so read-only fan-out stays free."""
+    if tool is None:
+        return frozenset()
+    caps = getattr(tool, "capabilities", None)
+    try:
+        if callable(caps):
+            return frozenset(caps())
+        if caps:
+            return frozenset(caps)
+    except Exception:  # noqa: BLE001 — admission gate, never raise into a turn
+        return frozenset()
+    return frozenset()
+
+
 def _skill_needs_arm(skill_tool: Any) -> bool:
     """Whether an armless body must NOT be offered *skill_tool* (the D175 manipulation gate).
 
@@ -345,6 +394,10 @@ class _NativeBaseNavigateTool:
         "obstacles (lidar + local planner). Use this to REACH a place/coordinate. After "
         "it returns, call verify(at_position(x, y))."
     )
+    # P3: navigate DRIVES THE BASE, so it claims the "base" actuator resource — the
+    # CapabilityLock refuses to run it concurrently with any other base-claiming skill
+    # (walk / approach / turn). Read as a plain attribute by ``_tool_capabilities``.
+    capabilities = frozenset({"base"})
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -760,6 +813,14 @@ class NativeStepRunner:
         self._steps: list[StepRecord] = []
         self._step_idx: int = 0
 
+        # P3 capability lock: the actuator-resource claim registry an EFFECTING skill
+        # dispatch acquires before it runs (and releases in ``finally``). One holder per
+        # resource; a conflicting claim is REJECTED (never blocked). In the current
+        # serial loop each effecting skill acquires+releases within its own dispatch, so
+        # a healthy turn never self-conflicts; the gate is the safety rail for P2's
+        # concurrent batch and any future background/long-running skill.
+        self._cap_lock = CapabilityLock()
+
     @property
     def has_unverified_action(self) -> bool:
         """True iff a skill ran for the current step but no verify has closed it —
@@ -832,33 +893,76 @@ class NativeStepRunner:
         ):
             self._post_place_regrasp_nudges += 1
             return ToolResult(content=_POST_PLACE_REGRASP_NUDGE, is_error=True)
-        if not self._step_open:
-            # First skill of a fresh step -> capture the causation baseline NOW.
-            self._baseline = actor_causation.capture(self._agent)
-            self._step_open = True
-            # P1.4 honest timing: the step's wall-clock starts at its FIRST skill.
-            self._step_t0 = time.monotonic()
-        self._chain.append(name)
+        # P3 capability claim: an EFFECTING skill acquires its actuator resources
+        # BEFORE the step opens. On conflict (another holder owns the base/arm) REJECT
+        # with a clear, bounded-safe correction and run NOTHING — no baseline, no chain
+        # entry, no StepRecord (same shape as the post-place refusal above). Released in
+        # ``finally`` so every exit path (success, skill exception, place) frees the
+        # resource — a preempted holder can never wedge the lock.
+        caps = _tool_capabilities(tool)
+        if caps:
+            conflict = self._cap_lock.acquire(name, caps)
+            if conflict is not None:
+                return ToolResult(
+                    content=(
+                        f"Cannot run '{name}' now: it needs {sorted(caps)}, but "
+                        f"'{conflict}' is currently using that. Wait for '{conflict}' "
+                        f"to finish, then retry."
+                    ),
+                    is_error=True,
+                )
         try:
-            result = tool.execute(params, self._ctx)
+            if not self._step_open:
+                # First skill of a fresh step -> capture the causation baseline NOW.
+                self._baseline = actor_causation.capture(self._agent)
+                self._step_open = True
+                # P1.4 honest timing: the step's wall-clock starts at its FIRST skill.
+                self._step_t0 = time.monotonic()
+            self._chain.append(name)
+            try:
+                result = tool.execute(params, self._ctx)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("native_loop: skill '%s' raised: %s", name, exc)
+                return ToolResult(content=f"Skill '{name}' raised: {exc}", is_error=True)
+            # Backlog #2 — capture an INFORMATIONAL skill diagnosis from the tool's
+            # metadata (the skill wrapper passes the skill's result_data through there).
+            # Keep the LAST non-empty code seen this step (the grasp/terminal action is
+            # last in a chain) so handle_verify can thread it onto the StepRecord. This
+            # is pure triage metadata — it never touches verify_result / actor causation.
+            md = getattr(result, "metadata", None)
+            if isinstance(md, dict):
+                diag = md.get("diagnosis")
+                if diag:
+                    self._step_diag = str(diag)
+            # R257/E60: a SUCCESSFUL place empties the gripper on purpose -> arm the
+            # post-place guard so the very next re-grasp is refused until a verify closes it.
+            if _skill_is_place(tool) and not getattr(result, "is_error", False):
+                self._place_awaiting_verify = True
+            return result
+        finally:
+            if caps:
+                self._cap_lock.release(name, caps)
+
+    def dispatch_readonly(self, name: str, params: dict[str, Any]) -> ToolResult:
+        """Execute a READ-ONLY tool WITHOUT touching the step accumulator (P2).
+
+        The concurrent-batch entry point: a read-only perception/status/code query is
+        pure output — it does not move the robot, so it opens no step, captures no
+        baseline, appends to no chain, records no StepRecord, and claims no capability.
+        Because a read-only tool cannot mutate actor state, deferring the baseline to
+        the first EFFECTING skill is GRADING-NEUTRAL (the snapshot is identical before
+        and after the observation) — Inv-1 is untouched: this output NEVER enters the
+        verify namespace. Thread-safe by design: no shared runner state is written here,
+        so N of these can run in parallel. Mirrors the verify-exempt bypass's execute +
+        fail-closed error shape."""
+        tool = self._motor_tools.get(name)
+        if tool is None:
+            return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
+        try:
+            return tool.execute(params, self._ctx)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("native_loop: skill '%s' raised: %s", name, exc)
+            logger.debug("native_loop: read-only tool '%s' raised: %s", name, exc)
             return ToolResult(content=f"Skill '{name}' raised: {exc}", is_error=True)
-        # Backlog #2 — capture an INFORMATIONAL skill diagnosis from the tool's
-        # metadata (the skill wrapper passes the skill's result_data through there).
-        # Keep the LAST non-empty code seen this step (the grasp/terminal action is
-        # last in a chain) so handle_verify can thread it onto the StepRecord. This
-        # is pure triage metadata — it never touches verify_result / actor causation.
-        md = getattr(result, "metadata", None)
-        if isinstance(md, dict):
-            diag = md.get("diagnosis")
-            if diag:
-                self._step_diag = str(diag)
-        # R257/E60: a SUCCESSFUL place empties the gripper on purpose -> arm the
-        # post-place guard so the very next re-grasp is refused until a verify closes it.
-        if _skill_is_place(tool) and not getattr(result, "is_error", False):
-            self._place_awaiting_verify = True
-        return result
 
     def _effecting_strategy(self) -> str:
         """The strategy name to attribute this (chain -> verify) step to.
@@ -1077,6 +1181,33 @@ class NativeStepRunner:
 
 def verify_word(ok: bool) -> str:
     return "PASS" if ok else "FAIL"
+
+
+def _dispatch_readonly_batch(
+    runner: "NativeStepRunner", calls: list[Any]
+) -> dict[str, ToolResult]:
+    """Run READ-ONLY tool *calls* concurrently; return ``{tool_call_id: ToolResult}``.
+
+    P2 (research report §3): a turn's independent read-only queries (detect x3;
+    robot_status + where) execute in a bounded thread pool instead of paying N serial
+    LLM-less round-trips, then the caller re-sequences the results into the model's
+    ORIGINAL order (keyed by id) so the session + trace are order-stable. Each call
+    runs via ``runner.dispatch_readonly`` (no step, no baseline, no capability claim),
+    so the batch cannot touch the verify spine. The pool is capped like the kernel's
+    ``_run_concurrent``; ``future.result()`` re-raises nothing because dispatch_readonly
+    already converts a tool exception into an error ToolResult."""
+    max_workers = min(len(calls), _MAX_CONCURRENT_TOOLS)
+    results: dict[str, ToolResult] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_to_id = {
+            pool.submit(
+                runner.dispatch_readonly, tc.name, dict(tc.input or {})
+            ): tc.id
+            for tc in calls
+        }
+        for future, tc_id in future_to_id.items():
+            results[tc_id] = future.result()
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -1310,7 +1441,47 @@ def run_turn_native(
         # they are instant/read-only — but once interjected they cancel too.
         interjected = False
         result_dicts: list[dict[str, Any]] = []
+
+        # P2 CONCURRENT READ-ONLY FAN-OUT (research report §3 P2 / short-board C).
+        # Execute this turn's READ-ONLY tool calls (perception / *_status / where /
+        # read-only code queries) in a bounded thread pool so a multi-candidate read
+        # pays ONE wall-clock batch instead of N serial round-trips. EFFECTING skills,
+        # verify and finish stay STRICTLY SERIAL in the pass below and are MUTUALLY
+        # EXCLUSIVE with this batch (the batch fully completes first, then the serial
+        # pass runs) — so the action-chain -> verify timing contract (baseline capture,
+        # grade) is byte-unchanged. Read-only tools never mutate actor state, so running
+        # them off the step accumulator is grading-neutral; their output NEVER enters
+        # the verify namespace (Inv-1 / the R6 audit lesson held). GATED at
+        # >=_MIN_CONCURRENT_READONLY eligible calls so a 0/1-read-only turn is
+        # byte-identical to the pre-P2 serial path; SKIPPED when an interject is already
+        # pending (the serial pass then cancels every call). Results are keyed by id and
+        # re-sequenced into the model's ORIGINAL order in the serial pass, so the session
+        # + trace order is stable regardless of thread completion order.
+        ro_results: dict[str, ToolResult] = {}
+        ro_calls = [
+            tc for tc in tool_calls
+            if tc.name not in (VERIFY_TOOL, FINISH_TOOL)
+            and _tool_is_read_only(motor_tools.get(tc.name))
+        ]
+        if (
+            len(ro_calls) >= _MIN_CONCURRENT_READONLY
+            and not interject_pending(app_state)
+        ):
+            ro_results = _dispatch_readonly_batch(runner, ro_calls)
+
         for tc in tool_calls:
+            if tc.id in ro_results:
+                # Already executed in the concurrent read-only batch above. A completed
+                # observation is reported as-is (it moved no robot and opened no step);
+                # interject only cancels calls that have NOT yet run. Events are emitted
+                # HERE, in original order, so the chain view stays sequential + thread-safe.
+                res = ro_results[tc.id]
+                _emit(f"{tc.name} {_progress_args(tc.input)}".strip())
+                _event("tool_start", label=tc.name, detail=_progress_args(tc.input))
+                _event("tool_end", label=tc.name, ok=not res.is_error,
+                       detail=str(res.content)[:80] if res.is_error else "")
+                result_dicts.append(_tool_result_dict(tc.id, res.content, res.is_error))
+                continue
             if interjected or (
                 tc.name not in (VERIFY_TOOL, FINISH_TOOL) and interject_pending(app_state)
             ):

@@ -35,6 +35,7 @@ def skill(
     direct: bool = False,
     auto_steps: list[str] | None = None,
     verify_exempt: bool = False,
+    uses: list[str] | None = None,
 ):
     """Decorator that marks a class as a skill with routing metadata.
 
@@ -53,6 +54,15 @@ def skill(
                     the model spin over an empty predicate set (field trace
                     2026-07-29, CEO-authorized). Default False keeps every
                     action/perception skill under the D23 verify demand unchanged.
+        uses: Named ACTUATOR RESOURCES this skill occupies while it runs
+                    (e.g. ["base"], ["arm", "gripper"]) — dimos-style capability
+                    claim (research report §3 P3). The native producer's
+                    CapabilityLock refuses to dispatch a skill whose resource is
+                    already held, so two effecting skills can never fight over the
+                    same base/arm. Default None -> the wrapper DERIVES the claim from
+                    the skill's motor/arm metadata (arm/gripper skills claim
+                    {"arm", "gripper"}, other motor skills claim {"base"}, read-only
+                    skills claim nothing), so every shipped skill is unchanged.
 
     Example::
 
@@ -72,6 +82,9 @@ def skill(
         cls.__skill_direct__ = direct
         cls.__skill_auto_steps__ = auto_steps or []
         cls.__skill_verify_exempt__ = verify_exempt
+        # None (unset) is preserved so the wrapper can DERIVE the claim from motor
+        # metadata; an explicit [] means "declares NO resource" (overrides derivation).
+        cls.__skill_uses__ = uses
         return cls
 
     if cls is not None:
@@ -80,6 +93,7 @@ def skill(
         cls.__skill_direct__ = False
         cls.__skill_auto_steps__ = []
         cls.__skill_verify_exempt__ = False
+        cls.__skill_uses__ = None
         return cls
 
     return wrapper

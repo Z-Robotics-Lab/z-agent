@@ -20,6 +20,24 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
   prefix-稳定性 + 断点落位 + token-省量 + DeepSeek usage/convert 共 15 测新增(test_prompt_cache.py)、pose-hooks
   4 测改钉 live→消息尾；tests/unit/vcli 1215 pass（3 既存 cv2/macOS env fail 无关）。**Inv-1 零触碰**（纯计费/
   传输层，verify 语义不动）。
+- **P2 并行只读 tool call + P3 作动能力锁（能力线，研究报告 §3 P2/P3，2026-07-29）**：内核 `_run_concurrent`
+  已在(engine.py)但 native 主路径对一条回复里的多个 tool_call 纯串行(native_loop for 循环)。**P2**：派发段按可
+  并发性分区——只读工具(`_tool_is_read_only`=`is_read_only({})is True`，fail-safe 反面 of `_tool_is_effecting`：
+  无访问器/异常→当作作动串行) ≥2 个才走 `_dispatch_readonly_batch`(ThreadPoolExecutor≤10)，结果按 tc.id 重排回
+  **原序**(session/trace 顺序不变)；作动/verify/finish 严格串行、与只读批**互斥**(批先跑完再串行段)。只读经
+  `runner.dispatch_readonly`**不开 step、不捕 baseline、不录 StepRecord、不认领能力**——只读永不改 actor 态，
+  baseline 推迟到首个作动技能是评分中性，输出绝不进 verify 命名空间(守 R6 审计教训)。interject 已完成的只读观测
+  照报、未跑的仍取消；事件在串行段按原序发(线程安全)。**P3**：`@skill(uses=[...])` 声明占用的作动资源，
+  SkillWrapperTool.capabilities() 缺省从 motor/arm 元数据派生(arm/gripper 技能→{"arm","gripper"}、其余 motor→
+  {"base"}、只读→空)，navigate 工具挂 {"base"}。新 `vcli/capability_lock.py`：CapabilityLock 非阻塞 claim
+  registry(acquire 全或无原子、冲突返当前持有者名**明确拒绝而非死锁**、release 持有者作用域幂等、claim ctxmgr
+  finally 释放)；runner.dispatch_skill 作动前 acquire、**finally 释放**(成功/异常/place 皆释放，抢占者永不楔住)，
+  冲突回一条纠正 tool_result(同 post-place 守卫模式)。当前串行环里每作动 acquire+release 自身派发内，健康回合不
+  自冲突；锁是 P2 并发批 + 未来后台/长时技能的安全轨。测 +14 hermetic(test_native_concurrency_caplock.py：
+  barrier(3) 证只读真并发 + 原序稳定、barrier(2) 证作动不并发、锁冲突明确拒绝不死锁、异常路径 finally 释放、
+  单只读走串行路径无回归)；native 回归 99 + import-firewall/verify-vocab 19 全绿。验收：`zeno -p "看看状态"`
+  (dev 世界，零硬件零运动)exit 0、verdict GROUNDED verified=True(1/1)、session 零 motor 派发——行为无回归。
+  **Inv-1 零触碰**(只读不产 StepRecord/不进 verify 命名空间；能力锁纯派发准入门、只会更严、不算 verified)。
 - **manip 管线 bug①② + 分级 bringup（2026-07-29）**：① 退出安全 cancel（真机 rclpy/DDS domain 20 活体验证）：
   Go2WManipBridge.connect() 在 add_node（注册 runtime.shutdown atexit）**之后**注册 _atexit_cancel → atexit LIFO
   先跑我们的 cancel（context 仍活、spin 线程仍在 flush）、只对在飞任务发一次（send_task 置位/cancel_task 清位）；
