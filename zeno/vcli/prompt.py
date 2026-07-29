@@ -160,6 +160,23 @@ Working style:
   then verify (run the test or command). Report what changed and why in one line.
 """
 
+# --- Kernel-owned response-style constraint (world-agnostic) ---------------
+# One always-on brevity/directness rule for the native loop, across every world.
+# Field feedback: replies were long, restated the capability list, and asked
+# "要我现在做吗?" instead of acting. Keep this embodiment-agnostic — anything
+# robot/dev-specific belongs to the world persona, not here.
+OUTPUT_STYLE_CONSTRAINT = """\
+[Response style — terminal, keep it tight]
+- Default to 1-3 sentences. Expand ONLY when the user asks for detail or you are
+  reporting the concrete evidence that a step verified. No preamble, no filler.
+- Do NOT restate your capability list, re-introduce yourself, or summarise what
+  you just said. Answer the actual question.
+- For a reversible/actionable instruction, DO IT — call the tool now. Never ask
+  "要我现在做吗?" / "shall I do it now?"; the operator prefers direct execution.
+- Ask first ONLY before irreversible or outward-facing actions. State the short
+  plan, act, then report what you actually verified — not a vibe."""
+
+
 # --- Backward-compatible aliases (default to the robot persona) ------------
 ROLE_PROMPT = ROBOT_ROLE_PROMPT
 TOOL_INSTRUCTIONS = ROBOT_TOOL_INSTRUCTIONS
@@ -249,6 +266,18 @@ def build_system_prompt(
         {
             "type": "text",
             "text": _load_personality(),
+            "cache_control": {"type": "ephemeral"},
+        }
+    )
+
+    # -- Static (cacheable) response-style constraint ------------------------
+    # Kernel-owned, world-agnostic, ALWAYS applied (not overridable by a
+    # personality.md edit): keep replies short + direct, no capability-list
+    # repetition, act instead of asking "要我现在做吗?" (field verbosity report).
+    blocks.append(
+        {
+            "type": "text",
+            "text": OUTPUT_STYLE_CONSTRAINT.strip(),
             "cache_control": {"type": "ephemeral"},
         }
     )
