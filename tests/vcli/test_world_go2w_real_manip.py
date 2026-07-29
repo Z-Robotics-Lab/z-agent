@@ -240,6 +240,61 @@ def test_approach_send_failure_is_task_send_failed(fast_cfg: None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# approach base-chain precheck — start_base recovery hint (injected probe only)
+# ---------------------------------------------------------------------------
+
+
+def test_approach_blocks_with_recovery_hint_when_base_chain_down(
+    fast_cfg: None,
+) -> None:
+    base = _FakeBase()
+    bridge = _MockBridge(["grounding", "final_grounding"])
+    bridge.base = base
+    tr = _FakeTransport()  # preflight() -> None, so the probe runs
+    res = RealApproachObjectSkill(
+        transport=tr, runner=_runner(out="reactive-control: inactive (NUC)"),
+    ).execute({"target": "cup"}, _ctx(base, bridge))
+    assert not res.success and res.diagnosis_code == "no_base_chain"
+    assert "start_base" in res.result_data["recovery"]
+    assert bridge.sent == []  # blocked BEFORE any task was published
+    assert base.manip_active is False
+
+
+def test_approach_proceeds_when_base_chain_healthy(fast_cfg: None) -> None:
+    base = _FakeBase()
+    bridge = _MockBridge(["grounding", "final_grounding"])
+    bridge.base = base
+    tr = _FakeTransport()
+    res = RealApproachObjectSkill(
+        transport=tr, runner=_runner(out="reactive-control: healthy"),
+    ).execute({"target": "cup"}, _ctx(base, bridge))
+    assert res.success  # probe said up -> normal approach reaches the handoff
+    assert bridge.sent  # a task WAS published
+
+
+def test_approach_fails_open_when_probe_undeterminable(fast_cfg: None) -> None:
+    base = _FakeBase()
+    bridge = _MockBridge(["grounding", "final_grounding"])
+    bridge.base = base
+    tr = _FakeTransport()
+    # rc != 0 -> undeterminable -> fail-OPEN (never block on a flaky probe).
+    res = RealApproachObjectSkill(
+        transport=tr, runner=_runner(rc=1, out=""),
+    ).execute({"target": "cup"}, _ctx(base, bridge))
+    assert res.success and bridge.sent
+
+
+def test_approach_default_construction_does_not_probe(fast_cfg: None) -> None:
+    # No injected transport -> the registry-default path NEVER runs the CLI probe
+    # (so it can't ssh the NUC per approach); it proceeds straight to the task.
+    base = _FakeBase()
+    bridge = _MockBridge(["grounding", "final_grounding"])
+    bridge.base = base
+    res = RealApproachObjectSkill().execute({"target": "cup"}, _ctx(base, bridge))
+    assert res.success and bridge.sent
+
+
+# ---------------------------------------------------------------------------
 # Base mutex — navigate / move_relative refuse a busy chassis
 # ---------------------------------------------------------------------------
 
@@ -359,15 +414,53 @@ def _runner(rc: int = 0, out: str = "ok", err: str = ""):
     return run
 
 
-@pytest.mark.parametrize("action,subcmd", [
-    ("start", "bringup"), ("bringup", "bringup"),
-    ("stop", "stop"), ("status", "status"),
+@pytest.mark.parametrize("action,tokens", [
+    ("start", ("start",)),
+    ("start_base", ("component", "restart", "reactive-control")),
+    ("bringup", ("bringup",)),
+    ("stop", ("stop",)),
+    ("status", ("status",)),
 ])
-def test_manip_bringup_action_maps_to_cli_subcommand(action: str, subcmd: str) -> None:
+def test_manip_bringup_action_maps_to_cli_subcommand(
+    action: str, tokens: tuple
+) -> None:
     tr = _FakeTransport()
-    res = RealManipBringupSkill(runner=_runner(), transport=tr).execute({"action": action}, None)
+    res = RealManipBringupSkill(runner=_runner(), transport=tr).execute(
+        {"action": action}, None)
     assert res.success, res.error_message
-    assert tr.calls == [(subcmd,)]
+    assert tr.calls == [tokens]
+
+
+def test_manip_bringup_start_is_zero_motion_and_surfaces_the_ui_address() -> None:
+    # The reported gap: 'start' must be the ZERO-MOTION grade (never the full
+    # 'bringup' that also enables the base chain) AND the reply must carry the UI.
+    tr = _FakeTransport()
+    res = RealManipBringupSkill(runner=_runner(), transport=tr).execute(
+        {"action": "start"}, None)
+    assert res.success
+    assert tr.calls == [("start",)]  # NOT ("bringup",)
+    assert res.result_data["motion_enabling"] is False
+    assert res.result_data["ui_url"] == "http://127.0.0.1:8766"
+    assert "http://127.0.0.1:8766" in res.result_data["message"]
+
+
+def test_manip_bringup_start_base_is_a_separate_motion_enabling_action() -> None:
+    tr = _FakeTransport()
+    res = RealManipBringupSkill(runner=_runner(), transport=tr).execute(
+        {"action": "start_base"}, None)
+    assert res.success
+    assert tr.calls == [("component", "restart", "reactive-control")]
+    assert res.result_data["motion_enabling"] is True
+    # start_base is the base chain, not the UI, so it does not advertise :8766.
+    assert res.result_data["ui_url"] is None
+
+
+def test_manip_bringup_full_bringup_surfaces_ui_and_is_motion_enabling() -> None:
+    tr = _FakeTransport()
+    res = RealManipBringupSkill(runner=_runner(), transport=tr).execute(
+        {"action": "bringup"}, None)
+    assert res.success and res.result_data["motion_enabling"] is True
+    assert "http://127.0.0.1:8766" in res.result_data["message"]
 
 
 def test_manip_bringup_defaults_to_status() -> None:

@@ -709,9 +709,13 @@ class Go2WRealWorld:
                     "at the handoff so the arm NEVER engages; verify "
                     "approach_ready(). Needs the manip stack up. 靠近某物(不抓)"),
                 "manip_bringup_skill": (
-                    "Lifecycle for the Z-Mobile-manip vision components via the "
-                    "manip CLI (start|bringup|stop|status). Cannot actuate the "
-                    "manipulator (home/grasp are UI-only). 起停查 manip 组件"),
+                    "GRADED lifecycle for the Z-Mobile-manip stack via the manip "
+                    "CLI. action='start' = ZERO-MOTION (perception+task FSM+UI at "
+                    "http://127.0.0.1:8766, no base chain); 'start_base' = the "
+                    "SEPARATE motion-enabling NUC base chain (reactive-live) that "
+                    "approach needs to drive; 'bringup' full cold stack; stop/"
+                    "status. Cannot actuate the arm (home/grasp are UI-only). "
+                    "起停查 manip(start=感知+FSM+UI 零运动;start_base=底盘链)"),
                 "manip_status_skill": (
                     "Read the manip task FSM state (phase/depth/handoff readiness/"
                     "failure) from its live status stream. DECISION INPUT, not "
@@ -754,7 +758,7 @@ class Go2WRealWorld:
   - find_object_skill: {"description": "<real appearance, e.g. 'metal bowl'>"}  (贴实际外观措辞;结果=侧别+偏角,验收仍用 at()/turned())
   - scene_query_skill: {"question": "<自由问题>"}  (思考模式问答;答案是决策输入不是验收证据)
   - approach_object_skill: {"target": "<real appearance, e.g. '红色杯子'>"}  (只靠近到交接距离,手臂不参与;验收 approach_ready())
-  - manip_bringup_skill: {"action": "start|bringup|stop|status"}  (默认 status;起停 manip 视觉组件,CLI 不动手臂)
+  - manip_bringup_skill: {"action": "start|start_base|bringup|stop|status"}  (默认 status;start=感知+FSM+UI 零运动风险(回复带 UI 地址 http://127.0.0.1:8766),start_base=底盘链单独起(approach 前置),CLI 不动手臂)
   - manip_status_skill: {}  (读 manip 任务相位/深度/交接就绪;决策输入)
   - manip_cancel_skill: {}  (任意相位干净取消 manip 任务;底盘归零)""",
             examples=REAL_DECOMPOSE_EXAMPLES,

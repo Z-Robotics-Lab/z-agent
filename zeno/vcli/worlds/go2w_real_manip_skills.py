@@ -56,10 +56,23 @@ from zeno.vcli.worlds.go2w_real_skills import _base_of
 
 _SENTINEL: object = object()
 
+#: The Z-Manip planning workbench UI (go2w_planning_control.py on the 4090). The
+#: bringup reply ALWAYS surfaces this on success so the operator can open it.
+MANIP_UI_URL: str = "http://127.0.0.1:8766"
+
 _NO_STACK_MSG = (
     "manip ROS bridge is not connected — the Z-Mobile-manip task graph is not "
     "reachable on domain 20. Bring it up with manip_bringup(action='start'), "
     "wait for the components, then retry."
+)
+
+#: Recovery hint when the NUC base chain (reactive-live) is not up: approach needs
+#: something to consume /cmd_vel or the FSM servos into the void (no motion).
+_NO_BASE_CHAIN_MSG = (
+    "the NUC base chain (reactive-live) is not up, so an approach would servo "
+    "into a chassis that cannot move. This is a SEPARATE, motion-enabling step: "
+    "run manip_bringup(action='start_base') (operator beside the E-stop), confirm "
+    "it is healthy, then retry approach_object."
 )
 
 
@@ -152,6 +165,13 @@ class RealApproachObjectSkill:
     preconditions: list = []
     effects = {"base_state": "moved"}
 
+    def __init__(self, transport: Any = None,
+                 runner: Callable[..., Any] | None = None) -> None:
+        # Injectable seams for the base-chain precheck (fake transport/runner in
+        # tests). Default: the resolved manip transport + a real subprocess runner.
+        self._transport = transport
+        self._runner = runner or _default_runner
+
     def execute(self, params=None, context=None, **kw) -> SkillResult:
         base = _base_of(context)
         bridge = _manip_of(context)
@@ -174,6 +194,22 @@ class RealApproachObjectSkill:
                 return SkillResult(success=False, diagnosis_code="bad_params",
                                    error_message="approach_object needs a target")
             instruction = _approach_instruction(target)
+
+        # Base-chain precheck: approach servos the CHASSIS, so the NUC base chain
+        # (reactive-live) must be up or the FSM commands velocities nothing
+        # consumes. The active probe runs ONLY when a transport was injected: a
+        # blind default would ssh the NUC on every approach (latency + disturbs a
+        # box we must not poke), so the registry-default path skips it and the
+        # recovery hint rides the stall/timeout message instead. When wired, a
+        # definite down fails CLOSED with the hint; an undeterminable probe (None)
+        # fails OPEN so a flaky CLI never blocks a run the operator knows is fine.
+        if self._transport is not None:
+            if _base_chain_ready(self._transport, self._runner) is False:
+                oplog("skill", "approach_object", "base chain down -> recovery hint")
+                return SkillResult(
+                    success=False, diagnosis_code="no_base_chain",
+                    result_data={"recovery": "manip_bringup(action='start_base')"},
+                    error_message=_NO_BASE_CHAIN_MSG)
 
         # Base mutex: clear stale goals, mark the chassis busy for the manip run.
         _clear_base_goals(base)
@@ -271,7 +307,9 @@ class RealApproachObjectSkill:
                 f"approach did not reach the handoff within "
                 f"{CFG.approach_timeout_s:.0f}s (last phase {phase!r}). The FSM "
                 "needs joint feedback (/piper/state) to leave GROUNDING and the "
-                "external nav stack for COARSE_NAV — check manip_status()."))
+                "external nav stack for COARSE_NAV — check manip_status(). If the "
+                "chassis never moved, the NUC base chain is likely down: bring it "
+                "up with manip_bringup(action='start_base'), then retry."))
 
     @staticmethod
     def _arm_abort(phase: Any) -> SkillResult:
@@ -289,13 +327,67 @@ def _default_runner(argv: list[str], timeout: float) -> Any:
     return subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
 
 
-#: manip_bringup action -> (CLI subcommand, subprocess timeout seconds).
-_BRINGUP_ACTIONS: dict[str, tuple[str, float]] = {
-    "start": ("bringup", 240.0),
-    "bringup": ("bringup", 240.0),
-    "stop": ("stop", 120.0),
-    "status": ("status", 30.0),
+@dataclass(frozen=True)
+class _BringupGrade:
+    """One manip_bringup grade: the CLI tokens, timeout, motion class, UI-surface."""
+
+    tokens: tuple[str, ...]   # manip <tokens...>
+    timeout_s: float
+    motion_enabling: bool     # True = starts/needs the base chain (approach can move)
+    show_ui: bool             # append the UI address to the success reply
+
+
+#: manip_bringup action -> grade. MODULAR / GRADED (2026-07-29):
+#:  * ``start``      — ZERO-MOTION-RISK level: the perception vision components +
+#:    the task FSM + the planning-workbench UI, via ``manip start``. It NEVER
+#:    touches the NUC base chain, so the chassis has no /cmd_vel consumer and is
+#:    physically inert; this is the default the persona steers to.
+#:  * ``start_base`` — the NUC base chain (reactive-live), a SEPARATE, deliberate,
+#:    motion-enabling action (``manip component restart reactive-control``). Only
+#:    after this can approach_object actually drive the chassis.
+#:  * ``bringup``    — the full cold stack INCLUDING the base chain (``manip
+#:    bringup``); operator-initiated, motion-enabling, kept for a from-cold host.
+#:  * ``stop`` / ``status`` — tear down / query.
+_BRINGUP_ACTIONS: dict[str, _BringupGrade] = {
+    "start": _BringupGrade(("start",), 120.0, motion_enabling=False, show_ui=True),
+    "start_base": _BringupGrade(
+        ("component", "restart", "reactive-control"), 180.0,
+        motion_enabling=True, show_ui=False),
+    "bringup": _BringupGrade(("bringup",), 240.0, motion_enabling=True, show_ui=True),
+    "stop": _BringupGrade(("stop",), 120.0, motion_enabling=False, show_ui=False),
+    "status": _BringupGrade(("status",), 30.0, motion_enabling=False, show_ui=False),
 }
+
+
+def _base_chain_ready(transport: Any, runner: Callable[..., Any]) -> bool | None:
+    """Best-effort read of whether the NUC base chain (reactive-live) is healthy.
+
+    Runs ``manip status reactive-control`` and looks for an active/healthy marker.
+    Returns True (up), False (clearly down), or None (undeterminable — no CLI, ssh
+    down, parse miss) so the caller can fail-OPEN on None (never block an approach
+    on a flaky probe) but fail-CLOSED with a recovery hint on a definite False."""
+    if transport is None:
+        return None
+    try:
+        if transport.preflight():
+            return None
+        argv = transport.command_argv("status", "reactive-control")
+        proc = runner(argv, timeout=20.0)
+    except Exception:  # noqa: BLE001 — probe boundary, undeterminable
+        return None
+    if getattr(proc, "returncode", 1) != 0:
+        return None
+    out = (getattr(proc, "stdout", "") or "").lower()
+    if not out.strip():
+        return None
+    # Down markers FIRST — "inactive" / "not active" contain the substring "active",
+    # so an up-first check would misread a down chain as up.
+    if any(k in out for k in ("inactive", "not active", "down", "absent", "failed",
+                              "stopped", "unreachable")):
+        return False
+    if any(k in out for k in ("healthy", "active", "running")):
+        return True
+    return None
 
 
 @skill(aliases=["manip_bringup", "manip bringup", "manip起", "起manip栈",
@@ -306,15 +398,20 @@ class RealManipBringupSkill:
 
     name = "manip_bringup"
     description = (
-        "Lifecycle for the Z-Mobile-manip vision+perception components through the "
-        "manip operator CLI. action=start|bringup brings the full stack up; stop "
-        "tears it down; status queries it. This CLI can NEVER actuate the "
-        "manipulator (home/grasp are UI-only, beside the E-stop), so it is "
-        "arm-safe by construction. 起停查 manip 组件(纯生命周期,不动手臂)。"
+        "GRADED lifecycle for the Z-Mobile-manip stack through the manip operator "
+        "CLI (arm-safe by construction: home/grasp are UI-only beside the E-stop, "
+        "never a CLI verb). action='start' = the ZERO-MOTION-RISK level — vision "
+        "perception + task FSM + the planning UI at " + MANIP_UI_URL + "; it never "
+        "touches the base chain, so the chassis stays physically inert. "
+        "action='start_base' = a SEPARATE, motion-enabling step that brings up the "
+        "NUC base chain (reactive-live) so approach_object can actually drive. "
+        "'bringup' = the full cold stack incl the base; 'stop' tears down; 'status' "
+        "queries. On a successful start the reply carries the UI address. "
+        "起停查 manip(start=感知+任务FSM+UI 零运动;start_base=底盘链单独起;不动手臂)。"
     )
     parameters = {
         "action": {"type": "string", "required": False, "default": "status",
-                   "description": "start | bringup | stop | status"},
+                   "description": "start | start_base | bringup | stop | status"},
     }
     preconditions: list = []
     effects = {"manip_stack": "changed"}
@@ -330,21 +427,23 @@ class RealManipBringupSkill:
             if isinstance(src, dict) and src.get("action"):
                 action = str(src["action"]).lower().strip()
                 break
-        if action not in _BRINGUP_ACTIONS:
+        grade = _BRINGUP_ACTIONS.get(action)
+        if grade is None:
             return SkillResult(
                 success=False, diagnosis_code="bad_action",
                 error_message=(f"unknown manip action {action!r}; valid: "
                                f"{sorted(_BRINGUP_ACTIONS)}"))
-        subcmd, timeout = _BRINGUP_ACTIONS[action]
         transport = self._transport or manip_transport()
         pre = transport.preflight()
         if pre:
             return SkillResult(success=False, diagnosis_code="no_manip_stack",
                                error_message=pre)
-        argv = transport.command_argv(subcmd)
-        oplog("skill", "manip_bringup", f"{action} -> manip {subcmd} ({transport.describe()})")
+        argv = transport.command_argv(*grade.tokens)
+        subcmd = " ".join(grade.tokens)
+        oplog("skill", "manip_bringup",
+              f"{action} -> manip {subcmd} ({transport.describe()})")
         try:
-            proc = self._runner(argv, timeout=timeout)
+            proc = self._runner(argv, timeout=grade.timeout_s)
         except Exception as exc:  # noqa: BLE001 — honest failure, never raise
             return SkillResult(success=False, diagnosis_code="manip_cli_failed",
                                error_message=f"manip {subcmd} failed: {exc}")
@@ -358,8 +457,31 @@ class RealManipBringupSkill:
                 error_message=f"manip {subcmd} rc={rc}: {err}")
         oplog("skill", "manip_bringup", f"{action} ok")
         return SkillResult(success=True, result_data={
-            "action": action, "stdout": out,
-            "message": f"manip {subcmd} 完成\n{out.strip()}"})
+            "action": action,
+            "stdout": out,
+            "ui_url": MANIP_UI_URL if grade.show_ui else None,
+            "motion_enabling": grade.motion_enabling,
+            "message": self._success_message(action, grade, out)})
+
+    @staticmethod
+    def _success_message(action: str, grade: _BringupGrade, out: str) -> str:
+        """Compose the honest, grade-aware success line (UI address on start)."""
+        tail = out.strip()
+        if action == "start":
+            head = (f"mobile manip 已就绪(零运动级:感知+任务FSM+UI,未起底盘链) — "
+                    f"UI 地址 {MANIP_UI_URL} 。要让底盘能靠近物体,再单独 "
+                    f"manip_bringup(action='start_base')(操作员在急停旁)")
+        elif action == "start_base":
+            head = ("NUC 底盘链(reactive-live)已起 — 底盘现在可被 approach_object "
+                    "驱动(运动使能级,操作员在急停旁)")
+        elif action == "bringup":
+            head = (f"完整 manip 冷启动完成(含底盘链,运动使能) — UI 地址 "
+                    f"{MANIP_UI_URL}")
+        elif action == "stop":
+            head = "manip 栈已停"
+        else:
+            head = f"manip {' '.join(grade.tokens)} 完成"
+        return f"{head}\n{tail}" if tail else head
 
 
 @skill(aliases=["manip_status", "manip status", "manip状态", "查manip",
