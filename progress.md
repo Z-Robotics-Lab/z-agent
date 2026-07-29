@@ -38,6 +38,20 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
   单只读走串行路径无回归)；native 回归 99 + import-firewall/verify-vocab 19 全绿。验收：`zeno -p "看看状态"`
   (dev 世界，零硬件零运动)exit 0、verdict GROUNDED verified=True(1/1)、session 零 motor 派发——行为无回归。
   **Inv-1 零触碰**(只读不产 StepRecord/不进 verify 命名空间；能力锁纯派发准入门、只会更严、不算 verified)。
+- **fetch_and_place 复合技能（编排报告 P5 首个消费者，2026-07-29）**：新文件 `worlds/go2w_real_fetch_skills.py`
+  = 显式阶段执行器（非通用图引擎）：bringup检查→goto_place(目标点)→approach_object(目标)→[gated]抓取→
+  goto_place(篮子)→[gated]放置。失败即停：首个失败阶段停链并诚实报「哪一阶段/为什么/恢复建议/前序完成阶段无需
+  重复」。**手臂双栅**：ZENO_ARM_ENABLE gate（默认关→跳过抓/放）+ 即便开也只 dry-run 规划（校验+日志，本文件零
+  import piper/can、绝不触碰 CAN/executor）。**整链 dry_run**（或说“演练/预演”）：解析计划+查前置但**零 ROS 发布**
+  （不发导航目标/manip 任务、不调任何子技能 execute）。**verify 守 Inv-1**：每阶段沿用既有 oracle（导航=at()、
+  approach=approach_ready()），整体 verdict = 末态谓词合取（at(篮子) and approach_ready()）由脊柱评分，生产者从不
+  自评 verified；dry-run 无物理主张→verify_hint="True"，失败→"False"。子技能可注入（hermetic 测）。对 go2w_real.py
+  最小侵入（扩展标记处 1 import+1 register）。capabilities.md 同步（技能/阶段/arm gate 现状=未启用）。测 +12
+  hermetic(test_world_go2w_real_fetch.py：dry-run 零发布/阶段顺序/gate 关跳过/gate 开仅规划/失败即停不越阶/
+  bad_params/世界注册)；manip+fetch 71 pass、go2w_real 世界 29 pass。**验收**（无 API key→走真实生产线路而非
+  LLM）：real 世界 embodiment→SkillWrapperTool→skill dry-run「去公司厨房拿水瓶放到篮子(演练)」exit 0、六阶段
+  计划 grasp/place=would-skip(arm off)、verify_hint=True、零 ROS；fail-stop demo 无 bridge→bringup_check 停+
+  no_manip_stack 恢复建议。**遗留**：LLM 驱动 `zeno -p` 活体验收 + real 全链(需 manip start + 底盘链)留 owner 现场。
 - **manip 管线 bug①② + 分级 bringup（2026-07-29）**：① 退出安全 cancel（真机 rclpy/DDS domain 20 活体验证）：
   Go2WManipBridge.connect() 在 add_node（注册 runtime.shutdown atexit）**之后**注册 _atexit_cancel → atexit LIFO
   先跑我们的 cancel（context 仍活、spin 线程仍在 flush）、只对在飞任务发一次（send_task 置位/cancel_task 清位）；
