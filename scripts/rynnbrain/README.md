@@ -21,6 +21,30 @@ GET  http://127.0.0.1:8786/health
 客户端侧 `ZENO_RYNNBRAIN_URL`（或 `VECTOR_RYNNBRAIN_URL`）可覆盖 base_url（NUC 部署
 指向工作站 LAN IP）。
 
+## 权重下载（HuggingFace）
+
+权重来自 **Alibaba-DAMO-Academy** 的 RynnBrain 1.1 系列（[模型主页](https://alibaba-damo-academy.github.io/RynnBrain/) ·
+[GitHub](https://github.com/alibaba-damo-academy/RynnBrain)）。下载到本 README「模型选择」
+表约定的 `~/models/` 路径（与 `RYNNBRAIN_MODEL_PATH` 的按-spec 推导一致）：
+
+```bash
+pip install -U "huggingface_hub[cli]"
+
+# 2B（默认 2b-bf16，~4.5GB 显存）
+huggingface-cli download Alibaba-DAMO-Academy/RynnBrain1.1-2B \
+    --local-dir ~/models/RynnBrain1.1-2B
+
+# 9B（可选 9b-nf4；下载的是 bf16 全权重，NF4 量化在加载时做）
+huggingface-cli download Alibaba-DAMO-Academy/RynnBrain1.1-9B \
+    --local-dir ~/models/RynnBrain1.1-9B
+```
+
+> repo id 已核对于 RynnBrain 官方 GitREADME（`Alibaba-DAMO-Academy/RynnBrain1.1-{2B,9B}`，
+> 另有 `RynnBrain1.1-122B-A10B` 未纳入本服务）。新版 `huggingface_hub` 下 `huggingface-cli
+> download` 等价于 `hf download`。门控/私有权重需先 `huggingface-cli login`。下载完成后
+> 目录内应有 `config.json` + 权重分片（`*.safetensors`），路径与「配置」表的
+> `RYNNBRAIN_MODEL_PATH` 默认推导一致即可被服务直接加载。
+
 ## 模型选择
 
 | spec | 权重 | 显存 | 定位延迟 | 问答 | 说明 |

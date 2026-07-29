@@ -57,6 +57,47 @@ zeno> 去 (2, 0)            # navigate: agent brings up the chain, drives, verif
 zeno> explore              # TARE autonomous exploration, verified by explored-volume growth
 ```
 
+## 4090 workstation deployment (real Go2W)
+
+The main controller is the 4090 workstation: it runs the `zeno` CLI, the perception
+client (encodes D435i frames for the RynnBrain VLM), and drives the real robot over a
+subscribe-only cross-machine DDS link to the NUC. Deployment lives in a **git worktree**
+so the production checkout is a first-class, reproducible tree (not a machine's manual
+leftovers):
+
+```bash
+# 1. Worktree for the real world (branch hw-go2w-manip), Python 3.12 venv.
+#    The venv is no-system-site-packages; rclpy enters PYTHONPATH from system ROS,
+#    which the launcher (below) sources — do NOT pip-install ROS.
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -U pip
+
+# 2. Kernel + test deps + the perception CLIENT (pillow for frame encoding).
+#    perception-client carries pillow WITHOUT torch — the RynnBrain model runs in
+#    its own venv (~/envs/rynnbrain), so the zeno venv never needs the torch stack.
+pip install -e '.[dev,perception-client]'
+
+# 3. Credentials (DeepSeek etc.) — .env is gitignored; copy from the NUC.
+scp go2w-nuc:z-agent/.env .env && chmod 600 .env
+
+# 4. Install the workstation launcher (sets ROS + DDS + world env, see below).
+scripts/install-launcher-workstation.sh   # installs ~/.local/bin/zeno
+
+# 5. Launch. The launcher exports ZENO_WORLD=go2w_real, so bare `zeno` enters the
+#    real-robot world directly.
+zeno
+```
+
+`scripts/install-launcher-workstation.sh` bakes the 4090 startup recipe into
+`~/.local/bin/zeno`: it sources `/opt/ros/jazzy`, points `CYCLONEDDS_URI` at the
+workstation DDS profile (subscribe-only, domain 20), and sets
+`ZENO_WORLD=go2w_real` + the SSH nav transport to the NUC. `which zeno` should then
+resolve to `~/.local/bin/zeno`. (The NUC has a sibling variant,
+`scripts/install-launcher.sh`.)
+
+The RynnBrain perception oracle (its own venv + weights + systemd service) is set up
+separately — see [scripts/rynnbrain/README.md](scripts/rynnbrain/README.md).
+
 ## Architecture (the parts that matter)
 
 - **Honest-verify spine** (`zeno/vcli/cognitive/`): evidence classifier +
