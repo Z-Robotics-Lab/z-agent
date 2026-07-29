@@ -914,3 +914,103 @@ def test_finish_on_fail_guardrail_is_bounded_and_never_forces_a_green() -> None:
     oracle_names = verify_oracle_names(agent, eng)
     report = VerdictReport.from_trace(trace, oracle_names)
     assert report.verified is False
+
+
+# ---------------------------------------------------------------------------
+# VERIFY-EXEMPT (CEO-authorized 2026-07-29) — a GUI / read-only QUERY tool
+# (open_viz / where / manip_status) must NOT be dragged through the D23 "verify
+# before you stop" retry: it has no physical goal-state a predicate can prove, so
+# demanding a verify only makes the model spin over an empty predicate set (field
+# trace: an open_viz success burned ~a minute). The exemption ONLY relaxes the
+# finish-gate's prompt-retry door — an exempt tool records no StepRecord, so the
+# verify SCORING / verdict semantics are unchanged, and NON-exempt tools are
+# byte-for-byte as before.
+# ---------------------------------------------------------------------------
+
+
+def _exempt_tool(name: str) -> "_OkSkillTool":
+    t = _OkSkillTool(name)
+    t.verify_exempt = True  # the metadata flag native_loop._tool_verify_exempt reads
+    return t
+
+
+def _runner_with(motor: dict) -> Any:
+    from zeno.vcli.native_loop import NativeStepRunner
+
+    agent, _base = _make_agent(0.0, 0.0)
+    verifier = SimpleNamespace(verify=lambda expr: True)
+    return NativeStepRunner(agent, verifier, frozenset(), motor, SimpleNamespace())
+
+
+def test_verify_exempt_tool_opens_no_step_so_no_verify_is_demanded() -> None:
+    """A verify-exempt tool executes but opens NO checked step -> has_unverified_action
+    stays False, so the finish-gate never nudges for a verify."""
+    runner = _runner_with({"open_viz": _exempt_tool("open_viz")})
+    res = runner.dispatch_skill("open_viz", {"view": "main"})
+    assert res.is_error is False
+    assert runner.has_unverified_action is False
+
+
+def test_non_exempt_tool_still_opens_a_step_and_demands_verify() -> None:
+    """Control: a NON-exempt tool opens a step exactly as before (the D23 demand is
+    scoped to non-exempt tools, not removed)."""
+    runner = _runner_with({"walk": _OkSkillTool("walk")})
+    runner.dispatch_skill("walk", {})
+    assert runner.has_unverified_action is True
+
+
+class _FakeOpenVizSkill:
+    """A GUI skill: verify-exempt, always succeeds (no world state to prove)."""
+
+    name = "open_viz"
+    description = "Open RViz for the operator (GUI action)."
+    parameters = {"view": {"type": "string", "required": False, "default": "main"}}
+    preconditions: list = []
+    postconditions: list = []
+    effects: dict = {}
+    failure_modes: list = []
+    verify_exempt = True
+
+    def execute(self, params, context):
+        from zeno.core.types import SkillResult
+
+        return SkillResult(success=True, result_data={"message": "rviz opening"})
+
+
+def _agent_with_viz():
+    agent, base = _make_agent(0.0, 0.0)
+    agent._skill_registry.register(_FakeOpenVizSkill())
+    return agent, base
+
+
+def test_open_viz_gui_action_is_not_nudged_to_verify() -> None:
+    """A GUI action (open_viz) that stops WITHOUT a verify must NOT trigger the D23
+    'verify before you finish' re-prompt — the ~1-min open_viz spin. The loop ends
+    cleanly after the single action + terminal turn (2 backend calls, no nudge)."""
+    backend = _CallRecorder.make([
+        tool_turn(("open_viz", {"view": "main"})),
+        tool_turn(end=True),
+    ])
+    agent, _ = _agent_with_viz()
+    eng = _make_engine(agent, backend)
+    eng.run_turn_native("打开rviz", session=_session())
+
+    flat = "\n".join(str(m) for msgs in backend.calls for m in msgs)
+    assert "did NOT verify it" not in flat  # the D23 nudge never fired
+    assert len(backend.calls) == 2  # no extra nudge round-trips
+
+
+def test_non_exempt_action_without_verify_is_still_nudged() -> None:
+    """Control: a NON-exempt action (walk) that stops without a verify STILL gets the
+    D23 nudge — proving the exemption is scoped, not a blanket removal."""
+    backend = _CallRecorder.make([
+        tool_turn(("walk", {"distance": 1.0, "speed": 0.3})),
+        tool_turn(end=True),
+    ])
+    agent, _ = _make_agent(0.0, 0.0)
+    eng = _make_engine(agent, backend)
+    eng.run_turn_native("走一步", session=_session())
+
+    flat = "\n".join(str(m) for msgs in backend.calls for m in msgs)
+    assert "did NOT verify it" in flat  # the nudge fired for the real action
+    assert len(backend.calls) > 2  # extra nudge round-trips happened

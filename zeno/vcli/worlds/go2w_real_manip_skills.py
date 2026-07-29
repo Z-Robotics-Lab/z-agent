@@ -363,7 +363,7 @@ class RealManipBringupSkill:
 
 
 @skill(aliases=["manip_status", "manip status", "manip状态", "查manip",
-                "抓取任务状态"], direct=True)
+                "抓取任务状态"], direct=True, verify_exempt=True)
 class RealManipStatusSkill:
     """Report the live Z-Mobile-manip FSM state (read-only query)."""
 

@@ -123,6 +123,9 @@ class WorldQueryTool:
     ),
     read_only=True,
     permission="allow",
+    # Read-only query: reports live hardware state, actuates nothing. The native-loop
+    # finish-gate must not demand a verify() after it (native_loop._tool_verify_exempt).
+    verify_exempt=True,
 )
 class RobotStatusTool:
     """Return a snapshot of all connected hardware components."""

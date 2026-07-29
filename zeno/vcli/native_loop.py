@@ -232,6 +232,27 @@ _ARM_REQUIRING_SKILLS: frozenset[str] = frozenset(
 )
 
 
+def _tool_verify_exempt(tool: Any) -> bool:
+    """Whether *tool* is exempt from the finish-gate's "verify before you stop" retry.
+
+    GUI and read-only QUERY tools (open_viz / where / manip_status / robot_status)
+    act on the operator's SCREEN or merely READ live state — there is no physical
+    goal-state for a deterministic predicate to prove. Demanding a model-authored
+    verify() after one of them ran makes the model spin over an empty/inapplicable
+    predicate set (field trace 2026-07-29: an ``open_viz`` success burned ~a minute
+    as the model walked every oracle looking for one that fit). A tool opts in by
+    carrying a truthy ``verify_exempt`` (threaded from the @tool / @skill metadata
+    flag through :class:`SkillWrapperTool`); default False keeps EVERY action and
+    perception tool under the D23 verify demand byte-for-byte.
+
+    Kernel gate scope (CEO-authorized, minimal): this ONLY relaxes the finish-gate's
+    prompt-retry door — an exempt tool records NO StepRecord (exactly as if it had
+    not run), so the verify SCORING / verdict / actor-causation semantics are
+    completely untouched. It can never turn an unproven physical goal green.
+    """
+    return bool(getattr(tool, "verify_exempt", False))
+
+
 def _skill_needs_arm(skill_tool: Any) -> bool:
     """Whether an armless body must NOT be offered *skill_tool* (the D175 manipulation gate).
 
@@ -762,6 +783,21 @@ class NativeStepRunner:
         tool = self._motor_tools.get(name)
         if tool is None:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
+        # VERIFY-EXEMPT (CEO-authorized 2026-07-29): a GUI / read-only QUERY tool
+        # (open_viz / where / manip_status) has no physical goal-state a predicate can
+        # prove, so it must NOT open a checked step. Executing it leaves the step
+        # accumulator (chain / baseline / step_open) untouched, so ``has_unverified_
+        # action`` stays whatever the REAL actions set it to — the finish-gate then
+        # never nudges the model to "verify" an action with no applicable predicate
+        # (the ~1-min open_viz spin). No StepRecord is recorded (same as not running),
+        # so the verify scoring / verdict semantics are unchanged. Fires BEFORE the
+        # post-place guard and step-open so an exempt tool is pure side-channel.
+        if _tool_verify_exempt(tool):
+            try:
+                return tool.execute(params, self._ctx)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("native_loop: exempt tool '%s' raised: %s", name, exc)
+                return ToolResult(content=f"Skill '{name}' raised: {exc}", is_error=True)
         # R257/E60 post-place guard: refuse a RE-GRASP that rides on an unverified place
         # (the '掉了' misread that undoes the placement). Fires BEFORE the step opens so a
         # refused grasp neither captures a baseline nor runs the skill. Bounded, so a

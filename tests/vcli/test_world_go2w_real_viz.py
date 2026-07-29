@@ -94,6 +94,116 @@ def test_viz_unknown_action_errors(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# workstation-local RViz (ssh transport: nav host = headless NUC, window on 4090)
+#
+# Phase-2 stub replacement (CEO-authorized 2026-07-29): under ssh the earlier code
+# returned a "go connect Foxglove yourself" pointer; now an RViz view opens LOCALLY
+# on the workstation (the 4090), subscribing over DDS domain 20.
+# ---------------------------------------------------------------------------
+
+
+def _ssh_session(factory: FakePopenFactory | None = None):
+    """A VizOverlaySession forced onto the ssh transport (nav host = headless NUC)."""
+    from zeno.hardware.ros2.nav_transport import SshNavTransport
+    from zeno.vcli.worlds.go2w_real_viz_tools import VizOverlaySession
+
+    return VizOverlaySession(
+        popen_factory=factory or FakePopenFactory(),
+        transport=SshNavTransport(host="go2w-nuc"))
+
+
+def test_workstation_ssh_open_launches_local_rviz2(monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":1")
+    factory = FakePopenFactory()
+    status, _detail = _ssh_session(factory).open("main")
+    assert status == "opened_workstation"
+    (argv, kwargs), = factory.calls
+    # rviz2 is spawned HERE, sourcing the workstation DDS env, with the main config.
+    assert argv[0] == "bash" and argv[1] == "-c"
+    cmd = argv[2]
+    assert "rviz2 -d" in cmd
+    assert "vehicle_simulator.rviz" in cmd  # main/route config
+    assert "ros_env.sh" in cmd  # sources RMW=cyclonedds + ROS_DOMAIN_ID=20 profile
+    # detached: a REPL Ctrl+C / exit must never take RViz with it.
+    assert kwargs.get("start_new_session") is True
+
+
+def test_workstation_explore_uses_tare_config(monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":1")
+    factory = FakePopenFactory()
+    status, _ = _ssh_session(factory).open("explore")
+    assert status == "opened_workstation"
+    (argv, _kwargs), = factory.calls
+    assert "tare_planner_ground.rviz" in argv[2]
+
+
+def test_workstation_route_dedupes_with_main(monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":1")
+    factory = FakePopenFactory()
+    session = _ssh_session(factory)
+    assert session.open("main")[0] == "opened_workstation"
+    status, _ = session.open("route")
+    # route shares the 'rviz' mode with main -> already open, NOT a second window.
+    assert status == "already_open"
+    assert len(factory.calls) == 1
+
+
+def test_workstation_no_display_degrades_to_foxglove(monkeypatch):
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    factory = FakePopenFactory()
+    status, detail = _ssh_session(factory).open("main")
+    # No X here -> honest Foxglove pointer, never a doomed window spawn.
+    assert status == "remote_gui"
+    assert "Foxglove" in detail
+    assert factory.calls == []
+
+
+def test_workstation_3d_view_stays_foxglove_pointer(monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":1")
+    factory = FakePopenFactory()
+    # The 3D View3D (Foxglove) stream is built on the NUC — under ssh it keeps its
+    # honest pointer (option preserved), it does NOT spawn a local process.
+    status, detail = _ssh_session(factory).open("3d")
+    assert status == "remote_gui"
+    assert "Foxglove" in detail
+    assert factory.calls == []
+
+
+def test_workstation_missing_config_is_honest_error(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISPLAY", ":1")
+    monkeypatch.setenv("ZENO_NAV_STACK_REPO", str(tmp_path))  # no rviz configs here
+    factory = FakePopenFactory()
+    status, detail = _ssh_session(factory).open("main")
+    assert status == "error"
+    assert "rviz config not found" in detail
+    assert factory.calls == []  # preflight failed before any spawn
+
+
+def test_workstation_tool_message_says_opened_on_workstation(monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":1")
+    from zeno.vcli.worlds.go2w_real_viz_tools import Go2WRealVizTool
+
+    session = _ssh_session()
+    result = Go2WRealVizTool().execute(
+        {"action": "open", "view": "main"},
+        SimpleNamespace(agent=SimpleNamespace(_viz=session)))
+    assert not result.is_error
+    assert "已在工作站打开 RViz(main)" in result.content
+
+
+def test_workstation_skill_message_says_opened_on_workstation(monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":1")
+    from zeno.vcli.worlds.go2w_real_ops_skills import RealVizSkill
+
+    session = _ssh_session()
+    ctx = SimpleNamespace(services={"viz": session}, instruction="打开rviz")
+    res = RealVizSkill().execute({"view": "main"}, ctx)
+    assert res.success
+    assert "已在工作站打开 RViz(main)" in res.result_data["message"]
+
+
+# ---------------------------------------------------------------------------
 # capability md -> persona
 # ---------------------------------------------------------------------------
 

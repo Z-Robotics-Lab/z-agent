@@ -84,6 +84,16 @@ class SkillWrapperTool:
         self._requires_arm: bool = self._detect_arm_requirement(skill)
         self._is_grasp: bool = self._detect_grasp(skill)
         self._releases_object: bool = self._detect_release(skill)
+        # verify_exempt: a GUI / read-only QUERY skill (open_viz / where /
+        # manip_status) the native-loop finish-gate must NOT demand a verify() for —
+        # there is no physical goal-state for a predicate to prove (field trace
+        # 2026-07-29, CEO-authorized). Threaded verbatim from the skill's declared
+        # metadata (the @skill(verify_exempt=True) flag, or a plain class attribute)
+        # so native_loop._tool_verify_exempt reads it off the wrapper. Default False.
+        self.verify_exempt: bool = bool(
+            getattr(skill, "__skill_verify_exempt__", False)
+            or getattr(skill, "verify_exempt", False)
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

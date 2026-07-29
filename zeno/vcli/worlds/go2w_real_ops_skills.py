@@ -59,7 +59,7 @@ def _viz_session_of(context: Any) -> Any:
 
 
 @skill(aliases=["open_viz", "open rviz", "打开rviz", "打开 rviz", "打开可视化",
-                "可视化", "show rviz", "rviz"], direct=True)
+                "可视化", "show rviz", "rviz"], direct=True, verify_exempt=True)
 class RealVizSkill:
     """Open an RViz view for the operator (plan-orchestrable viz)."""
 
@@ -105,6 +105,13 @@ class RealVizSkill:
                 "view": view, "status": status,
                 "message": (f"RViz ({view}) opening on the robot desktop — "
                             f"visible via Moonlight or the local screen")})
+        if status == "opened_workstation":
+            # ssh transport: nav host is the headless NUC, so RViz opened HERE on
+            # the 4090 desktop, subscribing over DDS domain 20 (Phase 2 stub gone).
+            return SkillResult(success=True, result_data={
+                "view": view, "status": status,
+                "message": (f"已在工作站打开 RViz({view}) —— 4090 本地窗口,"
+                            f"DDS domain 20 订阅 NUC 实时话题")})
         if status == "already_open":
             return SkillResult(success=True, result_data={
                 "view": view, "status": status,
@@ -122,7 +129,7 @@ class RealVizSkill:
 
 @skill(aliases=["where", "where_am_i", "where am i", "我在哪", "我在哪里",
                 "在哪里", "当前位置", "位置", "current position", "pose"],
-       direct=True)
+       direct=True, verify_exempt=True)
 class RealWhereSkill:
     """Report the live map-frame pose (x, y, yaw) from the driver."""
 

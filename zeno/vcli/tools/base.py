@@ -95,6 +95,7 @@ def tool(
     input_schema: dict[str, Any] | None = None,
     permission: str = "allow",
     read_only: bool = False,
+    verify_exempt: bool = False,
 ):
     """Class decorator that stamps tool metadata and injects default helpers.
 
@@ -147,6 +148,13 @@ def tool(
         cls.__tool_input_schema__ = resolved_schema
         cls.__tool_permission__ = permission
         cls.__tool_read_only__ = read_only
+        # verify_exempt: a GUI / read-only tool the native-loop finish-gate must NOT
+        # demand a model-authored verify() for (open_viz, robot_status, ...). Read by
+        # native_loop._tool_verify_exempt off this injected class attribute. Default
+        # False keeps every action tool under the D23 verify demand unchanged.
+        cls.__tool_verify_exempt__ = verify_exempt
+        if "verify_exempt" not in cls.__dict__:
+            cls.verify_exempt = verify_exempt  # type: ignore[attr-defined]
 
         # Inject name / description / input_schema as class attributes when absent
         if not hasattr(cls, "name") or not isinstance(cls.__dict__.get("name"), str):
