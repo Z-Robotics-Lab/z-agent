@@ -39,8 +39,18 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
   三条诚实失败/思考透传/只读判定/接线/能力卡）。回归：tests/vcli -k go2w_real = 363 pass/3 fail——
   3 个全是既存环境性 viz_3d（本工作站无 ~/go2w-nuc，干净树复现相同失败，非本轮引入）；
   vocab/seam/lifecycle/verify_vocab_integrity 子集 97/97 全绿。
-- **E2E 冒烟（视觉线新做）**：真 PNG 帧(448²)→JPEG 编码(≤640)→真 HTTP 往返(协议同款假模型)→解析→
-  方位(+13.7° 左)→教学文案，全链 PASS。
+- **相机命名空间修复 + 视觉 E2E 真机验收（Phase 3，2026-07-29）**：默认相机话题 →
+  **/nuc/camera/color/image_raw**（d435i.service /nuc 命名空间，BEST_EFFORT；env `ZENO_GO2W_COLOR_TOPIC`
+  可覆盖）。带宽策略=**按需短命订阅 raw**：connect 不再持续订阅（跨机 raw 640x480@15Hz≈13MB/s 会饿死共享
+  DDS 的里程计；感知只在 agent 决定"看"时触发）——取帧时才临时开 BEST_EFFORT depth=1 订阅→等一帧→退订，
+  零基线带宽，复用现有 numpy 解码（无 cv2/compressed，相机侧零新依赖）。4090 跨 WiFi 实测取一帧 5/5、
+  0.54–1.36s（中位 ~0.94s）。RynnBrain 编码需 Pillow→新增 **[perception-client]** tier（仅 pillow，非
+  [perception] torch 栈）装进 venv。**真机 E2E（狗只上相机、nav/loco 全下，运动话题零订阅者→物理不可动）**：
+  round1 `看看周围有什么`→native 路由 scene_query→真帧→"一个大的黑色箱子/black suitcase"（画面确为地毯上黑
+  flight case）；round2 `找黑色的箱子在哪边`→find_object→side=左 +12.1°（箱子确在左上），79s。**两轮 verdict
+  恒 RAN verified=False——视觉只作决策输入、Inv-1 未被污染**。已知限：2B 对不在场物体(椅子)返回全幅框→假定位
+  (由 Inv-1 兜底不作验收证据，待加拒识)。测：相机单测重写为按需契约 27 绿 + 感知 21 绿。
+  （早期离线冒烟：真 PNG(448²)→JPEG(≤640)→假模型 HTTP 往返→方位+13.7°，仍在。）
 - **CLI UI 立体化：braille 加载进度条 + 精简圆点树（导航/UI 线，设计工作流 w378ob0re + owner 定稿）**。
   纯显示层（turn_render.py），非 CEO 门槛。v1 三态箭头条(`●━→▶┄→○`)被 owner 否("箭头/方块圆圈不好看、
   没进度条感")，改 AskUserQuestion 出 5 套真实渲染让其拍板→选定：① **状态机=braille 加载条 + N/5 计数**：

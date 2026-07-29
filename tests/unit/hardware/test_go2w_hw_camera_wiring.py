@@ -81,11 +81,15 @@ def test_driver_frame_reflects_camera_after_ingest() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_install_node_for_test_attaches_camera_subscription() -> None:
-    """The test seam wires the camera's Image subscription onto the driver node,
-    so a Go2WHardware built for tests exposes the camera exactly like connect()."""
+def test_install_node_for_test_binds_camera_to_driver_node() -> None:
+    """The test seam binds the camera to the driver node for on-demand fetches,
+    so a Go2WHardware built for tests exposes the camera exactly like connect().
+
+    On-demand model (2026-07-29): the camera holds NO standing subscription (zero
+    baseline bandwidth); it opens a short-lived one on each frame request. So the
+    wiring contract is 'the camera is bound to the SAME node the driver owns',
+    not 'a subscription exists at install time'."""
     from zeno.hardware.ros2.go2w_hw import Go2WHardware
-    from zeno.hardware.ros2.go2w_hw_camera import Go2WCamera
 
     node = MagicMock()
     node.get_clock.return_value.now.return_value.to_msg.return_value = MagicMock()
@@ -95,8 +99,7 @@ def test_install_node_for_test_attaches_camera_subscription() -> None:
     hw = Go2WHardware()
     hw._install_node_for_test(node)
 
-    topics = [c.args[1] for c in node.create_subscription.call_args_list]
-    assert Go2WCamera.COLOR_TOPIC in topics
+    assert hw._camera._node is node  # bound; a fetch will subscribe on demand
 
 
 # ---------------------------------------------------------------------------
