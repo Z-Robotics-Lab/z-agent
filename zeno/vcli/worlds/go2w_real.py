@@ -470,9 +470,14 @@ class Go2WRealWorld:
             request_abort()
         except Exception:  # noqa: BLE001 — interrupt path must never raise
             pass
-        oplog("lifecycle", "interrupt", "operator Ctrl+C — goal cancelled")
-        return ("已中断:导航目标已取消,机器人将停止追踪。需要锁死急停请说 stop;"
-                "直接继续对话即可。")
+        oplog("lifecycle", "interrupt", "operator Ctrl+C — stop issued")
+        # Honest wording (误报 fix): an interrupt fires for ANY reason — a hung
+        # model call, a background SIGINT, a real Ctrl+C — not only mid-navigation.
+        # The old headline "导航目标已取消" made an idle-robot interrupt read as a
+        # phantom navigation being cancelled. We always SEND a stop (above), so
+        # report exactly that without asserting a specific goal existed.
+        return ("已中断本轮:已发出停止,机器人不再追踪任何进行中的目标。"
+                "需要锁死急停请说 stop;直接继续对话即可。")
 
     def teardown(self) -> None:
         """Nothing process-owned to release (the driver detaches via atexit)."""
