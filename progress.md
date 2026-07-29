@@ -5,6 +5,17 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 不动 main。叙事在 commit message 里；本文件只留当前状态。两条工作线的 Works 并列保留（导航/UI 在下半，感知在上半）。
 
 ## Works（已验证 / 单测 GREEN）
+- **stack_down() 关导航栈 verify oracle（2026-07-29，真机 E2E PASS）**：字段缺口=`zeno -p 把导航栈关掉`
+  实测 NUC 栈关干净但 verdict=RAN verified=False(0/1 grounded)——decomposer/verify 无可表达"栈已关"的
+  可 ground 谓词。世界层 APPEND-only 扩展（不动 verify 脊柱内核 vcli/cognitive/verdict）：
+  ① `go2w_real_verify.make_stack_down()`=stack_ready() 的精确反面，读同一真值源(/state_estimation
+  odom 新鲜度)——连着的驱动上 odom 陈旧(≥3s)或从未收到⇒栈已停 True；fail-safe False（无 base/断连不是
+  `not stack_ready()`，断连不能确证栈停）；predicate_oracle 标记。② build_verify_namespace + vocab
+  verify_functions/signatures + bringup_skill 描述教 stop 用 stack_down()；③ `把导航栈关掉` few-shot
+  (verify=stack_down(), bringup action=stop, 不走 liedown)。真机 E2E（legacy 分解 ZENO_PRINT_NATIVE=0,
+  只起停栈无运动）：round1 启动导航 verified=true(stack_ready)；round2 把导航栈关掉 **verified=true
+  1/1 GROUNDED on stack_down()**；NUC nav.sh status 全 NO_DATA（栈关干净）。测：lifecycle 新增 stack_down
+  真值源语义 9 测 + few-shot 断言，_REAL_ORACLES 扩入 stack_down；146 pass。
 - **RynnBrain 感知轮（视觉线）**：ac74ffa(RED)→GREEN。真机世界长出眼睛——本地 RynnBrain 具身 VLM
   （GPU 工作站服务，模型选择在其 start_rynn.sh 里）经 JSON 边车 http://127.0.0.1:8786 接入：
   ①`zeno/perception/rynnbrain.py`：RynnBrainClient（httpx 现有依赖、零新库；`read_env("RYNNBRAIN_URL")`
@@ -76,7 +87,8 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 2. native 错配修复轮（独立分支）：native 通用提示教 at_position 但本世界 deny 之（真谓词 at）、
    native 丢世界 navigate 技能——感知教学在 native 靠技能 description 已覆盖，但整体错配待修。
 3. 深度融合阶段2：订 depth 话题→像素+深度→map 米制目标（bearing 伺服先跑通再上）。
-4. few-shot 预算：REAL_DECOMPOSE_EXAMPLES 6000 上限已满（5816/6000），感知 few-shot 主动省略
+4. few-shot 预算：REAL_DECOMPOSE_EXAMPLES 护栏 2026-07-29 由 ~6000→6400（三处世界层测试同步），
+   容纳新增 `把导航栈关掉` stack_down few-shot（现 6275/6400）；感知 few-shot 仍主动省略
    （descriptions+params_help 已承载教学）；若 legacy 分解实测不足再议腾挪。
 5. **真机验收本轮 UI**：重启 zeno 跑一圈（站起/去地标/回home/失败恢复），眼看状态条填充 + 树轨是否更易读立体。
 6. **电量真机验证**：`colcon build --packages-select unitree_webrtc_ros` + `nav stop && nav start zeno_office`；
@@ -91,8 +103,8 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 ## Failed / 教训
 - **全量 `tests/vcli/` 在 4090 工作站被 OOM kill**（sim 栈导入 + 共存 Rynn/ROS 服务；团队基线机不同）
   ——本轮以定向子集 + 干净树对照代替全量；勿在本机跑全量，分块跑。
-- **例子预算是硬闸**：三个测试钉 ≤6000 字符，append-only 纪律下新 few-shot 挤不进——先写紧凑版仍超,
-  最终省略并注释原因。
+- **例子预算是硬闸**：三个测试钉 ≤N 字符，append-only 纪律下新 few-shot 挤不进——感知轮先写紧凑版仍超
+  最终省略；stack_down 轮（2026-07-29）判为必要能力，护栏 6000→6400 容纳而非删既有教学信号。
 - **既存环境性失败（勿追）**：viz_3d ×3（本机无 ~/go2w-nuc）+ tests/vcli 少数（playground/go2_perception/
   level66/go2_courtyard）+ unit/vcli 缺 PIL/cv2/mujoco + hardware sim 计时 flake + sim-env collect error。
   裸环境缺 prompt_toolkit/cv2 → 经 `scripts/run-tests`（.venv）跑显示测才有依赖。
