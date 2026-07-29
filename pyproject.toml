@@ -72,12 +72,26 @@ gpu = [
     "zeno[perception]",
 ]
 
+# Remote-perception client: talk to a REMOTE embodied-VLM service (the RynnBrain
+# HTTP sidecar, zeno/perception/rynnbrain.py) without hosting the model. Pillow
+# only — it JPEG-encodes the camera frame for POST /infer; NOT the local torch
+# model stack in [perception]. This is what a go2w_real deployment installs when
+# the VLM runs on a workstation (RYNNBRAIN_URL -> workstation LAN IP). Pillow is
+# an already-declared dep (also in [perception]) — this tier only makes it
+# installable WITHOUT torch, not a new dependency.
+perception-client = [
+    "pillow>=10",
+]
+
 # Real hardware / physical cameras: native deps that are Linux/USB-leaning and
-# painful or unavailable on macOS arm64. Kept out of [all].
+# painful or unavailable on macOS arm64. Kept out of [all]. Carries the
+# remote-perception client so the real dog can encode frames for the workstation
+# RynnBrain (the D435i colour path -> find_object / scene_query).
 real = [
     "pyrealsense2>=2.50",
     "open3d>=0.17",
     "pybullet>=3.2",
+    "zeno[perception-client]",
 ]
 
 # IK: Inverse kinematics solver
