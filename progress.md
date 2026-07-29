@@ -5,6 +5,13 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 不动 main。叙事在 commit message 里；本文件只留当前状态。两条工作线的 Works 并列保留（导航/UI 在下半，感知在上半）。
 
 ## Works（已验证 / 单测 GREEN）
+- **manip_stack_up() oracle + -p 静态验收全通（2026-07-29 深夜，0855316）**：bridge 加
+  `status_publisher_count()`（/z_manip/task/status 的 DDS 图 publisher 数——FSM 自己的节点是唯一
+  publisher，actor 不可伪造），世界注册 `manip_stack_up()` 谓词，manip_bringup start/bringup 档
+  加有界 FSM 确认等待(60s)+verify_hint。真机验收：`zeno -p "启动 mobile manip"` exit=0
+  **verified=true GROUNDED(1/1)**；`打开rviz` 本地弹窗 10.5s 无 verify 空转（legacy 路径 GUI 动作
+  exit=2 属 verdict 语义，改动=CEO gate 留议）；`演练:去公司厨房拿水瓶放篮子` native 路由
+  fetch_and_place，exit=0 verified=true，35.9s 零运动。65+51 tests GREEN。
 - **P1 native 主路径接 prompt 缓存（能力线，研究报告 §3 P1 / 短板 E1，2026-07-29）**：native 每轮全量重发
   ~200 行静态 system prompt(~2216 tok) + 全套 tool schema(~794 tok) + 增长历史，全价重算。三处 cache_control
   断点（≤4）：① `_native_system_prompt` 静态块打点；② `_native_tool_schemas` 最后一个工具打点（Anthropic
@@ -185,13 +192,11 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 ⑤ 上一轮遗留：/clean 全流程 + /place_markers 3D 标签现场验收仍待执行。
 
 ## Next
-0. **manip 活体验收（owner 现场窗口，需先 build FSM）**：① 4090 build z_manip_task 工作区（colcon），
-   supervisor 起 FSM：`scripts/runtime/mobile_manipulation_supervisor.py`（flock 单例，包
-   `ros2 launch z_manip_task mobile_manipulation.launch.py`）；确认 NUC 底盘链 reactive-live DOWN（/cmd_vel
-   无最终电机消费者=物理不可动）。② 静态 seam E2E：桥连→approach 任务→`ros2 topic info -v /z_manip/task/status`
-   实证 QoS（源码已核 RELIABLE+TRANSIENT_LOCAL depth=1）→status 文档流进桥→cancel→FSM 回 idle。③ zeno 脚本
-   验收：`zeno -p "启动 mobile manip"`→回复含 http://127.0.0.1:8766 + manip_status FSM alive；
-   `zeno -p "取消manip任务"` 干净。④ 全链：导航栈→rviz→启动 mobile manip→状态确认，记每回合耗时。
+0. **[2026-07-29 深夜已完成]** FSM 原来一直构建在 z-manip-runtime 镜像层（非"未构建"），缺的是生命周期
+   owner——Z-Mobile-manip 已补 `manip start`(零运动:FSM+UI)/`manip fsm`/`manip start-base` 分级
+   (e70352c..d8f2db9)，seam E2E 实录于该仓 docs/task-fsm-seam-e2e-2026-07-29.md；zeno 静态验收全通
+   （见 Works）。**剩余=owner 现场活体窗口**：开 NUC/机器狗电源→`打开导航栈`→`manip_bringup(action=
+   'start_base')`（急停旁）→真机 approach。当前留跑：FSM+UI 域 20、模型服务容器×4、RynnBrain :8786。
 1. 真机执行上述感知清单（本轮 hermetic 21/21 + E2E 冒烟，硬件闭环未做）。
 2. native 错配修复轮（独立分支）：native 通用提示教 at_position 但本世界 deny 之（真谓词 at）、
    native 丢世界 navigate 技能——感知教学在 native 靠技能 description 已覆盖，但整体错配待修。
