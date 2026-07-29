@@ -630,17 +630,16 @@ class ChainView:
             self._round = label
             self._tell_activity(f"round {label} · thinking…")
         elif kind == "reasoning":
+            # Accumulate the FULL think buffer (exposed via reasoning_text for
+            # /why + the post-turn ◌ Thinking · preview) but do NOT stream it
+            # ┆-line-by-line into the transcript: that flooded the field REPL with
+            # dozens of DeepSeek think lines (思考刷屏 fix). The live footer
+            # ('round N · thinking…') is the in-turn indicator; the calm ≤2-line
+            # preview is rendered once, after the turn, by reasoning_transcript_block.
             self._reasoning.append(detail)
             self._reasoning_tail = (self._reasoning_tail + detail)[
                 -max(self._reasoning_tail_chars * 2, 320) :
             ]
-            # P3.10 sink mode: the thinking PROCESS streams into the transcript
-            # as ┆ lines (sentence-bounded), instead of vanishing until /why.
-            if self._transcript_sink is not None and self._show_reasoning_tail:
-                if self._reasoning_streamer is None:
-                    self._reasoning_streamer = ReasoningStreamer()
-                for _line in self._reasoning_streamer.feed(detail):
-                    self._sink(f"  [italic {_p.TEXT_FAINT}]┆ {_escape_markup(_line)}[/]")
         elif kind == "text":
             self._text_tail = (self._text_tail + detail)[-72:]
         elif kind == "tool_start":

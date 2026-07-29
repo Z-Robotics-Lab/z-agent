@@ -372,14 +372,19 @@ def test_default_mode_unchanged_no_sink_flag() -> None:
     assert view.streamed_to_transcript is False
 
 
-def test_sink_mode_streams_reasoning_lines_live() -> None:
+def test_sink_mode_does_not_flood_reasoning_but_keeps_full_for_why() -> None:
+    """思考刷屏 fix: sink mode must NOT stream the think process ┆-line-by-line
+    into the transcript (that flooded the field REPL). The full buffer is still
+    accumulated for /why + the post-turn ◌ Thinking · preview."""
     view, lines, _a = _make_sink_view()
     view.handle_event(NativeEvent(kind="reasoning", detail="用户要左转30度。"))
     view.handle_event(NativeEvent(kind="reasoning", detail="turn 技能即可，verify"))
     view.handle_event(NativeEvent(kind="reasoning", detail=" turned(18)。"))
-    joined = "\n".join(lines)
-    assert "┆" in joined and "左转30度" in joined  # 句界即时落盘
-    assert "turned(18)" in joined
+    # No ┆ reasoning lines land in the transcript sink...
+    assert not [l for l in lines if "┆" in l]
+    # ...but the FULL think buffer is retained (reasoning_text feeds /why).
+    assert "左转30度" in view.reasoning_text
+    assert "turned(18)" in view.reasoning_text
 
 
 def test_sink_mode_reasoning_respects_off() -> None:
