@@ -74,6 +74,15 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
   4090 起停 NUC 栈，独立判据 4090 侧 `ros2 topic hz /state_estimation`。实测(狗未上电,预建图重定位)：
   start map=zeno_office→NUC 起 zdog+zdog-route→/state_estimation 跨机 48Hz→where 读位姿→stop 干净拆栈,
   NUC 事后零残留。只读:不发运动话题、finally 必 stop。可重复：`tests/e2e/run_e2e_nav_ssh_bringup.sh`。
+- **RynnBrain VLM 服务产品化收编进仓（Phase 3）**：`scripts/rynnbrain/{server.py, rynn_http.py,
+  start_rynn.sh, install-service.sh, README.md}`——把桌面 rynnbrain_test 的服务端统一、参数化（原件不动
+  不删）。默认 2B bf16（server 进程实测显存 ~4.7GB；grounding 冷 1.09s/热 0.51s、describe 0.4s），9B NF4
+  是即插 `RYNNBRAIN_MODEL_SPEC=9b-nf4` 配置项。配置全走 `Environment=`（spec/路径/端口/设备/ws）；server.py
+  不 import zeno、跑 `~/envs/rynnbrain` venv。HTTP 边车(8786)=z-agent 契约恒在（bind 失败即崩→systemd 兜），
+  ws+msgpack(8782)老客户端边车默认关、opt-in（放 daemon 线程，绑定失败只记日志不拖垮 http）。生产态
+  systemd --user：install-service.sh 生成 unit（Restart=on-failure、TimeoutStartSec=300、覆盖前备份到
+  ~/deploy-backups-20260729）；4090 上 `enable --now` 已起并 enabled，`/health` 200 {"ok":true,"model":
+  "2b-bf16"}，回复框 `<object>(x1,y1),(x2,y2)` 可被 parse_boxes 直吃。桌面 start_rynn.sh 仍可另跑(LIBERO)。
 
 ## CEO 现场验收清单（真机，owner+E-stop 在手 — 本轮未做）
 ① 工作站重启 start_rynn.sh（拾取 8786 边车），`curl http://127.0.0.1:8786/health` 应回 {"ok":true}。
@@ -118,5 +127,7 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
   `scripts/run-tests`。预建图：`~/maps/zeno_office/`（places.json 命名点，start_pose.txt 首行=home）。
   nav.sh/map_color_publisher 在 go2w-nuc 兄弟仓（独立提交）。
 - **现场跑 sink 模式**（持久 composer，从不调 render_lines）——UI 改动的可见性必须走 sink 流式路径验证。
-- 感知：RynnBrain 服务=用户侧 Learning_based_model/rynnbrain_test（start_rynn.sh 唯一入口，
-  ws:8782+http:8786 双协议同进程）；z-agent 侧只做 httpx 客户端+两只读技能，感知永不进 verify。
+- 感知：RynnBrain 服务已收编进仓 `scripts/rynnbrain/`（server.py 跑 ~/envs/rynnbrain venv、systemd --user
+  托管，install-service.sh 生成 unit；默认 2B、HTTP:8786=z-agent 契约恒在，ws:8782 老客户端边车 opt-in）；
+  桌面 rynnbrain_test 原件不动不删（LIBERO/ab_compare 老客户端仍可 start_rynn.sh 另跑）；z-agent 侧只做
+  httpx 客户端+两只读技能，感知永不进 verify。
