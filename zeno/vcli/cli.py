@@ -593,15 +593,83 @@ def _strip_markdown(raw: str) -> str:
     return raw
 
 
+def _hyperlinks_enabled() -> bool:
+    """Whether the terminal is likely to render OSC 8 hyperlinks.
+
+    Field UX (cli-ux report §4-2): reply/status lines carry addresses the operator
+    wants to click — chiefly the manip UI ``http://127.0.0.1:8766``. On a supporting
+    terminal we wrap URLs in OSC 8 so they are one click; on everything else we must
+    degrade to plain styled text (a raw escape on a non-supporting terminal is either
+    swallowed — harmless — or shows as garbage, so we gate it rather than blast it).
+
+    Detection is env-based (no tty round-trip): an explicit ``ZENO_HYPERLINKS`` /
+    ``NO_HYPERLINKS`` override wins; ``TERM=dumb`` / unset always degrades; known
+    hyperlink-capable terminals (VTE≥0.50, kitty, WezTerm, iTerm2, ghostty, Windows
+    Terminal, Konsole, VS Code, Hyper) enable it. Modern xterm-compatible terminals
+    otherwise default on (unsupported ones ignore the sequence).
+    """
+    override = os.environ.get("ZENO_HYPERLINKS")
+    if override is not None:
+        return override.strip().lower() not in ("0", "false", "no", "off", "")
+    if os.environ.get("NO_HYPERLINKS"):
+        return False
+    term = os.environ.get("TERM", "")
+    if not term or term == "dumb":
+        return False
+    vte = os.environ.get("VTE_VERSION", "")
+    if vte.isdigit() and int(vte) >= 5000:  # VTE 0.50+ (gnome-terminal, tilix, ...)
+        return True
+    if any(os.environ.get(k) for k in ("KITTY_WINDOW_ID", "WT_SESSION", "KONSOLE_VERSION")):
+        return True
+    if os.environ.get("TERM_PROGRAM", "") in (
+        "iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper", "Tabby",
+    ):
+        return True
+    if "kitty" in term or "ghostty" in term or "wezterm" in term:
+        return True
+    # Modern xterm-compatible terminals largely honour OSC 8; the rest ignore it.
+    return True
+
+
+def _append_url(target: Text, url: str, *, hyperlink: bool) -> None:
+    """Append a URL, OSC 8-linked when supported, otherwise plain underlined teal.
+
+    The ``link <url>`` rich style is what makes rich emit the OSC 8 escape (only when
+    it renders to a terminal); without it the same visible text prints with no escape,
+    which is exactly the required graceful degradation.
+    """
+    style = f"underline {TEAL}"
+    if hyperlink:
+        style = f"link {url} {style}"
+    target.append(url, style=style)
+
+
+# URL up to the first whitespace / closing bracket; trailing sentence punctuation is
+# trimmed back out so "see http://x:8766." does not swallow the period into the link.
+_URL_RE = r"(?P<url>https?://[^\s)>\]]+)"
+_URL_TRAILING = ".,;:!?"
+
+
 def _append_highlighted_text(target: Text, raw: str) -> None:
-    """Append text with file paths in teal and `inline code` highlighted."""
+    """Append text with URLs OSC 8-linked, file paths in teal, `inline code` shown."""
     raw = _strip_markdown(raw)
+    hyperlink = _hyperlinks_enabled()
     last = 0
-    # Merge path and inline code patterns, process in order
-    for m in re.finditer(r"(?P<path>(?<!\w)/[\w./\-_]+\.\w+)|(?P<code>`[^`]+`)", raw):
+    # URL first so an address is never mis-split by the path pattern; then path/code.
+    pattern = _URL_RE + r"|(?P<path>(?<!\w)/[\w./\-_]+\.\w+)|(?P<code>`[^`]+`)"
+    for m in re.finditer(pattern, raw):
         if m.start() > last:
             target.append(raw[last:m.start()])
-        if m.group("path"):
+        if m.group("url"):
+            url = m.group("url")
+            trailing = ""
+            while url and url[-1] in _URL_TRAILING:
+                trailing = url[-1] + trailing
+                url = url[:-1]
+            _append_url(target, url, hyperlink=hyperlink)
+            if trailing:
+                target.append(trailing)
+        elif m.group("path"):
             target.append(m.group("path"), style=f"bold {TEAL}")
         elif m.group("code"):
             # Strip backticks
