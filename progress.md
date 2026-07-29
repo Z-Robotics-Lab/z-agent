@@ -5,6 +5,18 @@ hw-go2w-real（导航/CLI-UI，NUC 侧 45d0b90 回灌）+ hw-go2w-real-vision（
 不动 main。叙事在 commit message 里；本文件只留当前状态。两条工作线的 Works 并列保留（导航/UI 在下半，感知在上半）。
 
 ## Works（已验证 / 单测 GREEN）
+- **打开rviz 本机弹窗 + GUI/查询类 verify 豁免（2026-07-29，真机 E2E PASS，CEO 授权）**：两处"agent
+  不智能"根因。① ssh transport（nav host=无屏 NUC，opens_local_gui False）下 open_viz 不再返 remote_gui
+  stub，而在 4090 本机 spawn `rviz2 -d <config>`：`_WorkstationRvizTransport` 复用 OverlayLauncher
+  spawn/SIGINT/dedupe 生命周期，source go2w-nuc/bringup/workstation/ros_env.sh(DDS domain 20)、按 nav.sh
+  模式选 Z-Navigation-Stack-go2w 的 rviz config(main/route=vehicle_simulator, explore=tare_planner_ground)、
+  start_new_session detached（REPL 退出不带走 RViz）、无 DISPLAY 诚实降级 Foxglove 指针；3D View3D(Foxglove,
+  NUC 侧构建)保留指针。真机 E2E：`zeno -p 打开rviz` → 4090 出现 `rviz2 -d .../vehicle_simulator.rviz`
+  进程、回合无 forced-verify nudge（grep=0）。② verify_exempt 元数据串起 @tool/@skill/SkillWrapperTool，
+  native_loop._tool_verify_exempt 让 open_viz/where/manip_status/robot_status 这类 GUI/只读查询在 finish-gate
+  的"verify 前不许停"催促门豁免——豁免工具开 0 checked step、录 0 StepRecord，verify 评分/verdict 语义
+  逐字不变（内核只松催促门，CEO 授权注释在案）。杀了实录里 open_viz 强制 verify 空转~1min。测 +12
+  (8 workstation-rviz + 4 verify-exempt e2e)，48 pass；`看看状态` verified=True(1/1) 不被催。
 - **find_object 全幅退化框拒识门（2026-07-29，RED→GREEN）**：实测 2B 对不在场物体
   (chair/keyboard/person/bottle/monitor)恒返回同一原点锚定近全宽框 (0,0),(648,290)@640x480，技能曾据此
   报假"椅子左侧+12.1°"。纯函数 `rynnbrain.is_degenerate_box(box, image_wh)` 按双坐标读法判退化
