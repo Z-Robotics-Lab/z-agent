@@ -354,3 +354,67 @@ def test_read_files_not_persisted_on_save_and_load(tmp_path: Path) -> None:
     # After loading, read_files must be empty (runtime tracking resets)
     assert len(loaded.read_files) == 0
     assert "/tmp/important.txt" not in loaded.read_files
+
+
+# ---------------------------------------------------------------------------
+# Dangling tool_use repair — R2-8's symmetric twin (2026-07-30 live bricking)
+# ---------------------------------------------------------------------------
+
+def test_to_messages_closes_dangling_tool_use_before_next_user(tmp_path: Path) -> None:
+    """A crashed turn (tool_use recorded, result never appended) must not brick
+    the session: the next build injects a synthetic error tool_result BEFORE the
+    following user text, so both backends accept the history again."""
+    session = create_session(directory=tmp_path)
+    session.append_user("打开")
+    session.append_assistant(
+        text="", tool_use_blocks=[
+            {"type": "tool_use", "id": "tu_crash", "name": "open_viz", "input": {}}])
+    # turn crashed here — no tool_result ever appended
+    session.append_user("打开ui")
+
+    messages = session.to_messages()
+    roles = [m["role"] for m in messages]
+    assert roles == ["user", "assistant", "user", "user"]
+    repair = messages[2]["content"]
+    assert repair[0]["type"] == "tool_result"
+    assert repair[0]["tool_use_id"] == "tu_crash"
+    assert repair[0]["is_error"] is True
+    assert "interrupted" in repair[0]["content"]
+    assert messages[3]["content"] == "打开ui"
+
+
+def test_to_messages_closes_dangling_tool_use_at_the_tail(tmp_path: Path) -> None:
+    session = create_session(directory=tmp_path)
+    session.append_user("go")
+    session.append_assistant(
+        text="", tool_use_blocks=[
+            {"type": "tool_use", "id": "tu_tail", "name": "walk", "input": {}}])
+
+    messages = session.to_messages()
+    assert messages[-1]["role"] == "user"
+    tail = messages[-1]["content"]
+    assert tail[0]["type"] == "tool_result" and tail[0]["tool_use_id"] == "tu_tail"
+    assert tail[0]["is_error"] is True
+
+
+def test_to_messages_repair_is_deterministic_and_leaves_healthy_history_alone(
+    tmp_path: Path,
+) -> None:
+    session = create_session(directory=tmp_path)
+    session.append_user("pick up the cube")
+    session.append_assistant(
+        text="ok", tool_use_blocks=[
+            {"type": "tool_use", "id": "tu_1", "name": "pick", "input": {}}])
+    session.append_tool_results(
+        [{"tool_use_id": "tu_1", "content": "picked", "is_error": False}])
+    session.append_assistant(text="Done!")
+    healthy = session.to_messages()
+    assert [m["role"] for m in healthy] == ["user", "assistant", "user", "assistant"]
+    assert not any(
+        b.get("is_error") for m in healthy if isinstance(m["content"], list)
+        for b in m["content"] if b.get("type") == "tool_result")
+    # byte-stable across rebuilds (P1 cache prefix)
+    session.append_assistant(
+        text="", tool_use_blocks=[
+            {"type": "tool_use", "id": "tu_2", "name": "walk", "input": {}}])
+    assert session.to_messages() == session.to_messages()

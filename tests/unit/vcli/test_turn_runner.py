@@ -130,3 +130,29 @@ def test_wait_idle_helper() -> None:
     runner.submit("a")
     assert runner.wait_idle(3.0) is True
     assert runner.busy is False
+
+
+def test_composer_interject_queue_suspended_is_a_noop_contextmanager() -> None:
+    """reader_suspended() calls .suspended() on the installed reader duck; the
+    composer queue must honor that surface (missing it crashed live turns)."""
+    from zeno.vcli.turn_runner import ComposerInterjectQueue
+
+    q = ComposerInterjectQueue()
+    with q.suspended():
+        q.push("mid-suspend line survives")
+    assert q.pop() == "mid-suspend line survives"
+
+
+def test_reader_suspended_tolerates_a_duck_without_suspended() -> None:
+    from zeno.vcli import interject as ij
+
+    class _BareDuck:  # no suspended() at all
+        pass
+
+    prev = ij._current_reader
+    ij._current_reader = _BareDuck()
+    try:
+        with ij.reader_suspended():
+            pass  # must not raise
+    finally:
+        ij._current_reader = prev

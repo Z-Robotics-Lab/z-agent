@@ -226,12 +226,37 @@ class Session:
         """
         messages: list[dict[str, Any]] = []
         open_tool_use_ids: set[str] = set()
+
+        def _close_dangling() -> None:
+            # R2-8's SYMMETRIC twin: an assistant tool_use with NO recorded
+            # tool_result (a turn that crashed between dispatch and the result
+            # append) 400s BOTH backends on every later turn ("tool_calls must
+            # be followed by tool messages"), permanently bricking the session.
+            # Close each dangling id with a synthetic error result. The content
+            # is a fixed string so the repaired prefix stays byte-stable across
+            # rounds (P1 prompt cache). Consecutive user-role messages are fine:
+            # every multi-round turn already emits tool_result-user then text-user.
+            if not open_tool_use_ids:
+                return
+            messages.append({"role": "user", "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tid,
+                    "content": ("[interrupted: the turn ended before this "
+                                "tool result was recorded]"),
+                    "is_error": True,
+                }
+                for tid in sorted(open_tool_use_ids)
+            ]})
+            open_tool_use_ids.clear()
+
         for entry in self._entries:
             etype = entry.get("type")
             if etype == "user":
+                _close_dangling()  # user text arriving after a crashed tool round
                 messages.append({"role": "user", "content": entry["content"]})
-                open_tool_use_ids = set()  # plain user text closes the tool window
             elif etype == "assistant":
+                _close_dangling()  # new assistant while prior tool_use unanswered
                 content: list[dict[str, Any]] = []
                 # Only include text block if non-empty (Anthropic rejects empty text)
                 if entry.get("text"):
@@ -240,9 +265,10 @@ class Session:
                 content.extend(tool_use)
                 if content:
                     messages.append({"role": "assistant", "content": content})
-                open_tool_use_ids = {
+                open_tool_use_ids.clear()
+                open_tool_use_ids.update(
                     b["id"] for b in tool_use if isinstance(b, dict) and "id" in b
-                }
+                )
             elif etype == "tool_result":
                 tool_result_blocks = [
                     {
@@ -261,6 +287,7 @@ class Session:
                     }
                 # else: fully orphaned -> skip (no preceding tool_use)
             # type == "meta" is skipped (internal tracking)
+        _close_dangling()  # crash on the LAST round leaves a dangling tail
         return messages
 
     # ------------------------------------------------------------------

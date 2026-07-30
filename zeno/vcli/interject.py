@@ -238,10 +238,16 @@ def set_current_reader(reader: InterjectReader | None) -> None:
 
 @contextmanager
 def reader_suspended() -> Iterator[None]:
-    """Suspend the session's reader (no-op when none) around a stdin prompt."""
+    """Suspend the session's reader (no-op when none) around a stdin prompt.
+
+    Fail-safe against reader ducks without a ``suspended()`` contextmanager
+    (e.g. a queue-style reader that never owns stdin): a missing attribute
+    must degrade to a no-op, never crash the turn mid-dispatch.
+    """
     reader = _current_reader
-    if reader is None:
+    suspended = getattr(reader, "suspended", None) if reader is not None else None
+    if suspended is None:
         yield
         return
-    with reader.suspended():
+    with suspended():
         yield

@@ -21,7 +21,8 @@ import logging
 import threading
 import time
 from collections import deque
-from typing import Any, Callable
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,17 @@ class ComposerInterjectQueue:
 
     def is_active(self) -> bool:
         return False
+
+    @contextmanager
+    def suspended(self) -> Iterator[None]:
+        """Protocol no-op twin of ``InterjectReader.suspended()``.
+
+        Confirmation prompts wrap stdin handoff in ``reader_suspended()``;
+        this duck type never touches stdin, but it MUST still honor the
+        contextmanager surface — missing it crashed the turn mid-dispatch
+        (AttributeError) and left dangling tool_calls in the session.
+        """
+        yield
 
     # -- the queue ------------------------------------------------------
     def push(self, line: str) -> None:
